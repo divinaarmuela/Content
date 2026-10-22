@@ -12,6 +12,7 @@ import {
 import { compareProbes, comparisonWords } from './scan-measure-core'
 import { drivePublicUrl, probeVideo, type Probe } from './scan-measure'
 import { cardFilesOf } from './drive-scan'
+import { storedCopyOf } from './drive-pull'
 
 /**
  * THE AI SCAN OF ONE NEW FILE (the owner, 21 Oct 2026: "we need ai everytime a file is modified and crosschecks with
@@ -139,7 +140,9 @@ export async function startScan(seenId: string): Promise<{ go: boolean; itemId?:
 export async function measureNewFile(seenId: string): Promise<{ ok: boolean }> {
   const row = await table<DriveSeen>('drive_seen').get(seenId)
   if (!row) return { ok: false }
-  const probe = await probeVideo(drivePublicUrl(row.drive_file_id), newKey(row))
+  // our own stored copy when there is one — Drive is not read again (its per-file download cap, 22 Oct 2026)
+  const stored = await storedCopyOf(row.drive_file_id, row.size)
+  const probe = await probeVideo(stored?.url ?? drivePublicUrl(row.drive_file_id), newKey(row))
   if (!probe.durationMs) { await finish(seenId, { error: probe.error ?? 'The video could not be read', steps: { measure: 'failed' } }, true); return { ok: false } }
   await setSteps(seenId, { measure: 'done', sound: 'running' }, { duration_ms: probe.durationMs, frames: probe.samples.map(s => s.url), colour: probe.samples.map(s => ({ sat: s.satavg, ymin: s.ymin, ymax: s.ymax })) })
   return { ok: true }

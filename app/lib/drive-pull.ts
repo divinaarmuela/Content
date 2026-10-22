@@ -308,6 +308,17 @@ async function readSlice(fileId: string, start: number, end: number, want: numbe
   throw last instanceof Error ? last : new Error('Drive stopped handing the file out')
 }
 
+/** a whole copy of this Drive file already in our storage, made by any earlier copy (the same size when we know it) */
+export async function storedCopyOf(driveId: string, size: number | null | undefined): Promise<{ url: string; size: number | null } | null> {
+  const pulls = await table<DrivePull>('drive_pulls').list().catch(() => [] as DrivePull[])
+  for (const p of pulls) {
+    for (const f of filesOf(p)) {
+      if (f.id === driveId && f.status === 'done' && f.url && (size == null || f.size == null || f.size === size)) return { url: f.url, size: f.size ?? null }
+    }
+  }
+  return null
+}
+
 /** a few slices of one file — returns whether the file is complete */
 export async function runPullSlices(id: string, fileId: string): Promise<{ done: boolean; error?: string; cancelled?: boolean }> {
   const pulls = table<DrivePull>('drive_pulls')
@@ -331,6 +342,17 @@ export async function runPullSlices(id: string, fileId: string): Promise<{ done:
   }
 
   try {
+    // DOWNLOADED ONCE, NEVER TWICE (live, 22 Oct 2026: the card's folder copy, the AI scan and the hand-in each
+    // downloaded the same Drive file, Google's per-file download cap ran out — "Quota exceeded" — and Ryan's Confirm
+    // could not copy Tagliolini Verde): a file already copied whole by any earlier copy (same Drive file, same size) is
+    // used as it is, and Drive is not asked again
+    if (!file.upload_id && file.done === 0) {
+      const stored = await storedCopyOf(file.id, file.size)
+      if (stored) {
+        await save({ status: 'done', url: stored.url, size: stored.size, done: stored.size ?? file.size ?? 0, upload_id: null })
+        return { done: true }
+      }
+    }
     if (file.size === null) {
       const size = await driveFileSize(file.id)
       if (size === null) throw new Error('Drive would not say how big the file is')
