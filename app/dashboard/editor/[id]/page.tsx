@@ -553,7 +553,9 @@ function Player({ item, s, entry, info, rowById, beforeGrade, onEntry }: {
         })()}
         {offer && (
           <div className="flex flex-wrap items-center gap-2 rounded-inner border border-accent-amber bg-tint-amber/40 p-3">
-            <span className="min-w-0 flex-1 text-[13px]"><b>New in Drive.</b> Add it to the card as {entry.label}?</span>
+            <span className="min-w-0 flex-1 text-[13px]">{(offer.scan as { copy_failed?: boolean } | null)?.copy_failed
+              ? <><b>The copy from Drive failed</b> (Drive stopped handing the file out for a while) — confirm again to retry.</>
+              : <><b>New in Drive.</b> Add it to the card as {entry.label}?</>}</span>
             <Button size="sm" disabled={!!busy} onClick={() => void answer('confirm')} className="h-9 rounded-full px-4 text-[13px] font-semibold">
               <Check className="mr-1 h-3.5 w-3.5" aria-hidden />{busy === 'confirm' ? 'Handing in…' : 'Confirm'}
             </Button>

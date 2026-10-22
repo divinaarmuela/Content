@@ -1044,7 +1044,9 @@ export const driveScanWatch = inngest.createFunction(
     const boards = await step.run('storyboards-due', async () => {
       const { table } = await import('@/lib/db')
       const rows = await table<{ id: string; source: string; duration_ms: number | null; storyboard?: { w?: number } | null; frames?: unknown }>('video_frames').list()
-      return rows.filter(x => x.duration_ms && (x.storyboard?.w ?? 0) < 180 && Array.isArray(x.frames) && x.frames.length >= 12).slice(0, 4).map(x => x.source)
+      // only from our own stored copies: a storyboard reads the whole file, and reading Drive files over and over gets
+      // them blocked by Google (live, 22 Oct 2026: "Drive stopped handing the file out" on a hand-in Ryan confirmed)
+      return rows.filter(x => x.source.startsWith('r2:') && x.duration_ms && (x.storyboard?.w ?? 0) < 180 && Array.isArray(x.frames) && x.frames.length >= 12).slice(0, 4).map(x => x.source)
     })
     if (boards.length) await step.sendEvent('storyboards', boards.map(key => ({ name: 'video/storyboard', data: { key } })))
     return r

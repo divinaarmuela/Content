@@ -124,6 +124,17 @@ export async function watchSources(opts: { limit?: number; budgetMs?: number } =
       await table<DriveSource>('drive_sources').update(s.id, { last_checked_at: now, last_error: (e instanceof Error ? e.message : String(e)).slice(0, 300) } as never).catch(() => undefined)
     }
   }
+  // A CONFIRMED FILE WHOSE COPY FAILED IS OFFERED AGAIN (live, 22 Oct 2026: Ryan confirmed Tagliolini Verde, Drive
+  // stopped handing it out, and it vanished from the card): taken by a person 15 minutes ago or more, and still not on
+  // the card, it goes back to "scanned" with a note — never silently lost
+  const cardsById = new Map(items.map(i => [i.id, i]))
+  for (const r of seenRows.filter(x => x.state === 'taken' && x.decided_by && x.decided_at && Date.now() - Date.parse(x.decided_at) > 15 * 60_000)) {
+    const item = cardsById.get(r.item_id)
+    if (!item) continue
+    const onCard = (Array.isArray((item as { final_files?: unknown }).final_files) ? (item as { final_files: { drive_file_id?: string }[] }).final_files : []).some(f => f.drive_file_id === r.drive_file_id)
+    if (onCard) continue
+    await seenTable.claim(r.id, cur => cur?.state === 'taken' ? { ...cur, state: 'scanned', decided_by: null, decided_at: null, scan: { ...((cur.scan as object) ?? {}), copy_failed: true }, updated_at: new Date().toISOString() } as DriveSeen : null).catch(() => undefined)
+  }
   // A FILE LEFT WAITING IS ASKED FOR AGAIN: one still "new" ten minutes on (its event lost, or set back for a rescan)
   // is queued again, and stamped so it is asked at most every ten minutes — a scan that never starts is never final
   const stale = await table<DriveSeen>('drive_seen').list({ where: r => r.state === 'new' && Date.now() - Date.parse(r.updated_at) > 10 * 60_000, fresh: true })
