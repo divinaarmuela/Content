@@ -433,58 +433,6 @@ function HoverFrames({ frames, thumb, board }: { frames: { url: string; at_s: nu
   )
 }
 
-/**
- * THE PLAYER'S ONE CONTROL BAR (the owner, 22 Oct 2026: "why are there two timeline parts of the video? one is
- * stretched … and the other the quality is bad"): play/pause, the time, full screen, and ONE timeline — move along it
- * and a line follows the cursor with the picture at that moment above it (from the storyboard, so nothing streams
- * while you look); press or drag and the video goes there.
- */
-function PlayerBar({ board, videoRef }: { board: Board | null; videoRef: React.RefObject<HTMLVideoElement | null> }) {
-  const [at, setAt] = useState<number | null>(null)
-  const [head, setHead] = useState(0)
-  const [dur, setDur] = useState(0)
-  const [playing, setPlaying] = useState(false)
-  const [dragging, setDragging] = useState(false)
-  useEffect(() => {
-    const v = videoRef.current
-    if (!v) return
-    const tick = () => { setHead(v.duration ? v.currentTime / v.duration : 0); setDur(v.duration || 0) }
-    const play = () => setPlaying(true), pause = () => setPlaying(false)
-    v.addEventListener('timeupdate', tick); v.addEventListener('loadedmetadata', tick); v.addEventListener('play', play); v.addEventListener('pause', pause)
-    return () => { v.removeEventListener('timeupdate', tick); v.removeEventListener('loadedmetadata', tick); v.removeEventListener('play', play); v.removeEventListener('pause', pause) }
-  }, [videoRef])
-  const total = dur || (board ? board.count * board.every_s : 0)
-  const frac = (e: React.PointerEvent<HTMLDivElement>) => { const r = e.currentTarget.getBoundingClientRect(); return Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)) }
-  const seek = (f: number) => { const v = videoRef.current; if (v && v.duration) { v.currentTime = f * v.duration; setHead(f) } }
-  const time = (f: number) => { const t = Math.round(f * total); return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}` }
-  const toggle = () => { const v = videoRef.current; if (!v) return; if (v.paused) void v.play().catch(() => undefined); else v.pause() }
-  return (
-    <div className="flex items-center gap-2 rounded-inner bg-muted px-2 py-1.5">
-      <button type="button" onClick={toggle} aria-label={playing ? 'Pause' : 'Play'} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-foreground text-[12px] font-bold text-background">
-        {playing ? '❚❚' : '▶'}
-      </button>
-      <div className="relative flex-1 select-none py-2"
-        onPointerMove={e => { const f = frac(e); setAt(f); if (dragging) seek(f) }}
-        onPointerLeave={() => { if (!dragging) setAt(null) }}
-        onPointerDown={e => { e.currentTarget.setPointerCapture(e.pointerId); setDragging(true); seek(frac(e)) }}
-        onPointerUp={e => { setDragging(false); seek(frac(e)) }}>
-        {at !== null && board && total > 0 && (
-          <span className="pointer-events-none absolute bottom-full z-10 mb-2 flex -translate-x-1/2 flex-col items-center gap-1" style={{ left: `${at * 100}%` }}>
-            <BoardFrame board={board} index={Math.floor((at * total) / board.every_s)} className="h-[160px] w-[90px] rounded border border-border shadow-lg" />
-            <span className="rounded bg-foreground px-1.5 text-[11px] font-semibold text-background">{time(at)}</span>
-          </span>
-        )}
-        <div className="relative h-1.5 cursor-pointer rounded-full bg-foreground/15">
-          <span className="absolute inset-y-0 left-0 rounded-full bg-foreground" style={{ width: `${head * 100}%` }} />
-          {at !== null && <span className="pointer-events-none absolute -inset-y-2 w-0.5 bg-foreground" style={{ left: `${at * 100}%` }} />}
-        </div>
-      </div>
-      <span className="shrink-0 font-mono text-[11px] tabular-nums text-muted-foreground">{time(head)} / {time(1)}</span>
-      <button type="button" aria-label="Full screen" onClick={() => void videoRef.current?.requestFullscreen?.().catch(() => undefined)} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[14px] hover:bg-background">⛶</button>
-    </div>
-  )
-}
-
 const folderName = (path: string) => { const i = path.lastIndexOf('/'); return i < 0 ? 'Top of the link' : path.slice(0, i) }
 
 /**
@@ -520,15 +468,15 @@ function Player({ item, s, entry, info, rowById, beforeGrade, onEntry }: {
       <div className="flex flex-col gap-2">
       <div className="overflow-hidden rounded-inner bg-black">
         {cardFile?.url
-          ? <video ref={videoRef} key={cardFile.url} src={cardFile.url} playsInline preload="metadata" onClick={e => { const v = e.currentTarget; if (v.paused) void v.play().catch(() => undefined); else v.pause() }} className="aspect-[9/16] w-full cursor-pointer bg-black object-contain" />
+          ? <video ref={videoRef} key={cardFile.url} src={cardFile.url} controls playsInline preload="metadata" className="aspect-[9/16] w-full bg-black object-contain" />
           : row
             ? <iframe key={row.drive_file_id} src={`https://drive.google.com/file/d/${row.drive_file_id}/preview`} title={entry.name} allow="autoplay" className="aspect-[9/16] w-full border-0" />
             : <div className="flex aspect-[9/16] items-center justify-center p-6 text-center text-[13px] text-white/70">{entry.source === 'other' ? `This version is on “${entry.otherCard}”` : 'No preview'}</div>}
       </div>
       {/* THE TIMELINE (the owner, 22 Oct 2026: "it should be wherever we drag it not fixed points") — a card video
           seeks; a Drive one shows its pictures */}
-      {/* one control bar, for the card's own copy; a Drive version keeps Drive's own player only */}
-      {cardFile?.url && <PlayerBar key={cardFile.url} board={entry.board ?? null} videoRef={videoRef} />}
+      {/* the standard player only — one set of controls, the same on every video (the owner, 22 Oct 2026: "things are
+          inconsistent why is there a custom player action"); the picture under the cursor lives on the tiles */}
       </div>
       <div className="flex min-w-0 flex-col gap-3">
         <div>
