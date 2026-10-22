@@ -7,6 +7,7 @@ import { ArrowLeft, Check, ChevronDown, ExternalLink, Film, FolderOpen, Hourglas
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useRow, useTable } from '@/lib/db-client'
 import type { Batch, Client, ContentItem, DriveSeen, DriveSource, TeamUser, WorkKind } from '@/lib/db-types'
@@ -300,15 +301,15 @@ function Workspace({ item, rows, needsGrade, gradeSince, sourceCreated, framesOf
   const [folder, setFolder] = useState<string | null>(null)
   const shown = folder ? ordered.filter(([f]) => f === folder) : ordered
   const [pick, setPick] = useState<{ stack: string; entry: string } | null>(null)
-  // a press on a tile further down brings the player into view (the owner: "when i click i have to scroll up")
-  const playerRef = useRef<HTMLDivElement | null>(null)
   // SIDE BY SIDE (back, the owner, 22 Oct 2026): choose videos on the card, open them side by side with their comments
   const router = useRouter()
   const [selecting, setSelecting] = useState(false)
   const [picked, setPicked] = useState<Set<string>>(() => new Set())
   const pickOf = (s: Stack) => { const f = info(s).file; return f ? `${f.id}@${f.version}` : null }
   const openSideBySide = (keys: string[]) => { if (keys.length) router.push(`/dashboard/editor/${item.id}/compare?f=${encodeURIComponent(keys.join(','))}`) }
-  const sel = stacks.find(s => s.key === pick?.stack) ?? stacks[0] ?? null
+  // PLAY IN PLACE (the owner, 22 Oct 2026: "play in place its confusing"): a press opens the video in a window over the
+  // list — nothing scrolls, nothing plays until you press play
+  const sel = pick ? stacks.find(s => s.key === pick.stack) ?? null : null
   const entry = sel ? (sel.entries.find(e => e.key === pick?.entry) ?? sel.latest) : null
   const info = (s: Stack) => {
     const asset = s.entries.find(e => e.source === 'card')?.key.slice(2).split('@')[0] ?? null
@@ -337,8 +338,12 @@ function Workspace({ item, rows, needsGrade, gradeSince, sourceCreated, framesOf
   }
   return (
     <section className="flex flex-col gap-5 rounded-card border border-border bg-surface p-5">
-      <div ref={playerRef} className="scroll-mt-24" />
-      {sel && entry && <Player item={item} s={sel} entry={entry} info={info(sel)} rowById={rowById} beforeGrade={beforeGrade} onEntry={k => setPick({ stack: sel.key, entry: k })} />}
+      <Dialog open={!!(sel && entry)} onOpenChange={o => { if (!o) setPick(null) }}>
+        <DialogContent className="max-h-[92vh] max-w-4xl overflow-y-auto bg-popover">
+          <DialogTitle className="sr-only">{sel?.title ?? 'Video'}</DialogTitle>
+          {sel && entry && <Player item={item} s={sel} entry={entry} info={info(sel)} rowById={rowById} beforeGrade={beforeGrade} onEntry={k => setPick({ stack: sel.key, entry: k })} />}
+        </DialogContent>
+      </Dialog>
       <div>
         <header className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <h2 className="flex items-center gap-2 text-[16px] font-semibold"><Film className="h-4 w-4" aria-hidden /> Videos <span className="text-muted-foreground">({stacks.length})</span></h2>
@@ -378,7 +383,7 @@ function Workspace({ item, rows, needsGrade, gradeSince, sourceCreated, framesOf
                       <button type="button" disabled={selecting && !key} title={selecting && !key ? 'Only videos on the card can be compared — confirm it first' : undefined}
                         onClick={() => selecting
                           ? key && setPicked(m => { const n = new Set(m); if (n.has(key)) n.delete(key); else n.add(key); return n })
-                          : (setPick({ stack: s.key, entry: s.latest.key }), playerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }))} aria-pressed={on}
+                          : setPick({ stack: s.key, entry: s.latest.key })} aria-pressed={on}
                         className={`flex w-full flex-col overflow-hidden rounded-inner border bg-background text-left transition hover:shadow-md ${on ? 'border-foreground ring-2 ring-foreground/20' : pending.length ? 'border-accent-amber' : 'border-border'}`}>
                         <span className="relative block aspect-[9/12] w-full bg-muted">
                           <HoverFrames frames={s.latest.frames ?? []} thumb={s.latest.thumb} board={s.latest.board ?? null} />
@@ -507,7 +512,7 @@ function Player({ item, s, entry, info, rowById, beforeGrade, onEntry }: {
         {cardFile?.url
           ? <video ref={videoRef} key={cardFile.url} src={cardFile.url} controls playsInline preload="metadata" className="aspect-[9/16] w-full bg-black object-contain" />
           : row
-            ? <iframe key={row.drive_file_id} src={`https://drive.google.com/file/d/${row.drive_file_id}/preview`} title={entry.name} allow="autoplay; fullscreen" allowFullScreen className="aspect-[9/16] w-full border-0" />
+            ? <iframe key={row.drive_file_id} src={`https://drive.google.com/file/d/${row.drive_file_id}/preview`} title={entry.name} allow="fullscreen" allowFullScreen className="aspect-[9/16] w-full border-0" />
             : <div className="flex aspect-[9/16] items-center justify-center p-6 text-center text-[13px] text-white/70">{entry.source === 'other' ? `This version is on “${entry.otherCard}”` : 'No preview'}</div>}
       </div>
       {/* THE TIMELINE (the owner, 22 Oct 2026: "it should be wherever we drag it not fixed points") — a card video
