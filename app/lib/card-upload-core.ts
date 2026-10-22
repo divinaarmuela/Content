@@ -90,9 +90,3 @@ export function resumableMatch(
   return Number.isFinite(at) && nowMs - at < RESUME_FOR_MS
 }
 
-/** what the card says about one upload still going or stopped half way */
-export function uploadWords(received: number, size: number | null): string {
-  if (!size) return 'Uploading…'
-  const pct = Math.min(100, Math.floor((received / size) * 100))
-  return received > 0 && received < size ? `${pct}% sent — pick the file again to carry on` : `${pct}%`
-}

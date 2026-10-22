@@ -311,6 +311,13 @@ export async function cardUploadState(user: TeamUser, item: ContentItem) {
   const by = user.email ?? user.id
   const now = Date.now()
   const rows = await table<DriveUpload>('drive_uploads').list({ where: r => r.purpose === 'card' && r.item_id === item.id })
+  // HOW FAR EACH STOPPED FILE GOT is Google's to say: the pieces went from the browser straight to Google, so our own
+  // row never heard (live, 22 Oct 2026: a file 27 MB in read "0 MB of 40 MB sent")
+  const mine = rows.filter(r => r.status === 'open' && r.created_by === by && now - Date.parse(String(r.created_at)) < 6 * 864e5).slice(0, 10)
+  const had = await Promise.all(mine.map(async r => {
+    const s = await pushUploadChunk(r.upload_uri, new Uint8Array(0), 0, r.size ?? 0).catch(() => null)
+    return s?.ok ? (s.done ? (r.size ?? 0) : s.received) : r.received
+  }))
   return {
     allowed: true as const,
     folder: folderId ? { id: folderId, url: String(item.upload_folder_url ?? sharingUrl(folderId)) } : null,
@@ -318,8 +325,7 @@ export async function cardUploadState(user: TeamUser, item: ContentItem) {
     version_folder: versionFoldersOf(item)[versionKey(round)] ?? null,
     locked: LOCKED_STATUSES.includes(String(item.status ?? '')),
     tree: folderId ? await cardFolderTree(item) : [],
-    unfinished: rows.filter(r => r.status === 'open' && r.created_by === by && now - Date.parse(String(r.created_at)) < 6 * 864e5)
-      .map(r => ({ id: r.id, name: r.name, size: r.size, received: r.received, parent: r.parent_id, version: r.version })),
+    unfinished: mine.map((r, i) => ({ id: r.id, name: r.name, size: r.size, received: had[i], parent: r.parent_id, version: r.version })),
     waiting: rows.filter(r => r.status === 'done' && !r.copied_at).length,
   }
 }
