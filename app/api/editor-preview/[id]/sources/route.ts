@@ -7,13 +7,14 @@ import { driveLinkTarget } from '@/app/lib/drive-handin-core'
 /**
  * THE EDITOR PREVIEW: a Drive link given to a card (a master link, the colourist's own, a new one for Version 2) —
  * recorded as one of the card's sources, read by the minute check. Writes only `drive_sources`, never the card.
- * Super admins only while the preview is walked (drive-scan-core.ts).
+ * Anyone on the team who can open the card (22 Oct 2026: the new Editor is the Editor).
  */
 export const dynamic = 'force-dynamic'
 
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
-    const user = await requireRole('super_admin')
+    // whoever can open the card may give it a Drive link (the colourist's own, a new one for the next version)
+    const user = await requireRole('scheduler')
     const { id } = await ctx.params
     const item = await loadItemForUser(user, id)
     if (!item) return NextResponse.json({ error: 'No such card' }, { status: 404 })

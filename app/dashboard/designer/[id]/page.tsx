@@ -4,4 +4,4 @@
  * editor's, shared; it reads its own address to know which board to go back
  * to and what to call it.
  */
-export { default } from '../../editor/[id]/page'
+export { default } from '../../editor/[id]/classic/page'

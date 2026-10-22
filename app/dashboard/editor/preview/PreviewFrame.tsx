@@ -23,19 +23,23 @@ const TABS = [
   { href: '/dashboard/editor/preview/scans', label: 'AI scans' },
 ]
 
-export function usePreviewAccess() {
+export function usePreviewAccess(everyone = false) {
   const { me } = useRole()
-  return { me, loading: !me, allowed: me?.role === 'super_admin' }
+  // the card page is the Editor's card for the whole team now (22 Oct 2026); the board and AI scans stay super admin
+  return { me, loading: !me, allowed: everyone ? !!me && me.role !== 'client' : me?.role === 'super_admin' }
 }
 
-export default function PreviewFrame({ title, summary, children, tabs = true }: {
+export default function PreviewFrame({ title, summary, children, tabs = true, classicHref = null }: {
   title?: string
   summary?: React.ReactNode
   children: React.ReactNode
   tabs?: boolean
+  /** the Editor's card page: open to the team, no Preview badge, and a way back to the old card ("Classic view") */
+  classicHref?: string | null
 }) {
   const path = usePathname()
-  const { loading, allowed } = usePreviewAccess()
+  const { loading, allowed, me } = usePreviewAccess(!!classicHref)
+  const manager = me?.role === 'super_admin' || me?.role === 'account_manager'
   const [checking, setChecking] = useState(false)
   const checkNow = async () => {
     setChecking(true)
@@ -48,7 +52,7 @@ export default function PreviewFrame({ title, summary, children, tabs = true }: 
   }
 
   if (loading) return <div className="flex flex-col gap-3 pt-6"><Skeleton className="h-10 w-64" /><Skeleton className="h-64 w-full" /></div>
-  if (!allowed) return <p className="pt-10 text-[15px] text-muted-foreground">The new Editor is in preview — only super admins can open it for now.</p>
+  if (!allowed) return <p className="pt-10 text-[15px] text-muted-foreground">{classicHref ? 'This card is for the team.' : 'The new Editor is in preview — only super admins can open it for now.'}</p>
 
   return (
     <div className="flex flex-col">
@@ -58,11 +62,15 @@ export default function PreviewFrame({ title, summary, children, tabs = true }: 
           <>Drive links are the inbox; the app keeps the versions. <span className="inline-flex items-center gap-1 font-semibold text-accent-blue-deep"><Sparkles className="h-3.5 w-3.5" aria-hidden />AI</span> checks every new or changed file against the card’s videos, and a person confirms.</>
         )}
         actions={<>
-          <Badge variant="outline" className="font-mono text-[12px] uppercase tracking-wider text-muted-foreground">Preview</Badge>
-          <Button variant="outline" onClick={checkNow} disabled={checking} className="gap-2">
-            <RefreshCw className={`h-4 w-4 ${checking ? 'animate-spin' : ''}`} aria-hidden /> {checking ? 'Checking Drive…' : 'Check Drive now'}
-          </Button>
-          <Button asChild variant="ghost"><Link href="/dashboard/editor">Back to the live Editor</Link></Button>
+          {!classicHref && <Badge variant="outline" className="font-mono text-[12px] uppercase tracking-wider text-muted-foreground">Preview</Badge>}
+          {manager && (
+            <Button variant="outline" onClick={checkNow} disabled={checking} className="gap-2">
+              <RefreshCw className={`h-4 w-4 ${checking ? 'animate-spin' : ''}`} aria-hidden /> {checking ? 'Checking Drive…' : 'Check Drive now'}
+            </Button>
+          )}
+          {classicHref
+            ? <Button asChild variant="ghost"><Link href={classicHref}>Classic view</Link></Button>
+            : <Button asChild variant="ghost"><Link href="/dashboard/editor">Back to the live Editor</Link></Button>}
         </>}
       />
       {tabs && (

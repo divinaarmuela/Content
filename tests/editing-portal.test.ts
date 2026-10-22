@@ -153,7 +153,7 @@ describe('the routes and the pages (source pins)', () => {
     const review = src('app/dashboard/editor/[id]/video/[fileId]/page.tsx')
     expect(review).toContain("const fromClient = (uid: string | null | undefined) => team.find(t => t.id === uid)?.role === 'client'")
     expect(review).toContain('{fromClient(c.author_id) && <span')
-    const page = src('app/dashboard/editor/[id]/page.tsx')
+    const page = (src('app/dashboard/editor/[id]/page.tsx') + src('app/dashboard/editor/[id]/classic/page.tsx'))
     expect(page).toContain('approvedIds={clipApprovalsOf(item).map(a => a.file_id)}')
     expect(page).toContain('editingPortalPath(client.share_token, id)')
     const tiles = src('app/dashboard/board/DriveFolderFiles.tsx')

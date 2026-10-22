@@ -181,7 +181,7 @@ export default function EditorPage() {
             {/* THE NEW EDITOR, IN PREVIEW (the owner, 21 Oct 2026) — super admins only while it is walked */}
             {viewer.role === 'super_admin' && (
               <Button asChild variant="outline" className="h-11 rounded-full px-5 text-[14px] font-semibold">
-                <Link href="/dashboard/editor/preview">Try the new Editor <span className="ml-1 rounded-full bg-tint-blue px-2 text-[11px] uppercase tracking-wider">Preview</span></Link>
+                <Link href="/dashboard/editor/preview/scans">AI scans</Link>
               </Button>
             )}
             {canCreate && (

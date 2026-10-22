@@ -56,7 +56,7 @@ export default function EditorPreviewScans() {
               <div className="min-w-0 flex-1">
                 <p className="truncate text-[14px] font-semibold" title={r.path}>{r.path}</p>
                 <p className="truncate text-[12px] text-muted-foreground">
-                  {item ? <Link href={`/dashboard/editor/preview/${item.id}`} className="hover:underline">{clientName.get(String(item.client_id)) ?? 'No client'} · {item.title}</Link> : 'A card no longer here'}
+                  {item ? <Link href={`/dashboard/editor/${item.id}`} className="hover:underline">{clientName.get(String(item.client_id)) ?? 'No client'} · {item.title}</Link> : 'A card no longer here'}
                   {' · '}{new Date(r.first_seen_at).toLocaleString('en-AU', { dateStyle: 'medium', timeStyle: 'short' })}
                   {r.last_modifying_user ? ` · by ${r.last_modifying_user}` : ''}
                 </p>

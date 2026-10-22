@@ -83,7 +83,7 @@ describe('the page, the stream and the tiles (source pins)', () => {
     expect(s).toContain("if (fromName && (!typed || typed.startsWith('application/octet-stream'))) headers.set('content-type', fromName)")
   })
   it('a press on a clip on the card page opens its review page; a comment says which clip it is on', () => {
-    expect(src('app/dashboard/editor/[id]/page.tsx')).toContain('reviewHref={t => reviewPath(id, t.id, t.name)}')
+    expect((src('app/dashboard/editor/[id]/page.tsx') + src('app/dashboard/editor/[id]/classic/page.tsx'))).toContain('reviewHref={t => reviewPath(id, t.id, t.name)}')
     // a picture opens the same page — the still, the comments, no timeline (16 Sep 2026)
     expect(src('app/dashboard/board/DriveFolderFiles.tsx')).toContain("if (reviewHref && (t.kind === 'video' || t.kind === 'image')) { window.location.assign(reviewHref(t)); return }")
     const rp = src('app/dashboard/editor/[id]/video/[fileId]/page.tsx')

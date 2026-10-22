@@ -841,7 +841,7 @@ describe('the order of a board (21 Sep 2026)', () => {
     expect(board).toContain("usePersistedChoice(`board-sort.${page}`, BOARD_SORTS, 'board', 'sort')")
     expect(board).toContain('cards: sortCards(g.cards, sort, viewedAt)')
     expect(readFileSync('app/dashboard/board/CardSheet.tsx', 'utf8')).toContain('void fetch(`/api/production/items/${cardId}/viewed`, { method: \'POST\' })')
-    expect(readFileSync('app/dashboard/editor/[id]/page.tsx', 'utf8')).toContain('void fetch(`/api/production/items/${id}/viewed`, { method: \'POST\' })')
+    expect((readFileSync('app/dashboard/editor/[id]/page.tsx', 'utf8') + readFileSync('app/dashboard/editor/[id]/classic/page.tsx', 'utf8'))).toContain('void fetch(`/api/production/items/${id}/viewed`, { method: \'POST\' })')
     const route = readFileSync('app/api/production/items/[id]/viewed/route.ts', 'utf8')
     expect(route).toContain('const user = await requireSignedIn()')
     expect(route).toContain('await loadItemForUser(user, id)')

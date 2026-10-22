@@ -53,7 +53,7 @@ export default function EditorPreviewBoard() {
               </header>
               {mine.length === 0 && <p className="px-1 text-[13px] text-muted-foreground">Nothing here.</p>}
               {mine.map(({ item, face, grade }) => (
-                <Link key={item.id} href={`/dashboard/editor/preview/${item.id}`}
+                <Link key={item.id} href={`/dashboard/editor/${item.id}`}
                   className="group flex flex-col gap-2 rounded-inner border border-border bg-background p-3 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
                   <span className="flex items-center justify-between gap-2">
                     <span className="truncate text-[12px] font-semibold text-muted-foreground">{clientName.get(String(item.client_id)) ?? 'No client'}</span>

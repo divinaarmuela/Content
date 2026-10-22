@@ -156,7 +156,7 @@ describe('a Round N card carries only its own round\'s unapproved videos (2 Oct 
 
 describe('the screens say what they do (3 Oct 2026: "all buttons make sense?")', () => {
   it('beside Split, the whole-card buttons say "all N"; the designer board has no empty Colour grade column', async () => {
-    const page = (readFileSync('app/dashboard/editor/[id]/page.tsx', 'utf8') + readFileSync('app/dashboard/board/CardAnswers.tsx', 'utf8'))
+    const page = ((readFileSync('app/dashboard/editor/[id]/page.tsx', 'utf8') + readFileSync('app/dashboard/editor/[id]/classic/page.tsx', 'utf8')) + readFileSync('app/dashboard/board/CardAnswers.tsx', 'utf8'))
     expect(page).toContain("a.kind === 'send_back' ? { ...a, label: `Send all ${whole} back for changes` }")
     expect(page).toContain("{ ...a, label: `${a.label} — all ${whole}` }")
     expect(readFileSync('app/dashboard/designer/page.tsx', 'utf8')).toContain("hideEmptyLanes={['colour_grade']}")

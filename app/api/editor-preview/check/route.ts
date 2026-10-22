@@ -12,7 +12,8 @@ export const maxDuration = 300
 
 export async function POST() {
   try {
-    await requireRole('super_admin')
+    // the whole team's Drive links at once: a manager's press (the minute check does it anyway)
+    await requireRole('account_manager')
     const r = await watchSources()
     // every new file goes to the AI scan (drive-scan-file)
     if (r.toScan.length) await inngest.send(r.toScan.map(id => ({ name: 'drive/scan.file', data: { seen_id: id, item_id: id.split('~')[0] } })))

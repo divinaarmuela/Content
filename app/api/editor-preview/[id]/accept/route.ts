@@ -4,7 +4,7 @@ import type { DriveSeen, DriveSource } from '@/lib/db-types'
 import { authzErrorResponse, requireRole } from '@/app/lib/authz'
 import { loadItemForUser } from '@/app/lib/production-access'
 import { startDriveHandIn } from '@/app/lib/drive-handin'
-import { isTestClient } from '@/app/lib/test-clients-core'
+import { canEditItemFields } from '@/app/lib/item-edit-core'
 
 /**
  * THE EDITOR PREVIEW: CONFIRM OR SET ASIDE WHAT THE AI FOUND IN DRIVE (step 3, the owner, 22 Oct 2026).
@@ -14,15 +14,16 @@ import { isTestClient } from '@/app/lib/test-clients-core'
  *             hand-in's own rules hold (who may hand in at which stage, one copying at a time).
  *   ignore  — "not this": the files are set aside and never offered again.
  *
- * Test clients only while the preview is walked (feedback: test on 100M / ZZ E2E first) — refused on a real card
- * here, on the server; hiding the button is not the control. Every row change is a claim (trap 11).
+ * WHO MAY: exactly who may hand in on the live Editor (api/production/items/[id]/drive-handin) — whoever holds the
+ * card, a manager, or the colourist at colour grade. The new Editor is the Editor now (the owner, 22 Oct 2026: "new
+ * editor page takes place"), so this works on every card. Every row change is a claim (trap 11).
  */
 export const dynamic = 'force-dynamic'
 
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
   return withRequestCache(async () => {
     try {
-      const user = await requireRole('super_admin')
+      const user = await requireRole('scheduler')
       const { id } = await ctx.params
       const item = await loadItemForUser(user, id)
       if (!item) return NextResponse.json({ error: 'No such card' }, { status: 404 })
@@ -30,8 +31,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       const action = body.action === 'ignore' ? 'ignore' : body.action === 'confirm' ? 'confirm' : null
       const ids = Array.isArray(body.seen_ids) ? body.seen_ids.filter((x): x is string => typeof x === 'string').slice(0, 50) : []
       if (!action || !ids.length) return NextResponse.json({ error: 'Say which files, and confirm or ignore' }, { status: 400 })
-      if (action === 'confirm' && !isTestClient(String(item.client_id))) {
-        return NextResponse.json({ error: 'Preview — confirming works on the test clients first. Hand this in on the live Editor for now.' }, { status: 403 })
+      const grades = (user as { colourist?: unknown }).colourist === true && String(item.status ?? '') === 'colour_grade'
+      if (!canEditItemFields(user, item as never) && !grades) {
+        return NextResponse.json({ error: 'Only whoever holds this card — or a manager — can hand in its files' }, { status: 403 })
       }
       const rows = (await Promise.all(ids.map(r => table<DriveSeen>('drive_seen').get(r)))).filter((r): r is DriveSeen => !!r && r.item_id === item.id)
       if (!rows.length) return NextResponse.json({ error: 'Those files are not on this card' }, { status: 404 })

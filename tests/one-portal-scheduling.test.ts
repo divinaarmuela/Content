@@ -96,7 +96,7 @@ describe('the Boards tab, and taking a piece off the portal (2 Oct 2026)', () =>
     expect(readFileSync('app/lib/one-portal-page.ts', 'utf8')).toContain('it?.portal_hidden !== true && !isArchived(it)')
     const route = readFileSync('app/api/production/items/[id]/route.ts', 'utf8')
     expect(route).toMatch(/hasOwnProperty\.call\(body, 'portal_hidden'\)\) \{\s+if \(!\['account_manager', 'super_admin'\]\.includes\(user\.role\)\)/)
-    expect((readFileSync('app/dashboard/editor/[id]/page.tsx', 'utf8') + readFileSync('app/dashboard/board/CardAnswers.tsx', 'utf8'))).toContain('Take it off the client&apos;s portal — they will not see it there.')
+    expect(((readFileSync('app/dashboard/editor/[id]/page.tsx', 'utf8') + readFileSync('app/dashboard/editor/[id]/classic/page.tsx', 'utf8')) + readFileSync('app/dashboard/board/CardAnswers.tsx', 'utf8'))).toContain('Take it off the client&apos;s portal — they will not see it there.')
   })
 })
 
@@ -125,7 +125,7 @@ describe('the person\'s own "If the client hasn\'t approved" choice is not "some
 
 describe('the card column on the editor and designer page ends at the bottom of the screen (5 Oct 2026: "I need to scroll outside the two windows")', () => {
   it('its height is what is left under its own top edge, kept right on scroll and resize', () => {
-    const page = (readFileSync('app/dashboard/editor/[id]/page.tsx', 'utf8') + readFileSync('app/dashboard/board/CardAnswers.tsx', 'utf8'))
+    const page = ((readFileSync('app/dashboard/editor/[id]/page.tsx', 'utf8') + readFileSync('app/dashboard/editor/[id]/classic/page.tsx', 'utf8')) + readFileSync('app/dashboard/board/CardAnswers.tsx', 'utf8'))
     expect(page).toContain('const cardColumn = useFitsScreen<HTMLElement>()')
     expect(page).toContain('<aside ref={cardColumn}')
     expect(page).toContain('el.style.maxHeight = `${Math.max(240, window.innerHeight - top - 16)}px`')

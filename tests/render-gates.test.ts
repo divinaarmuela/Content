@@ -138,7 +138,7 @@ describe('the editor\u2019s card draws every SOP section, empty or not', () => {
   const CARD_SHEET = 'app/dashboard/board/CardSheet.tsx'
   it('the Editor page opens the editor\u2019s drawer for an editor, the manager\u2019s for a manager', () => {
     // …on the card's own page (15 Sep 2026)
-    const page = src('app/dashboard/editor/[id]/page.tsx')
+    const page = (src('app/dashboard/editor/[id]/page.tsx') + src('app/dashboard/editor/[id]/classic/page.tsx'))
     expect(page).toContain('const maker = usesMakerDrawer(me, item)')
     // …and a manager gets the same brief, with their buttons above it (15 Sep 2026)
     expect(page).toContain('<EditorCardDrawer key={id} id={id} onClose={back} hideFolderFiles />')
@@ -617,7 +617,7 @@ describe('the editor’s card opens the plan and its board, read only and withou
     expect(drawer).toContain('{fromPlan && shoot && (')
     expect(drawer).toContain('const fromPlan = cardUsesPlan(item as never, shootCardId)')
     expect(drawer).toContain('{shootsOwn && shoot?.footage_handed_at && holder && (')
-    expect(src('app/dashboard/editor/[id]/page.tsx')).toContain('}, fromPlan)')
+    expect((src('app/dashboard/editor/[id]/page.tsx') + src('app/dashboard/editor/[id]/classic/page.tsx'))).toContain('}, fromPlan)')
     // the New card window asks, when a real shoot is picked (16 Sep 2026)
     const dialogs = src('app/dashboard/board/BoardDialogs.tsx')
     expect(dialogs).toContain('Include this shoot’s brief, plan and board on the card')

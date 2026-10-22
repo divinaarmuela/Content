@@ -78,7 +78,7 @@ describe('share-link-core — the public link for the accepted version (17 Sep 2
     expect(page).toContain('robots: { index: false, follow: false }')
     const dl = readFileSync('app/api/assets/download/route.ts', 'utf8')
     expect(dl).toContain('if (!sharedFilesOf(item as never, pulls as never).some(f => f.url === url)) return new Response')
-    const card = readFileSync('app/dashboard/editor/[id]/page.tsx', 'utf8')
+    const card = (readFileSync('app/dashboard/editor/[id]/page.tsx', 'utf8') + readFileSync('app/dashboard/editor/[id]/classic/page.tsx', 'utf8'))
     expect(card).toContain('<ShareAcceptedLink item={item as never} />')
     // public on purpose: not in the PROTECTED list — but the download route is in the
     // matcher, so the middleware runs and a signed-in download can ask who is calling

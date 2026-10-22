@@ -102,7 +102,7 @@ describe('where rounds are opened, tagged and shown (source pins)', () => {
     expect(box).toContain('Folder to work from')
     expect(box).toContain("{roundLabel(v.round)}{v === versionTabs[0] ? ' · latest' : ''}{v.inFlight ? ' · copying in' : ''}")
     expect(box).toContain('<DriveFolderFiles url={shownVersion.folderUrl} wide={wideFiles} reviewHref={reviewHref} approvedIds={approvedIds} copies={shownVersion.files} selected={selecting ? pickedKeys : undefined} onSelect={selecting ? pick : undefined} labelOf={roundLabel} />')
-    expect(src('app/dashboard/editor/[id]/page.tsx')).toContain('fallbackFolder={from.footage} wideFiles versions')
+    expect((src('app/dashboard/editor/[id]/page.tsx') + src('app/dashboard/editor/[id]/classic/page.tsx'))).toContain('fallbackFolder={from.footage} wideFiles versions')
     // every pull says what it was: the row's purpose
     expect(src('app/lib/drive-pull.ts')).toContain("purpose: opts.purpose ?? (row as { purpose?: string | null } | null)?.purpose ?? null,")
     expect(src('app/api/production/batches/[id]/route.ts')).toContain("by: user.id, purpose: 'folder' })")

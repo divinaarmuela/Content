@@ -86,7 +86,7 @@ describe('what to call the pieces', () => {
 
 describe('a designer\'s card opens on the Designer board', () => {
   it('the shared card page moves a graphics card from the Editor address to the Designer one', () => {
-    const src = readFileSync('app/dashboard/editor/[id]/page.tsx', 'utf8')
+    const src = (readFileSync('app/dashboard/editor/[id]/page.tsx', 'utf8') + readFileSync('app/dashboard/editor/[id]/classic/page.tsx', 'utf8'))
     expect(src).toContain('router.replace(`/dashboard/designer/${id}`)')
   })
 })
