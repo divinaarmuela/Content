@@ -141,6 +141,9 @@ and `npm run build` must pass. Do not report completion on tests alone.
     behind its own switch `DRIVE_CARD_FILING` — test clients only until it is
     `all`. It writes only inside a card's own folder, never moves or deletes,
     and V1/V2 keep their names; `tests/card-upload.test.ts` pins the guard.
+    Its one-off back-fill (`backfillPlan` / `backfillFile`, job `drive-card-backfill`, started only by a super
+    admin's `POST /api/production/drive-backfill`) files every client's earlier card files into those folders —
+    the owner's order of 22 Oct 2026; each file claims `claim_locks/card_backfill__{file id}` so it is never copied twice.
 
 ## Layout
 

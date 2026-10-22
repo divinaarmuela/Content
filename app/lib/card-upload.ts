@@ -3,11 +3,11 @@ import { table } from '@/lib/db'
 import type { Client, ContentItem, DriveUpload, TeamUser as TeamRow } from '@/lib/db-types'
 import type { TeamUser } from './authz'
 import { createSubfolder, ensureFolder, findSubfolder, listFolderNames, listSubfolders, renameFolder, rootFolderId } from './gdrive'
-import { entryDetail, grantUserPermission, isInside, openUploadSession, pushUploadChunk, shareableLink } from './gdrive-files'
+import { entryDetail, grantUserPermission, isInside, openUploadSession, pushUploadChunk, shareableLink, uploadStreamToFolder } from './gdrive-files'
 import { isDriveId } from './files-core'
 import { handInRound } from './edit-round-core'
 import { startDriveHandIn } from './drive-handin'
-import { assetIdOf, currentFiles } from './final-files-core'
+import { assetIdOf, currentFiles, finalFilesOf, type FinalFile } from './final-files-core'
 import {
   DIRECT_CHUNK, cardFilingAllowed, folderNameOf, isVersionFolderName, resumableMatch, sharingUrl, uniqueName, versionFolderName,
 } from './card-upload-core'
@@ -332,4 +332,67 @@ export async function cardUploadState(user: TeamUser, item: ContentItem) {
     unfinished: mine.map((r, i) => ({ id: r.id, name: r.name, size: r.size, received: had[i], parent: r.parent_id, version: r.version, replaces: r.replaces ?? null })),
     waiting: rows.filter(r => r.status === 'done' && !r.copied_at).length,
   }
+}
+
+/* ── THE CARDS' FILES BEFORE THIS, PUT IN THEIR FOLDERS ────────────────────
+ * The owner, 22 Oct 2026: "merge all existing ones to the folders correctly". Every card's files that went on before
+ * the card had a folder are copied — from our own stored copy — into Clients / {Client} / {Card} / V{n}: the cut each
+ * piece had at each version (an attempt replaced inside the same version is not filed). Run once by a super admin
+ * (POST /api/production/drive-backfill), one card per job and one file per step (drive-card-backfill). For EVERY
+ * client — the owner's order — so it does not ask cardFilingAllowed; it writes only inside each card's own folder.
+ *
+ * NEVER TWICE: each file claims `claim_locks/card_backfill__{file id}` before it is copied (trap 11); a copy that
+ * failed or stalled for 20 minutes may be tried again, one that landed never is. A file that came from the card's
+ * own folder in the first place (uploaded there) is already in it and is skipped.
+ */
+type BackfillLock = { id: string; item_id: string; file_id: string; status: 'copying' | 'done' | 'failed'; drive_id?: string | null; error?: string | null; at: string }
+const backfillKey = (fileId: string) => `card_backfill__${fileId}`
+
+/** the files of a card to file: the last cut of each piece at each version */
+export function backfillFilesOf(item: { final_files?: unknown }): FinalFile[] {
+  const last = new Map<string, FinalFile>()
+  for (const f of finalFilesOf(item)) {
+    const k = `${assetIdOf(f)}@${f.version}`
+    const have = last.get(k)
+    if (!have || f.uploaded_at > have.uploaded_at) last.set(k, f)
+  }
+  return [...last.values()].sort((a, b) => a.version - b.version || a.uploaded_at.localeCompare(b.uploaded_at))
+}
+
+export async function backfillPlan(itemId: string): Promise<{ ok: true; files: string[] } | Fail> {
+  const item = await items().get(itemId)
+  if (!item) return { ok: false, status: 404, error: 'No such card' }
+  const fromFolder = new Set((await table<DriveUpload>('drive_uploads').list({ where: r => r.purpose === 'card' && r.item_id === itemId && !!r.drive_file_id }))
+    .map(r => String(r.drive_file_id)))
+  const files = backfillFilesOf(item).filter(f => !(f.drive_file_id && fromFolder.has(f.drive_file_id)))
+  if (files.length === 0) return { ok: true, files: [] }
+  // the folders first, once, so the file steps never race to make them
+  const folder = await cardFolder(item)
+  if (!folder.ok) return folder
+  for (const v of [...new Set(files.map(f => f.version))]) {
+    const made = await versionFolder((await items().get(itemId)) ?? item, folder.id, v)
+    if (!made.ok) return made
+  }
+  return { ok: true, files: files.map(f => f.id) }
+}
+
+export async function backfillFile(itemId: string, fileId: string): Promise<{ ok: true; drive_id: string | null; skipped?: string } | Fail> {
+  const item = await items().get(itemId)
+  const f = item ? finalFilesOf(item).find(x => x.id === fileId) : null
+  if (!item || !f) return { ok: true, drive_id: null, skipped: 'no longer on the card' }
+  const folderId = String(item.upload_folder_id ?? '').trim()
+  const vId = versionFoldersOf(item)[versionKey(f.version)]
+  if (!folderId || !vId) return { ok: false, status: 409, error: 'The card’s folders are not made' }
+  const locks = table<BackfillLock>('claim_locks')
+  const now = new Date().toISOString()
+  const took = await locks.claim(backfillKey(fileId), cur => {
+    if (cur && (cur.status === 'done' || (cur.status === 'copying' && Date.now() - Date.parse(cur.at) < 20 * 60_000))) return null
+    return { id: backfillKey(fileId), item_id: itemId, file_id: fileId, status: 'copying', at: now }
+  })
+  if (!took.claimed) return { ok: true, drive_id: took.current?.drive_id ?? null, skipped: took.current?.status === 'done' ? 'already in Drive' : 'being copied' }
+  const up = await uploadStreamToFolder({ sourceUrl: f.url, name: f.name, parentId: vId })
+  await locks.claim(backfillKey(fileId), cur => (cur ? {
+    ...cur, status: up.ok ? 'done' : 'failed', drive_id: up.ok ? up.id : null, error: up.ok ? null : up.message.slice(0, 300), at: new Date().toISOString(),
+  } : null))
+  return up.ok ? { ok: true, drive_id: up.id } : { ok: false, status: 502, error: up.message }
 }

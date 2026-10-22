@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
   DIRECT_CHUNK, PROXY_CHUNK, RESUME_FOR_MS, cardFilingAllowed, folderNameOf, isVersionFolderName, resumableMatch, sharingUrl, uniqueName, versionFolderName,
@@ -65,13 +65,24 @@ describe('carrying on tomorrow', () => {
 // every exported function in card-upload.ts that can write to Drive checks the switch first (trap 13)
 describe('the guard is in the source', () => {
   const WRITERS = ['ensureCardFolders', 'startCardUpload', 'finishCardUploads', 'makeCardFolder', 'renameCardFolder']
-  const READS = ['cardFolderTree', 'cardUploadState', 'cardUploadRow']
+  const READS = ['cardFolderTree', 'cardUploadState', 'cardUploadRow', 'backfillFilesOf']
+  // THE ONE-OFF FILING OF EVERY CARD'S EARLIER FILES (the owner, 22 Oct 2026: "merge all existing ones to the folders
+  // correctly"): every client by the owner's order, so no switch — but reached only from its job, which only a super
+  // admin's request starts
+  const BACKFILL = ['backfillPlan', 'backfillFile']
+  it('the back-fill is reached only from its job, started only by a super admin', () => {
+    const hits = (name: string) => [...readdirAll('app')].filter(f => /\.(ts|tsx)$/.test(f) && readFileSync(f, 'utf8').includes(name))
+    for (const name of BACKFILL) expect(hits(name).filter(f => !f.includes('/api/production/drive-backfill/')).sort()).toEqual(['app/inngest/functions.ts', 'app/lib/card-upload.ts'])
+    const route = readFileSync('app/api/production/drive-backfill/route.ts', 'utf8')
+    expect(route).toContain("await requireRole('super_admin')")
+    expect(route).toContain("name: 'drive/card.backfill'")
+  })
   it('every writer checks cardFilingAllowed, and nothing new is unclassified', () => {
     const src = readFileSync('app/lib/card-upload.ts', 'utf8')
     const found = [...src.matchAll(/^export (?:async )?function (\w+)/gm)].map(m => ({ name: m[1], at: m.index! }))
     const body = (i: number) => src.slice(found[i].at, found[i + 1]?.at ?? src.length)
     for (const [i, f] of found.entries()) {
-      expect(WRITERS.includes(f.name) || READS.includes(f.name), `classify ${f.name}`).toBe(true)
+      expect(WRITERS.includes(f.name) || READS.includes(f.name) || BACKFILL.includes(f.name), `classify ${f.name}`).toBe(true)
       if (WRITERS.includes(f.name)) expect(body(i).includes('cardFilingAllowed('), `${f.name} skips the switch`).toBe(true)
     }
   })
@@ -137,5 +148,22 @@ describe('any time, and Replace', () => {
     expect(server).not.toContain('LOCKED_STATUSES')
     expect(server).toContain('{ anyTime: true }')
     expect(readFileSync('app/inngest/functions.ts', 'utf8')).toContain("process.env.DRIVE_SCAN !== '1'")
+  })
+})
+
+function* readdirAll(dir: string): Generator<string> {
+  for (const n of readdirSync(dir)) {
+    const p = `${dir}/${n}`
+    if (statSync(p).isDirectory()) yield* readdirAll(p)
+    else yield p
+  }
+}
+
+describe('which earlier files are filed', () => {
+  it('the last cut of each piece at each version — an attempt replaced inside the same version is not', async () => {
+    const { backfillFilesOf } = await import('@/app/lib/card-upload')
+    const f = (id: string, version: number, at: string, asset?: string) => ({ id, name: `${id}.mp4`, url: `https://r2/${id}`, mime: 'video/mp4', size: 1, version, uploaded_at: at, ...(asset ? { asset_id: asset, replaces: asset } : {}) })
+    const card = { final_files: [f('a', 1, '2026-10-01'), f('a2', 1, '2026-10-02', 'a'), f('a3', 2, '2026-10-05', 'a'), f('b', 1, '2026-10-01')] }
+    expect(backfillFilesOf(card).map(x => x.id)).toEqual(['b', 'a2', 'a3'])
   })
 })

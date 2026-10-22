@@ -1073,6 +1073,36 @@ export const videoStoryboard = inngest.createFunction(
   },
 )
 
+/**
+ * THE CARDS' FILES BEFORE THEIR FOLDERS, FILED (card-upload.ts backfillPlan / backfillFile; the owner, 22 Oct 2026:
+ * "merge all existing ones to the folders correctly"). One card per run, the folders made first, then one file per
+ * step — a step is one file streamed from our storage into V{n}, so a retry repeats one file, never the card. A NEW
+ * function — re-sync after deploying it (trap 5b).
+ */
+export const driveCardBackfill = inngest.createFunction(
+  { id: 'drive-card-backfill', name: 'Editor: file existing card files into their Drive folders', triggers: [{ event: 'drive/card.backfill' }], retries: 2, concurrency: { limit: 2 } },
+  async ({ event, step }) => {
+    const itemId = String((event.data as { item_id?: unknown })?.item_id ?? '')
+    if (!itemId) return { skipped: 'no card' }
+    const plan = await step.run('folders', async () => {
+      const { backfillPlan } = await import('../lib/card-upload')
+      const r = await backfillPlan(itemId)
+      if (!r.ok) throw new Error(r.error)
+      return r.files
+    })
+    const out: { file: string; drive_id: string | null; skipped?: string; error?: string }[] = []
+    for (const fileId of plan) {
+      out.push(await step.run(`file-${fileId}`, async () => {
+        const { backfillFile } = await import('../lib/card-upload')
+        const r = await backfillFile(itemId, fileId)
+        if (!r.ok) throw new Error(r.error)
+        return { file: fileId, drive_id: r.drive_id, ...(r.skipped ? { skipped: r.skipped } : {}) }
+      }))
+    }
+    return { card: itemId, files: out.length, filed: out.filter(x => x.drive_id && !x.skipped).length }
+  },
+)
+
 export const driveScanFile = inngest.createFunction(
   // three at a time, but one at a time per card: the first scan measures the card's videos, the rest reuse them
   { id: 'drive-scan-file', name: 'Editor preview: AI scan of a new Drive file', triggers: [{ event: 'drive/scan.file' }], retries: 1, concurrency: [{ limit: 3 }, { limit: 1, key: 'event.data.item_id' }] },
@@ -1126,6 +1156,7 @@ export const functions = [
   drivePullFolder,
   driveScanWatch,
   driveScanFile,
+  driveCardBackfill,
   videoStoryboard,
   metaIgTokenRefresh,
 ]
