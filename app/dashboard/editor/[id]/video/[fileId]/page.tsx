@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, ChevronLeft, ChevronRight, Send } from 'lucide-react'
+import { ArrowLeft, ChevronLeft, ChevronRight, Lock, Send } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -293,7 +293,7 @@ export default function VideoReviewPage() {
                       </button>
                     )}
                     <span className="text-[13px] font-semibold">{nameOf(c.author_id)}</span>
-                    {fromClient(c.author_id) && <span className="rounded-full bg-accent-blue px-2 py-0.5 text-[11px] font-semibold text-white">Client</span>}
+                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${fromClient(c.author_id) ? 'bg-accent-blue text-white' : 'bg-foreground/[0.08] text-muted-foreground'}`}>{fromClient(c.author_id) ? 'Client' : 'Team'}</span>
                     {/* WHEN IT WAS SAID (the owner, 17 Sep 2026: "add the date alongside the timestamped comments") — the team's and the client's alike */}
                     {c.created_at && <span className="text-[12px] text-muted-foreground">{formatInZone(String(c.created_at), DEFAULT_TZ, 'full') ?? ''}</span>}
                   </div>
@@ -304,6 +304,9 @@ export default function VideoReviewPage() {
             </ul>
           </div>
           <div className="flex flex-col gap-2 border-t border-border p-3">
+            {/* the team's own (the owner, 22 Oct 2026: "client portal shouldnt see our comments") — the portal reads only
+                the client's */}
+            <p className="flex items-center gap-1.5 text-[12px] text-muted-foreground"><Lock className="h-3.5 w-3.5" aria-hidden /> Team only — the client never sees this</p>
             {!isImage && (
             <label className="flex items-center gap-2 text-[13px]">
               <input type="checkbox" className="h-4 w-4 accent-foreground" checked={stamp} onChange={e => setStamp(e.target.checked)} />
