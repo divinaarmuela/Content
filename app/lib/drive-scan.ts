@@ -154,6 +154,14 @@ export async function watchSources(opts: { limit?: number; budgetMs?: number } =
       await seenTable.claim(r.id, cur => cur?.state === 'taken' ? { ...cur, decided_at: new Date().toISOString(), scan: { ...((cur.scan as object) ?? {}), copy_tries: tries + 1 }, updated_at: new Date().toISOString() } as DriveSeen : null).catch(() => undefined)
     } catch { /* tried again next minute */ }
   }
+  // A CHECK THAT FAILED IS TRIED AGAIN (live, 22 Oct 2026: Pan Roasted Quail could not be read while Google blocked its
+  // downloads, and then sat as "failed" for good): 30 minutes on, up to three times, it goes back to the queue
+  for (const r of seenRows.filter(x => x.state === 'failed' && Date.now() - Date.parse(x.updated_at) > 30 * 60_000).slice(0, 5)) {
+    const tries = Number((r.scan as { check_tries?: unknown } | null)?.check_tries ?? 0)
+    if (tries >= 3) continue
+    const put = await seenTable.claim(r.id, cur => cur?.state === 'failed' ? { ...cur, state: 'new', scan: { check_tries: tries + 1 }, updated_at: new Date().toISOString() } as DriveSeen : null).catch(() => null)
+    if (put?.claimed) out.toScan.push(r.id)
+  }
   // A FILE LEFT WAITING IS ASKED FOR AGAIN: one still "new" ten minutes on (its event lost, or set back for a rescan)
   // is queued again, and stamped so it is asked at most every ten minutes — a scan that never starts is never final
   const stale = await table<DriveSeen>('drive_seen').list({ where: r => r.state === 'new' && Date.now() - Date.parse(r.updated_at) > 10 * 60_000, fresh: true })

@@ -228,10 +228,13 @@ function stackFilesOf(item: ContentItem, rows: readonly DriveSeen[], framesOf: F
   // a file matched to a video on ANOTHER card: that video is its earlier version (New Menu Medley's draft is on the
   // Flinders Lane card, so Ryan's cut in this card's Drive is V2 — live, 21 Oct 2026)
   const others: StackFile[] = []
+  // only for files shown here, and never this card itself (live, 22 Oct 2026: "0 files are already on Olimpia" on the
+  // Olimpia card — a file matched TO this card made a line pointing back at it)
+  const shownIds = new Set(drive.map(d => d.key.slice(2)))
   for (const r of rows) {
     const scan = (r.scan ?? null) as { asset?: string | null; other_card?: { title?: string } | null; compared?: { asset: string; name: string }[] } | null
     const a = scan?.asset
-    if (!a?.startsWith('card:') || others.some(o => o.key === `o:${a.slice(5)}`)) continue
+    if (!a?.startsWith('card:') || a.startsWith(`card:${item.id}:`) || !shownIds.has(r.id) || others.some(o => o.key === `o:${a.slice(5)}`)) continue
     others.push({
       key: `o:${a.slice(5)}`, name: scan?.compared?.find(c => c.asset === a)?.name ?? 'a video', at: '', source: 'other', kind: null, matchKey: null,
       ask: false, busy: false, thumb: null, confidence: null, otherCard: scan?.other_card?.title ?? null, otherCardId: (scan?.other_card as { id?: string } | null)?.id ?? null,
@@ -257,7 +260,7 @@ function Workspace({ item, rows, needsGrade, gradeSince, sourceCreated, framesOf
   // A VIDEO THAT IS ANOTHER CARD'S — a copy of it, or a new cut of it — is never added here: the card says where it is,
   // a press away (the owner, 22 Oct 2026: "if videos are appearing in multiple cards dont add it but prompt the card
   // there and tell it where it is at so when they click it takes them there")
-  const elsewhere = all.filter(s => s.otherCard && s.entries.every(e => e.source !== 'card'))
+  const elsewhere = all.filter(s => s.otherCard && s.otherCardId !== item.id && s.entries.every(e => e.source !== 'card') && s.entries.some(e => e.source === 'drive'))
   const stacks = all.filter(s => !elsewhere.includes(s))
   const round = roundOf(item)
   const gradedThisRound = gradedRoundOf(item) === round
@@ -307,6 +310,9 @@ function Workspace({ item, rows, needsGrade, gradeSince, sourceCreated, framesOf
     const gone = s.entries.some(e => e.source === 'drive') && s.entries.every(e => e.source !== 'drive' || rowById.get(e.key.slice(2))?.state === 'gone')
     const copying = s.entries.map(e => e.source === 'drive' ? rowById.get(e.key.slice(2)) : undefined).find(r => r?.state === 'taken')
     if (s.busy && !copying) return { file, pending, next: { words: 'AI checking it…', tone: 'blue' as NextTone } }
+    // a check that failed says so, never the card's stage (the owner: "why does it say with editor")
+    const failed = s.entries.some(e => e.source === 'drive' && rowById.get(e.key.slice(2))?.state === 'failed') && !s.entries.some(e => e.source === 'card')
+    if (failed) return { file, pending, next: { words: 'Couldn’t check it yet — trying again', tone: 'amber' as NextTone } }
     const tries = Number((copying?.scan as { copy_tries?: unknown } | null)?.copy_tries ?? 0)
     if (copying) return { file, pending, next: { words: tries ? `Copying onto the card — trying again (try ${tries + 1} of 6)` : 'Copying onto the card…', tone: 'blue' as NextTone } }
     const next = videoNext({ status: item.status, needsGrade, gradedThisRound: gradedThisRound && !!file, approved: !!file && approvedFiles.has(file.id), newInDrive: pending.length > 0, gone, onCard: !!asset })
