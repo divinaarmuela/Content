@@ -293,7 +293,8 @@ export default function VideoReviewPage() {
                       </button>
                     )}
                     <span className="text-[13px] font-semibold">{nameOf(c.author_id)}</span>
-                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${fromClient(c.author_id) ? 'bg-accent-blue text-white' : 'bg-foreground/[0.08] text-muted-foreground'}`}>{fromClient(c.author_id) ? 'Client' : 'Team'}</span>
+                    {fromClient(c.author_id) && <span className="rounded-full bg-accent-blue px-2 py-0.5 text-[11px] font-semibold text-white">Client</span>}
+                    {!fromClient(c.author_id) && <span className="rounded-full bg-foreground/[0.08] px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">Team</span>}
                     {/* WHEN IT WAS SAID (the owner, 17 Sep 2026: "add the date alongside the timestamped comments") — the team's and the client's alike */}
                     {c.created_at && <span className="text-[12px] text-muted-foreground">{formatInZone(String(c.created_at), DEFAULT_TZ, 'full') ?? ''}</span>}
                   </div>

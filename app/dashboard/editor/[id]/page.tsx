@@ -79,9 +79,9 @@ export default function EditorCard() {
     const mine = seen.rows.map(r => owned[r.drive_file_id] && r.state !== 'taken'
       ? { ...r, scan: { ...((r.scan as object) ?? {}), kind: 'copy', asset: `card:${owned[r.drive_file_id].id}:shared`, other_card: owned[r.drive_file_id], shared: true } } as DriveSeen
       : r)
-    // NO AI ANY MORE (the owner, 22 Oct 2026: "we are not using ai anymore"): a file the scan found and nobody put on
-    // the card offers nothing now — only the ones that went on ('taken') stay, for the folder they came from
-    return [...mine, ...(extra?.incoming ?? []).filter(r => !seen.rows.some(x => x.id === r.id))].filter(r => r.state === 'taken')
+    // every video in the card's Drive stays on the card (live, 22 Oct 2026: keeping only the confirmed ones emptied the
+    // Alia and Cecconi cards — "all alia videos are not there")
+    return [...mine, ...(extra?.incoming ?? []).filter(r => !seen.rows.some(x => x.id === r.id))]
   }, [seen.rows, extra])
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 10_000); return () => clearInterval(t) }, [])
@@ -322,7 +322,8 @@ function Workspace({ item, rows, needsGrade, gradeSince, sourceCreated, framesOf
     if (!editing && !file && s.entries.every(e => e.source !== 'card') && s.entries.some(e => e.source === 'drive' && ['locked', 'failed', 'scanned'].includes(rowById.get(e.key.slice(2))?.state ?? '')))
       return { file, pending, next: { words: 'In Drive — waiting for the next hand-in', tone: 'muted' as NextTone } }
     const failed = s.entries.some(e => e.source === 'drive' && rowById.get(e.key.slice(2))?.state === 'failed') && !s.entries.some(e => e.source === 'card')
-    if (failed) return { file, pending, next: { words: 'Couldn’t check it yet — trying again', tone: 'amber' as NextTone } }
+    // no AI any more (22 Oct 2026): a file the check never reached is simply in Drive
+    if (failed) return { file, pending, next: { words: 'In Drive', tone: 'muted' as NextTone } }
     const tries = Number((copying?.scan as { copy_tries?: unknown } | null)?.copy_tries ?? 0)
     if (copying) return { file, pending, next: { words: tries ? `Copying onto the card — trying again (try ${tries + 1} of 6)` : 'Copying onto the card…', tone: 'blue' as NextTone } }
     const next = videoNext({ status: item.status, needsGrade, gradedThisRound: gradedThisRound && !!file, approved: !!file && approvedFiles.has(file.id), newInDrive: pending.length > 0, gone, onCard: !!asset, holder })
