@@ -24,6 +24,7 @@ import { boardLine, readPerformance } from '../../lib/post-performance-core'
 import { postPageHref } from '../../lib/post-page-core'
 import { LaneBoard, type Lane } from '../production/LaneBoard'
 import { BoardCard, CompactCard } from './BoardCard'
+import { EditorBoardCard } from '../editor/EditorBoardCard'
 
 /** COLUMNS OR A LIST (the owner, 16 Sep 2026: "is there a way to make a list
  *  format?") — remembered per page, `?view=list` in the address */
@@ -213,6 +214,8 @@ export function Board({
   )
 
   const laneLayout = useMemo(() => pageLanes(page), [page])
+  /** the Editor board draws small cards in tight lanes (the owner, 22 Oct 2026: "the columns and all") */
+  const dense = page === 'editor'
   // the Delivered column is drawn only when a card is in it — a team with no
   // client who posts their own never sees an eighth column
   const grouped = useMemo(
@@ -276,7 +279,7 @@ export function Board({
         onDragOver={e => { if (dragging) { e.preventDefault(); if (over !== key) setOver(key) } }}
         onDragLeave={() => { if (over === key) setOver(null) }}
         onDrop={e => { e.preventDefault(); drop(key) }}
-        className={`flex min-h-[120px] flex-col gap-2.5 rounded-inner transition-colors ${
+        className={`flex flex-col rounded-inner transition-colors ${dense ? 'min-h-[80px] gap-1.5' : 'min-h-[120px] gap-2.5'} ${
           dragging
             ? active
               ? over === key ? 'bg-tint-green ring-2 ring-accent-green' : 'bg-tint-green'
@@ -305,6 +308,26 @@ export function Board({
             {lane.folded ? (
               // compact: title, client, stage — open the card to act on it
               <CompactCard card={c} today={today} onOpen={open} names={names} />
+            ) : dense ? (
+              // THE EDITOR'S SMALL CARD (the owner, 22 Oct 2026: "cards here are too big")
+              <EditorBoardCard
+                card={c}
+                viewer={viewer}
+                names={names}
+                managers={managersOf?.(c.client_id) ?? []}
+                today={today}
+                busy={busyId === c.id}
+                canEdit={canEdit(c)}
+                onOpen={open}
+                onAction={act}
+                onMove={act}
+                tour={c.id === firstCardId}
+                onHandTo={canEdit(c) && (isManager || viewer.role === 'general') ? setHandToFor : undefined}
+                canDelete={mayDeleteCard(viewer, c as never)}
+                onDelete={setDeleteFor}
+                onArchive={mayArchiveCard(viewer, c as never) ? card => { void setArchived('card', card.id, true) } : undefined}
+                onAcknowledge={onAcknowledge ? card => onAcknowledge(card as BoardCardRow) : undefined}
+              />
             ) : (
               <BoardCard
                 card={c}
@@ -344,7 +367,7 @@ export function Board({
           </div>
         ))}
         {inLane.length === 0 && (
-          <div className="rounded-inner border border-dashed border-border px-3 py-7 text-center text-[13px] text-muted-foreground">
+          <div className={`rounded-inner border border-dashed border-border px-3 text-center text-muted-foreground ${dense ? 'py-4 text-[12px]' : 'py-7 text-[13px]'}`}>
             {dropLabel?.ok ? `Drop here — ${dropLabel.action.label}` : (laneEmpty?.(lane.label) ?? lane.empty)}
           </div>
         )}
@@ -430,6 +453,7 @@ export function Board({
       <div data-tour="board-lanes">
         <LaneBoard
           lanes={lanes}
+          dense={dense}
           initialLane={initialColumn ? laneOf(page, initialColumn) : undefined}
           ariaLabel={ariaLabel}
         />

@@ -55,8 +55,11 @@ export type Lane = {
  * Presentation only — every rule about which card is in which lane belongs
  * to the page and to board-view-core.
  */
-export function LaneBoard({ lanes, initialLane, ariaLabel }: {
+export function LaneBoard({ lanes, initialLane, ariaLabel, dense = false }: {
   lanes: Lane[]
+  /** TIGHT LANES (the Editor board, the owner 22 Oct 2026: "cards here are too big i mean the columns and all"):
+   *  each lane a quiet panel, narrower, its cards closer together — four lanes fit a laptop with room to spare */
+  dense?: boolean
   /** the lane to open on a phone; defaults to the first one with cards */
   initialLane?: string
   ariaLabel: string
@@ -115,6 +118,15 @@ export function LaneBoard({ lanes, initialLane, ariaLabel }: {
     // a readable card beats a whole board of unreadable ones. No cap: on a
     // wide screen the lanes share the whole width ("there is a gap on far
     // right, make sure we utilize the space").
+    if (dense) {
+      return (
+        <UiLane key={lane.key} title={lane.title} count={lane.count} hint={lane.hint}
+          muted={lane.folded} dense
+          className="min-w-[210px] flex-1 rounded-card bg-foreground/[0.025] p-2">
+          {stack(lane)}
+        </UiLane>
+      )
+    }
     return (
       <UiLane key={lane.key} title={lane.title} count={lane.count} hint={lane.hint}
         muted={lane.folded}
@@ -165,7 +177,7 @@ export function LaneBoard({ lanes, initialLane, ariaLabel }: {
     // the edge gave no sign they were there (the owner, 13 Sep 2026: "need a
     // bottom scrollbar to indicate they can scroll left to right")
     <div className="w-full overflow-x-auto" data-lane-scroll>
-      <div className="flex gap-3.5 pb-3">
+      <div className={`flex pb-3 ${dense ? 'gap-2.5' : 'gap-3.5'}`}>
         {lanes.map((l, i) => column(l, i))}
       </div>
     </div>

@@ -12,8 +12,10 @@ import { cn } from '@/lib/utils'
  * the chevron that collapses it to a rail.
  */
 export default function Lane({
-  title, count, children, className, hint, muted, control,
+  title, count, children, className, hint, muted, control, dense,
 }: {
+  /** a smaller heading and closer cards — the Editor board (22 Oct 2026) */
+  dense?: boolean
   title: string
   count: number
   children?: React.ReactNode
@@ -26,21 +28,21 @@ export default function Lane({
   control?: React.ReactNode
 }) {
   return (
-    <section className={cn('flex min-w-0 flex-1 flex-col gap-2.5', className)}>
-      <div className="flex items-center gap-1.5 px-1 pb-1">
+    <section className={cn('flex min-w-0 flex-1 flex-col', dense ? 'gap-1.5' : 'gap-2.5', className)}>
+      <div className={cn('flex items-center gap-1.5 px-1', dense ? 'pb-0.5' : 'pb-1')}>
         {/* the hint is a sibling, not part of the heading — a "?" button
             inside the <h2> would become part of the column's name */}
-        <h2 className={cn('min-w-0 truncate text-[15px] font-semibold', muted && 'text-muted-foreground')}>{title}</h2>
+        <h2 className={cn('min-w-0 truncate font-semibold', dense ? 'text-[13px]' : 'text-[15px]', muted && 'text-muted-foreground')}>{title}</h2>
         {hint}
         <span className={cn(
-          'ml-auto shrink-0 rounded-full px-2.5 py-[3px] text-[12px] font-bold tabular-nums',
+          'ml-auto shrink-0 rounded-full font-bold tabular-nums', dense ? 'px-2 py-px text-[11px]' : 'px-2.5 py-[3px] text-[12px]',
           muted ? 'bg-foreground/[0.05] text-muted-foreground' : 'bg-foreground/[0.08] text-foreground',
         )}>
           {count}
         </span>
         {control}
       </div>
-      <div className="flex flex-col gap-2.5">{children}</div>
+      <div className={cn('flex flex-col', dense ? 'gap-1.5' : 'gap-2.5')}>{children}</div>
     </section>
   )
 }
