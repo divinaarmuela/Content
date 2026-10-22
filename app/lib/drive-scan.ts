@@ -131,7 +131,9 @@ export async function watchSources(opts: { limit?: number; budgetMs?: number } =
   // a much-read file usually lasts. After the sixth it goes back to "scanned" with a note — never silently lost.
   const cardsById = new Map(items.map(i => [i.id, i]))
   for (const r of seenRows.filter(x => x.state === 'taken' && x.decided_by && x.decided_at && Date.now() - Date.parse(x.decided_at) > 30 * 60_000).slice(0, 5)) {
-    const item = cardsById.get(r.item_id)
+    // a file confirmed onto ANOTHER card (it was that card's video) is that card's to copy
+    const target = (r.scan as { other_card?: { id?: string } | null } | null)?.other_card?.id ?? r.item_id
+    const item = cardsById.get(target)
     if (!item) continue
     const onCard = (Array.isArray((item as { final_files?: unknown }).final_files) ? (item as { final_files: { drive_file_id?: string }[] }).final_files : []).some(f => f.drive_file_id === r.drive_file_id)
     if (onCard) continue
@@ -146,7 +148,7 @@ export async function watchSources(opts: { limit?: number; budgetMs?: number } =
       ])
       if (!user || !source) continue
       const a = (r.scan as { asset?: string | null } | null)?.asset ?? null
-      const res = await startDriveHandIn(user as never, item as never, { url: source.link, ids: [r.drive_file_id], map: { [r.drive_file_id]: a && !a.startsWith('seen:') && !a.startsWith('card:') ? a : 'new' } })
+      const res = await startDriveHandIn(user as never, item as never, { url: source.link, ids: [r.drive_file_id], map: { [r.drive_file_id]: a?.startsWith(`card:${item.id}:`) ? a.slice(`card:${item.id}:`.length) : a && !a.startsWith('seen:') && !a.startsWith('card:') ? a : 'new' } })
       // a copy still running on the card is waited for, not counted as a try
       if (!res.ok && res.status === 409) continue
       await seenTable.claim(r.id, cur => cur?.state === 'taken' ? { ...cur, decided_at: new Date().toISOString(), scan: { ...((cur.scan as object) ?? {}), copy_tries: tries + 1 }, updated_at: new Date().toISOString() } as DriveSeen : null).catch(() => undefined)

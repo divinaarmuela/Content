@@ -73,6 +73,8 @@ async function sampleAt(src: string, atS: number, pct: number): Promise<{ sample
 }
 
 const keyOf = (source: string) => createHash('sha256').update(source).digest('hex').slice(0, 32)
+/** the `video_frames` row id of a measured video, by what was measured */
+export const framesRowId = (cacheKey: string) => keyOf(`${PROBE_VERSION}|${cacheKey}`)
 
 /**
  * THE MEASURE OF ONE VIDEO, cached by its source — `cacheKey` names the content (an R2 url, or a Drive id with its

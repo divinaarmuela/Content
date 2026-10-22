@@ -37,7 +37,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       if (!canEditItemFields(user, item as never) && !grades) {
         return NextResponse.json({ error: 'Only whoever holds this card — or a manager — can hand in its files' }, { status: 403 })
       }
-      const rows = (await Promise.all(ids.map(r => table<DriveSeen>('drive_seen').get(r)))).filter((r): r is DriveSeen => !!r && r.item_id === item.id)
+      // this card's own files, and files in another card's Drive the AI matched to a video on THIS card (they are offered here)
+      const mine = (r: DriveSeen) => r.item_id === item.id || (r.scan as { other_card?: { id?: string } | null } | null)?.other_card?.id === item.id
+      const rows = (await Promise.all(ids.map(r => table<DriveSeen>('drive_seen').get(r)))).filter((r): r is DriveSeen => !!r && mine(r))
       if (!rows.length) return NextResponse.json({ error: 'Those files are not on this card' }, { status: 404 })
       const now = new Date().toISOString()
       const settle = (state: 'taken' | 'ignored') => Promise.all(rows.map(r => table<DriveSeen>('drive_seen').claim(r.id, cur =>
@@ -49,7 +51,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       }
 
       // ANOTHER CARD'S VIDEO IS NEVER HANDED IN HERE — the card points to where it is instead (the owner, 22 Oct 2026)
-      const theirs = rows.find(r => (r.scan as { other_card?: { title?: string } | null } | null)?.other_card)
+      const theirs = rows.find(r => r.item_id === item.id && (r.scan as { other_card?: { title?: string } | null } | null)?.other_card)
       if (theirs) {
         const title = (theirs.scan as { other_card: { title?: string } }).other_card.title ?? 'another card'
         return NextResponse.json({ error: `${theirs.name} is already on “${title}” — open that card to add it there.` }, { status: 409 })
@@ -59,6 +61,10 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       if (String(item.status) === 'colour_grade') {
         const since = await gradeSinceOf(item.id)
         for (const r of rows) {
+          // a new cut is not a grade: it goes back through editing first
+          if ((r.scan as { kind?: string } | null)?.kind !== 'graded') {
+            return NextResponse.json({ error: `${r.name} is a new cut, not a grade. Send the card back for changes first, then add it in editing.` }, { status: 409 })
+          }
           const src = await table<DriveSource>('drive_sources').get(r.source_id)
           if (gradeStanding(r, src?.created_at, since) !== 'grade') {
             return NextResponse.json({ error: `${r.name} was in Drive before this card went to colour grade — it isn't a grade. Send the card back to editing if it is a new cut.` }, { status: 409 })
@@ -76,7 +82,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         for (const r of group) {
           const a = (r.scan as { asset?: string | null } | null)?.asset ?? null
           // a card video's id goes to that video; a match in Drive or on another card is a new video here
-          map[r.drive_file_id] = a && !a.startsWith('seen:') && !a.startsWith('card:') ? a : 'new'
+          map[r.drive_file_id] = a?.startsWith(`card:${item.id}:`) ? a.slice(`card:${item.id}:`.length) : a && !a.startsWith('seen:') && !a.startsWith('card:') ? a : 'new'
         }
         const res = await startDriveHandIn(user, item as never, { url: source.link, ids: group.map(r => r.drive_file_id), map })
         if (!res.ok) return NextResponse.json({ error: res.error }, { status: res.status })

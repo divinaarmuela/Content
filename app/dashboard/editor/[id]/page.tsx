@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useRow, useTable } from '@/lib/db-client'
-import type { Batch, Client, ContentItem, DriveSeen, DriveSource, TeamUser, VideoFrame, WorkKind } from '@/lib/db-types'
+import type { Batch, Client, ContentItem, DriveSeen, DriveSource, TeamUser, WorkKind } from '@/lib/db-types'
 import { STEPS, agoWords, initialsOfName, isEditorCard, stepOf, videoNext, type NextTone } from '../../../lib/editor-preview-core'
 import { KIND_WORDS, OPEN_STATES, STATE_WORDS, gradeStanding, isFootage, isVideo, stageRule, type CutKind, type SeenState } from '../../../lib/drive-scan-core'
 import { assetHistory, assetIdOf, currentFiles, finalFilesOf, isRetiredAt } from '../../../lib/final-files-core'
@@ -54,20 +54,25 @@ export default function EditorCard() {
   const seen = useTable<DriveSeen>('drive_seen', { enabled: allowed, by: { item_id: id } as Partial<DriveSeen> })
   const sources = useTable<DriveSource>('drive_sources', { enabled: allowed, by: { item_id: id } as Partial<DriveSource> })
   // when the card went to Colour grade: after that, a new file in its links is a grade; before, it never is
-  // the twelve frames the scan kept of every video (scan-measure.ts), keyed by what it measured
-  const framesTable = useTable<VideoFrame>('video_frames', { enabled: allowed })
+  // WHAT THIS CARD NEEDS BESIDE ITS ROW, in one small answer (api/editor-preview/[id]/media): the frames and
+  // storyboards of its videos, when it went to colour grade, and files in other cards' Drive matched to its videos —
+  // not the whole activity history and every video's frames (live, 22 Oct 2026: ~15 s to open a card)
+  const [extra, setExtra] = useState<{ gradeSince: string | null; media: Record<string, { frames: { url: string; at_s: number }[]; board: Board | null }>; incoming: DriveSeen[] } | null>(null)
+  useEffect(() => {
+    if (!allowed || !id) return
+    let live = true
+    const load = () => fetch(`/api/editor-preview/${id}/media`).then(r => r.ok ? r.json() : null).then(j => { if (live && j) setExtra(j) }).catch(() => undefined)
+    void load()
+    const t = setInterval(load, 60_000)
+    return () => { live = false; clearInterval(t) }
+  }, [allowed, id, seen.rows.length])
   const framesOf = useMemo(() => {
     const m = new Map<string, { url: string; at_s: number }[]>() as FramesMap
     m.boards = new Map()
-    for (const r of framesTable.rows) {
-      const b = (r as { storyboard?: Board | null }).storyboard
-      if (b?.url) m.boards.set(r.source, b)
-      const list = (Array.isArray(r.frames) ? r.frames as { url?: string | null; at_s?: number }[] : []).filter(f => f.url).map(f => ({ url: String(f.url), at_s: Number(f.at_s ?? 0) }))
-      if (list.length > (m.get(r.source)?.length ?? 0)) m.set(r.source, list)
-    }
+    for (const [k, v] of Object.entries(extra?.media ?? {})) { m.set(k, v.frames); if (v.board?.url) m.boards.set(k, v.board) }
     return m
-  }, [framesTable.rows])
-  const moves = useTable<{ id: string; entity_id?: string; action?: string; new_value?: string; created_at?: string }>('workflow_activity', { enabled: allowed, by: { entity_id: id } as never })
+  }, [extra])
+  const allRows = useMemo(() => [...seen.rows, ...(extra?.incoming ?? []).filter(r => !seen.rows.some(x => x.id === r.id))], [seen.rows, extra])
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 10_000); return () => clearInterval(t) }, [])
   // WHEN A PERSON LAST OPENED A CARD: stamped for the board's "Last viewed" order, as the classic card did — fire and forget
@@ -124,8 +129,8 @@ export default function EditorCard() {
       </div>
       <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(420px,520px)]">
         <div className="flex min-w-0 flex-col gap-6">
-          <Workspace item={item} rows={seen.rows} needsGrade={needsColourGrade(kindSlug)} framesOf={framesOf}
-            gradeSince={moves.rows.filter(a => a.action === 'status_change' && a.new_value === 'colour_grade').map(a => String(a.created_at ?? '')).sort().pop() ?? null}
+          <Workspace item={item} rows={allRows} needsGrade={needsColourGrade(kindSlug)} framesOf={framesOf}
+            gradeSince={extra?.gradeSince ?? null}
             sourceCreated={new Map(sources.rows.map(s => [s.id, s.created_at]))} />
           <details className="rounded-card border border-border bg-surface p-4">
             <summary className="cursor-pointer text-[13px] font-semibold text-muted-foreground">Scan details — every file the AI looked at</summary>
@@ -206,14 +211,17 @@ function stackFilesOf(item: ContentItem, rows: readonly DriveSeen[], framesOf: F
     .map(r => {
       const scan = (r.scan ?? null) as { kind?: string; asset?: string | null; same_as?: string | null; ask?: boolean; confidence?: number; frames?: (string | null)[]; other_card?: { title?: string } | null } | null
       const a = scan?.asset ?? null
-      const matchKey = !a ? null : a.startsWith('seen:') ? `s:${a.slice(5)}` : a.startsWith('card:') ? `o:${a.slice(5)}` : `a:${a}`
+      // found in ANOTHER card's Drive and matched to a video here: it is this card's, joined to that video
+      const incoming = r.item_id !== item.id
+      const here = incoming && a?.startsWith(`card:${item.id}:`) ? a.slice(`card:${item.id}:`.length) : null
+      const matchKey = here ? `a:${here}` : !a ? null : a.startsWith('seen:') ? `s:${a.slice(5)}` : a.startsWith('card:') ? `o:${a.slice(5)}` : `a:${a}`
       return {
         // a "graded" verdict on a file seen before the card was at colour grade is only a cut (verdictOf says so now)
         key: `s:${r.id}`, name: r.path, at: r.created_time ?? r.modified ?? r.first_seen_at, source: 'drive', kind: scan?.kind === 'graded' && r.stage_at_seen !== 'colour_grade' ? 'recut' : scan?.kind ?? null, matchKey,
         ask: !!scan?.ask, busy: r.state === 'new' || r.state === 'scanning', thumb: scan?.frames?.find(Boolean) ?? null,
         frames: (scan?.frames ?? []).map((u, i) => ({ url: String(u ?? ''), at_s: i })).filter(x => x.url),
         board: framesOf.boards?.get(driveKey(r)) ?? null,
-        confidence: typeof scan?.confidence === 'number' ? scan.confidence : null, otherCard: scan?.other_card?.title ?? null, otherCardId: (scan?.other_card as { id?: string } | null)?.id ?? null,
+        confidence: typeof scan?.confidence === 'number' ? scan.confidence : null, otherCard: incoming ? null : scan?.other_card?.title ?? null, otherCardId: incoming ? null : (scan?.other_card as { id?: string } | null)?.id ?? null,
         sameAs: scan?.same_as?.startsWith('seen:') ? `s:${scan.same_as.slice(5)}` : null,
       }
     })
@@ -257,7 +265,10 @@ function Workspace({ item, rows, needsGrade, gradeSince, sourceCreated, framesOf
   const current = currentFiles(item)
   const atGrade = String(item.status) === 'colour_grade'
   const beforeGrade = new Set(atGrade ? rows.filter(r => r.state === 'scanned' && gradeStanding(r, sourceCreated.get(r.source_id), gradeSince) === 'before').map(r => r.id) : [])
-  const offerable = (r: DriveSeen | undefined) => !!r && r.state === 'scanned' && !beforeGrade.has(r.id)
+  for (const r of rows) if (atGrade && r.state === 'scanned' && !beforeGrade.has(r.id) && (r.scan as { kind?: string } | null)?.kind !== 'graded') beforeGrade.add(r.id)
+  // at colour grade only a grade is offered; a new cut then waits for the card to go back to editing
+  const notGrade = new Set(atGrade ? rows.filter(r => r.state === 'scanned' && (r.scan as { kind?: string } | null)?.kind !== 'graded').map(r => r.id) : [])
+  const offerable = (r: DriveSeen | undefined) => !!r && r.state === 'scanned' && !beforeGrade.has(r.id) && !notGrade.has(r.id)
   const folderOf = (s: Stack): string => {
     for (const e of s.entries) {
       if (e.source === 'drive') { const r = rowById.get(e.key.slice(2)); if (r) return folderName(r.path) }
@@ -268,14 +279,14 @@ function Workspace({ item, rows, needsGrade, gradeSince, sourceCreated, framesOf
           const kept = (v as { drive_path?: string | null }).drive_path
           if (kept) return folderName(kept)
         }
-        return 'Handed in'
+        return 'Uploaded to the card'
       }
     }
-    return 'Top of the link'
+    return 'Main folder'
   }
   const groups = new Map<string, Stack[]>()
   for (const s of stacks) { const k = folderOf(s); groups.set(k, [...(groups.get(k) ?? []), s]) }
-  const ordered = [...groups.entries()].sort((a, b) => (a[0] === 'Top of the link' ? 1 : b[0] === 'Top of the link' ? -1 : a[0].localeCompare(b[0])))
+  const ordered = [...groups.entries()].sort((a, b) => (a[0] === 'Main folder' ? 1 : b[0] === 'Main folder' ? -1 : a[0].localeCompare(b[0])))
   const [folder, setFolder] = useState<string | null>(null)
   const shown = folder ? ordered.filter(([f]) => f === folder) : ordered
   const [pick, setPick] = useState<{ stack: string; entry: string } | null>(null)
@@ -295,6 +306,7 @@ function Workspace({ item, rows, needsGrade, gradeSince, sourceCreated, framesOf
     const pending = s.entries.filter(e => e.source === 'drive' && offerable(rowById.get(e.key.slice(2))) && e.kind !== 'copy').map(e => rowById.get(e.key.slice(2))!)
     const gone = s.entries.some(e => e.source === 'drive') && s.entries.every(e => e.source !== 'drive' || rowById.get(e.key.slice(2))?.state === 'gone')
     const copying = s.entries.map(e => e.source === 'drive' ? rowById.get(e.key.slice(2)) : undefined).find(r => r?.state === 'taken')
+    if (s.busy && !copying) return { file, pending, next: { words: 'AI checking it…', tone: 'blue' as NextTone } }
     const tries = Number((copying?.scan as { copy_tries?: unknown } | null)?.copy_tries ?? 0)
     if (copying) return { file, pending, next: { words: tries ? `Copying onto the card — trying again (try ${tries + 1} of 6)` : 'Copying onto the card…', tone: 'blue' as NextTone } }
     const next = videoNext({ status: item.status, needsGrade, gradedThisRound: gradedThisRound && !!file, approved: !!file && approvedFiles.has(file.id), newInDrive: pending.length > 0, gone, onCard: !!asset })
@@ -312,14 +324,14 @@ function Workspace({ item, rows, needsGrade, gradeSince, sourceCreated, framesOf
   }
   return (
     <section className="flex flex-col gap-5 rounded-card border border-border bg-surface p-5">
-      <div ref={playerRef} className="scroll-mt-4" />
+      <div ref={playerRef} className="scroll-mt-24" />
       {sel && entry && <Player item={item} s={sel} entry={entry} info={info(sel)} rowById={rowById} beforeGrade={beforeGrade} onEntry={k => setPick({ stack: sel.key, entry: k })} />}
       <div>
         <header className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <h2 className="flex items-center gap-2 text-[16px] font-semibold"><Film className="h-4 w-4" aria-hidden /> Videos <span className="text-muted-foreground">({stacks.length})</span></h2>
           <span className="flex items-center gap-2">
             <AiScanning n={rows.filter(r => r.state === 'new' || r.state === 'scanning').length} />
-            {selecting
+            {stacks.filter(x => x.entries.some(e => e.source === 'card')).length < 2 ? null : selecting
               ? <>
                   <Button size="sm" disabled={picked.size === 0} onClick={() => openSideBySide([...picked])} className="h-9 rounded-full px-4 text-[13px] font-semibold">Side by side ({picked.size})</Button>
                   <Button size="sm" variant="ghost" onClick={() => { setSelecting(false); setPicked(new Set()) }} className="h-9 rounded-full px-3 text-[13px]">Cancel</Button>
@@ -382,27 +394,30 @@ function Workspace({ item, rows, needsGrade, gradeSince, sourceCreated, framesOf
 
 /** the files in this card's links that are another card's videos — named, not counted as this card's */
 function Elsewhere({ list }: { list: Stack[] }) {
-  const byCard = new Map<string, { title: string; files: string[] }>()
+  const byCard = new Map<string, { title: string; files: string[]; cut: boolean }>()
   for (const s of list) {
     const k = s.otherCardId ?? s.otherCard ?? ''
-    const names = s.entries.filter(e => e.source === 'drive').map(e => e.name.slice(e.name.lastIndexOf('/') + 1))
-    byCard.set(k, { title: s.otherCard ?? 'another card', files: [...(byCard.get(k)?.files ?? []), ...names] })
+    const drive = s.entries.filter(e => e.source === 'drive')
+    const names = drive.map(e => e.name.slice(e.name.lastIndexOf('/') + 1))
+    byCard.set(k, { title: s.otherCard ?? 'another card', files: [...(byCard.get(k)?.files ?? []), ...names], cut: (byCard.get(k)?.cut ?? false) || drive.some(e => e.kind !== 'copy') })
   }
   return (
     <div className="mt-4 flex flex-col gap-2">
-      {[...byCard.entries()].map(([id, c]) => <ElsewhereCard key={id} id={id} title={c.title} files={c.files} />)}
+      {[...byCard.entries()].map(([id, c]) => <ElsewhereCard key={id} id={id} title={c.title} files={c.files} cut={c.cut} />)}
     </div>
   )
 }
 
 /** one card a file here belongs to: its name, where it is, and the way there */
-function ElsewhereCard({ id, title, files }: { id: string; title: string; files: string[] }) {
+function ElsewhereCard({ id, title, files, cut }: { id: string; title: string; files: string[]; cut: boolean }) {
   const { row } = useRow<ContentItem>('content_items', /^[0-9a-f-]{36}$/.test(id) ? id : null)
   const stage = row ? STEPS[stepOf(row.status)] ?? null : null
   const body = (
     <>
       <span className="min-w-0 flex-1">
-        <b>{files.length === 1 ? files[0] : `${files.length} files`}</b> {files.length === 1 ? 'is' : 'are'} already on <b>“{row?.title ?? title}”</b>{stage ? ` — ${stage}` : ''}. Not added here.
+        {cut
+          ? <><b>{files.length === 1 ? files[0] : `${files.length} files`}</b> {files.length === 1 ? 'is a new cut' : 'are new cuts'} of a video on <b>“{row?.title ?? title}”</b>{stage ? ` — ${stage}` : ''}. Confirm it there — it is waiting on that card.</>
+          : <><b>{files.length === 1 ? files[0] : `${files.length} files`}</b> {files.length === 1 ? 'is' : 'are'} already on <b>“{row?.title ?? title}”</b>{stage ? ` — ${stage}` : ''}. Not added here.</>}
       </span>
       {row && <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-foreground px-3 py-1.5 text-[12px] font-semibold text-background">Open that card <ExternalLink className="h-3 w-3" aria-hidden /></span>}
     </>
@@ -442,7 +457,7 @@ function HoverFrames({ frames, thumb, board }: { frames: { url: string; at_s: nu
   )
 }
 
-const folderName = (path: string) => { const i = path.lastIndexOf('/'); return i < 0 ? 'Top of the link' : path.slice(0, i) }
+const folderName = (path: string) => { const i = path.lastIndexOf('/'); return i < 0 ? 'Main folder' : path.slice(0, i) }
 
 /**
  * THE PLAYER — the chosen video, big, with its versions as tabs to click between (the owner, 22 Oct 2026: "why cant
@@ -501,24 +516,13 @@ function Player({ item, s, entry, info, rowById, beforeGrade, onEntry }: {
             </button>
           ))}
         </div>
-        <p className="truncate text-[13px] text-muted-foreground">{entry.name}{row && beforeGrade.has(row.id) ? ' — from before colour grade, not a grade' : ''}</p>
+        <p className="truncate text-[13px] text-muted-foreground">{entry.name}{row && beforeGrade.has(row.id) ? ' — not a grade (a new cut goes back through editing first)' : ''}</p>
         {/* the same file saved under other names is this version — named, so nothing looks missing (the owner,
             22 Oct 2026: "new menu medley final is not there?") */}
         {(() => {
           const twins = s.entries.filter(e => e.label === entry.label && e.key !== entry.key && !e.graded).map(e => e.name.slice(e.name.lastIndexOf('/') + 1))
           return twins.length ? <p className="text-[12px] text-muted-foreground">Also saved as: {twins.join(', ')} — the same file, byte for byte</p> : null
         })()}
-        {offer && (
-          <div className="flex flex-wrap items-center gap-2 rounded-inner border border-accent-amber bg-tint-amber/40 p-3">
-            <span className="min-w-0 flex-1 text-[13px]">{(offer.scan as { copy_failed?: boolean } | null)?.copy_failed
-              ? <><b>Not on the card yet.</b> The video is fine — Drive refused to let us copy it for a while, and six tries didn’t get through. Confirm again to try once more.</>
-              : <><b>New in Drive.</b> Add it to the card as {entry.label}?</>}</span>
-            <Button size="sm" disabled={!!busy} onClick={() => void answer('confirm')} className="h-9 rounded-full px-4 text-[13px] font-semibold">
-              <Check className="mr-1 h-3.5 w-3.5" aria-hidden />{busy === 'confirm' ? 'Handing in…' : 'Confirm'}
-            </Button>
-            <Button size="sm" variant="outline" disabled={!!busy} onClick={() => void answer('ignore')} className="h-9 rounded-full px-4 text-[13px] font-semibold">Not this</Button>
-          </div>
-        )}
         {cardFile && assetHistory(item, assetIdOf(cardFile)).length > 1 && (
           <Link href={`/dashboard/editor/${item.id}/compare?f=${encodeURIComponent(assetHistory(item, assetIdOf(cardFile)).map(v => `${v.id}@${v.version}`).join(','))}`}
             className="inline-flex w-fit items-center gap-1.5 rounded-full bg-foreground px-4 py-2 text-[13px] font-semibold text-background">
@@ -537,6 +541,19 @@ function Player({ item, s, entry, info, rowById, beforeGrade, onEntry }: {
           </details>
         )}
       </div>
+      {offer && (
+        <div className="flex flex-wrap items-center gap-2 rounded-inner border border-accent-amber bg-tint-amber/40 p-3 md:col-span-2">
+          <span className="min-w-0 flex-1 text-[13px]">{(offer.scan as { copy_failed?: boolean } | null)?.copy_failed
+            ? <><b>Not on the card yet.</b> The video is fine — Drive wouldn’t let us copy it for a while. Confirm again to try once more.</>
+            : offer.item_id !== item.id
+              ? <><b>New cut found in another card’s Drive.</b> Add it here as {entry.label}?</>
+              : <><b>New in Drive.</b> Add it to the card as {entry.label}?</>}</span>
+          <Button size="sm" disabled={!!busy} onClick={() => void answer('confirm')} className="h-9 rounded-full px-4 text-[13px] font-semibold">
+            <Check className="mr-1 h-3.5 w-3.5" aria-hidden />{busy === 'confirm' ? 'Handing in…' : 'Confirm'}
+          </Button>
+          <Button size="sm" variant="outline" disabled={!!busy} onClick={() => void answer('ignore')} className="h-9 rounded-full px-4 text-[13px] font-semibold">Not this</Button>
+        </div>
+      )}
     </div>
   )
 }
