@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { useMemo, useRef, useState, type RefObject } from 'react'
-import { ArrowLeft, Send } from 'lucide-react'
+import { ArrowLeft, Lock, Send } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -86,51 +86,67 @@ function ClipPanel({ itemId, file, src, streamBase, comments, nameOf, fromClient
     } finally { setSending(false) }
   }
   return (
-    <section className="flex min-w-0 flex-col gap-2 rounded-card border border-border bg-card p-3" aria-label={file.name} data-clip-panel>
+    <section className="flex min-w-0 flex-col gap-3 rounded-card border border-border bg-card p-4" aria-label={file.name} data-clip-panel>
       <div className="flex flex-wrap items-center gap-2">
-        <span className="min-w-0 flex-1 truncate text-[14px] font-semibold" title={file.name}>{file.name}</span>
-        <span className="rounded-full border border-border px-2.5 py-0.5 text-[12px] font-semibold">{fromFolder ? 'Folder to work from' : labelOf(fileRound(file))}</span>
+        <span className="min-w-0 flex-1 truncate text-[15px] font-semibold" title={file.name}>{file.name}</span>
+        <span className="rounded-full bg-foreground px-2.5 py-0.5 text-[12px] font-semibold text-background">{fromFolder ? 'Folder to work from' : labelOf(fileRound(file))}</span>
         <Link href={reviewPath(itemId, file.id, file.name)} className="text-[12px] text-muted-foreground underline-offset-4 hover:underline">Open on its own</Link>
       </div>
-      {isImage ? (
-        // eslint-disable-next-line @next/next/no-img-element -- the file itself
-        <img src={src ?? ''} alt={file.name} className={`w-full rounded-tile bg-foreground/[0.06] object-contain ${one ? 'max-h-[70vh]' : 'max-h-[52vh]'}`} />
-      ) : (
-        <video ref={video} controls playsInline preload="metadata"
-          className={`w-full rounded-tile bg-black ${one ? 'max-h-[70vh]' : 'max-h-[52vh]'}`}
-          onTimeUpdate={e => setNow(e.currentTarget.currentTime)} />
-      )}
-      <p className="text-[12px] text-muted-foreground">{isImage ? '' : `${formatStamp(now)} · `}{comments.length} {comments.length === 1 ? 'comment' : 'comments'}</p>
-      <ul className="flex max-h-[30vh] flex-col gap-1.5 overflow-y-auto">
-        {comments.length === 0 && <li className="text-[13px] text-muted-foreground">Nothing said on this one yet.</li>}
-        {comments.map(c => (
-          <li key={c.id} className="rounded-inner border border-border p-2 text-[13px]">
-            <div className="flex flex-wrap items-baseline gap-2">
-              {typeof c.video_timestamp_sec === 'number' && !isImage && (
-                <button type="button" onClick={() => seek(c.video_timestamp_sec as number)} className="rounded-full bg-foreground px-2 py-0.5 font-mono text-[11px] font-semibold text-background">{formatStamp(c.video_timestamp_sec)}</button>
-              )}
-              <span className="font-semibold">{nameOf(c.author_id)}</span>
-              {fromClient(c.author_id) && <span className="rounded-full bg-accent-blue px-2 py-0.5 text-[11px] font-semibold text-white">Client</span>}
+      {/* THE VIDEO AND WHAT WAS SAID ON IT, SIDE BY SIDE (the owner, 22 Oct 2026: "please make the ui nice") — one file
+          gets the comments beside it; two or more stack them under each video */}
+      <div className={`grid gap-4 ${one ? 'lg:grid-cols-[minmax(0,1fr)_360px]' : 'grid-cols-1'}`}>
+        <div className="min-w-0">
+          {isImage ? (
+            // eslint-disable-next-line @next/next/no-img-element -- the file itself
+            <img src={src ?? ''} alt={file.name} className={`w-full rounded-tile bg-foreground/[0.06] object-contain ${one ? 'max-h-[72vh]' : 'max-h-[52vh]'}`} />
+          ) : (
+            <video ref={video} controls playsInline preload="metadata"
+              className={`w-full rounded-tile bg-black ${one ? 'max-h-[72vh]' : 'max-h-[52vh]'}`}
+              onTimeUpdate={e => setNow(e.currentTarget.currentTime)} />
+          )}
+        </div>
+        <div className={`flex min-w-0 flex-col rounded-inner border border-border bg-surface ${one ? 'lg:max-h-[72vh]' : ''}`}>
+          <p className="flex items-center justify-between border-b border-border px-3 py-2 text-[12px] font-semibold uppercase tracking-wider text-muted-foreground">
+            <span>Comments · {comments.length}</span>
+            {!isImage && <span className="font-mono normal-case tracking-normal">{formatStamp(now)}</span>}
+          </p>
+          <ul className={`flex flex-1 flex-col gap-2 overflow-y-auto p-3 ${one ? 'min-h-[160px]' : 'max-h-[30vh]'}`}>
+            {comments.length === 0 && <li className="py-6 text-center text-[13px] text-muted-foreground">Nothing said on this one yet.</li>}
+            {comments.map(c => (
+              <li key={c.id} className={`rounded-inner p-2.5 text-[13px] ${fromClient(c.author_id) ? 'bg-tint-blue' : 'bg-card'}`}>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {typeof c.video_timestamp_sec === 'number' && !isImage && (
+                    <button type="button" onClick={() => seek(c.video_timestamp_sec as number)} title="Play from here"
+                      className="rounded-full bg-foreground px-2 py-0.5 font-mono text-[11px] font-semibold text-background">{formatStamp(c.video_timestamp_sec)}</button>
+                  )}
+                  <span className="font-semibold">{nameOf(c.author_id)}</span>
+                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${fromClient(c.author_id) ? 'bg-accent-blue text-white' : 'bg-foreground/[0.08] text-muted-foreground'}`}>
+                    {fromClient(c.author_id) ? 'Client' : 'Team'}
+                  </span>
+                  {c.created_at && <span className="ml-auto text-[11px] text-muted-foreground">{new Date(c.created_at).toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}</span>}
+                </div>
+                <p className="mt-1 whitespace-pre-wrap break-words">{c.body}</p>
+              </li>
+            ))}
+          </ul>
+          <div className="flex flex-col gap-2 border-t border-border p-3">
+            <p className="flex items-center gap-1.5 text-[12px] text-muted-foreground"><Lock className="h-3.5 w-3.5" aria-hidden /> Team only — the client never sees this</p>
+            <div className="flex gap-2">
+              <textarea value={text} onChange={e => setText(e.target.value)} rows={2} placeholder="What needs changing here?"
+                onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') void send() }}
+                className="min-w-0 flex-1 rounded-inner border border-border bg-card px-3 py-2 text-[13px] outline-none focus:border-foreground/40" />
+              <Button disabled={sending || !text.trim()} onClick={() => void send()} aria-label="Add the comment"
+                className="h-11 w-11 shrink-0 self-end rounded-full bg-foreground p-0 text-background">
+                <Send className="h-4 w-4" aria-hidden />
+              </Button>
             </div>
-            <p className="mt-0.5 whitespace-pre-wrap break-words">{c.body}</p>
-          </li>
-        ))}
-      </ul>
-      <div className="flex flex-col gap-1.5 border-t border-border pt-2">
-        {!isImage && (
-          <label className="flex items-center gap-2 text-[12px]">
-            <input type="checkbox" className="h-4 w-4 accent-foreground" checked={stamp} onChange={e => setStamp(e.target.checked)} />
-            Stamp the current second{stamp ? `: ${formatStamp(now)}` : ''}
-          </label>
-        )}
-        <div className="flex gap-2">
-          <textarea value={text} onChange={e => setText(e.target.value)} rows={2} placeholder="What needs changing here?"
-            onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') void send() }}
-            className="min-w-0 flex-1 rounded-inner border border-border bg-surface px-3 py-2 text-[13px] outline-none" />
-          <Button disabled={sending || !text.trim()} onClick={() => void send()} aria-label="Add the comment"
-            className="h-11 w-11 shrink-0 rounded-full bg-foreground p-0 text-background">
-            <Send className="h-4 w-4" aria-hidden />
-          </Button>
+            {!isImage && (
+              <label className="flex items-center gap-2 text-[12px] text-muted-foreground">
+                <input type="checkbox" className="h-4 w-4 accent-foreground" checked={stamp} onChange={e => setStamp(e.target.checked)} />
+                Pin it to {formatStamp(now)} in the video
+              </label>
+            )}
+          </div>
         </div>
       </div>
     </section>

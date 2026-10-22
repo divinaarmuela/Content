@@ -72,3 +72,18 @@ describe('the card’s page', () => {
     expect(tiles).toContain("wide ? 'grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5'")
   })
 })
+
+// the owner, 22 Oct 2026: "an AM or anyone super admin editor can go in the video click and leave comments for team …
+// but client portal shouldnt see our comments there"
+describe('comments on a video, side by side', () => {
+  it('are the team’s: sent without a client visibility, and said so on the box', async () => {
+    const { readFileSync } = await import('node:fs')
+    const page = readFileSync('app/dashboard/editor/[id]/compare/page.tsx', 'utf8')
+    expect(page).toContain("body: JSON.stringify({ body, video_file_id: file.id, video_file_name: file.name,")
+    expect(page).not.toMatch(/visibility:\s*'client'/)
+    expect(page).toContain('Team only — the client never sees this')
+    for (const f of ['app/lib/editing-portal.ts', 'app/lib/portal-thread.ts', 'app/lib/portal-data.ts']) {
+      expect(readFileSync(f, 'utf8')).toMatch(/visibility === 'client'/)
+    }
+  })
+})
