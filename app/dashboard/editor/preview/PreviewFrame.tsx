@@ -69,9 +69,8 @@ export default function PreviewFrame({ title, summary, children, tabs = true, cl
               <RefreshCw className={`h-4 w-4 ${checking ? 'animate-spin' : ''}`} aria-hidden /> {checking ? 'Checking Drive…' : 'Check Drive now'}
             </Button>
           )}
-          {classicHref
-            ? <Button asChild variant="ghost"><Link href={classicHref}>Classic view</Link></Button>
-            : <Button asChild variant="ghost"><Link href="/dashboard/editor">Back to the live Editor</Link></Button>}
+          {/* no "Classic view" on a card (the owner, 22 Oct 2026: "remove classic view") — the new card is the card */}
+          {!classicHref && <Button asChild variant="ghost"><Link href="/dashboard/editor">Back to the live Editor</Link></Button>}
         </>}
       />
       {tabs && (
