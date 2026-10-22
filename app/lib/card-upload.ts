@@ -2,7 +2,7 @@ import 'server-only'
 import { table } from '@/lib/db'
 import type { Client, ContentItem, DriveUpload, TeamUser as TeamRow } from '@/lib/db-types'
 import type { TeamUser } from './authz'
-import { createSubfolder, ensureFolder, findSubfolder, listFolderNames, listSubfolders, renameFolder, rootFolderId } from './gdrive'
+import { createSubfolder, ensureChain, ensureFolder, findSubfolder, listFolderNames, listSubfolders, renameFolder, rootFolderId } from './gdrive'
 import { entryDetail, grantUserPermission, isInside, openUploadSession, pushUploadChunk, shareableLink, uploadStreamToFolder } from './gdrive-files'
 import { isDriveId } from './files-core'
 import { handInRound } from './edit-round-core'
@@ -359,21 +359,74 @@ export function backfillFilesOf(item: { final_files?: unknown }): FinalFile[] {
   return [...last.values()].sort((a, b) => a.version - b.version || a.uploaded_at.localeCompare(b.uploaded_at))
 }
 
-export async function backfillPlan(itemId: string): Promise<{ ok: true; files: string[] } | Fail> {
+/**
+ * THE VIDEOS IN THE EDITOR'S OWN DRIVE LINK (the owner, 22 Oct 2026: "the current alia did u merge it into new
+ * folders? … all the existing cards"): every video the card's Drive link held and the app copied (drive_pulls — not a
+ * hand-in, those are on the card already), the last copy of each Drive file at each version, footage left out. Filed
+ * into V{n} with the folders it sat in kept ("SCHEDULED/Video Carousel/1.mov" → V1/SCHEDULED/Video Carousel/1.mov).
+ */
+export type PullCopy = { key: string; drive_id: string; name: string; path: string; url: string; version: number }
+export async function linkVideosOf(item: ContentItem): Promise<PullCopy[]> {
+  const { filesOf } = await import('./drive-pull-core')
+  const { isFootage, isVideo } = await import('./drive-scan-core')
+  const onCard = new Set(finalFilesOf(item).map(f => f.drive_file_id).filter(Boolean) as string[])
+  const pulls = await table<{ id: string; kind?: string; scope_id?: string; purpose?: string | null; files?: unknown }>('drive_pulls')
+    .list({ where: p => p.kind === 'item' && p.scope_id === item.id && p.purpose !== 'finished' && p.purpose !== 'handin' })
+  const last = new Map<string, PullCopy & { modified: string }>()
+  for (const f of pulls.flatMap(p => filesOf(p))) {
+    if (f.status !== 'done' || !f.url || onCard.has(f.id)) continue
+    if (!isVideo({ mime: f.mime ?? '', name: f.name }) || isFootage({ name: f.name })) continue
+    const version = Math.max(1, Number(f.version) || 1)
+    const key = `${f.id}@${version}`
+    const modified = String(f.modified ?? '')
+    const have = last.get(key)
+    if (have && have.modified >= modified) continue
+    const at = f.name.lastIndexOf('/')
+    last.set(key, { key, drive_id: f.id, name: at < 0 ? f.name : f.name.slice(at + 1), path: at < 0 ? '' : f.name.slice(0, at), url: f.url, version, modified })
+  }
+  return [...last.values()].map(({ modified: _m, ...c }) => c)
+}
+
+/** what one card's job files: the card's own files, then its Drive link's videos. EVERY card gets its folder and the
+ *  version it is on, files or not — the link on the card ("like new drive links … all the existing cards") */
+export async function backfillPlan(itemId: string): Promise<{ ok: true; files: string[]; pulls: string[] } | Fail> {
   const item = await items().get(itemId)
   if (!item) return { ok: false, status: 404, error: 'No such card' }
   const fromFolder = new Set((await table<DriveUpload>('drive_uploads').list({ where: r => r.purpose === 'card' && r.item_id === itemId && !!r.drive_file_id }))
     .map(r => String(r.drive_file_id)))
   const files = backfillFilesOf(item).filter(f => !(f.drive_file_id && fromFolder.has(f.drive_file_id)))
-  if (files.length === 0) return { ok: true, files: [] }
+  const pulls = (await linkVideosOf(item)).filter(c => !fromFolder.has(c.drive_id))
   // the folders first, once, so the file steps never race to make them
   const folder = await cardFolder(item)
   if (!folder.ok) return folder
-  for (const v of [...new Set(files.map(f => f.version))]) {
+  for (const v of [...new Set([handInRound(item as never), ...files.map(f => f.version), ...pulls.map(c => c.version)])]) {
     const made = await versionFolder((await items().get(itemId)) ?? item, folder.id, v)
     if (!made.ok) return made
   }
-  return { ok: true, files: files.map(f => f.id) }
+  return { ok: true, files: files.map(f => f.id), pulls: pulls.map(c => c.key) }
+}
+
+/** one Drive-link video into V{n}/{its folders}, once (claim_locks/card_backfill__pull__{card}__{drive id@version}) */
+export async function backfillPullFile(itemId: string, key: string): Promise<{ ok: true; drive_id: string | null; skipped?: string } | Fail> {
+  const item = await items().get(itemId)
+  const c = item ? (await linkVideosOf(item)).find(x => x.key === key) : null
+  if (!item || !c) return { ok: true, drive_id: null, skipped: 'no longer in the link' }
+  const vId = versionFoldersOf(item)[versionKey(c.version)]
+  if (!vId) return { ok: false, status: 409, error: 'The card’s folders are not made' }
+  const lockId = `card_backfill__pull__${itemId}__${key}`.replace(/[.#$[\]/@]/g, '_')
+  const locks = table<BackfillLock>('claim_locks')
+  const now = new Date().toISOString()
+  const took = await locks.claim(lockId, cur => {
+    if (cur && (cur.status === 'done' || (cur.status === 'copying' && Date.now() - Date.parse(cur.at) < 20 * 60_000))) return null
+    return { id: lockId, item_id: itemId, file_id: key, status: 'copying', at: now }
+  })
+  if (!took.claimed) return { ok: true, drive_id: took.current?.drive_id ?? null, skipped: took.current?.status === 'done' ? 'already in Drive' : 'being copied' }
+  const where = c.path ? await ensureChain(vId, c.path.split('/').map(p => folderNameOf(p, 'Folder'))) : { ok: true as const, id: vId }
+  const up = where.ok ? await uploadStreamToFolder({ sourceUrl: c.url, name: c.name, parentId: where.id }) : where
+  await locks.claim(lockId, cur => (cur ? {
+    ...cur, status: up.ok ? 'done' : 'failed', drive_id: up.ok ? up.id : null, error: up.ok ? null : up.message.slice(0, 300), at: new Date().toISOString(),
+  } : null))
+  return up.ok ? { ok: true, drive_id: up.id } : { ok: false, status: 502, error: up.message }
 }
 
 export async function backfillFile(itemId: string, fileId: string): Promise<{ ok: true; drive_id: string | null; skipped?: string } | Fail> {

@@ -1088,10 +1088,19 @@ export const driveCardBackfill = inngest.createFunction(
       const { backfillPlan } = await import('../lib/card-upload')
       const r = await backfillPlan(itemId)
       if (!r.ok) throw new Error(r.error)
-      return r.files
+      return { files: r.files, pulls: r.pulls }
     })
     const out: { file: string; drive_id: string | null; skipped?: string; error?: string }[] = []
-    for (const fileId of plan) {
+    // the videos the card's Drive link held too, into V{n}/{the folders they sat in}
+    for (const key of plan.pulls) {
+      out.push(await step.run(`pull-${key}`, async () => {
+        const { backfillPullFile } = await import('../lib/card-upload')
+        const r = await backfillPullFile(itemId, key)
+        if (!r.ok) throw new Error(r.error)
+        return { file: key, drive_id: r.drive_id, ...(r.skipped ? { skipped: r.skipped } : {}) }
+      }))
+    }
+    for (const fileId of plan.files) {
       out.push(await step.run(`file-${fileId}`, async () => {
         const { backfillFile } = await import('../lib/card-upload')
         const r = await backfillFile(itemId, fileId)
