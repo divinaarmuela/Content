@@ -5,6 +5,8 @@ import { authzErrorResponse, requireRole } from '@/app/lib/authz'
 import { loadItemForUser } from '@/app/lib/production-access'
 import { startDriveHandIn } from '@/app/lib/drive-handin'
 import { canEditItemFields } from '@/app/lib/item-edit-core'
+import { gradeSinceOf } from '@/app/lib/drive-scan'
+import { gradeStanding } from '@/app/lib/drive-scan-core'
 
 /**
  * THE EDITOR PREVIEW: CONFIRM OR SET ASIDE WHAT THE AI FOUND IN DRIVE (step 3, the owner, 22 Oct 2026).
@@ -46,6 +48,17 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         return NextResponse.json({ ok: true, ignored: rows.length })
       }
 
+      // AT COLOUR GRADE ONLY A GRADE IS HANDED IN: a file that was in Drive before the card went there (an editor's
+      // re-cut) is not the colourist's work (the owner, 22 Oct 2026)
+      if (String(item.status) === 'colour_grade') {
+        const since = await gradeSinceOf(item.id)
+        for (const r of rows) {
+          const src = await table<DriveSource>('drive_sources').get(r.source_id)
+          if (gradeStanding(r, src?.created_at, since) !== 'grade') {
+            return NextResponse.json({ error: `${r.name} was in Drive before this card went to colour grade — it isn't a grade. Send the card back to editing if it is a new cut.` }, { status: 409 })
+          }
+        }
+      }
       // one hand-in per Drive link the files came from, each file to the video the AI matched (or a new video)
       const bySource = new Map<string, DriveSeen[]>()
       for (const r of rows) bySource.set(r.source_id, [...(bySource.get(r.source_id) ?? []), r])

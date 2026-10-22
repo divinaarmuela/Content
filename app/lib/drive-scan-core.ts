@@ -316,3 +316,23 @@ export function signalScore(s: Signals): number {
   // the same pictures count as much as the same sound: a re-edit with new music keeps its shots
   return (s.sound ?? 0) * 3 + (s.picture ?? 0) * 3 + (s.lengthGapMs === null ? 0 : s.lengthGapMs <= 150 ? 2 : s.lengthGapMs <= 3000 ? 0.5 : 0)
 }
+
+/* ─── at colour grade, only what lands after it counts as a grade ─────────────────────────────────────────── */
+
+export type GradeStanding = 'grade' | 'before'
+/**
+ * A FILE AT COLOUR GRADE IS A GRADE ONLY IF IT LANDED AFTER THE CARD WENT THERE (the owner, 22 Oct 2026: "shouldnt
+ * graded be taken when card is passed to the color graded column and then any new videos that goes there link will
+ * scan?"). Its Drive date says when, to the day; without one, it counts only if a LATER read of its link found it —
+ * a file already there when the link was first read (an editor's re-cut like OLIMPIA_P2C_v2) is from before.
+ */
+export function gradeStanding(
+  row: { created_time?: string | null; first_seen_at: string },
+  sourceCreatedAt: string | null | undefined,
+  gradeSince: string | null | undefined,
+): GradeStanding {
+  if (!gradeSince) return 'before'
+  if (row.created_time) return row.created_time.slice(0, 10) >= gradeSince.slice(0, 10) ? 'grade' : 'before'
+  const laterRead = !!sourceCreatedAt && Date.parse(row.first_seen_at) - Date.parse(sourceCreatedAt) > 2 * 60_000
+  return laterRead && row.first_seen_at >= gradeSince ? 'grade' : 'before'
+}

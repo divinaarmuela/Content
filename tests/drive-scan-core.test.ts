@@ -224,3 +224,17 @@ describe('videoNext — each video\'s next step on the card', () => {
     expect(initialsOfName('martin')).toBe('M')
   })
 })
+
+describe('gradeStanding — at colour grade, only what lands after it is a grade', () => {
+  it('reads the Drive date to the day, else whether a later read found it', async () => {
+    const { gradeStanding } = await import('../app/lib/drive-scan-core')
+    const since = '2026-10-20T14:46:59.894Z'
+    expect(gradeStanding({ created_time: '2026-10-21T00:00:00.000Z', first_seen_at: '2026-10-21T10:00:00Z' }, null, since)).toBe('grade')
+    expect(gradeStanding({ created_time: '2026-10-20T00:00:00.000Z', first_seen_at: '2026-10-21T10:00:00Z' }, null, since)).toBe('grade')
+    expect(gradeStanding({ created_time: '2026-10-19T00:00:00.000Z', first_seen_at: '2026-10-21T10:00:00Z' }, null, since)).toBe('before')
+    // OLIMPIA_P2C_v2: no Drive date, found on the link's first read — from before
+    expect(gradeStanding({ first_seen_at: '2026-10-21T11:21:52.475Z' }, '2026-10-21T11:21:50.000Z', since)).toBe('before')
+    expect(gradeStanding({ first_seen_at: '2026-10-21T11:30:00.000Z' }, '2026-10-21T11:21:50.000Z', since)).toBe('grade')
+    expect(gradeStanding({ first_seen_at: '2026-10-21T11:30:00.000Z' }, '2026-10-21T11:21:50.000Z', null)).toBe('before')
+  })
+})

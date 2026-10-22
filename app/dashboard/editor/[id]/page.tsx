@@ -11,7 +11,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { useRow, useTable } from '@/lib/db-client'
 import type { Batch, Client, ContentItem, DriveSeen, DriveSource, TeamUser, WorkKind } from '@/lib/db-types'
 import { STEPS, agoWords, initialsOfName, isEditorCard, stepOf, videoNext, type NextTone } from '../../../lib/editor-preview-core'
-import { KIND_WORDS, OPEN_STATES, STATE_WORDS, isFootage, isVideo, stageRule, type CutKind, type SeenState } from '../../../lib/drive-scan-core'
+import { KIND_WORDS, OPEN_STATES, STATE_WORDS, gradeStanding, isFootage, isVideo, stageRule, type CutKind, type SeenState } from '../../../lib/drive-scan-core'
 import { assetHistory, assetIdOf, currentFiles, isRetiredAt } from '../../../lib/final-files-core'
 import { roundOf } from '../../../lib/edit-round-core'
 import { clipApprovalsOf } from '../../../lib/clip-approvals-core'
@@ -53,6 +53,8 @@ export default function EditorCard() {
   const team = useTable<TeamUser>('team_users', { enabled: allowed })
   const seen = useTable<DriveSeen>('drive_seen', { enabled: allowed, by: { item_id: id } as Partial<DriveSeen> })
   const sources = useTable<DriveSource>('drive_sources', { enabled: allowed, by: { item_id: id } as Partial<DriveSource> })
+  // when the card went to Colour grade: after that, a new file in its links is a grade; before, it never is
+  const moves = useTable<{ id: string; entity_id?: string; action?: string; new_value?: string; created_at?: string }>('workflow_activity', { enabled: allowed, by: { entity_id: id } as never })
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 10_000); return () => clearInterval(t) }, [])
   // WHEN A PERSON LAST OPENED A CARD: stamped for the board's "Last viewed" order, as the classic card did — fire and forget
@@ -90,7 +92,9 @@ export default function EditorCard() {
       <Stepper status={item.status} />
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_420px]">
         <div className="flex min-w-0 flex-col gap-6">
-          <VideoList item={item} rows={seen.rows} needsGrade={needsColourGrade(kindSlug)} />
+          <VideoList item={item} rows={seen.rows} needsGrade={needsColourGrade(kindSlug)}
+            gradeSince={moves.rows.filter(a => a.action === 'status_change' && a.new_value === 'colour_grade').map(a => String(a.created_at ?? '')).sort().pop() ?? null}
+            sourceCreated={new Map(sources.rows.map(s => [s.id, s.created_at]))} />
           {/* the footage to work from and every file on the card, playable here — what the editor opens first */}
           <details open={maker} className="overflow-hidden rounded-card border border-border bg-card">
             <summary className="cursor-pointer px-5 py-3 text-[14px] font-semibold">Files to work from and play</summary>
@@ -193,7 +197,11 @@ const TONES: Record<NextTone, string> = {
  * make sure its at the top"). One row per video: its picture, its name, V1 · V2 · V3 (the current one dark), Graded,
  * and its next step. A new cut in Drive is one line on the row: Confirm or Not this.
  */
-function VideoList({ item, rows, needsGrade }: { item: ContentItem; rows: DriveSeen[]; needsGrade: boolean }) {
+function VideoList({ item, rows, needsGrade, gradeSince, sourceCreated }: { item: ContentItem; rows: DriveSeen[]; needsGrade: boolean; gradeSince: string | null; sourceCreated: Map<string, string> }) {
+  // at colour grade a file is offered only as a grade — one already there before the card went to grade is not
+  const atGrade = String(item.status) === 'colour_grade'
+  const beforeGrade = new Set(atGrade ? rows.filter(r => r.state === 'scanned' && gradeStanding(r, sourceCreated.get(r.source_id), gradeSince) === 'before').map(r => r.id) : [])
+  const offerable = (r: DriveSeen | undefined) => !!r && r.state === 'scanned' && (!atGrade || gradeStanding(r, sourceCreated.get(r.source_id), gradeSince) === 'grade')
   const stacks = useMemo(() => stackVersions(stackFilesOf(item, rows)), [item, rows])
   const rowById = useMemo(() => new Map(rows.map(r => [r.id, r])), [rows])
   const round = roundOf(item)
@@ -259,10 +267,10 @@ function VideoList({ item, rows, needsGrade }: { item: ContentItem; rows: DriveS
               {list.map(s => {
                 const asset = s.entries.find(e => e.source === 'card')?.key.slice(2) ?? null
                 const file = asset ? current.find(f => assetIdOf(f) === asset) : null
-                const pending = s.entries.filter(e => e.source === 'drive' && rowById.get(e.key.slice(2))?.state === 'scanned' && e.kind !== 'copy')
+                const pending = s.entries.filter(e => e.source === 'drive' && offerable(rowById.get(e.key.slice(2))) && e.kind !== 'copy')
                 const gone = s.entries.every(e => e.source !== 'drive' || rowById.get(e.key.slice(2))?.state === 'gone') && s.entries.some(e => e.source === 'drive')
                 const next = videoNext({ status: item.status, needsGrade, gradedThisRound: gradedThisRound && !!file, approved: !!file && approvedFiles.has(file.id), newInDrive: pending.length > 0, gone, onCard: !!asset })
-                return <VideoRow key={s.key} item={item} s={s} next={next} pending={pending.map(e => rowById.get(e.key.slice(2))!).filter(Boolean)} rowById={rowById} />
+                return <VideoRow key={s.key} item={item} s={s} next={next} pending={pending.map(e => rowById.get(e.key.slice(2))!).filter(Boolean)} rowById={rowById} beforeGrade={beforeGrade} />
               })}
             </ul>
           </div>
@@ -274,7 +282,7 @@ function VideoList({ item, rows, needsGrade }: { item: ContentItem; rows: DriveS
 
 const folderName = (path: string) => { const i = path.lastIndexOf('/'); return i < 0 ? 'Top of the link' : path.slice(0, i) }
 
-function VideoRow({ item, s, next, pending, rowById }: { item: ContentItem; s: Stack; next: { words: string; tone: NextTone }; pending: DriveSeen[]; rowById: Map<string, DriveSeen> }) {
+function VideoRow({ item, s, next, pending, rowById, beforeGrade }: { item: ContentItem; s: Stack; next: { words: string; tone: NextTone }; pending: DriveSeen[]; rowById: Map<string, DriveSeen>; beforeGrade: Set<string> }) {
   const l = s.latest
   const [busy, setBusy] = useState<string | null>(null)
   // the newest new cut is the one confirmed; "Not this" sets every waiting one aside
@@ -335,7 +343,7 @@ function VideoRow({ item, s, next, pending, rowById }: { item: ContentItem; s: S
                   {e.graded && <span className="rounded-full bg-tint-green px-1.5 text-[11px] font-semibold">graded</span>}
                   {e.sameAsEarlier && <span className="rounded-full bg-muted px-1.5 text-[11px] text-muted-foreground">same file again</span>}
                   <span className="min-w-0 flex-1 truncate">{e.name}</span>
-                  <span className="text-[12px] text-muted-foreground">{e.source === 'card' ? 'on the card' : e.source === 'other' ? `on “${e.otherCard}”` : r ? STATE_WORDS[r.state as SeenState] ?? r.state : 'in Drive'}</span>
+                  <span className="text-[12px] text-muted-foreground">{e.source === 'card' ? 'on the card' : e.source === 'other' ? `on “${e.otherCard}”` : r && beforeGrade.has(r.id) ? 'From before colour grade — not a grade' : r ? STATE_WORDS[r.state as SeenState] ?? r.state : 'in Drive'}</span>
                 </span>
                 {why.length > 0 && <span className="pl-9 text-[12px] text-muted-foreground">{why.join(' · ')}</span>}
               </li>

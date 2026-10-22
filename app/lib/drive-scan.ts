@@ -135,3 +135,10 @@ export async function watchSources(opts: { limit?: number; budgetMs?: number } =
   return out
 }
 
+
+/** when the card last went to Colour grade — the moment after which a new file in its links is a grade */
+export async function gradeSinceOf(itemId: string): Promise<string | null> {
+  const moves = await table<{ id: string; entity_id?: string; action?: string; new_value?: string; created_at?: string }>('workflow_activity')
+    .list({ where: a => a.entity_id === itemId && a.action === 'status_change' && a.new_value === 'colour_grade' })
+  return moves.map(a => String(a.created_at ?? '')).filter(Boolean).sort().pop() ?? null
+}
