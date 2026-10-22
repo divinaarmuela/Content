@@ -376,6 +376,12 @@ function Player({ item, s, entry, info, rowById, beforeGrade, onEntry }: {
           ))}
         </div>
         <p className="truncate text-[13px] text-muted-foreground">{entry.name}{row && beforeGrade.has(row.id) ? ' — from before colour grade, not a grade' : ''}</p>
+        {/* the same file saved under other names is this version — named, so nothing looks missing (the owner,
+            22 Oct 2026: "new menu medley final is not there?") */}
+        {(() => {
+          const twins = s.entries.filter(e => e.label === entry.label && e.key !== entry.key && !e.graded).map(e => e.name.slice(e.name.lastIndexOf('/') + 1))
+          return twins.length ? <p className="text-[12px] text-muted-foreground">Also saved as: {twins.join(', ')} — the same file, byte for byte</p> : null
+        })()}
         {offer && (
           <div className="flex flex-wrap items-center gap-2 rounded-inner border border-accent-amber bg-tint-amber/40 p-3">
             <span className="min-w-0 flex-1 text-[13px]"><b>New in Drive.</b> Add it to the card as {entry.label}?</span>
