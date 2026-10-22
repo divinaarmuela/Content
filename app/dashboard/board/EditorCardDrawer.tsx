@@ -273,7 +273,7 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
     try {
       const landed = await uploadFiles(picked, { purpose: 'social' }).done
       const next = withFinalFiles(finalFilesOf(item as never), landed.map(({ file, url }) => ({ name: file.name, url, mime: file.type, size: file.size })), handInRound(item as never), me?.id ?? null, new Date().toISOString())
-      const ok = await post(`/api/production/items/${id}`, { final_files: next }, `${landed.length} ${landed.length === 1 ? 'file' : 'files'} handed in as ${roundLabel(handInRound(item as never))}`, 'Saving the files', 'PATCH')
+      const ok = await post(`/api/production/items/${id}`, { final_files: next }, `${landed.length} ${landed.length === 1 ? 'file' : 'files'} added as ${roundLabel(handInRound(item as never))}`, 'Saving the files', 'PATCH')
       if (!ok) throw new Error('Could not save the files')
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Upload failed')
@@ -713,7 +713,7 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
               </p>
             )}
             {currentFiles(item as never).length === 0
-              ? (driveCopying ? null : <p className="text-[13px] text-muted-foreground">{frozen ? 'Booked in or posted — the files are the channel’s now.' : `Nothing handed in for ${roundLabel(handInRound(item as never))} yet.`}</p>)
+              ? (driveCopying ? null : <p className="text-[13px] text-muted-foreground">{frozen ? 'Booked in or posted — the files are the channel’s now.' : `Nothing on the card for ${roundLabel(handInRound(item as never))} yet.`}</p>)
               : (
                 <ul className="flex flex-col divide-y divide-border" aria-label="The finished files">
                   {currentFiles(item as never).map(f => {
@@ -808,7 +808,7 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
         ) : item.link_url ? (
           <a href={item.link_url} target="_blank" rel="noreferrer noopener" className="inline-flex min-h-11 items-center text-[14px] underline underline-offset-4">Open the finished edit<span className="sr-only">, opens in a new tab</span></a>
         ) : (
-          <p className="text-[13px] text-muted-foreground">{frozen ? 'Booked in or posted — the files are the channel’s now.' : 'Nothing handed in yet.'}</p>
+          <p className="text-[13px] text-muted-foreground">{frozen ? 'Booked in or posted — the files are the channel’s now.' : 'Nothing on the card yet.'}</p>
         )}
         {!filesCard && holder && !frozen && item.link_url && (
           <a href={item.link_url} target="_blank" rel="noreferrer noopener" className="inline-flex min-h-11 items-center text-[13px] text-muted-foreground underline underline-offset-4">Open the finished edit<span className="sr-only">, opens in a new tab</span></a>
@@ -818,7 +818,7 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
             held one link, so each hand-in wrote over the last; these are the ones it still has. */}
         {item && earlierLinkVersions(item as never).length > 0 && (
           <div className="flex flex-col gap-1" data-link-versions>
-            <p className="text-[12px] uppercase tracking-wider text-muted-foreground">Handed in before</p>
+            <p className="text-[12px] uppercase tracking-wider text-muted-foreground">Earlier versions</p>
             {earlierLinkVersions(item as never).slice().reverse().map(v => (
               <a key={`${v.version}-${v.at}`} href={v.url} target="_blank" rel="noreferrer noopener"
                 className="min-h-11 text-[13px] text-muted-foreground underline underline-offset-4 hover:text-foreground">
@@ -1004,8 +1004,8 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
             <DialogTitle>Upload the finished files — {item ? roundLabel(handInRound(item as never)) : ''}</DialogTitle>
             <DialogDescription>
               {designCard
-                ? 'The finished pictures or PDFs. They join this version with the designs already handed in — to change one, use Replace beside it instead. Up to 5GB a file.'
-                : 'The clips, pictures or PDFs themselves, if they are not in Google Drive. They join this version with the files already handed in. Up to 5GB a file.'}
+                ? 'The finished pictures or PDFs. They join this version with the designs already on the card — to change one, use Replace beside it instead. Up to 5GB a file.'
+                : 'The clips, pictures or PDFs themselves, if they are not in Google Drive. They join this version with the files already on the card. Up to 5GB a file.'}
             </DialogDescription>
           </DialogHeader>
           <label className="flex min-h-32 cursor-pointer flex-col items-center justify-center gap-2 rounded-inner border border-dashed border-border bg-surface p-4 text-center text-[14px] hover:bg-muted"

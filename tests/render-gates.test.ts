@@ -187,7 +187,7 @@ describe('the editor\u2019s card draws every SOP section, empty or not', () => {
     // the empty states say what to do
     // "Your finished edit": a Drive/Dropbox link or files, nothing else (14 Sep 2026)
     expect(s).toMatch(/Your finished edit/)
-    expect(s).toMatch(/Nothing handed in yet\./)
+    expect(s).toMatch(/Nothing on the card yet\./)
     expect(s).toMatch(/Not given yet — ask Production\./)
     // Handover and Blocked? are the two that DO step aside when they have
     // nothing to say (the owner, 13 Sep 2026: "your UI has so many texts in

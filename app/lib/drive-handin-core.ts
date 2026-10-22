@@ -296,7 +296,7 @@ export function mergeDriveHandIn(
     return {
       ok: false,
       failed: failed.map(x => x.d),
-      error: `Nothing was handed in — ${names.length === 1 ? 'this file' : `${names.length} files`} could not be copied from Drive: ${names.slice(0, 5).join(', ')}${names.length > 5 ? '…' : ''}${why ? ` (${why})` : ''}. Try again.`.slice(0, 500),
+      error: `Nothing was added — ${names.length === 1 ? 'this file' : `${names.length} files`} could not be copied from Drive: ${names.slice(0, 5).join(', ')}${names.length > 5 ? '…' : ''}${why ? ` (${why})` : ''}. Try again.`.slice(0, 500),
     }
   }
   const manager = handIn.manager === true
@@ -409,7 +409,7 @@ export function handInWords(row: PullRow | null | undefined, h: DriveHandIn | nu
     // green over a greyed Submit) — it says so, and what to do
     if (n === 0 && kept > 0 && dropped === 0) return { tone: 'working', words: unchangedWords(kept) }
     const fresh = Math.min(n, h.new_ids?.length ?? 0)
-    const head = `${h.auto ? 'New from the Drive folder, added on its own: ' : ''}${total} ${total === 1 ? 'file' : 'files'} handed in — ${[`${fresh} new`, `${n - fresh} updated`, kept ? `${kept} unchanged` : ''].filter(Boolean).join(', ')}`
+    const head = `${h.auto ? 'New from the Drive folder, added on its own: ' : ''}${total} ${total === 1 ? 'file' : 'files'} added — ${[`${fresh} new`, `${n - fresh} updated`, kept ? `${kept} unchanged` : ''].filter(Boolean).join(', ')}`
     return { tone: 'done', words: [head, left ? `${left} left out (${h.skipped![0].why})` : '', dropped ? `${dropped} no longer in the folder — left out of this version, kept in the ones before` : ''].filter(Boolean).join(' · ') }
   }
   if (!row) return { tone: 'working', words: 'Waiting to start copying from Google Drive…' }

@@ -223,7 +223,7 @@ describe('handing a version in from a Drive link', () => {
     await runJob()
     expect(finalFilesOf(card())).toEqual([])
     expect(card().drive_handins[0].status).toBe('failed')
-    expect(card().drive_handins[0].error).toMatch(/Nothing was handed in .*Script 2 BROKEN\.mp4/)
+    expect(card().drive_handins[0].error).toMatch(/Nothing was added .*Script 2 BROKEN\.mp4/)
     // and it may be tried again
     h.drive[CLIP2].name = 'Script 2.mp4'
     expect((await handIn({ url: FOLDER_URL, ids: [CLIP1, CLIP2] })).status).toBe(200)
@@ -523,7 +523,7 @@ describe('a Drive hand-in that changed nothing (1 Oct 2026, the walk)', () => {
     expect(submitWaitsWords({ drive_handins: [h] })).toBe('Nothing changed — all 7 files are the same as before. Change them in Google Drive, then hand the link in again.')
     expect(submitWaitsWords({ drive_handins: [] })).toBe('Hand in from Google Drive first.')
     // one clip re-exported: a real hand-in, in the usual words
-    expect(handInWords(null, { ...h, file_ids: ['x'], carried: ['b', 'c', 'd', 'e', 'f', 'g'] }, 0)?.words).toBe('7 files handed in — 0 new, 1 updated, 6 unchanged')
+    expect(handInWords(null, { ...h, file_ids: ['x'], carried: ['b', 'c', 'd', 'e', 'f', 'g'] }, 0)?.words).toBe('7 files added — 0 new, 1 updated, 6 unchanged')
     const d = readFileSync('app/dashboard/board/EditorCardDrawer.tsx', 'utf8')
     expect(d).not.toContain("'Upload the finished files first'")
   })

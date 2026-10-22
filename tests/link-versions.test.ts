@@ -73,7 +73,7 @@ describe('a card keeps the link of every version', () => {
     expect(drawer).not.toContain('if (!needsAdoption(item as never)) return')
     expect(readFileSync('app/lib/adopt-clips.ts', 'utf8')).toContain('const merged = mergeHandIn(files, pulled, round, by, now)')
     expect(drawer).not.toContain('handInRound(item as never) === roundOf(item as never)) return')
-    expect(drawer).toContain('Handed in before')
+    expect(drawer).toContain('Earlier versions')
     expect(readFileSync('docs/schema-history/link_versions.sql', 'utf8'))
       .toContain('alter table content_items add column if not exists link_versions jsonb;')
   })

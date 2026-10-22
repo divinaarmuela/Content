@@ -533,7 +533,7 @@ function HoverFrames({ frames, thumb, board }: { frames: { url: string; at_s: nu
 
 /** where a version is, in words a person reads at a glance */
 function versionWhere(e: Stack['entries'][number], rowById: Map<string, DriveSeen>): string {
-  if (e.source === 'card') return ' · handed in'
+  if (e.source === 'card') return ' · on the card'
   if (e.source === 'other') return ` · on “${e.otherCard}”`
   // every state said as it is — a removed file never reads "in Drive" (the owner, 22 Oct 2026: "removed from drive but
   // when clicking it says v1 in drive")
