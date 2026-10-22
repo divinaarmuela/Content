@@ -21,6 +21,7 @@ import { formatBytes } from '../../../lib/drive-pull-core'
 import { stackVersions, type Stack, type StackFile } from '../../../lib/version-stack-core'
 import { editingPortalPath, portalHasWork } from '../../../lib/editing-portal-core'
 import { onePortalPath, workTab } from '../../../lib/one-portal-core'
+import { isTestClient } from '../../../lib/test-clients-core'
 import { ColourGradePanel } from '../../board/ColourGradePanel'
 import { HolderTransfer, ManagerActions } from '../../board/CardAnswers'
 import FilesToWorkFrom from '../../board/FilesToWorkFrom'
@@ -30,6 +31,7 @@ import { cardUsesPlan, workFrom } from '../../../lib/editor-sop-core'
 import { reviewPath } from '../../../lib/video-review-core'
 import EditorCardClassicPage from './classic/page'
 import EditorCardDrawer from '../../board/EditorCardDrawer'
+import CardDriveUpload from './CardDriveUpload'
 import PreviewFrame, { AiScanning, ScanSteps, usePreviewAccess } from '../preview/PreviewFrame'
 
 /**
@@ -137,6 +139,8 @@ export default function EditorCard() {
       </div>
       <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(420px,520px)]">
         <div className="flex min-w-0 flex-col gap-6">
+          {/* UPLOAD STRAIGHT INTO THE CARD'S DRIVE FOLDER (preview: test clients only — card-upload-core.ts) */}
+          {isTestClient(item.client_id) && <CardDriveUpload itemId={item.id} />}
           <Workspace item={item} rows={allRows} needsGrade={needsColourGrade(kindSlug)} framesOf={framesOf} holder={holder ? (holder.name || holder.email) : null}
             gradeSince={extra?.gradeSince ?? null}
             sourceCreated={new Map(sources.rows.map(s => [s.id, s.created_at]))} />
@@ -319,6 +323,11 @@ function Workspace({ item, rows, needsGrade, gradeSince, sourceCreated, framesOf
     const copying = s.entries.map(e => e.source === 'drive' ? rowById.get(e.key.slice(2)) : undefined).find(r => r?.state === 'taken')
     if (s.busy && !copying) return { file, pending, next: { words: 'AI checking it…', tone: 'blue' as NextTone } }
     // a check that failed says so, never the card's stage (the owner: "why does it say with editor")
+    // past editing, a file in Drive that is not on the card simply waits for the next hand-in — whether or not the AI got
+    // to it (live, 22 Oct 2026: 15 on September 18th at the quality check read "Couldn't check it yet")
+    const editing = ['draft_uploaded', 'revision_required', 'revision_complete', 'client_changes_requested'].includes(String(item.status))
+    if (!editing && !file && s.entries.every(e => e.source !== 'card') && s.entries.some(e => e.source === 'drive' && ['locked', 'failed', 'scanned'].includes(rowById.get(e.key.slice(2))?.state ?? '')))
+      return { file, pending, next: { words: 'In Drive — waiting for the next hand-in', tone: 'muted' as NextTone } }
     const failed = s.entries.some(e => e.source === 'drive' && rowById.get(e.key.slice(2))?.state === 'failed') && !s.entries.some(e => e.source === 'card')
     if (failed) return { file, pending, next: { words: 'Couldn’t check it yet — trying again', tone: 'amber' as NextTone } }
     const tries = Number((copying?.scan as { copy_tries?: unknown } | null)?.copy_tries ?? 0)

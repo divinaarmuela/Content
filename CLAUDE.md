@@ -136,6 +136,11 @@ and `npm run build` must pass. Do not report completion on tests alone.
     it and listing it in `tests/drive-auto-filing.test.ts`; the Files page's
     side is pinned by `tests/drive-page-writes.test.ts`, which reads the
     source so a new Upload button fails a test rather than a review.
+    ONE EXCEPTION, by the owner's word (22 Oct 2026): a card's upload goes
+    straight into `Clients/{Client}/{Card}/V{n}` in Drive (`app/lib/card-upload.ts`),
+    behind its own switch `DRIVE_CARD_FILING` — test clients only until it is
+    `all`. It writes only inside a card's own folder, never moves or deletes,
+    and V1/V2 keep their names; `tests/card-upload.test.ts` pins the guard.
 
 ## Layout
 

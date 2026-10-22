@@ -50,11 +50,14 @@ export async function listDriveHandIn(rawUrl: unknown): Promise<HandInListing> {
 export type StartResult = { ok: true; handIn: DriveHandIn; round: number } | { ok: false; status: number; error: string }
 
 /** record the hand-in on the card and queue the copy of the picked files */
-export async function startDriveHandIn(user: TeamUser, item: ContentItem, body: { url?: unknown; ids?: unknown; map?: unknown }): Promise<StartResult> {
+export async function startDriveHandIn(user: TeamUser, item: ContentItem, body: { url?: unknown; ids?: unknown; map?: unknown }, opts: { anyStage?: boolean } = {}): Promise<StartResult> {
   // the colourist hands in the graded cut at colour grade (COLOUR_GRADE_SPLIT_SPEC C4) — a manager's say, there only
   const colourist = (user as { colourist?: unknown }).colourist === true && String(item.status) === 'colour_grade'
   const manager = user.role === 'account_manager' || user.role === 'super_admin' || colourist
-  const refusal = handInRefusal(item as never, manager)
+  // a file uploaded into the card's own Drive folder may be swapped in at any step before approval (the owner, 22 Oct
+  // 2026: "in any step of this cards anyone should be able to swap in a new version") — card-upload.ts
+  const mayChange = manager || opts.anyStage === true
+  const refusal = handInRefusal(item as never, mayChange)
   if (refusal) return { ok: false, status: 409, error: refusal }
   const listing = await listDriveHandIn(body.url)
   if (!listing.ok) return listing
@@ -79,13 +82,13 @@ export async function startDriveHandIn(user: TeamUser, item: ContentItem, body: 
   const names = Object.fromEntries(listing.files.filter(f => picked.ids.includes(f.id)).map(f => [f.id, f.name]))
   const handIn: DriveHandIn = {
     id: `${pull}#${now}`, pull_id: pull, link: listing.url, drive_ids: picked.ids, names, map, round, ...(whole ? { whole: true } : {}),
-    by: user.id, manager, requested_at: now, status: 'copying',
+    by: user.id, manager: mayChange, requested_at: now, status: 'copying',
   }
   const items = table<ContentItem>('content_items')
   const put = await items.claim(item.id, cur => {
     if (!cur) return null
     // the card moved on since it was loaded (approved, with the client): refused inside the write too
-    if (handInRefusal(cur as never, manager)) return null
+    if (handInRefusal(cur as never, mayChange)) return null
     // a hand-in left 'copying' whose copy is not running any more is superseded by this one
     const list = driveHandInsOf(cur as never).map(h => (h.status === 'copying' ? { ...h, status: 'failed' as const, error: 'Replaced by a newer hand-in from Drive', settled_at: now } : h))
     return { ...cur, drive_handins: withHandIn(list, handIn), updated_at: now } as unknown as ContentItem

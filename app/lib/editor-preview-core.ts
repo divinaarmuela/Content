@@ -110,7 +110,7 @@ export function videoNext(v: {
       // handed in is not finished: the editor still presses "Ready for quality check" (the owner, 22 Oct 2026: "he has
       // clicked confirm meaning he has done finishing the work" — it read "With the editor")
       return v.onCard
-        ? { words: `Handed in — waiting for ${v.holder ? v.holder.split(' ')[0] : 'the editor'} to send it to quality check`, tone: 'muted' }
+        ? { words: `Handed in — waiting for ${v.holder || 'the editor'} to send it to quality check`, tone: 'muted' }
         : { words: 'With the editor', tone: 'muted' }
     case 'quality_check': case 'internal_review':
       return { words: v.needsGrade ? 'Quality check — then colour grade' : 'Quality check — then the portal', tone: 'amber' }

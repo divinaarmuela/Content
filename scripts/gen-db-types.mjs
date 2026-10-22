@@ -565,6 +565,14 @@ const GHOST_TABLES = {
     ['created_by', col('string', true)],
     ['created_at', col('string', false)],
     ['updated_at', col('string', false)],
+    // a card upload (the owner, 22 Oct 2026: uploads go straight into the card's Drive folder): which card and version
+    // it is for, and — once our playable copy is made — the file it became on the card
+    ['purpose', col('string', true)],       // 'card' | null (the Files page)
+    ['item_id', col('string', true)],
+    ['version', col('number', true)],
+    ['copied_at', col('string', true)],
+    ['final_file_id', col('string', true)],
+    ['error', col('string', true)],
   ],
   // drive_pulls — A DRIVE FOLDER PULLED INTO OUR OWN STORAGE (the owner, 16
   //   Sep 2026: "I want a Drive link to be uploaded and it downloads it — a

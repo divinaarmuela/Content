@@ -141,3 +141,18 @@ export const AUTO_FILING_NOTE =
   'The dashboard only reads Google Drive. Nothing here uploads, moves, renames '
   + 'or deletes anything in it — Files shows you what is there, and the '
   + 'Schedule composer picks from it.'
+
+/* ── the third switch: the card's own Drive folder ──────────────────────── */
+
+/**
+ * THE ONE WRITE THE OWNER ASKED FOR (22 Oct 2026: "we will upload everything as files and everything will be tracked
+ * via drive"; "what i thought uploading here uploaded straight to drive"). An editor's upload on a card goes straight
+ * into `Clients / {Client} / {Card} / V{n}` in Drive — folders the app makes inside its own Clients folder, the
+ * card's shared view-only by link, the card's editor given edit access. A person may also add folders inside a card's
+ * folder and rename the ones that are not V1 / V2. Nothing outside a card's folder is written; nothing is moved or
+ * deleted.
+ *
+ * It is its own switch, `DRIVE_CARD_FILING` (card-upload-core.ts `cardFilingAllowed`), and neither of the two above
+ * turns it on or off: in PREVIEW it runs on the test clients only; `DRIVE_CARD_FILING=all` puts it on every client.
+ * Every writer in card-upload.ts checks it first — pinned by tests/card-upload.test.ts.
+ */

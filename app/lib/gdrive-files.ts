@@ -47,6 +47,7 @@ async function beginResumable(
   token: string,
   meta: { name: string; parents: string[]; mimeType?: string },
   size: number | null,
+  origin?: string,
 ): Promise<DriveResult<{ uri: string }>> {
   const url = `${UPLOAD_FILES}?` + new URLSearchParams({
     uploadType: 'resumable', fields: 'id', ...ALL_DRIVES,
@@ -58,6 +59,9 @@ async function beginResumable(
       'Content-Type': 'application/json; charset=UTF-8',
       ...(meta.mimeType ? { 'X-Upload-Content-Type': meta.mimeType } : {}),
       ...(size != null ? { 'X-Upload-Content-Length': String(size) } : {}),
+      // a session begun with the page's Origin lets THAT page send the pieces to Google itself (CORS) — the card's
+      // uploader (card-upload.ts); without it only the server may
+      ...(origin ? { Origin: origin } : {}),
     },
     body: JSON.stringify({ name: meta.name, parents: meta.parents }),
   })
@@ -837,7 +841,7 @@ export async function openDownload(id: string, key?: string | null): Promise<Dri
  * handed out — the browser holds an opaque id of ours instead.
  */
 export async function openUploadSession(
-  parentId: string, name: string, size: number | null, mimeType?: string,
+  parentId: string, name: string, size: number | null, mimeType?: string, origin?: string,
 ): Promise<DriveResult<{ uri: string; name: string }>> {
   if (!isDriveId(parentId)) return asError('That folder could not be found')
   if (!String(name ?? '').trim()) return asError('That file has no name')
@@ -848,7 +852,7 @@ export async function openUploadSession(
   const auth = await accessToken()
   if (!auth.ok) return auth
   const begun = await beginResumable(
-    auth.token, { name: clean, parents: [parentId], mimeType }, size,
+    auth.token, { name: clean, parents: [parentId], mimeType }, size, origin,
   )
   if (!begun.ok) return begun
   return { ok: true, uri: begun.uri, name: clean }

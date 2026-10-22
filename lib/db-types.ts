@@ -564,6 +564,7 @@ export interface Client {
   brand_profile: unknown | null
   brand_profile_updated_at: string | null
   brand_profile_updated_by: string | null
+  upload_folder_id: string | null
   timezone: string | null
   posts_own_content: boolean | null
   website: string | null
@@ -654,6 +655,10 @@ export interface ContentAsset {
 export interface ContentItem {
   archived_at: string | null
   archived_by: string | null
+  upload_folder_id: string | null
+  upload_folder_url: string | null
+  upload_folder_lock: string | null
+  upload_version_folders: unknown | null
   group_id: string | null
   deliver_only: boolean | null
   blocked_need: string | null
@@ -877,6 +882,12 @@ export interface DriveUpload {
   created_by: string | null
   created_at: string
   updated_at: string
+  purpose: string | null
+  item_id: string | null
+  version: number | null
+  copied_at: string | null
+  final_file_id: string | null
+  error: string | null
 }
 
 export interface EmailIngestLog {
@@ -1843,11 +1854,11 @@ export const TABLE_COLUMNS = {
   client_contacts: ['id', 'created_at', 'updated_at', 'client_id', 'name', 'role', 'email', 'phone', 'is_primary', 'notes', 'share_token'],
   client_credentials: ['id', 'created_at', 'updated_at', 'client_id', 'platform', 'label', 'username', 'secret_cipher', 'url', 'notes', 'updated_by', 'updated_by_name'],
   client_notes: ['id', 'created_at', 'updated_at', 'client_id', 'body', 'author_id', 'author_name', 'visibility'],
-  clients: ['brand_profile', 'brand_profile_updated_at', 'brand_profile_updated_by', 'timezone', 'posts_own_content', 'website', 'source', 'default_scheduler_ids', 'share_token', 'social_profile_id', 'id', 'created_at', 'name', 'slug', 'industry', 'contact_name', 'email', 'phone', 'clerk_user_id', 'status', 'notes', 'portal_one', 'instagram_locations', 'instagram_via_meta', 'client_approval_required', 'drive_folder_id', 'drive_folder_origin'],
+  clients: ['brand_profile', 'brand_profile_updated_at', 'brand_profile_updated_by', 'upload_folder_id', 'timezone', 'posts_own_content', 'website', 'source', 'default_scheduler_ids', 'share_token', 'social_profile_id', 'id', 'created_at', 'name', 'slug', 'industry', 'contact_name', 'email', 'phone', 'clerk_user_id', 'status', 'notes', 'portal_one', 'instagram_locations', 'instagram_via_meta', 'client_approval_required', 'drive_folder_id', 'drive_folder_origin'],
   comment_automations: ['id', 'client_id', 'social_account_id', 'provider_account_id', 'platform', 'zernio_automation_id', 'runner', 'social_post_id', 'platform_post_id', 'zernio_post_id', 'post_title', 'post_thumb', 'post_date', 'name', 'keywords', 'match_mode', 'dm_message', 'button_title', 'link', 'comment_reply', 'dm_variations', 'reply_variations', 'active', 'paused_reason', 'created_by', 'created_at', 'updated_at'],
   content_applications: ['id', 'created_at', 'first_name', 'last_name', 'email', 'phone', 'business', 'industry', 'model_interest', 'content_needed', 'budget', 'timeline'],
   content_assets: ['id', 'client_id', 'title', 'platform', 'slug', 'dest_url', 'post_url', 'provider_post_id', 'source', 'offer_code', 'keyword', 'published_at', 'created_at'],
-  content_items: ['archived_at', 'archived_by', 'group_id', 'deliver_only', 'blocked_need', 'blocked_from_id', 'blocked_note', 'blocked_at', 'blocked_nudged_12_at', 'blocked_nudged_24_at', 'ack_nudged_at', 'qc_done_version', 'handover_drive_at', 'handover_source_at', 'drive_folder_id', 'drive_url', 'link_final', 'link_versions', 'delivered_at', 'posting_approval_state', 'id', 'created_at', 'updated_at', 'client_id', 'batch_id', 'title', 'content_type', 'platform_targets', 'status', 'owner_id', 'assigned_by', 'due_date', 'priority', 'caption', 'client_approval_required', 'current_version_number', 'raw_assets_url', 'brief', 'raw_assets', 'review_link', 'review_note', 'scheduler_ids', 'brief_url', 'work_kind_id', 'portal_hidden', 'graded_round', 'split_from_id', 'split_round', 'split_at', 'adhoc_post', 'for_contact_id', 'clip_approvals', 'edit_round', 'include_plan', 'final_files', 'change_assets', 'drive_handins', 'client_round', 'client_rounds', 'client_frozen', 'share_token', 'accepted_at', 'accepted_round', 'link_url', 'link_kind', 'change_note', 'change_note_by', 'change_note_at', 'posted_slides', 'asked_ids', 'asked_at'],
+  content_items: ['archived_at', 'archived_by', 'upload_folder_id', 'upload_folder_url', 'upload_folder_lock', 'upload_version_folders', 'group_id', 'deliver_only', 'blocked_need', 'blocked_from_id', 'blocked_note', 'blocked_at', 'blocked_nudged_12_at', 'blocked_nudged_24_at', 'ack_nudged_at', 'qc_done_version', 'handover_drive_at', 'handover_source_at', 'drive_folder_id', 'drive_url', 'link_final', 'link_versions', 'delivered_at', 'posting_approval_state', 'id', 'created_at', 'updated_at', 'client_id', 'batch_id', 'title', 'content_type', 'platform_targets', 'status', 'owner_id', 'assigned_by', 'due_date', 'priority', 'caption', 'client_approval_required', 'current_version_number', 'raw_assets_url', 'brief', 'raw_assets', 'review_link', 'review_note', 'scheduler_ids', 'brief_url', 'work_kind_id', 'portal_hidden', 'graded_round', 'split_from_id', 'split_round', 'split_at', 'adhoc_post', 'for_contact_id', 'clip_approvals', 'edit_round', 'include_plan', 'final_files', 'change_assets', 'drive_handins', 'client_round', 'client_rounds', 'client_frozen', 'share_token', 'accepted_at', 'accepted_round', 'link_url', 'link_kind', 'change_note', 'change_note_by', 'change_note_at', 'posted_slides', 'asked_ids', 'asked_at'],
   content_tracker: ['id', 'client_id', 'month', 'required_graphics', 'required_reels', 'notes', 'responsible', 'in_asana', 'updated_by', 'created_at', 'updated_at'],
   data_deletion_requests: ['id', 'meta_user_id', 'received_at', 'status', 'note', 'updated_at'],
   deliverable_groups: ['id', 'client_id', 'batch_id', 'content_type', 'title', 'target', 'work_kind_id', 'created_by', 'created_at', 'planned'],
@@ -1856,7 +1867,7 @@ export const TABLE_COLUMNS = {
   drive_pulls: ['id', 'folder_id', 'folder_url', 'kind', 'scope_id', 'purpose', 'status', 'total_files', 'total_bytes', 'done_files', 'done_bytes', 'files', 'error', 'started_at', 'finished_at', 'requested_by', 'cancelled_at', 'only_ids', 'handin_id', 'version', 'created_at', 'updated_at'],
   drive_seen: ['id', 'item_id', 'source_id', 'drive_file_id', 'path', 'name', 'mime', 'size', 'md5', 'revision', 'modified', 'created_time', 'last_modifying_user', 'duration_ms', 'width', 'height', 'stage_at_seen', 'state', 'scan', 'decided_by', 'decided_at', 'first_seen_at', 'created_at', 'updated_at'],
   drive_sources: ['id', 'item_id', 'link', 'drive_id', 'kind', 'added_by', 'stage_at_add', 'last_checked_at', 'last_error', 'file_count', 'created_at', 'updated_at'],
-  drive_uploads: ['id', 'upload_uri', 'name', 'parent_id', 'mime_type', 'size', 'received', 'client_id', 'status', 'drive_file_id', 'created_by', 'created_at', 'updated_at'],
+  drive_uploads: ['id', 'upload_uri', 'name', 'parent_id', 'mime_type', 'size', 'received', 'client_id', 'status', 'drive_file_id', 'created_by', 'created_at', 'updated_at', 'purpose', 'item_id', 'version', 'copied_at', 'final_file_id', 'error'],
   email_ingest_log: ['id', 'created_at', 'gmail_message_id', 'mailbox', 'from_email', 'subject', 'received_at', 'status', 'is_lead', 'confidence', 'reasoning', 'lead_id', 'error'],
   encode_jobs: ['id', 'source_url', 'platform', 'kind', 'asset_id', 'version_id', 'slide_index', 'status', 'attempts', 'output_key', 'target_source', 'bytes', 'width', 'height', 'duration_sec', 'video_kbps', 'error', 'created_at', 'updated_at'],
   inbox_touches: ['id', 'account_id', 'client_id', 'username', 'name', 'kind', 'first_at', 'last_at', 'conversation_id', 'post_id', 'updated_at'],
@@ -1949,11 +1960,11 @@ export const NULLABLE_COLUMNS = {
   client_contacts: ['share_token'],
   client_credentials: ['secret_cipher', 'updated_by'],
   client_notes: ['author_id', 'visibility'],
-  clients: ['brand_profile', 'brand_profile_updated_at', 'brand_profile_updated_by', 'timezone', 'posts_own_content', 'website', 'source', 'default_scheduler_ids', 'share_token', 'social_profile_id', 'industry', 'contact_name', 'email', 'phone', 'clerk_user_id', 'notes', 'portal_one', 'instagram_via_meta', 'client_approval_required', 'drive_folder_id', 'drive_folder_origin'],
+  clients: ['brand_profile', 'brand_profile_updated_at', 'brand_profile_updated_by', 'upload_folder_id', 'timezone', 'posts_own_content', 'website', 'source', 'default_scheduler_ids', 'share_token', 'social_profile_id', 'industry', 'contact_name', 'email', 'phone', 'clerk_user_id', 'notes', 'portal_one', 'instagram_via_meta', 'client_approval_required', 'drive_folder_id', 'drive_folder_origin'],
   comment_automations: ['zernio_automation_id', 'runner', 'social_post_id', 'platform_post_id', 'zernio_post_id', 'post_title', 'post_thumb', 'post_date', 'button_title', 'link', 'comment_reply', 'dm_variations', 'reply_variations', 'paused_reason', 'created_by'],
   content_applications: ['industry', 'model_interest', 'content_needed', 'budget', 'timeline'],
   content_assets: ['client_id', 'platform', 'dest_url', 'post_url', 'provider_post_id', 'offer_code', 'keyword', 'published_at'],
-  content_items: ['archived_at', 'archived_by', 'group_id', 'deliver_only', 'blocked_need', 'blocked_from_id', 'blocked_note', 'blocked_at', 'blocked_nudged_12_at', 'blocked_nudged_24_at', 'ack_nudged_at', 'qc_done_version', 'handover_drive_at', 'handover_source_at', 'drive_folder_id', 'drive_url', 'link_final', 'link_versions', 'delivered_at', 'batch_id', 'owner_id', 'assigned_by', 'due_date', 'caption', 'raw_assets_url', 'brief', 'raw_assets', 'review_link', 'review_note', 'scheduler_ids', 'brief_url', 'work_kind_id', 'portal_hidden', 'graded_round', 'split_from_id', 'split_round', 'split_at', 'adhoc_post', 'for_contact_id', 'clip_approvals', 'edit_round', 'include_plan', 'final_files', 'change_assets', 'drive_handins', 'client_round', 'client_rounds', 'client_frozen', 'share_token', 'accepted_at', 'accepted_round', 'link_url', 'link_kind', 'change_note', 'change_note_by', 'change_note_at', 'posted_slides', 'asked_ids', 'asked_at'],
+  content_items: ['archived_at', 'archived_by', 'upload_folder_id', 'upload_folder_url', 'upload_folder_lock', 'upload_version_folders', 'group_id', 'deliver_only', 'blocked_need', 'blocked_from_id', 'blocked_note', 'blocked_at', 'blocked_nudged_12_at', 'blocked_nudged_24_at', 'ack_nudged_at', 'qc_done_version', 'handover_drive_at', 'handover_source_at', 'drive_folder_id', 'drive_url', 'link_final', 'link_versions', 'delivered_at', 'batch_id', 'owner_id', 'assigned_by', 'due_date', 'caption', 'raw_assets_url', 'brief', 'raw_assets', 'review_link', 'review_note', 'scheduler_ids', 'brief_url', 'work_kind_id', 'portal_hidden', 'graded_round', 'split_from_id', 'split_round', 'split_at', 'adhoc_post', 'for_contact_id', 'clip_approvals', 'edit_round', 'include_plan', 'final_files', 'change_assets', 'drive_handins', 'client_round', 'client_rounds', 'client_frozen', 'share_token', 'accepted_at', 'accepted_round', 'link_url', 'link_kind', 'change_note', 'change_note_by', 'change_note_at', 'posted_slides', 'asked_ids', 'asked_at'],
   content_tracker: ['required_graphics', 'required_reels', 'notes', 'responsible', 'in_asana', 'updated_by'],
   data_deletion_requests: ['note'],
   deliverable_groups: ['batch_id', 'work_kind_id', 'created_by', 'planned'],
@@ -1962,7 +1973,7 @@ export const NULLABLE_COLUMNS = {
   drive_pulls: ['purpose', 'files', 'error', 'started_at', 'finished_at', 'requested_by', 'cancelled_at', 'only_ids', 'handin_id', 'version'],
   drive_seen: ['size', 'md5', 'revision', 'modified', 'created_time', 'last_modifying_user', 'duration_ms', 'width', 'height', 'scan', 'decided_by', 'decided_at'],
   drive_sources: ['added_by', 'stage_at_add', 'last_checked_at', 'last_error', 'file_count'],
-  drive_uploads: ['mime_type', 'size', 'client_id', 'drive_file_id', 'created_by'],
+  drive_uploads: ['mime_type', 'size', 'client_id', 'drive_file_id', 'created_by', 'purpose', 'item_id', 'version', 'copied_at', 'final_file_id', 'error'],
   email_ingest_log: ['from_email', 'subject', 'received_at', 'is_lead', 'confidence', 'reasoning', 'lead_id', 'error'],
   encode_jobs: ['kind', 'asset_id', 'version_id', 'slide_index', 'output_key', 'bytes', 'width', 'height', 'duration_sec', 'video_kbps', 'error'],
   inbox_touches: ['client_id', 'name', 'conversation_id', 'post_id'],
@@ -2066,7 +2077,7 @@ export const JSON_COLUMNS = {
   comment_automations: ['keywords', 'dm_variations', 'reply_variations'],
   content_applications: [],
   content_assets: [],
-  content_items: ['link_versions', 'raw_assets', 'scheduler_ids', 'clip_approvals', 'final_files', 'change_assets', 'drive_handins', 'client_rounds', 'client_frozen', 'posted_slides', 'asked_ids'],
+  content_items: ['upload_version_folders', 'link_versions', 'raw_assets', 'scheduler_ids', 'clip_approvals', 'final_files', 'change_assets', 'drive_handins', 'client_rounds', 'client_frozen', 'posted_slides', 'asked_ids'],
   content_tracker: [],
   data_deletion_requests: [],
   deliverable_groups: ['planned'],
