@@ -474,7 +474,7 @@ function Player({ item, s, entry, info, rowById, beforeGrade, onEntry }: {
         {cardFile?.url
           ? <video ref={videoRef} key={cardFile.url} src={cardFile.url} controls playsInline preload="metadata" className="aspect-[9/16] w-full bg-black object-contain" />
           : row
-            ? <iframe key={row.drive_file_id} src={`https://drive.google.com/file/d/${row.drive_file_id}/preview`} title={entry.name} allow="autoplay" className="aspect-[9/16] w-full border-0" />
+            ? <iframe key={row.drive_file_id} src={`https://drive.google.com/file/d/${row.drive_file_id}/preview`} title={entry.name} allow="autoplay; fullscreen" allowFullScreen className="aspect-[9/16] w-full border-0" />
             : <div className="flex aspect-[9/16] items-center justify-center p-6 text-center text-[13px] text-white/70">{entry.source === 'other' ? `This version is on “${entry.otherCard}”` : 'No preview'}</div>}
       </div>
       {/* THE TIMELINE (the owner, 22 Oct 2026: "it should be wherever we drag it not fixed points") — a card video
