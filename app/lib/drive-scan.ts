@@ -116,7 +116,10 @@ export async function watchSources(opts: { limit?: number; budgetMs?: number } =
         seenIds.add(id)
         if (!put.claimed) continue
         out.seen++
-        if (state === 'new' || state === 'locked') out.toScan.push(id)
+        // a file another card's links already hold is that card's — not scanned again here (it would only spend Google's
+        // per-file download allowance)
+        const elsewhere = seenRows.some(x => x.drive_file_id === f.id && x.item_id !== item.id && !['ignored', 'gone'].includes(x.state))
+        if ((state === 'new' || state === 'locked') && !elsewhere) out.toScan.push(id)
       }
       await table<DriveSource>('drive_sources').update(s.id, { last_checked_at: now, last_error: files.length ? null : 'Nothing readable in this link — is it shared with the agency’s Drive?', file_count: files.length } as never)
     } catch (e) {
@@ -156,9 +159,14 @@ export async function watchSources(opts: { limit?: number; budgetMs?: number } =
   }
   // A CHECK THAT FAILED IS TRIED AGAIN (live, 22 Oct 2026: Pan Roasted Quail could not be read while Google blocked its
   // downloads, and then sat as "failed" for good): 30 minutes on, up to three times, it goes back to the queue
-  for (const r of seenRows.filter(x => x.state === 'failed' && Date.now() - Date.parse(x.updated_at) > 30 * 60_000).slice(0, 5)) {
+  // …for a whole day: 30 minutes after the first failure, then every three hours (Google lifts its per-file download
+  // block within a day — the owner, 22 Oct 2026: "next few hours?")
+  for (const r of seenRows.filter(x => x.state === 'failed').slice(0, 40)) {
     const tries = Number((r.scan as { check_tries?: unknown } | null)?.check_tries ?? 0)
-    if (tries >= 3) continue
+    if (tries >= 9) continue
+    if (Date.now() - Date.parse(r.updated_at) < (tries === 0 ? 30 : 180) * 60_000) continue
+    // a file another card's links held first is that card's: it is never checked here
+    if (seenRows.some(x => x.drive_file_id === r.drive_file_id && x.item_id !== r.item_id && x.first_seen_at < r.first_seen_at && !['ignored', 'gone'].includes(x.state))) continue
     const put = await seenTable.claim(r.id, cur => cur?.state === 'failed' ? { ...cur, state: 'new', scan: { check_tries: tries + 1 }, updated_at: new Date().toISOString() } as DriveSeen : null).catch(() => null)
     if (put?.claimed) out.toScan.push(r.id)
   }
@@ -167,6 +175,7 @@ export async function watchSources(opts: { limit?: number; budgetMs?: number } =
   const stale = await table<DriveSeen>('drive_seen').list({ where: r => r.state === 'new' && Date.now() - Date.parse(r.updated_at) > 10 * 60_000, fresh: true })
   for (const r of stale.slice(0, 60)) {
     if (out.toScan.includes(r.id)) continue
+    if (seenRows.some(x => x.drive_file_id === r.drive_file_id && x.item_id !== r.item_id && x.first_seen_at < r.first_seen_at && !['ignored', 'gone'].includes(x.state))) continue
     const put = await table<DriveSeen>('drive_seen').claim(r.id, cur => cur?.state === 'new' ? { ...cur, updated_at: new Date().toISOString() } : null)
     if (put.claimed) out.toScan.push(r.id)
   }
