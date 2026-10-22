@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, Check, ChevronDown, ExternalLink, Film, FolderOpen, Hourglass, Link2, Lock, Sparkles } from 'lucide-react'
+import { ArrowLeft, Check, ChevronDown, ExternalLink, Film, FolderOpen, Hourglass, Link2, Lock, Search, Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -296,7 +296,14 @@ function Workspace({ item, rows, needsGrade, gradeSince, sourceCreated, framesOf
   for (const s of stacks) { const k = folderOf(s); groups.set(k, [...(groups.get(k) ?? []), s]) }
   const ordered = [...groups.entries()].sort((a, b) => (a[0] === 'Main folder' ? 1 : b[0] === 'Main folder' ? -1 : a[0].localeCompare(b[0])))
   const [folder, setFolder] = useState<string | null>(null)
-  const shown = folder ? ordered.filter(([f]) => f === folder) : ordered
+  // FIND A VIDEO BY ITS FILE NAME (the owner, 23 Oct 2026: "a filename search it helps editors find the video") —
+  // any of its versions' names, or its folder
+  const [query, setQuery] = useState('')
+  const q = query.trim().toLowerCase()
+  const hits = (f: string, s: Stack) => !q || f.toLowerCase().includes(q) || s.title.toLowerCase().includes(q) || s.entries.some(e => e.name.toLowerCase().includes(q))
+  const shown = (folder ? ordered.filter(([f]) => f === folder) : ordered)
+    .map(([f, list]) => [f, list.filter(s => hits(f, s))] as [string, Stack[]])
+    .filter(([, list]) => list.length > 0)
   const [pick, setPick] = useState<{ stack: string; entry: string } | null>(null)
   // SIDE BY SIDE (back, the owner, 22 Oct 2026): choose videos on the card, open them side by side with their comments
   const router = useRouter()
@@ -379,6 +386,12 @@ function Workspace({ item, rows, needsGrade, gradeSince, sourceCreated, framesOf
               : <Button size="sm" variant="outline" onClick={() => setSelecting(true)} className="h-9 rounded-full px-4 text-[13px] font-semibold">Select to compare</Button>}
           </span>
         </header>
+        <label className="mb-3 flex items-center gap-2 rounded-full border border-border bg-background px-3 py-1.5">
+          <Search className="h-4 w-4 text-muted-foreground" aria-hidden />
+          <input type="search" value={query} onChange={e => setQuery(e.target.value)} placeholder="Find a video by its file name"
+            aria-label="Find a video by its file name" className="min-w-0 flex-1 bg-transparent text-[13px] outline-none" />
+        </label>
+        {q && shown.length === 0 && <p className="mb-3 text-[13px] text-muted-foreground">No video here has “{query.trim()}” in its name.</p>}
         {ordered.length > 1 && (
           <nav aria-label="Folders" className="mb-3 flex flex-wrap gap-1.5">
             <button type="button" onClick={() => setFolder(null)} aria-pressed={folder === null}
