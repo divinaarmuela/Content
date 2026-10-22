@@ -172,11 +172,13 @@ export async function watchSources(opts: { limit?: number; budgetMs?: number } =
   }
   // A FILE LEFT WAITING IS ASKED FOR AGAIN: one still "new" ten minutes on (its event lost, or set back for a rescan)
   // is queued again, and stamped so it is asked at most every ten minutes — a scan that never starts is never final
-  const stale = await table<DriveSeen>('drive_seen').list({ where: r => r.state === 'new' && Date.now() - Date.parse(r.updated_at) > 10 * 60_000, fresh: true })
+  // …and a file waiting at the quality check or with the client that never got its AI verdict (live, 22 Oct 2026: 15 on
+  // Real Deal's September 18th) — checked now, so it is ready when the card comes back
+  const stale = await table<DriveSeen>('drive_seen').list({ where: r => (r.state === 'new' || (r.state === 'locked' && !(r.scan as { kind?: string } | null)?.kind)) && Date.now() - Date.parse(r.updated_at) > 10 * 60_000, fresh: true })
   for (const r of stale.slice(0, 60)) {
     if (out.toScan.includes(r.id)) continue
     if (seenRows.some(x => x.drive_file_id === r.drive_file_id && x.item_id !== r.item_id && x.first_seen_at < r.first_seen_at && !['ignored', 'gone'].includes(x.state))) continue
-    const put = await table<DriveSeen>('drive_seen').claim(r.id, cur => cur?.state === 'new' ? { ...cur, updated_at: new Date().toISOString() } : null)
+    const put = await table<DriveSeen>('drive_seen').claim(r.id, cur => cur && (cur.state === 'new' || cur.state === 'locked') ? { ...cur, updated_at: new Date().toISOString() } : null)
     if (put.claimed) out.toScan.push(r.id)
   }
   return out
