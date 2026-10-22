@@ -41,7 +41,17 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
         const frames = (Array.isArray(r.frames) ? r.frames as { url?: string | null; at_s?: number }[] : []).filter(f => f.url).map(f => ({ url: String(f.url), at_s: Number(f.at_s ?? 0) }))
         media[keys[i]] = { frames, board: (r as { storyboard?: unknown }).storyboard ?? null }
       })
-      return NextResponse.json({ gradeSince: await gradeSinceOf(id), media, incoming })
+      // THE SAME DRIVE FILE ON TWO CARDS (live, 22 Oct 2026: Ryan added Alia's whole folder to Product Photos/Videos and
+      // Travel Vlogs' files showed there as new): a file another card met first is that card's — named, not offered
+      const items = await table<{ id: string; title?: string | null }>('content_items').list()
+      const title = new Map(items.map(i => [i.id, String(i.title ?? 'another card')]))
+      const ownedElsewhere: Record<string, { id: string; title: string }> = {}
+      for (const r of own) {
+        const first = seen.filter(x => x.drive_file_id === r.drive_file_id && x.item_id !== id && x.first_seen_at < r.first_seen_at && !['ignored', 'gone'].includes(x.state))
+          .sort((a, b) => a.first_seen_at.localeCompare(b.first_seen_at))[0]
+        if (first) ownedElsewhere[r.drive_file_id] = { id: first.item_id, title: title.get(first.item_id) ?? 'another card' }
+      }
+      return NextResponse.json({ gradeSince: await gradeSinceOf(id), media, incoming, ownedElsewhere })
     } catch (e) {
       const { error, status } = authzErrorResponse(e)
       return NextResponse.json({ error }, { status })

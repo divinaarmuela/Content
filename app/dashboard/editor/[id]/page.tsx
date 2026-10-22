@@ -57,7 +57,7 @@ export default function EditorCard() {
   // WHAT THIS CARD NEEDS BESIDE ITS ROW, in one small answer (api/editor-preview/[id]/media): the frames and
   // storyboards of its videos, when it went to colour grade, and files in other cards' Drive matched to its videos —
   // not the whole activity history and every video's frames (live, 22 Oct 2026: ~15 s to open a card)
-  const [extra, setExtra] = useState<{ gradeSince: string | null; media: Record<string, { frames: { url: string; at_s: number }[]; board: Board | null }>; incoming: DriveSeen[] } | null>(null)
+  const [extra, setExtra] = useState<{ gradeSince: string | null; media: Record<string, { frames: { url: string; at_s: number }[]; board: Board | null }>; incoming: DriveSeen[]; ownedElsewhere?: Record<string, { id: string; title: string }> } | null>(null)
   useEffect(() => {
     if (!allowed || !id) return
     let live = true
@@ -72,7 +72,14 @@ export default function EditorCard() {
     for (const [k, v] of Object.entries(extra?.media ?? {})) { m.set(k, v.frames); if (v.board?.url) m.boards.set(k, v.board) }
     return m
   }, [extra])
-  const allRows = useMemo(() => [...seen.rows, ...(extra?.incoming ?? []).filter(r => !seen.rows.some(x => x.id === r.id))], [seen.rows, extra])
+  const allRows = useMemo(() => {
+    const owned = extra?.ownedElsewhere ?? {}
+    // a Drive file another card met first is that card's: shown here as "in that card's Drive", never offered
+    const mine = seen.rows.map(r => owned[r.drive_file_id] && r.state !== 'taken'
+      ? { ...r, scan: { ...((r.scan as object) ?? {}), kind: 'copy', asset: `card:${owned[r.drive_file_id].id}:shared`, other_card: owned[r.drive_file_id], shared: true } } as DriveSeen
+      : r)
+    return [...mine, ...(extra?.incoming ?? []).filter(r => !seen.rows.some(x => x.id === r.id))]
+  }, [seen.rows, extra])
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 10_000); return () => clearInterval(t) }, [])
   // WHEN A PERSON LAST OPENED A CARD: stamped for the board's "Last viewed" order, as the classic card did — fire and forget

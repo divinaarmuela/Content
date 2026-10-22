@@ -50,6 +50,15 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         return NextResponse.json({ ok: true, ignored: rows.length })
       }
 
+      // A DRIVE FILE ANOTHER CARD MET FIRST IS THAT CARD'S — never handed in here too (live, 22 Oct 2026)
+      const everyone = await table<DriveSeen>('drive_seen').list()
+      for (const r of rows.filter(x => x.item_id === item.id)) {
+        const first = everyone.find(x => x.drive_file_id === r.drive_file_id && x.item_id !== item.id && x.first_seen_at < r.first_seen_at && !['ignored', 'gone'].includes(x.state))
+        if (first) {
+          const other = await table<{ id: string; title?: string | null }>('content_items').get(first.item_id)
+          return NextResponse.json({ error: `${r.name} is in “${other?.title ?? 'another card'}”'s Drive too, and belongs to that card — open it to add it there.` }, { status: 409 })
+        }
+      }
       // ANOTHER CARD'S VIDEO IS NEVER HANDED IN HERE — the card points to where it is instead (the owner, 22 Oct 2026)
       const theirs = rows.find(r => r.item_id === item.id && (r.scan as { other_card?: { title?: string } | null } | null)?.other_card)
       if (theirs) {
