@@ -340,7 +340,7 @@ function Workspace({ item, rows, needsGrade, gradeSince, sourceCreated, framesOf
     const pending = s.entries.filter(e => e.source === 'drive' && offerable(rowById.get(e.key.slice(2))) && e.kind !== 'copy').map(e => rowById.get(e.key.slice(2))!)
     const gone = s.entries.some(e => e.source === 'drive') && s.entries.every(e => e.source !== 'drive' || rowById.get(e.key.slice(2))?.state === 'gone')
     const copying = s.entries.map(e => e.source === 'drive' ? rowById.get(e.key.slice(2)) : undefined).find(r => r?.state === 'taken')
-    if (s.busy && !copying) return { file, pending, next: { words: 'AI checking it…', tone: 'blue' as NextTone } }
+    if (s.busy && !copying) return { file, pending, next: { words: 'In Drive', tone: 'muted' as NextTone } }
     // a check that failed says so, never the card's stage (the owner: "why does it say with editor")
     // past editing, a file in Drive that is not on the card simply waits for the next hand-in — whether or not the AI got
     // to it (live, 22 Oct 2026: 15 on September 18th at the quality check read "Couldn't check it yet")
@@ -490,8 +490,8 @@ function ElsewhereCard({ id, title, files, cut }: { id: string; title: string; f
     <>
       <span className="min-w-0 flex-1">
         {cut
-          ? <><b>{files.length === 1 ? files[0] : `${files.length} files`}</b> {files.length === 1 ? 'is a new cut' : 'are new cuts'} of a video on <b>“{row?.title ?? title}”</b>{stage ? ` — ${stage}` : ''}. Confirm it there — it is waiting on that card.</>
-          : <><b>{files.length === 1 ? files[0] : `${files.length} files`}</b> {files.length === 1 ? 'is' : 'are'} already on <b>“{row?.title ?? title}”</b>{stage ? ` — ${stage}` : ''}. Not added here.</>}
+          ? <><b>{files.length === 1 ? files[0] : `${files.length} files`}</b> {files.length === 1 ? 'is a newer cut' : 'are newer cuts'} of a video on <b>“{row?.title ?? title}”</b>{stage ? ` — ${stage}` : ''}. It belongs to that card, so it is not added here.</>
+          : <><b>{files.length === 1 ? files[0] : `${files.length} files`}</b> {files.length === 1 ? 'is' : 'are'} on <b>“{row?.title ?? title}”</b>{stage ? ` — ${stage}` : ''}. It belongs to that card, so it is not added here.</>}
       </span>
       {row && <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-foreground px-3 py-1.5 text-[12px] font-semibold text-background">Open that card <ExternalLink className="h-3 w-3" aria-hidden /></span>}
     </>
@@ -543,7 +543,7 @@ function versionWhere(e: Stack['entries'][number], rowById: Map<string, DriveSee
     case 'taken': return ' · copying in'
     case 'locked': return ' · in Drive, waiting for the next hand-in'
     case 'failed': return ' · in Drive, not checked yet'
-    case 'new': case 'scanning': return ' · in Drive, AI checking'
+    case 'new': case 'scanning': return ' · in Drive'
     case 'ignored': return ' · set aside'
     default: return ' · in Drive, not added yet'
   }
@@ -576,7 +576,7 @@ function Player({ item, s, entry, info, rowById, beforeGrade, onEntry }: {
       })
       const j = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(j.error ?? 'Could not do that')
-      toast.success(action === 'confirm' ? 'Handed in — it copies onto the card now' : 'Set aside — it won’t be offered again')
+      toast.success(action === 'confirm' ? 'Added — it copies onto the card now' : 'Set aside — it won’t be offered again')
     } catch (e) { toast.error(e instanceof Error ? e.message : 'Could not do that') } finally { setBusy(null) }
   }
   const why = ((row?.scan as { reasons?: string[] } | null)?.reasons ?? []).slice(0, 3)
@@ -632,7 +632,7 @@ function Player({ item, s, entry, info, rowById, beforeGrade, onEntry }: {
                 : <span className="inline-flex w-fit items-center rounded-full border border-dashed border-border px-4 py-2 text-[13px] text-muted-foreground">Side by side with comments</span>}
               {inDrive.length > 0 && (
                 <span className="text-[12px] text-muted-foreground">
-                  {inDrive.map(e => e.label).join(', ')} {inDrive.length === 1 ? 'is' : 'are'} still in Drive — confirm {inDrive.length === 1 ? 'it' : 'them'} to compare and comment.
+                  {inDrive.map(e => e.label).join(', ')} {inDrive.length === 1 ? 'is' : 'are'} in the editor’s Drive, not on the card yet.
                 </span>
               )}
             </div>
@@ -643,7 +643,8 @@ function Player({ item, s, entry, info, rowById, beforeGrade, onEntry }: {
             Comments on this video
           </Link>
         )}
-        {why.length > 0 && (
+        {/* no AI any more (the owner, 22 Oct 2026) — its reasoning is not shown */}
+        {false && why.length > 0 && (
           <details className="text-[12px] text-muted-foreground">
             <summary className="cursor-pointer font-semibold">Why the AI put it here</summary>
             <ul className="mt-1 list-disc pl-5">{why.map((w, i) => <li key={i}>{w}</li>)}</ul>
@@ -653,12 +654,12 @@ function Player({ item, s, entry, info, rowById, beforeGrade, onEntry }: {
       {offer && (
         <div className="flex flex-wrap items-center gap-2 rounded-inner border border-accent-amber bg-tint-amber/40 p-3 md:col-span-2">
           <span className="min-w-0 flex-1 text-[13px]">{(offer.scan as { copy_failed?: boolean } | null)?.copy_failed
-            ? <><b>Not on the card yet.</b> The video is fine — Drive wouldn’t let us copy it for a while. Confirm again to try once more.</>
+            ? <><b>Not on the card yet.</b> The video is fine — Drive wouldn’t let us copy it for a while. Add it again to try once more.</>
             : offer.item_id !== item.id
               ? <><b>New cut found in another card’s Drive.</b> Add it here as {entry.label}?</>
               : <><b>New in Drive.</b> Add it to the card as {entry.label}?</>}</span>
           <Button size="sm" disabled={!!busy} onClick={() => void answer('confirm')} className="h-9 rounded-full px-4 text-[13px] font-semibold">
-            <Check className="mr-1 h-3.5 w-3.5" aria-hidden />{busy === 'confirm' ? 'Handing in…' : 'Confirm'}
+            <Check className="mr-1 h-3.5 w-3.5" aria-hidden />{busy === 'confirm' ? 'Adding…' : 'Add to the card'}
           </Button>
           <Button size="sm" variant="outline" disabled={!!busy} onClick={() => void answer('ignore')} className="h-9 rounded-full px-4 text-[13px] font-semibold">Not this</Button>
         </div>
