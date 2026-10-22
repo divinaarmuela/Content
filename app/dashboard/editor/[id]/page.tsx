@@ -169,10 +169,20 @@ function Stepper({ status }: { status: unknown }) {
 /** the card's videos and the scanned Drive files, as the stacks' input */
 function stackFilesOf(item: ContentItem, rows: readonly DriveSeen[], framesOf: Map<string, { url: string; at_s: number }[]> = new Map()): StackFile[] {
   const round = roundOf(item)
-  const card: StackFile[] = currentFiles(item).filter(f => !isRetiredAt(f, round) && isVideo({ mime: f.mime, name: f.name })).map(f => {
-    const first = assetHistory(item, assetIdOf(f))[0] ?? f
-    const frames = framesOf.get(`r2:${f.url}`) ?? []
-    return { key: `a:${assetIdOf(f)}`, name: f.name, at: first.uploaded_at, source: 'card', kind: null, matchKey: null, ask: false, busy: false, thumb: frames[0]?.url ?? null, frames, confidence: null, otherCard: null }
+  // EVERY VERSION HANDED IN IS ITS OWN TAB (the owner, 22 Oct 2026: "remember u click between versions of that video and
+  // it opens up"): the first keeps the video's key (what the AI matches to), each later one follows the one before
+  const card: StackFile[] = currentFiles(item).filter(f => !isRetiredAt(f, round) && isVideo({ mime: f.mime, name: f.name })).flatMap(f => {
+    const asset = assetIdOf(f)
+    const history = assetHistory(item, asset)
+    return history.map((v, i) => {
+      const frames = framesOf.get(`r2:${v.url}`) ?? []
+      return {
+        key: i === 0 ? `a:${asset}` : `a:${asset}@${v.version}`, name: v.name, at: v.uploaded_at, source: 'card' as const,
+        kind: i === 0 ? null : 'recut', matchKey: i === 0 ? null : (i === 1 ? `a:${asset}` : `a:${asset}@${history[i - 1].version}`),
+        ask: false, busy: false, thumb: frames[0]?.url ?? null, frames, confidence: null, otherCard: null,
+        file: { id: v.id, url: v.url, name: v.name, version: v.version },
+      }
+    })
   })
   const drive: StackFile[] = rows
     .filter(r => !['taken', 'ignored', 'footage'].includes(r.state) && isVideo({ mime: r.mime, name: r.path }) && !isFootage({ name: r.path }))
@@ -247,10 +257,16 @@ function Workspace({ item, rows, needsGrade, gradeSince, sourceCreated, framesOf
   const [folder, setFolder] = useState<string | null>(null)
   const shown = folder ? ordered.filter(([f]) => f === folder) : ordered
   const [pick, setPick] = useState<{ stack: string; entry: string } | null>(null)
+  // SIDE BY SIDE (back, the owner, 22 Oct 2026): choose videos on the card, open them side by side with their comments
+  const router = useRouter()
+  const [selecting, setSelecting] = useState(false)
+  const [picked, setPicked] = useState<Set<string>>(() => new Set())
+  const pickOf = (s: Stack) => { const f = info(s).file; return f ? `${f.id}@${f.version}` : null }
+  const openSideBySide = (keys: string[]) => { if (keys.length) router.push(`/dashboard/editor/${item.id}/compare?f=${encodeURIComponent(keys.join(','))}`) }
   const sel = stacks.find(s => s.key === pick?.stack) ?? stacks[0] ?? null
   const entry = sel ? (sel.entries.find(e => e.key === pick?.entry) ?? sel.latest) : null
   const info = (s: Stack) => {
-    const asset = s.entries.find(e => e.source === 'card')?.key.slice(2) ?? null
+    const asset = s.entries.find(e => e.source === 'card')?.key.slice(2).split('@')[0] ?? null
     const file = asset ? current.find(f => assetIdOf(f) === asset) : null
     const pending = s.entries.filter(e => e.source === 'drive' && offerable(rowById.get(e.key.slice(2))) && e.kind !== 'copy').map(e => rowById.get(e.key.slice(2))!)
     const gone = s.entries.some(e => e.source === 'drive') && s.entries.every(e => e.source !== 'drive' || rowById.get(e.key.slice(2))?.state === 'gone')
@@ -273,7 +289,15 @@ function Workspace({ item, rows, needsGrade, gradeSince, sourceCreated, framesOf
       <div>
         <header className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <h2 className="flex items-center gap-2 text-[16px] font-semibold"><Film className="h-4 w-4" aria-hidden /> Videos <span className="text-muted-foreground">({stacks.length})</span></h2>
-          <AiScanning n={rows.filter(r => r.state === 'new' || r.state === 'scanning').length} />
+          <span className="flex items-center gap-2">
+            <AiScanning n={rows.filter(r => r.state === 'new' || r.state === 'scanning').length} />
+            {selecting
+              ? <>
+                  <Button size="sm" disabled={picked.size === 0} onClick={() => openSideBySide([...picked])} className="h-9 rounded-full px-4 text-[13px] font-semibold">Side by side ({picked.size})</Button>
+                  <Button size="sm" variant="ghost" onClick={() => { setSelecting(false); setPicked(new Set()) }} className="h-9 rounded-full px-3 text-[13px]">Cancel</Button>
+                </>
+              : <Button size="sm" variant="outline" onClick={() => setSelecting(true)} className="h-9 rounded-full px-4 text-[13px] font-semibold">Select to compare</Button>}
+          </span>
         </header>
         {ordered.length > 1 && (
           <nav aria-label="Folders" className="mb-3 flex flex-wrap gap-1.5">
@@ -294,10 +318,14 @@ function Workspace({ item, rows, needsGrade, gradeSince, sourceCreated, framesOf
               <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
                 {list.map(s => {
                   const { next, pending } = info(s)
-                  const on = sel?.key === s.key
+                  const key = pickOf(s)
+                  const on = selecting ? !!key && picked.has(key) : sel?.key === s.key
                   return (
                     <li key={s.key}>
-                      <button type="button" onClick={() => setPick({ stack: s.key, entry: s.latest.key })} aria-pressed={on}
+                      <button type="button" disabled={selecting && !key} title={selecting && !key ? 'Only videos on the card can be compared — confirm it first' : undefined}
+                        onClick={() => selecting
+                          ? key && setPicked(m => { const n = new Set(m); if (n.has(key)) n.delete(key); else n.add(key); return n })
+                          : setPick({ stack: s.key, entry: s.latest.key })} aria-pressed={on}
                         className={`flex w-full flex-col overflow-hidden rounded-inner border bg-background text-left transition hover:shadow-md ${on ? 'border-foreground ring-2 ring-foreground/20' : pending.length ? 'border-accent-amber' : 'border-border'}`}>
                         <span className="relative block aspect-[9/12] w-full bg-muted">
                           <HoverFrames frames={s.latest.frames ?? []} thumb={s.latest.thumb} />
@@ -366,7 +394,8 @@ function Player({ item, s, entry, info, rowById, beforeGrade, onEntry }: {
   const [busy, setBusy] = useState<string | null>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const row = entry.source === 'drive' ? rowById.get(entry.key.slice(2)) ?? null : null
-  const cardFile = entry.source === 'card' ? info.file : null
+  // the version chosen plays its own file; the newest is the card's current one
+  const cardFile = entry.source === 'card' ? (entry.file ?? info.file) : null
   const offer = row && info.pending.some(p => p.id === row.id) ? row : null
   const answer = async (action: 'confirm' | 'ignore') => {
     setBusy(action)
@@ -434,6 +463,12 @@ function Player({ item, s, entry, info, rowById, beforeGrade, onEntry }: {
             </Button>
             <Button size="sm" variant="outline" disabled={!!busy} onClick={() => void answer('ignore')} className="h-9 rounded-full px-4 text-[13px] font-semibold">Not this</Button>
           </div>
+        )}
+        {cardFile && assetHistory(item, assetIdOf(cardFile)).length > 1 && (
+          <Link href={`/dashboard/editor/${item.id}/compare?f=${encodeURIComponent(assetHistory(item, assetIdOf(cardFile)).map(v => `${v.id}@${v.version}`).join(','))}`}
+            className="inline-flex w-fit items-center gap-1.5 rounded-full bg-foreground px-4 py-2 text-[13px] font-semibold text-background">
+            Compare its versions side by side
+          </Link>
         )}
         {cardFile && (
           <Link href={reviewPath(item.id, cardFile.id, cardFile.name)} className="inline-flex w-fit items-center gap-1.5 rounded-full border border-border px-4 py-2 text-[13px] font-semibold hover:bg-muted">
