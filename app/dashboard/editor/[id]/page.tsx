@@ -424,7 +424,7 @@ function Workspace({ item, rows, needsGrade, gradeSince, sourceCreated, framesOf
                       {!selecting && versionPicks(s).length > 1 && (
                         <button type="button" onClick={() => openSideBySide(versionPicks(s))}
                           className="absolute left-1.5 top-8 rounded-full bg-background/90 px-2.5 py-1 text-[11px] font-semibold text-foreground shadow hover:bg-background">
-                          Side by side · {s.versions.join(' ')}
+                          Side by side · {versionPicks(s).length} cuts
                         </button>
                       )}
                       {!selecting && info(s).file && (
