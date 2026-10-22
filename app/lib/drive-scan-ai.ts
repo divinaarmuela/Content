@@ -141,7 +141,7 @@ export async function measureNewFile(seenId: string): Promise<{ ok: boolean }> {
   const row = await table<DriveSeen>('drive_seen').get(seenId)
   if (!row) return { ok: false }
   // our own stored copy when there is one — Drive is not read again (its per-file download cap, 22 Oct 2026)
-  const stored = await storedCopyOf(row.drive_file_id, row.size)
+  const stored = await storedCopyOf(row.drive_file_id, row.size, { md5: row.md5, revision: row.revision, modified: row.modified })
   const probe = await probeVideo(stored?.url ?? drivePublicUrl(row.drive_file_id), newKey(row))
   if (!probe.durationMs) { await finish(seenId, { error: probe.error ?? 'The video could not be read', steps: { measure: 'failed' } }, true); return { ok: false } }
   await setSteps(seenId, { measure: 'done', sound: 'running' }, { duration_ms: probe.durationMs, frames: probe.samples.map(s => s.url), colour: probe.samples.map(s => ({ sat: s.satavg, ymin: s.ymin, ymax: s.ymax })) })

@@ -309,11 +309,19 @@ async function readSlice(fileId: string, start: number, end: number, want: numbe
 }
 
 /** a whole copy of this Drive file already in our storage, made by any earlier copy (the same size when we know it) */
-export async function storedCopyOf(driveId: string, size: number | null | undefined): Promise<{ url: string; size: number | null } | null> {
+export async function storedCopyOf(driveId: string, size: number | null | undefined, cut: { md5?: string | null; revision?: string | null; modified?: string | null } = {}): Promise<{ url: string; size: number | null } | null> {
+  // only the SAME CUT: a file replaced in Drive keeps its id, and its new cut must be copied fresh (tests/drive-handin
+  // "one replaced … Version 2 is exactly the folder") — so the size must be known and equal, and where either side
+  // knows Drive's checksum, revision or edit time, they must agree
+  if (size == null) return null
   const pulls = await table<DrivePull>('drive_pulls').list().catch(() => [] as DrivePull[])
+  const same = (a: string | null | undefined, b: string | null | undefined) => !a || !b || a === b
   for (const p of pulls) {
     for (const f of filesOf(p)) {
-      if (f.id === driveId && f.status === 'done' && f.url && (size == null || f.size == null || f.size === size)) return { url: f.url, size: f.size ?? null }
+      if (f.id !== driveId || f.status !== 'done' || !f.url || f.size !== size) continue
+      const g = f as { md5?: string | null; revision?: string | null; modified?: string | null }
+      if (!same(g.md5, cut.md5) || !same(g.revision, cut.revision) || !same(g.modified, cut.modified)) continue
+      return { url: f.url, size: f.size ?? null }
     }
   }
   return null
@@ -347,7 +355,7 @@ export async function runPullSlices(id: string, fileId: string): Promise<{ done:
     // could not copy Tagliolini Verde): a file already copied whole by any earlier copy (same Drive file, same size) is
     // used as it is, and Drive is not asked again
     if (!file.upload_id && file.done === 0) {
-      const stored = await storedCopyOf(file.id, file.size)
+      const stored = await storedCopyOf(file.id, file.size, file as { md5?: string | null; revision?: string | null; modified?: string | null })
       if (stored) {
         await save({ status: 'done', url: stored.url, size: stored.size, done: stored.size ?? file.size ?? 0, upload_id: null })
         return { done: true }
