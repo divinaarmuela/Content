@@ -122,7 +122,7 @@ export function LaneBoard({ lanes, initialLane, ariaLabel, dense = false }: {
       return (
         <UiLane key={lane.key} title={lane.title} count={lane.count} hint={lane.hint}
           muted={lane.folded} dense
-          className="min-w-[210px] flex-1 rounded-card bg-foreground/[0.025] p-2">
+          className="min-w-[180px] flex-1 rounded-card bg-foreground/[0.025] p-2">
           {stack(lane)}
         </UiLane>
       )

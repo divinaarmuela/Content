@@ -79,7 +79,9 @@ export default function EditorCard() {
     const mine = seen.rows.map(r => owned[r.drive_file_id] && r.state !== 'taken'
       ? { ...r, scan: { ...((r.scan as object) ?? {}), kind: 'copy', asset: `card:${owned[r.drive_file_id].id}:shared`, other_card: owned[r.drive_file_id], shared: true } } as DriveSeen
       : r)
-    return [...mine, ...(extra?.incoming ?? []).filter(r => !seen.rows.some(x => x.id === r.id))]
+    // NO AI ANY MORE (the owner, 22 Oct 2026: "we are not using ai anymore"): a file the scan found and nobody put on
+    // the card offers nothing now — only the ones that went on ('taken') stay, for the folder they came from
+    return [...mine, ...(extra?.incoming ?? []).filter(r => !seen.rows.some(x => x.id === r.id))].filter(r => r.state === 'taken')
   }, [seen.rows, extra])
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 10_000); return () => clearInterval(t) }, [])
