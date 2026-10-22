@@ -4,37 +4,36 @@ import { ensureClientPortal } from '../../ui/ensurePortal'
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
-import { ArrowLeft, Check, Link2, Send, Undo2, Users } from 'lucide-react'
+import { ArrowLeft, Link2, Users } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useRow, useTable } from '@/lib/db-client'
 import type { Client, TeamBoard, TeamUser } from '@/lib/db-types'
 import PageTitle from '../../ui/PageTitle'
-import Chip, { type ChipTone } from '../../ui/Chip'
 import { useRole } from '../../useRole'
-import { personLabel } from '../../../lib/identity-core'
 import BriefCanvas, { type CanvasOp } from '../../production/shoots/[id]/BriefCanvas'
 import { sanitiseCanvasCards } from '../../../lib/batch-brief-core'
 import {
-  INTERNAL_BOARD_WORD, REVIEW_NOTE_MAX, TEAM_BOARD_STATUS_LABEL, boardClientName, boardStatusOf, cardCountWords, mayEditTeamBoard,
-  mayManageTeamBoards, mayReviewTeamBoard, teamBoardLink, type TeamBoardStatus,
+  INTERNAL_BOARD_WORD, boardClientName, cardCountWords, mayEditTeamBoard, mayManageTeamBoards, teamBoardLink,
 } from '../../../lib/team-board-core'
 import { clientLinkWords, mayShareTeamBoard, portalTeamBoardLink } from '../../../lib/team-board-comments-core'
 import TeamBoardComments from './TeamBoardComments'
 import { NotifyClientButton } from '../../board/NotifyClientDialog'
 
 /**
- * ONE INSPO BOARD (the owner, 21–22 Sep 2026): the shoot brief's own canvas
- * — pictures, links, posts with Drive files, notes, arrows, boards inside
- * boards — with the client's name over it and its stage beside that. Read
- * live, so two people on the same board see each other's cards; an edit is
- * a per-card op the server merges on the row as it stands. Anyone on the
- * team sends it to the quality check; the checker or a manager approves it
- * or asks for changes with a note. "Copy board link" copies this address.
+ * ONE BOARD (the owner, 21–22 Sep 2026): the shoot brief's own canvas —
+ * pictures, links, posts with Drive files, notes, arrows, boards inside
+ * boards — with the client's name over it. Read live, so two people on the
+ * same board see each other's cards; an edit is a per-card op the server
+ * merges on the row as it stands. "Copy board link" copies this address.
+ *
+ * NO STAGES (the owner, 22 Oct 2026: "I don't think we need quality check
+ * and inspo or changes asked for boards — this is just internal for us to
+ * work"): no stage chip, no Send to quality check, no Approve, no Ask for
+ * changes. The board is the team's working space and nothing more.
  *
  * COMMENTS (22 Sep 2026): every card wears a bubble; its thread opens beside
  * the board, "@" tags a colleague. "Copy client link" (a manager, on a
@@ -44,7 +43,6 @@ import { NotifyClientButton } from '../../board/NotifyClientDialog'
 
 type Row = TeamBoard & { canvas_cards?: unknown }
 const CLIENTS_BY_NAME: ['name', 'asc'][] = [['name', 'asc']]
-const STATUS_TONE: Record<TeamBoardStatus, ChipTone> = { draft: 'muted', quality_check: 'amber', changes_requested: 'red', approved: 'green' }
 const NO_CLIENT = 'none'
 
 export default function TeamBoardPage() {
@@ -59,13 +57,8 @@ export default function TeamBoardPage() {
   const { rows: team } = useTable<TeamUser>('team_users')
   const cards = useMemo(() => sanitiseCanvasCards(board?.canvas_cards), [board?.canvas_cards])
   const [busy, setBusy] = useState(false)
-  const [asking, setAsking] = useState(false)
-  const [note, setNote] = useState('')
-  const status = boardStatusOf(board)
   const client = board ? boardClientName(board, clients) : null
   const manager = mayManageTeamBoards(me)
-  const reviewer = mayReviewTeamBoard(me)
-  const nameOf = (uid: string | null | undefined) => { const u = team.find(t => t.id === uid); return u ? personLabel(u.name, u.email) : null }
 
   const copyLink = async () => {
     try {
@@ -120,14 +113,6 @@ export default function TeamBoardPage() {
     )
   }
 
-  const stageWords = status === 'approved'
-    ? `Approved${nameOf(board.reviewed_by) ? ` by ${nameOf(board.reviewed_by)}` : ''}. Working on it again puts it back to Inspo.`
-    : status === 'quality_check'
-      ? `In the quality check${nameOf(board.submitted_by) ? ` — sent by ${nameOf(board.submitted_by)}` : ''}.`
-      : status === 'changes_requested'
-        ? `Changes asked${nameOf(board.reviewed_by) ? ` by ${nameOf(board.reviewed_by)}` : ''}${board.review_note ? `: “${board.review_note}”` : '.'}`
-        : 'Inspo — drop pictures in, paste a link or a Drive file on a post, write a note, draw an arrow. Send it to the quality check when it is ready.'
-
   return (
     <div className="flex flex-col gap-3">
       <Link href="/dashboard/team-boards" className="inline-flex min-h-11 w-fit items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground">
@@ -137,26 +122,9 @@ export default function TeamBoardPage() {
       <p className={`font-mono text-[11px] uppercase tracking-wider ${client ? 'text-accent-blue-deep' : 'text-muted-foreground'}`}>{client ?? INTERNAL_BOARD_WORD}</p>
       <PageTitle
         title={board.name}
-        summary={`${cardCountWords(board.canvas_cards)}. ${stageWords}`}
+        summary={`${cardCountWords(board.canvas_cards)}. Drop pictures in, paste a link or a Drive file on a post, write a note, draw an arrow.`}
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            <Chip tone={STATUS_TONE[status]}>{TEAM_BOARD_STATUS_LABEL[status]}</Chip>
-            {/* the stage's one or two buttons: send in; approve or ask for changes */}
-            {mayEditTeamBoard(me) && (status === 'draft' || status === 'changes_requested') && (
-              <Button disabled={busy} onClick={() => void patch({ status: 'quality_check' }, 'Sent to the quality check')} className="h-11 rounded-full bg-foreground px-4 text-[13px] font-semibold text-background hover:bg-foreground/90">
-                <Send className="mr-1.5 h-4 w-4" aria-hidden /> Send to quality check
-              </Button>
-            )}
-            {reviewer && status === 'quality_check' && (
-              <>
-                <Button disabled={busy} onClick={() => void patch({ status: 'approved' }, 'Board approved')} className="h-11 rounded-full bg-accent-green px-4 text-[13px] font-semibold text-ink hover:bg-accent-green/90">
-                  <Check className="mr-1.5 h-4 w-4" aria-hidden /> Approve
-                </Button>
-                <Button disabled={busy} variant="outline" onClick={() => { setNote(''); setAsking(true) }} className="h-11 rounded-full px-4 text-[13px] font-semibold">
-                  <Undo2 className="mr-1.5 h-4 w-4" aria-hidden /> Ask for changes
-                </Button>
-              </>
-            )}
             <Button variant="outline" onClick={() => void copyLink()} className="h-11 rounded-full px-4 text-[13px] font-semibold">
               <Link2 className="mr-1.5 h-4 w-4" aria-hidden /> Copy board link
             </Button>
@@ -197,23 +165,6 @@ export default function TeamBoardPage() {
       <TeamBoardComments boardId={id} cards={cards} team={team}>
         <BriefCanvas cards={cards} references={[]} canEdit={mayEditTeamBoard(me)} onOp={onOp} initialBoard={openAt} rootName={board?.name} />
       </TeamBoardComments>
-
-      <Dialog open={asking} onOpenChange={o => { if (!busy) setAsking(o) }}>
-        <DialogContent className="bg-popover sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Ask for changes</DialogTitle>
-            <DialogDescription>Say what should change. The board goes back to the team with your words on it.</DialogDescription>
-          </DialogHeader>
-          <form onSubmit={e => { e.preventDefault(); void patch({ status: 'changes_requested', note }, 'Sent back with your note').then(ok => { if (ok) setAsking(false) }) }} className="flex flex-col gap-3">
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="board-note">What should change</Label>
-              <textarea id="board-note" autoFocus value={note} maxLength={REVIEW_NOTE_MAX} onChange={e => setNote(e.target.value)} rows={4}
-                className="w-full rounded-inner border border-border bg-surface px-3 py-2 text-[14px] outline-none focus:border-accent-blue/50" />
-            </div>
-            <Button type="submit" disabled={busy || !note.trim()} className="h-11 rounded-full bg-foreground text-[13px] font-semibold text-background hover:bg-foreground/90">{busy ? 'Sending…' : 'Send it back'}</Button>
-          </form>
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }

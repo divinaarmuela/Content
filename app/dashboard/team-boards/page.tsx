@@ -22,14 +22,12 @@ import {
 import { useTable } from '@/lib/db-client'
 import type { Client, TeamBoard, TeamUser } from '@/lib/db-types'
 import PageTitle from '../ui/PageTitle'
-import Lane from '../ui/Lane'
-import Chip, { type ChipTone } from '../ui/Chip'
 import { useRole } from '../useRole'
 import { LoadFailed } from '../NotSetUp'
 import { personLabel } from '../../lib/identity-core'
 import {
-  INTERNAL_BOARD_WORD, TEAM_BOARD_NAME_MAX, TEAM_BOARD_STATUS_LABEL, boardClientName, boardStatusOf, cardCountWords, lanesOf,
-  matchesBoardSearch, mayManageTeamBoards, sortTeamBoards, teamBoardLink, teamBoardPath, type TeamBoardStatus,
+  INTERNAL_BOARD_WORD, TEAM_BOARD_NAME_MAX, boardClientName, cardCountWords,
+  matchesBoardSearch, mayManageTeamBoards, sortTeamBoards, teamBoardLink, teamBoardPath,
 } from '../../lib/team-board-core'
 
 /**
@@ -40,16 +38,17 @@ import {
  * … ensure it goes through the quality check stage and approved —
  * essentially the same stage as the brief flow with less columns").
  *
- * Four columns, the brief flow's shape with fewer stages: Inspo, Quality
- * check, Changes asked, Approved. One tile per board, the client's name on
- * it (or "Internal" for the team's own), newest work first. A manager
- * makes, edits (name and client) and deletes; anyone on the team opens one,
- * works on it, sends it in for its check, and copies its link.
+ * NO STAGES (the owner, 22 Oct 2026: "I don't think we need quality check
+ * and inspo or changes asked for boards — this is just internal for us to
+ * work"). The four lanes — Inspo, Quality check, Changes asked, Approved —
+ * are gone: the boards are one grid, newest work first, like Milanote's
+ * home. One tile per board, the client's name on it (or "Internal" for the
+ * team's own). A manager makes, edits (name and client) and deletes; anyone
+ * on the team opens one, works on it, and copies its link.
  */
 
 type Row = TeamBoard & { canvas_cards?: unknown }
 const CLIENTS_BY_NAME: ['name', 'asc'][] = [['name', 'asc']]
-const STATUS_TONE: Record<TeamBoardStatus, ChipTone> = { draft: 'muted', quality_check: 'amber', changes_requested: 'red', approved: 'green' }
 /** the Select cannot carry an empty value: the team's own board is "none" */
 const NO_CLIENT = 'none'
 
@@ -78,7 +77,7 @@ export default function TeamBoardsPage() {
   const [editClient, setEditClient] = useState(NO_CLIENT)
   const [deleting, setDeleting] = useState<Row | null>(null)
   const [busy, setBusy] = useState(false)
-  // ARCHIVE (20 Oct 2026): boards put away are off the lanes and the client's portal, behind "Archived"
+  // ARCHIVE (20 Oct 2026): boards put away are off this page and the client's portal, behind "Archived"
   const [showArchived, setShowArchived] = useState(false)
   // THE CLIENT FILTER (the owner, 20 Oct 2026: "add the right filter client filters not search … a filter which
   // showcases which one we can pick"): pick a client, see only their boards
@@ -94,7 +93,6 @@ export default function TeamBoardsPage() {
     () => sortTeamBoards(byArchive(rows)).filter(b => boardForClient(b, clientFilter) && matchesBoardSearch(b, nameOf(b.created_by), search, clientOf(b))),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [rows, search, team, clients, clientFilter])
-  const lanes = useMemo(() => lanesOf(boards), [boards])
 
   const copyLink = async (b: Row) => {
     try {
@@ -161,7 +159,6 @@ export default function TeamBoardsPage() {
 
   const tile = (b: Row) => {
     const client = clientOf(b)
-    const status = boardStatusOf(b)
     return (
       <li key={b.id} className="flex flex-col gap-2.5 rounded-card border border-border bg-card p-4">
         <Link href={teamBoardPath(b.id)} className="flex min-h-11 items-start gap-3">
@@ -181,10 +178,6 @@ export default function TeamBoardsPage() {
             <span className="text-[13px] text-muted-foreground">{cardCountWords(b.canvas_cards)}{b.milanote_id ? ' · from Milanote' : ''}</span>
           </span>
         </Link>
-        <div className="flex flex-wrap items-center gap-1.5">
-          <Chip tone={STATUS_TONE[status]}>{TEAM_BOARD_STATUS_LABEL[status]}</Chip>
-          {status === 'changes_requested' && b.review_note && <span className="truncate text-[12px] text-muted-foreground" title={b.review_note}>“{b.review_note}”</span>}
-        </div>
         <p className="text-[12px] text-muted-foreground">
           {nameOf(b.created_by) ? `Made by ${nameOf(b.created_by)}` : 'Made'} {when(b.created_at)}
           {b.updated_at && b.updated_at !== b.created_at ? ` · last worked on ${when(b.updated_at)}${nameOf(b.updated_by) ? ` by ${nameOf(b.updated_by)}` : ''}` : ''}
@@ -215,7 +208,7 @@ export default function TeamBoardsPage() {
     <div className="flex flex-col gap-4">
       <PageTitle
         title="Boards"
-        summary="Inspo boards — one per client, the same canvas as a shoot’s plan. Make one, fill it, send it to the quality check, and it is approved or comes back with a note. Copy its link to point someone at it."
+        summary="The team’s own boards — the same canvas as a shoot’s plan, one per client or for the team. Open one and work on it; copy its link to point someone at it."
         actions={manager ? (
           <div className="flex flex-wrap items-center gap-2">
             <ArchivedToggle count={archivedBoards.length} open={showArchived} onToggle={() => setShowArchived(v => !v)} />
@@ -253,15 +246,7 @@ export default function TeamBoardsPage() {
           {search.trim() ? `No board matches “${search.trim()}”.` : manager ? 'No boards yet. Make the first one with New board.' : 'No boards yet. An account manager or a super admin can make one.'}
         </div>
       ) : (
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start" aria-label="The boards, by stage">
-          {lanes.map(lane => (
-            <Lane key={lane.status} title={lane.label} count={lane.boards.length} muted={lane.boards.length === 0} className="lg:min-w-0">
-              {lane.boards.length === 0
-                ? <p className="rounded-card border border-dashed border-border p-4 text-[13px] text-muted-foreground">Nothing here.</p>
-                : <ul className="flex flex-col gap-3" aria-label={`${lane.label} boards`}>{lane.boards.map(tile)}</ul>}
-            </Lane>
-          ))}
-        </div>
+        <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" aria-label="The boards">{boards.map(tile)}</ul>
       )}
 
       <Dialog open={making} onOpenChange={o => { if (!busy) setMaking(o) }}>

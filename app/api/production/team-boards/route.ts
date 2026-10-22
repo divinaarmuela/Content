@@ -10,7 +10,8 @@ import { cleanBoardName, cleanClientId, mayManageTeamBoards, sortTeamBoards } fr
  * refuses a client. Anyone on the team lists and opens the boards; only an
  * account manager or a super admin makes one — and says which client it is
  * for (22 Sep 2026: "inspo boards … allow to edit / add to which client").
- * A new board starts at Inspo (`status: 'draft'`).
+ * A new board is still stored with `status: 'draft'`, which nothing reads
+ * since 22 Oct 2026 — Boards have no stages (team-board-core, NO STAGES).
  */
 export const dynamic = 'force-dynamic'
 

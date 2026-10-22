@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import {
-  boardClientName, boardStatusOf, cardCountWords, checkBoardTransition, cleanBoardName, cleanClientId, lanesOf, matchesBoardSearch,
-  mayEditTeamBoard, mayManageTeamBoards, mayReviewTeamBoard, sortTeamBoards, statusAfterEdit, teamBoardLink, teamBoardPath,
+  boardClientName, cardCountWords, cleanBoardName, cleanClientId, matchesBoardSearch,
+  mayEditTeamBoard, mayManageTeamBoards, sortTeamBoards, teamBoardLink, teamBoardPath,
 } from '../app/lib/team-board-core'
+import * as core from '../app/lib/team-board-core'
 import { canSeePage } from '../app/lib/page-access-core'
 
 describe('team boards (21 Sep 2026)', () => {
@@ -46,55 +47,38 @@ describe('team boards (21 Sep 2026)', () => {
     expect(matchesBoardSearch({ name: 'October ideas' }, 'Divina', 'glass', 'The Glass Den')).toBe(true)
     expect(matchesBoardSearch({ name: 'October ideas' }, 'Divina', 'glass', null)).toBe(false)
   })
-  it('THE STAGES (22 Sep 2026): Inspo → Quality check → Approved, or back with a note — the brief flow with fewer columns', () => {
-    const editor = { id: 'e', role: 'editor' }, checker = { id: 'q', role: 'quality_checker' }, am = { id: 'a', role: 'account_manager' }, client = { id: 'c', role: 'client' }
-    expect(boardStatusOf({ status: null })).toBe('draft')
-    expect(boardStatusOf({ status: 'nonsense' })).toBe('draft')
-    expect(boardStatusOf({ status: 'approved' })).toBe('approved')
-    expect(boardStatusOf(undefined)).toBe('draft')
-    // who decides
-    expect(mayReviewTeamBoard(checker)).toBe(true); expect(mayReviewTeamBoard(am)).toBe(true); expect(mayReviewTeamBoard({ id: 's', role: 'super_admin' })).toBe(true)
-    expect(mayReviewTeamBoard(editor)).toBe(false); expect(mayReviewTeamBoard(client)).toBe(false); expect(mayReviewTeamBoard(null)).toBe(false)
-    // sending in: anyone on the team, from Inspo or from Changes asked
-    expect(checkBoardTransition(editor, 'draft', 'quality_check')).toEqual({ ok: true, note: null })
-    expect(checkBoardTransition(editor, 'changes_requested', 'quality_check')).toEqual({ ok: true, note: null })
-    expect(checkBoardTransition(editor, 'quality_check', 'quality_check').ok).toBe(false)
-    expect(checkBoardTransition(editor, 'approved', 'quality_check').ok).toBe(false)
-    expect(checkBoardTransition(client, 'draft', 'quality_check').ok).toBe(false)
-    // deciding: the checker or a manager, only from the check; changes need a note
-    expect(checkBoardTransition(checker, 'quality_check', 'approved')).toEqual({ ok: true, note: null })
-    expect(checkBoardTransition(am, 'quality_check', 'changes_requested', '  the second row is off brand ')).toEqual({ ok: true, note: 'the second row is off brand' })
-    expect(checkBoardTransition(checker, 'quality_check', 'changes_requested', '   ')).toEqual({ ok: false, error: 'Say what should change' })
-    expect(checkBoardTransition(editor, 'quality_check', 'approved').ok).toBe(false)
-    expect(checkBoardTransition(checker, 'draft', 'approved').ok).toBe(false)
-    expect(checkBoardTransition(checker, 'quality_check', 'draft').ok).toBe(false)
-    expect(checkBoardTransition(checker, 'quality_check', 'published').ok).toBe(false)
-    expect(checkBoardTransition(checker, 'quality_check', 'changes_requested', 'x'.repeat(2000))).toMatchObject({ ok: true, note: 'x'.repeat(1000) })
-    // an approved board worked on again is back at Inspo
-    expect(statusAfterEdit('approved')).toBe('draft')
-    expect(statusAfterEdit('quality_check')).toBe('quality_check')
-    // the columns, every stage drawn, in the flow's order
-    const lanes = lanesOf([{ status: 'approved' }, { status: null }, { status: 'quality_check' }, { status: 'draft' }])
-    expect(lanes.map(l => [l.status, l.label, l.boards.length])).toEqual([['draft', 'Inspo', 2], ['quality_check', 'Quality check', 1], ['changes_requested', 'Changes asked', 0], ['approved', 'Approved', 1]])
+  it('NO STAGES (the owner, 22 Oct 2026: "I don’t think we need quality check and inspo or changes asked for boards — this is just internal for us to work")', () => {
+    // The Inspo → Quality check → Changes asked → Approved flow of 22 Sep 2026 is gone from Boards: its
+    // rules are no longer in the core, the route no longer takes a `status`, and neither page draws a lane,
+    // a stage chip, or a send-in / approve / ask-for-changes button. Stored `status` values are left alone.
+    for (const gone of ['checkBoardTransition', 'statusAfterEdit', 'lanesOf', 'boardStatusOf', 'mayReviewTeamBoard', 'TEAM_BOARD_STATUSES', 'TEAM_BOARD_STATUS_LABEL', 'editChangesContent']) {
+      expect(core).not.toHaveProperty(gone)
+    }
+    const one = readFileSync('app/api/production/team-boards/[id]/route.ts', 'utf8')
+    expect(one).not.toContain("'status' in body")
+    expect(one).not.toContain('statusAfterEdit')
+    expect(one).toContain('if (!name && !clientChange && !op && share === null) return NextResponse.json({ error: \'Nothing to change\' }, { status: 400 })')
+    const listPage = readFileSync('app/dashboard/team-boards/page.tsx', 'utf8')
+    const page = readFileSync('app/dashboard/team-boards/[id]/page.tsx', 'utf8')
+    // the code, without its comments (which record the history in the owner's words)
+    const code = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\{\/\*[\s\S]*?\*\/\}/g, '').replace(/^\s*\/\/.*$/gm, '')
+    for (const src of [listPage, page].map(code)) {
+      for (const word of ['Quality check', 'quality check', 'quality_check', 'Changes asked', 'changes_requested', 'Inspo', 'Approve', 'Ask for changes', '<Lane', 'STATUS_TONE', 'status:']) expect(src).not.toContain(word)
+    }
+    expect(listPage).toContain('<ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" aria-label="The boards">{boards.map(tile)}</ul>')
   })
-  it('the routes take a client and a stage: a client must exist and a manager sets it; the stage is decided inside the claim; the pages draw the client, the lanes and the buttons; Boards sits under Shoots', () => {
+  it('the routes take a client: a client must exist and a manager sets it; the pages draw the client; Boards sits under Shoots', () => {
     const list = readFileSync('app/api/production/team-boards/route.ts', 'utf8')
     expect(list).toContain("if (client_id && !(await table<Client>('clients').get(client_id))) {")
     expect(list).toContain("name, client_id, status: 'draft', canvas_cards: [],")
     const one = readFileSync('app/api/production/team-boards/[id]/route.ts', 'utf8')
     expect(one).toContain("return NextResponse.json({ error: 'Only an account manager or a super admin says which client a board is for' }, { status: 403 })")
-    expect(one).toContain('const step = checkBoardTransition(user, from, to, body.note)')
-    expect(one).toContain('const after = statusAfterEdit(from)')
     expect(one).toContain("if (refused) return NextResponse.json({ error: refused }, { status: String(refused).startsWith('Only') || String(refused).startsWith('Say which') ? 403 : 409 })")
     const listPage = readFileSync('app/dashboard/team-boards/page.tsx', 'utf8')
-    expect(listPage).toContain('const lanes = useMemo(() => lanesOf(boards), [boards])')
     expect(listPage).toContain('{client ?? INTERNAL_BOARD_WORD}')
     expect(listPage).toContain("body: JSON.stringify({ name, client_id: newClient === NO_CLIENT ? null : newClient }),")
     expect(listPage).toContain("body: JSON.stringify({ name, client_id: editClient === NO_CLIENT ? null : editClient }),")
     const page = readFileSync('app/dashboard/team-boards/[id]/page.tsx', 'utf8')
-    expect(page).toContain("void patch({ status: 'quality_check' }, 'Sent to the quality check')")
-    expect(page).toContain("void patch({ status: 'approved' }, 'Board approved')")
-    expect(page).toContain("void patch({ status: 'changes_requested', note }, 'Sent back with your note')")
     expect(page).toContain("void patch({ client_id: v === NO_CLIENT ? null : v }")
     // the rail: Boards right under Shoots, in the main list (22 Sep 2026: "place the boards page up higher, near the Shoots link")
     const shell = readFileSync('app/dashboard/ui/Shell.tsx', 'utf8')
