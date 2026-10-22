@@ -2,14 +2,14 @@
 
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowLeft, Check, ChevronDown, ExternalLink, Film, FolderOpen, Hourglass, Link2, Lock, Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useRow, useTable } from '@/lib/db-client'
-import type { Batch, Client, ContentItem, DriveSeen, DriveSource, TeamUser, WorkKind } from '@/lib/db-types'
+import type { Batch, Client, ContentItem, DriveSeen, DriveSource, TeamUser, VideoFrame, WorkKind } from '@/lib/db-types'
 import { STEPS, agoWords, initialsOfName, isEditorCard, stepOf, videoNext, type NextTone } from '../../../lib/editor-preview-core'
 import { KIND_WORDS, OPEN_STATES, STATE_WORDS, gradeStanding, isFootage, isVideo, stageRule, type CutKind, type SeenState } from '../../../lib/drive-scan-core'
 import { assetHistory, assetIdOf, currentFiles, isRetiredAt } from '../../../lib/final-files-core'
@@ -54,6 +54,16 @@ export default function EditorCard() {
   const seen = useTable<DriveSeen>('drive_seen', { enabled: allowed, by: { item_id: id } as Partial<DriveSeen> })
   const sources = useTable<DriveSource>('drive_sources', { enabled: allowed, by: { item_id: id } as Partial<DriveSource> })
   // when the card went to Colour grade: after that, a new file in its links is a grade; before, it never is
+  // the twelve frames the scan kept of every video (scan-measure.ts), keyed by what it measured
+  const framesTable = useTable<VideoFrame>('video_frames', { enabled: allowed })
+  const framesOf = useMemo(() => {
+    const m = new Map<string, { url: string; at_s: number }[]>()
+    for (const r of framesTable.rows) {
+      const list = (Array.isArray(r.frames) ? r.frames as { url?: string | null; at_s?: number }[] : []).filter(f => f.url).map(f => ({ url: String(f.url), at_s: Number(f.at_s ?? 0) }))
+      if (list.length > (m.get(r.source)?.length ?? 0)) m.set(r.source, list)
+    }
+    return m
+  }, [framesTable.rows])
   const moves = useTable<{ id: string; entity_id?: string; action?: string; new_value?: string; created_at?: string }>('workflow_activity', { enabled: allowed, by: { entity_id: id } as never })
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 10_000); return () => clearInterval(t) }, [])
@@ -111,7 +121,7 @@ export default function EditorCard() {
       </div>
       <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
         <div className="flex min-w-0 flex-col gap-6">
-          <Workspace item={item} rows={seen.rows} needsGrade={needsColourGrade(kindSlug)}
+          <Workspace item={item} rows={seen.rows} needsGrade={needsColourGrade(kindSlug)} framesOf={framesOf}
             gradeSince={moves.rows.filter(a => a.action === 'status_change' && a.new_value === 'colour_grade').map(a => String(a.created_at ?? '')).sort().pop() ?? null}
             sourceCreated={new Map(sources.rows.map(s => [s.id, s.created_at]))} />
           <details className="rounded-card border border-border bg-surface p-4">
@@ -157,11 +167,12 @@ function Stepper({ status }: { status: unknown }) {
 }
 
 /** the card's videos and the scanned Drive files, as the stacks' input */
-function stackFilesOf(item: ContentItem, rows: readonly DriveSeen[]): StackFile[] {
+function stackFilesOf(item: ContentItem, rows: readonly DriveSeen[], framesOf: Map<string, { url: string; at_s: number }[]> = new Map()): StackFile[] {
   const round = roundOf(item)
   const card: StackFile[] = currentFiles(item).filter(f => !isRetiredAt(f, round) && isVideo({ mime: f.mime, name: f.name })).map(f => {
     const first = assetHistory(item, assetIdOf(f))[0] ?? f
-    return { key: `a:${assetIdOf(f)}`, name: f.name, at: first.uploaded_at, source: 'card', kind: null, matchKey: null, ask: false, busy: false, thumb: null, confidence: null, otherCard: null }
+    const frames = framesOf.get(`r2:${f.url}`) ?? []
+    return { key: `a:${assetIdOf(f)}`, name: f.name, at: first.uploaded_at, source: 'card', kind: null, matchKey: null, ask: false, busy: false, thumb: frames[0]?.url ?? null, frames, confidence: null, otherCard: null }
   })
   const drive: StackFile[] = rows
     .filter(r => !['taken', 'ignored', 'footage'].includes(r.state) && isVideo({ mime: r.mime, name: r.path }) && !isFootage({ name: r.path }))
@@ -172,6 +183,7 @@ function stackFilesOf(item: ContentItem, rows: readonly DriveSeen[]): StackFile[
       return {
         key: `s:${r.id}`, name: r.path, at: r.created_time ?? r.modified ?? r.first_seen_at, source: 'drive', kind: scan?.kind ?? null, matchKey,
         ask: !!scan?.ask, busy: r.state === 'new' || r.state === 'scanning', thumb: scan?.frames?.find(Boolean) ?? null,
+        frames: (scan?.frames ?? []).map((u, i) => ({ url: String(u ?? ''), at_s: i })).filter(x => x.url),
         confidence: typeof scan?.confidence === 'number' ? scan.confidence : null, otherCard: scan?.other_card?.title ?? null,
         sameAs: scan?.same_as?.startsWith('seen:') ? `s:${scan.same_as.slice(5)}` : null,
       }
@@ -200,8 +212,8 @@ const TONES: Record<NextTone, string> = {
  * make sure its at the top"). One row per video: its picture, its name, V1 · V2 · V3 (the current one dark), Graded,
  * and its next step. A new cut in Drive is one line on the row: Confirm or Not this.
  */
-function Workspace({ item, rows, needsGrade, gradeSince, sourceCreated }: { item: ContentItem; rows: DriveSeen[]; needsGrade: boolean; gradeSince: string | null; sourceCreated: Map<string, string> }) {
-  const all = useMemo(() => stackVersions(stackFilesOf(item, rows)), [item, rows])
+function Workspace({ item, rows, needsGrade, gradeSince, sourceCreated, framesOf }: { item: ContentItem; rows: DriveSeen[]; needsGrade: boolean; gradeSince: string | null; sourceCreated: Map<string, string>; framesOf: Map<string, { url: string; at_s: number }[]> }) {
+  const all = useMemo(() => stackVersions(stackFilesOf(item, rows, framesOf)), [item, rows, framesOf])
   const rowById = useMemo(() => new Map(rows.map(r => [r.id, r])), [rows])
   // a file that is only a copy of ANOTHER card's video is that card's, not a video here (the owner, 22 Oct 2026: "why
   // are videos getting checked with their own videos?" — the Flinders draft sat in the shoot's folder and on its card)
@@ -288,9 +300,7 @@ function Workspace({ item, rows, needsGrade, gradeSince, sourceCreated }: { item
                       <button type="button" onClick={() => setPick({ stack: s.key, entry: s.latest.key })} aria-pressed={on}
                         className={`flex w-full flex-col overflow-hidden rounded-inner border bg-background text-left transition hover:shadow-md ${on ? 'border-foreground ring-2 ring-foreground/20' : pending.length ? 'border-accent-amber' : 'border-border'}`}>
                         <span className="relative block aspect-[9/12] w-full bg-muted">
-                          {s.latest.thumb
-                            ? <img src={s.latest.thumb} alt="" className="h-full w-full object-cover" />
-                            : <span className="flex h-full items-center justify-center"><Film className="h-5 w-5 text-muted-foreground" aria-hidden /></span>}
+                          <HoverFrames frames={s.latest.frames ?? []} thumb={s.latest.thumb} />
                           <span className="absolute left-1.5 top-1.5 flex gap-1">
                             {s.versions.map(v => <span key={v} className={`rounded-full px-1.5 text-[10px] font-bold ${v === s.latest.label ? 'bg-foreground text-background' : 'bg-background/80 text-foreground'}`}>{v}</span>)}
                             {s.latest.graded && <span className="rounded-full bg-tint-green px-1.5 text-[10px] font-bold">Graded</span>}
@@ -324,6 +334,24 @@ function Elsewhere({ list }: { list: Stack[] }) {
   )
 }
 
+/** a tile's picture: the first frame, and as the cursor moves across, the frame at that point in the video — with a
+ *  line showing where — all from the twelve small frames the scan kept, so it is instant */
+function HoverFrames({ frames, thumb }: { frames: { url: string; at_s: number }[]; thumb: string | null }) {
+  const [i, setI] = useState<number | null>(null)
+  const src = i !== null && frames[i] ? frames[i].url : thumb
+  if (!src) return <span className="flex h-full items-center justify-center"><Film className="h-5 w-5 text-muted-foreground" aria-hidden /></span>
+  return (
+    <span className="absolute inset-0 block"
+      onMouseMove={e => { if (!frames.length) return; const r = e.currentTarget.getBoundingClientRect(); setI(Math.min(frames.length - 1, Math.max(0, Math.floor(((e.clientX - r.left) / r.width) * frames.length)))) }}
+      onMouseLeave={() => setI(null)}>
+      <img src={src} alt="" className="h-full w-full object-cover" />
+      {/* every frame loaded up front, so moving is instant */}
+      {frames.map(f => <link key={f.url} rel="preload" as="image" href={f.url} />)}
+      {i !== null && frames.length > 1 && <span className="absolute bottom-0 left-0 h-1 bg-foreground" style={{ width: `${((i + 1) / frames.length) * 100}%` }} />}
+    </span>
+  )
+}
+
 const folderName = (path: string) => { const i = path.lastIndexOf('/'); return i < 0 ? 'Top of the link' : path.slice(0, i) }
 
 /**
@@ -336,6 +364,7 @@ function Player({ item, s, entry, info, rowById, beforeGrade, onEntry }: {
   rowById: Map<string, DriveSeen>; beforeGrade: Set<string>; onEntry: (key: string) => void
 }) {
   const [busy, setBusy] = useState<string | null>(null)
+  const videoRef = useRef<HTMLVideoElement | null>(null)
   const row = entry.source === 'drive' ? rowById.get(entry.key.slice(2)) ?? null : null
   const cardFile = entry.source === 'card' ? info.file : null
   const offer = row && info.pending.some(p => p.id === row.id) ? row : null
@@ -354,12 +383,27 @@ function Player({ item, s, entry, info, rowById, beforeGrade, onEntry }: {
   const why = ((row?.scan as { reasons?: string[] } | null)?.reasons ?? []).slice(0, 3)
   return (
     <div className="grid gap-4 md:grid-cols-[minmax(0,320px)_1fr]">
+      <div className="flex flex-col gap-2">
       <div className="overflow-hidden rounded-inner bg-black">
         {cardFile?.url
-          ? <video key={cardFile.url} src={cardFile.url} controls playsInline preload="metadata" className="aspect-[9/16] w-full bg-black object-contain" />
+          ? <video ref={videoRef} key={cardFile.url} src={cardFile.url} controls playsInline preload="metadata" className="aspect-[9/16] w-full bg-black object-contain" />
           : row
             ? <iframe key={row.drive_file_id} src={`https://drive.google.com/file/d/${row.drive_file_id}/preview`} title={entry.name} allow="autoplay" className="aspect-[9/16] w-full border-0" />
             : <div className="flex aspect-[9/16] items-center justify-center p-6 text-center text-[13px] text-white/70">{entry.source === 'other' ? `This version is on “${entry.otherCard}”` : 'No preview'}</div>}
+      </div>
+      {/* TWELVE FRAMES, INSTANT (the owner, 22 Oct 2026: "when i hover it should be instant to show parts of the
+          video"): the whole run of shots without streaming the 4K original; a press jumps the video there */}
+      {(entry.frames?.length ?? 0) > 0 && (
+        <div className="grid grid-cols-6 gap-1">
+          {entry.frames!.map((f, i) => (
+            <button key={i} type="button" title={cardFile ? `Jump to ${Math.round(f.at_s)}s` : undefined}
+              onClick={() => { const v = videoRef.current; if (v && cardFile) { v.currentTime = f.at_s; void v.play().catch(() => undefined) } }}
+              className="overflow-hidden rounded bg-black hover:ring-2 hover:ring-foreground">
+              <img src={f.url} alt="" className="aspect-[9/16] w-full object-cover" />
+            </button>
+          ))}
+        </div>
+      )}
       </div>
       <div className="flex min-w-0 flex-col gap-3">
         <div>
