@@ -315,6 +315,8 @@ function Workspace({ item, rows, needsGrade, gradeSince, sourceCreated, framesOf
     const r = s.entries.map(e => (e.source === 'drive' ? rowById.get(e.key.slice(2)) : undefined)).find(Boolean)
     return r ? reviewPath(item.id, r.drive_file_id, r.name) : null
   }
+  const replaceInput = useRef<HTMLInputElement | null>(null)
+  const replaceFor = useRef<{ id: string; name: string; asset_id?: string } | null>(null)
   const sel = pick ? stacks.find(s => s.key === pick.stack) ?? null : null
   const entry = sel ? (sel.entries.find(e => e.key === pick?.entry) ?? sel.latest) : null
   const info = (s: Stack) => {
@@ -391,7 +393,7 @@ function Workspace({ item, rows, needsGrade, gradeSince, sourceCreated, framesOf
                   const key = pickOf(s)
                   const on = selecting ? !!key && picked.has(key) : sel?.key === s.key
                   return (
-                    <li key={s.key}>
+                    <li key={s.key} className="group relative">
                       <button type="button" disabled={selecting && !key} title={selecting && !key ? 'Only videos on the card can be compared — confirm it first' : undefined}
                         onClick={() => selecting
                           ? key && setPicked(m => { const n = new Set(m); if (n.has(key)) n.delete(key); else n.add(key); return n })
@@ -409,6 +411,14 @@ function Workspace({ item, rows, needsGrade, gradeSince, sourceCreated, framesOf
                           <span className={`self-start rounded-full px-2 py-0.5 text-[11px] font-semibold ${TONES[next.tone]}`}>{next.words}</span>
                         </span>
                       </button>
+                      {/* REPLACE BY THE PICTURE (the owner, 22 Oct 2026: "why cant it be easier to select video that needs to be
+                          replaced … reading a file name doesnt help a lot"): on the video itself, it goes to the card's uploader */}
+                      {!selecting && info(s).file && (
+                        <button type="button" onClick={() => { replaceFor.current = info(s).file!; replaceInput.current?.click() }}
+                          className="absolute right-1.5 top-1.5 rounded-full bg-foreground px-2.5 py-1 text-[11px] font-semibold text-background shadow opacity-90 hover:opacity-100">
+                          + New version
+                        </button>
+                      )}
                     </li>
                   )
                 })}
@@ -417,6 +427,13 @@ function Workspace({ item, rows, needsGrade, gradeSince, sourceCreated, framesOf
           ))}
         </div>
         {elsewhere.length > 0 && <Elsewhere list={elsewhere} />}
+        {/* the new cut goes to the card's uploader (EditorCardDrawer listens): into the card's Drive folder, as this video's next version */}
+        <input ref={replaceInput} type="file" accept="video/*,image/*,application/pdf" className="hidden" aria-label="The new version of this video"
+          onChange={e => {
+            const file = e.target.files?.[0], was = replaceFor.current
+            if (file && was) window.dispatchEvent(new CustomEvent('card-replace', { detail: { assetId: assetIdOf(was as never), name: was.name, file } }))
+            e.target.value = ''; replaceFor.current = null
+          }} />
       </div>
     </section>
   )

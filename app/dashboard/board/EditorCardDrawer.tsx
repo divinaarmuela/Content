@@ -255,6 +255,18 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
   // takes the place of the Drive-link hand-in and the plain upload, and every file can be replaced at any stage
   const cardUpload = useRef<CardUploadHandle | null>(null)
   const [driveFiling, setDriveFiling] = useState(false)
+  // Replace pressed on a video's picture on the card page: the new cut comes here, to the uploader
+  useEffect(() => {
+    const on = (e: Event) => {
+      const d = (e as CustomEvent<{ assetId: string; name: string; file: File }>).detail
+      if (!d || !cardUpload.current) return
+      setTab('work')
+      cardUpload.current.replace(d.assetId, d.name, d.file)
+      setTimeout(() => document.getElementById('card-upload')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50)
+    }
+    window.addEventListener('card-replace', on)
+    return () => window.removeEventListener('card-replace', on)
+  })
   const addFinalFiles = async (picked: File[]) => {
     if (!item || picked.length === 0) return
     setUploading(`Uploading ${picked.length} ${picked.length === 1 ? 'file' : 'files'}`)
@@ -731,7 +743,7 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
                               put the new version with it") — into the card's Drive folder, as this piece's next version */}
                           {driveFiling && !dropped && (
                             <button type="button" onClick={() => { setReplacing(a); replaceInput.current?.click() }}
-                              className="inline-flex min-h-11 items-center px-1 text-[12px] font-semibold underline underline-offset-4">Replace</button>
+                              className="inline-flex min-h-11 items-center px-1 text-[12px] font-semibold underline underline-offset-4">+ New version</button>
                           )}
                           {!driveFiling && designCard && (holder || isManager) && !frozen && (
                             dropped ? (

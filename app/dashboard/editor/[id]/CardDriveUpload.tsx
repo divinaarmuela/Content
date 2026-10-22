@@ -234,7 +234,7 @@ export default function CardDriveUpload({ itemId, onAllowed, ref }: {
             <p className="text-[13px]">Drop videos here, or</p>
             <Button size="sm" onClick={() => input.current?.click()} className="h-9 rounded-full px-4 text-[13px] font-semibold">Choose files</Button>
             <input ref={input} type="file" multiple className="hidden" onChange={e => void start([...(e.target.files ?? [])])} />
-            <p className="text-[12px] text-muted-foreground">New files go into {vName} in Drive and onto the card. To swap one in, press Replace on that file below. Keep this page open until it says done.</p>
+            <p className="text-[12px] text-muted-foreground">New files go into {vName} in Drive and onto the card. To add a new version of a video, press “+ New version” on it. Keep this page open until it says done.</p>
           </div>
       </>
 
@@ -267,7 +267,7 @@ export default function CardDriveUpload({ itemId, onAllowed, ref }: {
           <p className="font-semibold">Not finished yet — pick these files again and they carry on where they stopped</p>
           <ul className="mt-1">
             {(state.unfinished ?? []).filter(u => !jobs.some(j => j.upload === u.id)).map(u => (
-              <li key={u.id}>{u.name} — {formatBytes(u.received)} of {u.size ? formatBytes(u.size) : '?'} sent{u.replaces ? ' (a replacement — press Replace on that file and pick it again)' : ''}</li>
+              <li key={u.id}>{u.name} — {formatBytes(u.received)} of {u.size ? formatBytes(u.size) : '?'} sent{u.replaces ? ' (a new version — press “+ New version” on that video and pick it again)' : ''}</li>
             ))}
           </ul>
         </div>
