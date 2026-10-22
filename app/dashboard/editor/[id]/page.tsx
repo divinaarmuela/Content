@@ -137,7 +137,7 @@ export default function EditorCard() {
       </div>
       <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(420px,520px)]">
         <div className="flex min-w-0 flex-col gap-6">
-          <Workspace item={item} rows={allRows} needsGrade={needsColourGrade(kindSlug)} framesOf={framesOf}
+          <Workspace item={item} rows={allRows} needsGrade={needsColourGrade(kindSlug)} framesOf={framesOf} holder={holder ? (holder.name || holder.email) : null}
             gradeSince={extra?.gradeSince ?? null}
             sourceCreated={new Map(sources.rows.map(s => [s.id, s.created_at]))} />
           <details className="rounded-card border border-border bg-surface p-4">
@@ -260,7 +260,7 @@ const TONES: Record<NextTone, string> = {
  * make sure its at the top"). One row per video: its picture, its name, V1 · V2 · V3 (the current one dark), Graded,
  * and its next step. A new cut in Drive is one line on the row: Confirm or Not this.
  */
-function Workspace({ item, rows, needsGrade, gradeSince, sourceCreated, framesOf }: { item: ContentItem; rows: DriveSeen[]; needsGrade: boolean; gradeSince: string | null; sourceCreated: Map<string, string>; framesOf: FramesMap }) {
+function Workspace({ item, rows, needsGrade, gradeSince, sourceCreated, framesOf, holder = null }: { item: ContentItem; rows: DriveSeen[]; needsGrade: boolean; gradeSince: string | null; sourceCreated: Map<string, string>; framesOf: FramesMap; holder?: string | null }) {
   const all = useMemo(() => stackVersions(stackFilesOf(item, rows, framesOf)), [item, rows, framesOf])
   const rowById = useMemo(() => new Map(rows.map(r => [r.id, r])), [rows])
   // a file that is only a copy of ANOTHER card's video is that card's, not a video here (the owner, 22 Oct 2026: "why
@@ -323,7 +323,7 @@ function Workspace({ item, rows, needsGrade, gradeSince, sourceCreated, framesOf
     if (failed) return { file, pending, next: { words: 'Couldn’t check it yet — trying again', tone: 'amber' as NextTone } }
     const tries = Number((copying?.scan as { copy_tries?: unknown } | null)?.copy_tries ?? 0)
     if (copying) return { file, pending, next: { words: tries ? `Copying onto the card — trying again (try ${tries + 1} of 6)` : 'Copying onto the card…', tone: 'blue' as NextTone } }
-    const next = videoNext({ status: item.status, needsGrade, gradedThisRound: gradedThisRound && !!file, approved: !!file && approvedFiles.has(file.id), newInDrive: pending.length > 0, gone, onCard: !!asset })
+    const next = videoNext({ status: item.status, needsGrade, gradedThisRound: gradedThisRound && !!file, approved: !!file && approvedFiles.has(file.id), newInDrive: pending.length > 0, gone, onCard: !!asset, holder })
     return { file, pending, next }
   }
 
@@ -475,6 +475,14 @@ function HoverFrames({ frames, thumb, board }: { frames: { url: string; at_s: nu
   )
 }
 
+/** where a version is, in words a person reads at a glance */
+function versionWhere(e: Stack['entries'][number], rowById: Map<string, DriveSeen>): string {
+  if (e.source === 'card') return ' · handed in'
+  if (e.source === 'other') return ` · on “${e.otherCard}”`
+  const st = rowById.get(e.key.slice(2))?.state
+  return st === 'taken' ? ' · copying in' : st === 'locked' ? ' · in Drive, waiting' : ' · in Drive, not added yet'
+}
+
 const folderName = (path: string) => { const i = path.lastIndexOf('/'); return i < 0 ? 'Main folder' : path.slice(0, i) }
 
 /**
@@ -488,6 +496,10 @@ function Player({ item, s, entry, info, rowById, beforeGrade, onEntry }: {
 }) {
   const [busy, setBusy] = useState<string | null>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
+  // SIDE BY SIDE, every version of this video — handed in or still in Drive (the owner, 22 Oct 2026: "why cant i do
+  // side by side here since versions here are 3 version")
+  const [sideBySide, setSideBySide] = useState(false)
+  const distinct = [...s.entries].filter(e => !e.sameAsEarlier)
   const row = entry.source === 'drive' ? rowById.get(entry.key.slice(2)) ?? null : null
   // the version chosen plays its own file; the newest is the card's current one
   const cardFile = entry.source === 'card' ? (entry.file ?? info.file) : null
@@ -530,7 +542,7 @@ function Player({ item, s, entry, info, rowById, beforeGrade, onEntry }: {
           {[...s.entries].reverse().filter(e => !e.sameAsEarlier).map(e => (
             <button key={e.key} type="button" role="tab" aria-selected={e.key === entry.key} onClick={() => onEntry(e.key)}
               className={`rounded-full px-3 py-1.5 text-[13px] font-semibold ${e.key === entry.key ? 'bg-foreground text-background' : 'bg-muted text-muted-foreground hover:text-foreground'}`}>
-              {e.label}{e.graded ? ' · Graded' : ''}{e.source === 'card' ? ' · on the card' : e.source === 'other' ? ' · other card' : ''}
+              {e.label}{e.graded ? ' · Graded' : ''}{versionWhere(e, rowById)}
             </button>
           ))}
         </div>
@@ -541,10 +553,15 @@ function Player({ item, s, entry, info, rowById, beforeGrade, onEntry }: {
           const twins = s.entries.filter(e => e.label === entry.label && e.key !== entry.key && !e.graded).map(e => e.name.slice(e.name.lastIndexOf('/') + 1))
           return twins.length ? <p className="text-[12px] text-muted-foreground">Also saved as: {twins.join(', ')} — the same file, byte for byte</p> : null
         })()}
+        {distinct.length > 1 && (
+          <Button size="sm" variant={sideBySide ? 'default' : 'outline'} onClick={() => setSideBySide(v => !v)} className="h-9 w-fit rounded-full px-4 text-[13px] font-semibold">
+            {sideBySide ? 'Back to one video' : `Side by side — all ${distinct.length} versions`}
+          </Button>
+        )}
         {cardFile && assetHistory(item, assetIdOf(cardFile)).length > 1 && (
           <Link href={`/dashboard/editor/${item.id}/compare?f=${encodeURIComponent(assetHistory(item, assetIdOf(cardFile)).map(v => `${v.id}@${v.version}`).join(','))}`}
             className="inline-flex w-fit items-center gap-1.5 rounded-full bg-foreground px-4 py-2 text-[13px] font-semibold text-background">
-            Compare its versions side by side
+            Compare with their comments
           </Link>
         )}
         {cardFile && (
@@ -570,6 +587,27 @@ function Player({ item, s, entry, info, rowById, beforeGrade, onEntry }: {
             <Check className="mr-1 h-3.5 w-3.5" aria-hidden />{busy === 'confirm' ? 'Handing in…' : 'Confirm'}
           </Button>
           <Button size="sm" variant="outline" disabled={!!busy} onClick={() => void answer('ignore')} className="h-9 rounded-full px-4 text-[13px] font-semibold">Not this</Button>
+        </div>
+      )}
+      {sideBySide && (
+        <div className="grid gap-3 md:col-span-2" style={{ gridTemplateColumns: `repeat(${Math.min(distinct.length, 4)}, minmax(0, 1fr))` }}>
+          {distinct.map(e => {
+            const r = e.source === 'drive' ? rowById.get(e.key.slice(2)) : null
+            const url = e.source === 'card' ? e.file?.url ?? null : null
+            return (
+              <div key={e.key} className="flex min-w-0 flex-col gap-1">
+                <span className="truncate text-[12px] font-semibold">{e.label}{e.graded ? ' · Graded' : ''}{versionWhere(e, rowById)}</span>
+                <div className="overflow-hidden rounded-inner bg-black">
+                  {url
+                    ? <video src={url} controls playsInline preload="metadata" className="aspect-[9/16] w-full object-contain" />
+                    : r
+                      ? <iframe src={`https://drive.google.com/file/d/${r.drive_file_id}/preview`} title={e.name} allow="fullscreen" allowFullScreen className="aspect-[9/16] w-full border-0" />
+                      : <div className="flex aspect-[9/16] items-center justify-center p-3 text-center text-[12px] text-white/70">On “{e.otherCard}”</div>}
+                </div>
+                <span className="truncate text-[11px] text-muted-foreground">{e.name.slice(e.name.lastIndexOf('/') + 1)}</span>
+              </div>
+            )
+          })}
         </div>
       )}
     </div>

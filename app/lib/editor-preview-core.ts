@@ -99,7 +99,7 @@ export type VideoNext = { words: string; tone: NextTone }
  * landed, whether the client approved this video, and whether a new cut of it is waiting in Drive.
  */
 export function videoNext(v: {
-  status: unknown; needsGrade: boolean; gradedThisRound: boolean; approved: boolean; newInDrive: boolean; gone?: boolean; onCard?: boolean
+  status: unknown; needsGrade: boolean; gradedThisRound: boolean; approved: boolean; newInDrive: boolean; gone?: boolean; onCard?: boolean; holder?: string | null
 }): VideoNext {
   if (v.gone) return { words: 'Removed from Drive — the card keeps its copy', tone: 'muted' }
   // a new cut of a video on the card, or a whole new video
@@ -107,7 +107,11 @@ export function videoNext(v: {
   if (v.approved) return { words: 'Approved by the client', tone: 'green' }
   switch (String(v.status ?? '')) {
     case 'draft_uploaded': case 'revision_required': case 'revision_complete': case 'client_changes_requested':
-      return { words: 'With the editor', tone: 'muted' }
+      // handed in is not finished: the editor still presses "Ready for quality check" (the owner, 22 Oct 2026: "he has
+      // clicked confirm meaning he has done finishing the work" — it read "With the editor")
+      return v.onCard
+        ? { words: `Handed in — waiting for ${v.holder ? v.holder.split(' ')[0] : 'the editor'} to send it to quality check`, tone: 'muted' }
+        : { words: 'With the editor', tone: 'muted' }
     case 'quality_check': case 'internal_review':
       return { words: v.needsGrade ? 'Quality check — then colour grade' : 'Quality check — then the portal', tone: 'amber' }
     case 'colour_grade':
