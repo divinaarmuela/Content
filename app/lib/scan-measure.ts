@@ -126,12 +126,14 @@ export async function probeVideo(src: string, cacheKey: string): Promise<Probe> 
  * wherever we drag it not fixed points"). Made once per video in the background: ffmpeg reads only the keyframes
  * (-skip_frame nokey), shrinks them and tiles them 10 across. Kept on the video's `video_frames` row.
  */
-export type Storyboard = { url: string; cols: number; rows: number; count: number; every_s: number }
+export type Storyboard = { url: string; cols: number; rows: number; count: number; every_s: number; w?: number }
+/** the storyboard's frame width — 180 px (96 looked blurred in the preview, the owner, 22 Oct 2026); a smaller one is remade */
+export const BOARD_W = 180
 export async function makeStoryboard(cacheKey: string): Promise<{ ok: boolean; note: string }> {
   const id = keyOf(`${PROBE_VERSION}|${cacheKey}`)
   const row = await table<VideoFrame>('video_frames').get(id)
   if (!row?.duration_ms) return { ok: false, note: 'not measured' }
-  if ((row as { storyboard?: unknown }).storyboard) return { ok: true, note: 'already' }
+  if (((row as { storyboard?: Storyboard | null }).storyboard?.w ?? 0) >= BOARD_W) return { ok: true, note: 'already' }
   if (!r2Configured()) return { ok: false, note: 'no storage' }
   const src = cacheKey.startsWith('r2:') ? cacheKey.slice(3) : cacheKey.startsWith('drive:') ? drivePublicUrl(cacheKey.split(':')[1]) : null
   if (!src) return { ok: false, note: 'unknown source' }
@@ -141,12 +143,12 @@ export async function makeStoryboard(cacheKey: string): Promise<{ ok: boolean; n
   const rows = Math.ceil(count / cols)
   const { out } = await run([
     '-hide_banner', '-nostats', '-skip_frame', 'nokey', '-i', src, '-an',
-    '-vf', `fps=${count}/${dur.toFixed(3)},scale=96:-2,tile=${cols}x${rows}`, '-frames:v', '1', '-threads', '2',
+    '-vf', `fps=${count}/${dur.toFixed(3)},scale=${BOARD_W}:-2,tile=${cols}x${rows}`, '-frames:v', '1', '-threads', '2',
     '-f', 'image2pipe', '-vcodec', 'mjpeg', '-q:v', '5', 'pipe:1',
   ], 280_000)
   if (out.length < 1000) return { ok: false, note: 'ffmpeg made no storyboard' }
-  const url = (await putObject(`scan-frames/${id}-board.jpg`, out, 'image/jpeg')).publicUrl
-  const storyboard: Storyboard = { url, cols, rows, count, every_s: dur / count }
+  const url = (await putObject(`scan-frames/${id}-board-${BOARD_W}.jpg`, out, 'image/jpeg')).publicUrl
+  const storyboard: Storyboard = { url, cols, rows, count, every_s: dur / count, w: BOARD_W }
   await table<VideoFrame>('video_frames').update(id, { storyboard, updated_at: new Date().toISOString() } as never)
   return { ok: true, note: `${count} frames` }
 }
