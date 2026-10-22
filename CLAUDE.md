@@ -138,8 +138,8 @@ and `npm run build` must pass. Do not report completion on tests alone.
     source so a new Upload button fails a test rather than a review.
     ONE EXCEPTION, by the owner's word (22 Oct 2026): a card's upload goes
     straight into `Clients/{Client}/{Card}/V{n}` in Drive (`app/lib/card-upload.ts`),
-    behind its own switch `DRIVE_CARD_FILING` — test clients only until it is
-    `all`. It writes only inside a card's own folder, never moves or deletes,
+    behind its own switch `DRIVE_CARD_FILING` — every client since 22 Oct 2026
+    (`DRIVE_CARD_FILING=test` = test clients only). It writes only inside a card's own folder, never moves or deletes,
     and V1/V2 keep their names; `tests/card-upload.test.ts` pins the guard.
     Its one-off back-fill (`backfillPlan` / `backfillFile`, job `drive-card-backfill`, started only by a super
     admin's `POST /api/production/drive-backfill`) files every client's earlier card files into those folders —

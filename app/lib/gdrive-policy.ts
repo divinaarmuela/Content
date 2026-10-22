@@ -153,6 +153,6 @@ export const AUTO_FILING_NOTE =
  * deleted.
  *
  * It is its own switch, `DRIVE_CARD_FILING` (card-upload-core.ts `cardFilingAllowed`), and neither of the two above
- * turns it on or off: in PREVIEW it runs on the test clients only; `DRIVE_CARD_FILING=all` puts it on every client.
+ * turns it on or off: it runs on every client since 22 Oct 2026; `DRIVE_CARD_FILING=test` keeps it to the test clients.
  * Every writer in card-upload.ts checks it first — pinned by tests/card-upload.test.ts.
  */

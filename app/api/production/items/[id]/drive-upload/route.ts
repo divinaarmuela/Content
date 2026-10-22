@@ -15,7 +15,7 @@ import { cardUploadState, finishCardUploads, makeCardFolder, renameCardFolder, s
  *   POST { action: 'rename', id, name }  rename a folder inside it — never V1 / V2
  *
  * WHO: anyone on the team who can open the card (the owner, 22 Oct 2026: "in any step of this cards anyone should be
- * able to swap in a new version"). Test clients only until DRIVE_CARD_FILING=all.
+ * able to swap in a new version"). Every client (DRIVE_CARD_FILING=test: test clients only).
  */
 export const dynamic = 'force-dynamic'
 

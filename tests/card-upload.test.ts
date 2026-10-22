@@ -8,14 +8,13 @@ import { TEST_CLIENT_IDS } from '@/app/lib/test-clients-core'
 // the owner, 22 Oct 2026: editors upload straight into Clients / {Client} / {Card} / V{n} in Drive — preview first
 describe('the switch', () => {
   afterEach(() => { delete process.env.DRIVE_CARD_FILING })
-  it('is on for the test clients only, until it is "all"', () => {
+  it('is on for every client (live 22 Oct 2026); "test" keeps it to the test clients', () => {
     expect(cardFilingAllowed(TEST_CLIENT_IDS[0])).toBe(true)
-    expect(cardFilingAllowed('a-real-client')).toBe(false)
-    expect(cardFilingAllowed(null)).toBe(false)
-    process.env.DRIVE_CARD_FILING = '1'
-    expect(cardFilingAllowed('a-real-client')).toBe(false)
-    process.env.DRIVE_CARD_FILING = 'all'
     expect(cardFilingAllowed('a-real-client')).toBe(true)
+    expect(cardFilingAllowed(null)).toBe(false)
+    process.env.DRIVE_CARD_FILING = 'test'
+    expect(cardFilingAllowed('a-real-client')).toBe(false)
+    expect(cardFilingAllowed(TEST_CLIENT_IDS[0])).toBe(true)
   })
 })
 

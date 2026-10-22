@@ -15,18 +15,19 @@
  * Inside the card's folder a person may add folders and rename the ones they made ("allow the editor to rename
  * folders in there? or add folders?"). The V1 / V2 folders are the versions and keep their names.
  *
- * PREVIEW FIRST ("make it in preview mode first please"): on test clients only, until DRIVE_CARD_FILING=all.
+ * LIVE FOR EVERY CLIENT since 22 Oct 2026 (the owner, after the preview on the test clients: "1 and 2 do it").
+ * DRIVE_CARD_FILING=test puts it back on the test clients only.
  *
  * Pure: names, links, the switch, the resume rule. No I/O.
  */
 import { isTestClient } from './test-clients-core'
 
-/** `all` turns it on for every client; anything else keeps it on the test clients (gdrive-policy.ts trap 13) */
+/** on for every client; `test` keeps it on the test clients only (gdrive-policy.ts, trap 13) */
 export const DRIVE_CARD_FILING = 'DRIVE_CARD_FILING'
 
 export function cardFilingAllowed(clientId: string | null | undefined): boolean {
   if (!clientId) return false
-  return process.env[DRIVE_CARD_FILING] === 'all' || isTestClient(clientId)
+  return process.env[DRIVE_CARD_FILING] !== 'test' || isTestClient(clientId)
 }
 
 /** a Drive name: no slashes, no control characters, not empty, not absurdly long */
