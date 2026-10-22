@@ -85,8 +85,9 @@ describe('graded = the same edit with its colour changed', () => {
   it('a different edit → a re-cut', () => {
     expect(verdictOf(ai({ same_edit: false }), { status: 'revision_required', candidates: cands, byColourist: false, gradedFolder: false })).toMatchObject({ kind: 'recut', ask: false })
   })
-  it('looks graded but added by the editor while editing → asked, not filed', () => {
-    expect(verdictOf(ai(), { status: 'draft_uploaded', candidates: cands, byColourist: false, gradedFolder: false }).ask).toBe(true)
+  // 22 Oct 2026, the owner: "why is alia one of the videos shown as graded" — while editing it is never a grade, just a cut
+  it('looks graded but added by the editor while editing → a cut, never a grade', () => {
+    expect(verdictOf(ai(), { status: 'draft_uploaded', candidates: cands, byColourist: false, gradedFolder: false }).kind).toBe('recut')
   })
   it('no match, or a match not among the candidates → a new video', () => {
     expect(verdictOf(ai({ match: 'new' }), { status: 'draft_uploaded', candidates: cands, byColourist: false, gradedFolder: false })).toMatchObject({ kind: 'new_video', asset: null })
@@ -236,5 +237,14 @@ describe('gradeStanding — at colour grade, only what lands after it is a grade
     expect(gradeStanding({ first_seen_at: '2026-10-21T11:21:52.475Z' }, '2026-10-21T11:21:50.000Z', since)).toBe('before')
     expect(gradeStanding({ first_seen_at: '2026-10-21T11:30:00.000Z' }, '2026-10-21T11:21:50.000Z', since)).toBe('grade')
     expect(gradeStanding({ first_seen_at: '2026-10-21T11:30:00.000Z' }, '2026-10-21T11:21:50.000Z', null)).toBe('before')
+  })
+})
+
+describe('graded only at colour grade', () => {
+  it('the same edit with its colour moved is a cut while editing, a grade at colour grade', () => {
+    const ai = { match: 'A1', same_edit: true, colour_changed: true, confidence: 0.9, reasons: [] }
+    const cands = [{ asset: 'A1', name: 'x', score: 1, why: [] }]
+    expect(verdictOf(ai, { status: 'draft_uploaded', candidates: cands, byColourist: false, gradedFolder: false }).kind).toBe('recut')
+    expect(verdictOf(ai, { status: 'colour_grade', candidates: cands, byColourist: false, gradedFolder: false }).kind).toBe('graded')
   })
 })

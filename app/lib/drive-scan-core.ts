@@ -221,7 +221,10 @@ export function verdictOf(ai: AiAnswer, ctx: { status: unknown; candidates: read
   // the same edit cannot differ in length: a grade or a copy is never a second longer or shorter (live, 21 Oct 2026:
   // OLIMPIA_P2C_v2, 1.8s longer with B-roll added, was called graded)
   const sameEdit = ai.same_edit && !(ctx.lengthGapMs != null && ctx.lengthGapMs > 1000)
-  let kind: CutKind = sameEdit ? (ai.colour_changed ? 'graded' : 'copy') : 'recut'
+  // GRADED ONLY AT COLOUR GRADE (the owner, 22 Oct 2026: "why is alia one of the videos shown as graded" — a card in
+  // editing): before it, the same edit with its colour moved is just another cut from the editor
+  const gradeable = String(ctx.status ?? '') === 'colour_grade' || ctx.byColourist
+  let kind: CutKind = sameEdit ? (ai.colour_changed ? (gradeable ? 'graded' : 'recut') : 'copy') : 'recut'
   let ask = ai.confidence < SURE
   const atGrade = String(ctx.status ?? '') === 'colour_grade'
   if (kind === 'graded' && !atGrade && !ctx.byColourist) { ask = true; reasons.push('Looks graded, but it was added outside colour grade — check it') }

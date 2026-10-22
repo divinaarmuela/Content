@@ -206,7 +206,8 @@ function stackFilesOf(item: ContentItem, rows: readonly DriveSeen[], framesOf: F
       const a = scan?.asset ?? null
       const matchKey = !a ? null : a.startsWith('seen:') ? `s:${a.slice(5)}` : a.startsWith('card:') ? `o:${a.slice(5)}` : `a:${a}`
       return {
-        key: `s:${r.id}`, name: r.path, at: r.created_time ?? r.modified ?? r.first_seen_at, source: 'drive', kind: scan?.kind ?? null, matchKey,
+        // a "graded" verdict on a file seen before the card was at colour grade is only a cut (verdictOf says so now)
+        key: `s:${r.id}`, name: r.path, at: r.created_time ?? r.modified ?? r.first_seen_at, source: 'drive', kind: scan?.kind === 'graded' && r.stage_at_seen !== 'colour_grade' ? 'recut' : scan?.kind ?? null, matchKey,
         ask: !!scan?.ask, busy: r.state === 'new' || r.state === 'scanning', thumb: scan?.frames?.find(Boolean) ?? null,
         frames: (scan?.frames ?? []).map((u, i) => ({ url: String(u ?? ''), at_s: i })).filter(x => x.url),
         board: framesOf.boards?.get(driveKey(r)) ?? null,
@@ -276,6 +277,8 @@ function Workspace({ item, rows, needsGrade, gradeSince, sourceCreated, framesOf
   const [folder, setFolder] = useState<string | null>(null)
   const shown = folder ? ordered.filter(([f]) => f === folder) : ordered
   const [pick, setPick] = useState<{ stack: string; entry: string } | null>(null)
+  // a press on a tile further down brings the player into view (the owner: "when i click i have to scroll up")
+  const playerRef = useRef<HTMLDivElement | null>(null)
   // SIDE BY SIDE (back, the owner, 22 Oct 2026): choose videos on the card, open them side by side with their comments
   const router = useRouter()
   const [selecting, setSelecting] = useState(false)
@@ -304,6 +307,7 @@ function Workspace({ item, rows, needsGrade, gradeSince, sourceCreated, framesOf
   }
   return (
     <section className="flex flex-col gap-5 rounded-card border border-border bg-surface p-5">
+      <div ref={playerRef} className="scroll-mt-4" />
       {sel && entry && <Player item={item} s={sel} entry={entry} info={info(sel)} rowById={rowById} beforeGrade={beforeGrade} onEntry={k => setPick({ stack: sel.key, entry: k })} />}
       <div>
         <header className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -344,7 +348,7 @@ function Workspace({ item, rows, needsGrade, gradeSince, sourceCreated, framesOf
                       <button type="button" disabled={selecting && !key} title={selecting && !key ? 'Only videos on the card can be compared — confirm it first' : undefined}
                         onClick={() => selecting
                           ? key && setPicked(m => { const n = new Set(m); if (n.has(key)) n.delete(key); else n.add(key); return n })
-                          : setPick({ stack: s.key, entry: s.latest.key })} aria-pressed={on}
+                          : (setPick({ stack: s.key, entry: s.latest.key }), playerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }))} aria-pressed={on}
                         className={`flex w-full flex-col overflow-hidden rounded-inner border bg-background text-left transition hover:shadow-md ${on ? 'border-foreground ring-2 ring-foreground/20' : pending.length ? 'border-accent-amber' : 'border-border'}`}>
                         <span className="relative block aspect-[9/12] w-full bg-muted">
                           <HoverFrames frames={s.latest.frames ?? []} thumb={s.latest.thumb} board={s.latest.board ?? null} />
