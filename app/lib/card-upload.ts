@@ -17,7 +17,7 @@ import {
  *
  * THE ONE PLACE THE DASHBOARD WRITES TO GOOGLE DRIVE BY DESIGN (gdrive-policy.ts, CLAUDE.md trap 13): it makes the
  * client's folder and the card's folder inside the app's own "Clients" folder, shares the card's folder view-only
- * with anyone who has the link, gives the card's editor edit access, opens upload sessions into it, and makes or
+ * with anyone who has the link (no person may edit it — viewOnlyFolder), opens upload sessions into it, and makes or
  * renames folders a person asks for inside it. Nothing else: nothing outside a card's folder is written, nothing is
  * ever moved or deleted, and V1 / V2 keep their names. Every entry point checks `cardFilingAllowed` first.
  */
@@ -55,7 +55,7 @@ async function clientFolder(clientId: string): Promise<{ ok: true; id: string } 
 
 /**
  * THE CARD'S FOLDER, made the first time anything is uploaded to the card: "Card title" — "(2)" when another card of
- * this client has that name — shared view-only with anyone who has the link, the card's editor given edit access.
+ * this client has that name — shared view-only with anyone who has the link.
  * One maker at a time: `upload_folder_lock` is claimed first (trap 11), and a request that loses waits for the winner.
  */
 async function cardFolder(item: ContentItem): Promise<{ ok: true; id: string; url: string } | Fail> {

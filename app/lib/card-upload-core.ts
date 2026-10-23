@@ -6,8 +6,8 @@
  *                               / V2 / …
  *
  * The app makes the client folder and the card's folder the first time a file is uploaded to the card, shares the
- * card's folder "anyone with the link can view" (the link sits on the card), and gives the card's editor edit access
- * with their own Google account so Drive for desktop can drop files in too. The browser sends the bytes to Google
+ * card's folder "anyone with the link can view" (the link sits on the card) — view only for every person, so files go
+ * in only through the card and Drive always matches it (the owner, 23 Oct 2026). The browser sends the bytes to Google
  * itself, in resumable pieces, so a file half-sent today carries on tomorrow from where it stopped ("an editor can
  * submit a file in progress and come back next day to continue"). When the files are in, the existing Drive hand-in
  * (drive-handin.ts) copies them onto the card — versions, replacements and matching exactly as a pasted Drive link.

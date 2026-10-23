@@ -148,7 +148,7 @@ export const AUTO_FILING_NOTE =
  * THE ONE WRITE THE OWNER ASKED FOR (22 Oct 2026: "we will upload everything as files and everything will be tracked
  * via drive"; "what i thought uploading here uploaded straight to drive"). An editor's upload on a card goes straight
  * into `Clients / {Client} / {Card} / V{n}` in Drive — folders the app makes inside its own Clients folder, the
- * card's shared view-only by link, the card's editor given edit access. A person may also add folders inside a card's
+ * card's shared view-only by link, no person given edit access (files go in through the card). A person may also add folders inside a card's
  * folder and rename the ones that are not V1 / V2. Nothing outside a card's folder is written; nothing is moved or
  * deleted.
  *
