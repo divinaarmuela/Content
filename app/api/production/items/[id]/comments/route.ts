@@ -104,6 +104,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           .list({ where: u => u.role === 'super_admin' && u.active_status === true })
         recipients = admins as unknown as typeof recipients
       }
+      // …and the editor holding the card, who reads the client's words now (the owner, 23 Oct 2026)
+      if (item.owner_id && !recipients.some(r => r.id === item.owner_id)) {
+        const holder = await table<TeamUser>('team_users').get(String(item.owner_id)).catch(() => null)
+        if (holder && holder.active_status === true && holder.role === 'editor' && holder.email) {
+          recipients = [...recipients, holder as unknown as (typeof recipients)[number]]
+        }
+      }
       for (const r of recipients) {
         await notify({
           actorName: user.name,

@@ -208,6 +208,40 @@ export async function settleDriveHandIn(pullId: string): Promise<{ settled: bool
       : done.result.error,
   }).catch(() => undefined)
   announceItemChange({ item_id: item.id, client_id: item.client_id, status: String(fresh?.status ?? item.status), kind: 'updated' })
+  // UPLOADED ON THE CARD → THE CLIENT'S ACCOUNT MANAGERS ARE TOLD (the owner, 23 Oct 2026: "notify AM when its uploaded")
+  if (done.result.ok && done.handIn.any_time === true && done.result.added.length > 0) {
+    await tellManagersOfUpload((fresh ?? item) as ContentItem, (by as TeamUser | null) ?? null, done.result.added.length, done.round, done.handIn.id)
+      .catch(e => console.error('[drive-handin] telling the account managers failed:', e instanceof Error ? e.message : e))
+  }
   return { settled: true, result: done.result }
+}
+
+/** one bell and email per upload (not per file) to each active account manager of the client — never the uploader */
+async function tellManagersOfUpload(item: ContentItem, by: TeamUser | null, count: number, round: number, handInId: string): Promise<void> {
+  if (!item.client_id) return
+  const { managesClients } = await import('./identity-core')
+  const { notify, renderEmail, escapeHtml } = await import('./mailer')
+  const { DASHBOARD_URL } = await import('./app-url')
+  const links = await table<{ id: string; team_user_id: string; client_id: string }>('team_user_clients').list({ by: { client_id: item.client_id } })
+  const ids = new Set(links.map(l => l.team_user_id))
+  const managers = (await table<TeamUser & { active_status?: boolean; email?: string | null }>('team_users').list({ where: u => ids.has(u.id) }))
+    .filter(u => managesClients(u.role) && u.active_status !== false && !!u.email && u.id !== by?.id)
+  const who = by?.name || by?.email || 'Someone'
+  const what = `${count} ${count === 1 ? 'file' : 'files'}`
+  const title = String(item.title ?? 'a card')
+  for (const m of managers) {
+    await notify({
+      actorName: by?.name ?? null, actorEmail: by?.email ?? null,
+      eventType: 'card_upload', entityType: 'content_item', entityId: `${item.id}#upload#${handInId}`,
+      recipientId: m.id, recipientEmail: String(m.email),
+      subject: `${who} uploaded ${what} to ${title}`,
+      bodyHtml: renderEmail(
+        `New on ${title}`,
+        `<p>${escapeHtml(who)} uploaded ${what} to <strong>${escapeHtml(title)}</strong> as ${escapeHtml(versionLabel(item as never, round))}.</p>`,
+        'Open the card',
+        `${DASHBOARD_URL}/dashboard/editor/${encodeURIComponent(item.id)}`,
+      ),
+    })
+  }
 }
 

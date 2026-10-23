@@ -166,3 +166,17 @@ describe('which earlier files are filed', () => {
     expect(backfillFilesOf(card).map(x => x.id)).toEqual(['b', 'a2', 'a3'])
   })
 })
+
+// the owner, 23 Oct 2026: "notify AM when its uploaded"; the editor reads the client's comments, so is told of them
+describe('who is told', () => {
+  it('an upload on the card tells the client’s account managers — once per upload, never the uploader', () => {
+    const src = readFileSync('app/lib/drive-handin.ts', 'utf8')
+    expect(src).toContain('done.handIn.any_time === true && done.result.added.length > 0')
+    expect(src).toContain("eventType: 'card_upload'")
+    expect(src).toContain('u.id !== by?.id')
+  })
+  it('a client comment also tells the editor holding the card', () => {
+    const src = readFileSync('app/api/production/items/[id]/comments/route.ts', 'utf8')
+    expect(src).toContain("holder.role === 'editor'")
+  })
+})
