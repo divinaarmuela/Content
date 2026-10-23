@@ -1,13 +1,13 @@
 import 'server-only'
 import { table } from '@/lib/db'
-import type { Client, ContentItem, DriveUpload, TeamUser as TeamRow } from '@/lib/db-types'
+import type { Client, ContentItem, DriveUpload } from '@/lib/db-types'
 import type { TeamUser } from './authz'
 import { createSubfolder, ensureChain, ensureFolder, findSubfolder, listFolderNames, listSubfolders, renameFolder, rootFolderId } from './gdrive'
-import { entryDetail, grantUserPermission, isInside, openUploadSession, pushUploadChunk, shareableLink, uploadStreamToFolder } from './gdrive-files'
+import { entryDetail, isInside, listPermissions, openUploadSession, pushUploadChunk, revokePermission, shareableLink, uploadStreamToFolder } from './gdrive-files'
 import { isDriveId } from './files-core'
 import { handInRound } from './edit-round-core'
 import { startDriveHandIn } from './drive-handin'
-import { assetIdOf, currentFiles, finalFilesOf, type FinalFile } from './final-files-core'
+import { assetHistory, assetIdOf, currentFiles, finalFilesOf, type FinalFile } from './final-files-core'
 import {
   DIRECT_CHUNK, cardFilingAllowed, folderNameOf, isVersionFolderName, resumableMatch, sharingUrl, uniqueName, versionFolderName,
 } from './card-upload-core'
@@ -88,21 +88,24 @@ async function cardFolder(item: ContentItem): Promise<{ ok: true; id: string; ur
   if (!shared.ok) console.error('[card-upload] sharing the card folder failed:', shared.message)
   const url = sharingUrl(made.id)
   await items().claim(item.id, cur => (cur ? { ...cur, upload_folder_id: made.id, upload_folder_url: url, upload_folder_lock: null } : null))
-  // the card's editor works in it with their own Google account (Drive for desktop): edit access, no email
-  if (item.owner_id) {
-    const owner = await table<TeamRow>('team_users').get(item.owner_id).catch(() => null)
-    if (owner?.email) await grantEditor(made.id, owner.email)
-  }
   return { ok: true, id: made.id, url }
 }
 
-const granted = new Set<string>()
-async function grantEditor(folderId: string, email: string): Promise<void> {
-  const key = `${folderId}:${email.toLowerCase()}`
-  if (granted.has(key)) return
-  const r = await grantUserPermission(folderId, email).catch(() => null)
-  if (r?.ok) granted.add(key)
-  else console.error('[card-upload] edit access for', email, 'failed:', r && !r.ok ? r.message : 'no answer')
+/**
+ * VIEW ONLY FOR EVERYONE BUT THE APP (the owner, 23 Oct 2026: files go on through the card, never dropped into Drive —
+ * so Drive always matches the card). Until then the card's editor was given edit access; this takes back any person's
+ * edit access to the card's folder. The "anyone with the link can view" stays.
+ */
+export async function viewOnlyFolder(folderId: string): Promise<number> {
+  const list = await listPermissions(folderId)
+  if (!list.ok) return 0
+  let n = 0
+  for (const p of list.permissions) {
+    if (!p.id || p.type !== 'user' || p.role !== 'writer') continue
+    const r = await revokePermission(folderId, p.id)
+    if (r.ok) n++
+  }
+  return n
 }
 
 /** the folder this version's files go in — V1, V2 … inside the card's folder, recorded on the card */
@@ -177,15 +180,33 @@ export async function startCardUpload(user: TeamUser, item: ContentItem, body: {
   if (!Number.isFinite(size) || size <= 0) return { ok: false, status: 400, error: 'That file is empty' }
   const folders = await ensureCardFolders(item)
   if (!folders.ok) return folders
-  const parent = isDriveId(body.parent) ? body.parent : folders.versionId
+  // A NEW CUT OF A VIDEO (the owner, 23 Oct 2026): it goes in the same folders the video sits in (V2/SCHEDULED/1.mov,
+  // not V2/1.mov), and a fix inside the same version is named "(draft 2)" so Drive shows which is newer, not just the card
+  let named = name
+  let parent = isDriveId(body.parent) ? body.parent : folders.versionId
+  if (replaces) {
+    const line = assetHistory(item as never, replaces)
+    const piece = line[line.length - 1]
+    const dirs = String(piece?.drive_path ?? '').split('/').slice(0, -1).filter(Boolean)
+    if (dirs.length && isVersionFolderName(dirs[0])) dirs.shift()
+    if (!isDriveId(body.parent) && dirs.length) {
+      const chain = await ensureChain(folders.versionId, dirs.map(d => folderNameOf(d, 'Folder')))
+      if (chain.ok) parent = chain.id
+    }
+    const cuts = line.filter(f => f.version === folders.version).length
+    if (cuts > 0) {
+      const dot = name.lastIndexOf('.')
+      const stem = (dot > 0 ? name.slice(0, dot) : name).replace(/\s*\(draft \d+\)$/i, '')
+      named = `${stem} (draft ${cuts + 1})${dot > 0 ? name.slice(dot) : ''}`
+    }
+  }
   if (!(await insideVersion(parent, folders.versionId))) {
     return { ok: false, status: 400, error: `Files go in ${versionFolderName(folders.version)} or a folder inside it` }
   }
-  if (user.email) await grantEditor(folders.folderId, user.email)
   const by = user.email ?? user.id
   const uploads = table<DriveUpload>('drive_uploads')
   const now = Date.now()
-  const open = (await uploads.list({ where: r => resumableMatch(r as never, { itemId: item.id, parentId: parent, name, size, by, replaces }, now) }))
+  const open = (await uploads.list({ where: r => resumableMatch(r as never, { itemId: item.id, parentId: parent, name: named, size, by, replaces }, now) }))
     .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))[0]
   if (open) {
     // where Google is: an empty piece asks without sending anything
@@ -201,11 +222,11 @@ export async function startCardUpload(user: TeamUser, item: ContentItem, body: {
     await uploads.update(open.id, { status: 'failed', error: status.message, updated_at: new Date().toISOString() } as Partial<DriveUpload>)
   }
   const mime = String(body.mime ?? '').slice(0, 100) || undefined
-  const session = await openUploadSession(parent, name, size, mime, origin ?? undefined)
+  const session = await openUploadSession(parent, named, size, mime, origin ?? undefined)
   if (!session.ok) return { ok: false, status: 502, error: session.message }
   const stamp = new Date().toISOString()
   const row = await uploads.insert({
-    upload_uri: session.uri, name, parent_id: parent, mime_type: mime ?? null, size, received: 0, client_id: item.client_id,
+    upload_uri: session.uri, name: named, parent_id: parent, mime_type: mime ?? null, size, received: 0, client_id: item.client_id,
     status: 'open', drive_file_id: null, created_by: by, created_at: stamp, updated_at: stamp,
     purpose: 'card', item_id: item.id, version: folders.version, copied_at: null, final_file_id: null, error: null, replaces,
   } as unknown as Omit<DriveUpload, 'id'>)
@@ -402,6 +423,7 @@ export async function backfillPlan(itemId: string): Promise<{ ok: true; files: s
   // the folders first, once, so the file steps never race to make them
   const folder = await cardFolder(item)
   if (!folder.ok) return folder
+  await viewOnlyFolder(folder.id).catch(() => 0)
   for (const v of [...new Set([handInRound(item as never), ...files.map(f => f.version), ...pulls.map(c => c.version)])]) {
     const made = await versionFolder((await items().get(itemId)) ?? item, folder.id, v)
     if (!made.ok) return made

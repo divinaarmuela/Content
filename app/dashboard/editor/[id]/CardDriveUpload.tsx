@@ -215,7 +215,7 @@ export default function CardDriveUpload({ itemId, onAllowed, ref }: {
         ) : <span className="text-[13px] text-muted-foreground">Made when the first file is uploaded</span>}
       </div>
       <p className="mt-1 text-[13px] text-muted-foreground">
-        Anyone with the link can view. You can also drop files into it from Google Drive on your computer.
+        Anyone with the link can view it. Files go in from this card, so Drive always matches the card.
       </p>
 
       <>

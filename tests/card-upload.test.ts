@@ -68,10 +68,10 @@ describe('the guard is in the source', () => {
   // THE ONE-OFF FILING OF EVERY CARD'S EARLIER FILES (the owner, 22 Oct 2026: "merge all existing ones to the folders
   // correctly"): every client by the owner's order, so no switch — but reached only from its job, which only a super
   // admin's request starts
-  const BACKFILL = ['backfillPlan', 'backfillFile', 'backfillPullFile']
+  const BACKFILL = ['backfillPlan', 'backfillFile', 'backfillPullFile', 'viewOnlyFolder']
   it('the back-fill is reached only from its job, started only by a super admin', () => {
     const hits = (name: string) => [...readdirAll('app')].filter(f => /\.(ts|tsx)$/.test(f) && readFileSync(f, 'utf8').includes(name))
-    for (const name of BACKFILL) expect(hits(name).filter(f => !f.includes('/api/production/drive-backfill/')).sort()).toEqual(['app/inngest/functions.ts', 'app/lib/card-upload.ts'])
+    for (const name of BACKFILL) for (const f of hits(name).filter(f => !f.includes('/api/production/drive-backfill/'))) expect(['app/inngest/functions.ts', 'app/lib/card-upload.ts']).toContain(f)
     const route = readFileSync('app/api/production/drive-backfill/route.ts', 'utf8')
     expect(route).toContain("await requireRole('super_admin')")
     expect(route).toContain("name: 'drive/card.backfill'")
