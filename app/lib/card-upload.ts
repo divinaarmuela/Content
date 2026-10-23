@@ -352,6 +352,8 @@ export async function cardUploadState(user: TeamUser, item: ContentItem) {
     tree: folderId ? await cardFolderTree(item) : [],
     unfinished: mine.map((r, i) => ({ id: r.id, name: r.name, size: r.size, received: had[i], parent: r.parent_id, version: r.version, replaces: r.replaces ?? null })),
     waiting: rows.filter(r => r.status === 'done' && !r.copied_at).length,
+    // how many people can EDIT the folder — 0 since it went view only (viewOnlyFolder); read, never changed here
+    editors: folderId ? await listPermissions(folderId).then(l => (l.ok ? l.permissions.filter(p => p.type === 'user' && p.role === 'writer').length : null)).catch(() => null) : null,
   }
 }
 
