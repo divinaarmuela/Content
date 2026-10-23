@@ -421,7 +421,8 @@ function Workspace({ item, rows, needsGrade, gradeSince, sourceCreated, framesOf
                           : pageOf(s) ? router.push(pageOf(s)!) : setPick({ stack: s.key, entry: s.latest.key })} aria-pressed={on}
                         className={`flex w-full flex-col overflow-hidden rounded-inner border bg-background text-left transition hover:shadow-md ${on ? 'border-foreground ring-2 ring-foreground/20' : pending.length ? 'border-accent-amber' : 'border-border'}`}>
                         <span className="relative block aspect-[9/12] w-full bg-muted">
-                          <HoverFrames frames={s.latest.frames ?? []} thumb={s.latest.thumb} board={s.latest.board ?? null} src={info(s).file?.url ?? s.entries.find(e => e.file)?.file?.url ?? null} />
+                          <HoverFrames frames={s.latest.frames ?? []} thumb={s.latest.thumb} board={s.latest.board ?? null} src={info(s).file?.url ?? s.entries.find(e => e.file)?.file?.url ?? null}
+                            driveId={s.entries.map(e => (e.source === 'drive' ? rowById.get(e.key.slice(2))?.drive_file_id : undefined)).find(Boolean) ?? null} />
                           <span className="absolute left-1.5 top-1.5 flex gap-1">
                             {s.versions.map(v => <span key={v} className={`rounded-full px-1.5 text-[10px] font-bold ${v === s.latest.label ? 'bg-foreground text-background' : 'bg-background/80 text-foreground'}`}>{v}</span>)}
                             {s.latest.graded && <span className="rounded-full bg-tint-green px-1.5 text-[10px] font-bold">Graded</span>}
@@ -514,11 +515,14 @@ function BoardFrame({ board, index, className = '' }: { board: Board; index: num
  * cursor is (the owner, 22 Oct 2026: "where is the long vertical line", "it should be wherever we drag it not fixed
  * points"). From the storyboard (a frame a second) once it is made; until then, the nearest of the twelve frames.
  */
-function HoverFrames({ frames, thumb, board, src = null }: { frames: { url: string; at_s: number }[]; thumb: string | null; board: Board | null; src?: string | null }) {
+function HoverFrames({ frames, thumb, board, src = null, driveId = null }: { frames: { url: string; at_s: number }[]; thumb: string | null; board: Board | null; src?: string | null; driveId?: string | null }) {
   const [at, setAt] = useState<number | null>(null)   // 0–1 across the tile
   // NO PICTURE SAVED (the old scan made them; it is off): the video's own frame a second in (the owner, 23 Oct 2026:
   // "one trendy doesnt have a thumbnail")
   if (!thumb && !board && src) return <video src={`${src}#t=1`} preload="metadata" muted playsInline aria-hidden className="absolute inset-0 h-full w-full object-cover" />
+  // …or, for a video only in the editor's Drive, Drive's own picture of it
+  // eslint-disable-next-line @next/next/no-img-element -- Drive's thumbnail, sized by Drive
+  if (!thumb && !board && driveId) return <img src={`https://drive.google.com/thumbnail?id=${encodeURIComponent(driveId)}&sz=w480`} alt="" referrerPolicy="no-referrer" className="absolute inset-0 h-full w-full object-cover" />
   if (!thumb && !board) return <span className="flex h-full items-center justify-center"><Film className="h-5 w-5 text-muted-foreground" aria-hidden /></span>
   const fallback = at !== null && frames.length ? frames[Math.min(frames.length - 1, Math.floor(at * frames.length))].url : thumb
   return (
