@@ -4,7 +4,8 @@ import { deliverOnly } from '@/app/lib/deliver-only-core'
 import { managesClients, personLabel } from '@/app/lib/identity-core'
 import { useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { ExternalLink, MessageCircle, Plus, RefreshCw, Trash2, X } from 'lucide-react'
+import { ArrowLeft, ArrowRight, ExternalLink, MessageCircle, Plus, RefreshCw, Trash2, X } from 'lucide-react'
+import PickOrderDialog from './PickOrderDialog'
 import { cn } from '@/lib/utils'
 import { useRow, useTable } from '@/lib/db-client'
 import type { AssetVersion, Client, ContentItem, ItemComment, PublishJob, SocialPost, TeamUser, TeamUserClient, WorkflowActivity, WorkKind } from '@/lib/db-types'
@@ -352,6 +353,17 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
       toast.error(e instanceof Error ? e.message : 'Upload failed')
       setWorking(null)
     }
+  }
+  // several files picked at once: asked which goes first before they go up (PickOrderDialog)
+  const [toOrder, setToOrder] = useState<File[] | null>(null)
+  // MOVE A FILE ONE PLACE (the owner, 25 Oct 2026: the files go in the order picked — and can be put right after)
+  const move = (i: number, by: -1 | 1) => {
+    const j = i + by
+    if (j < 0 || j >= slides.length) return
+    // a file the channel holds or has posted keeps its place
+    if (slides.some(s => postedUrls.has(s.url) || fileBooking(s.url, filePosts, jobsById) !== null)) { toast.error('Some of these are booked in or posted — the order stays'); return }
+    const next = [...slides];[next[i], next[j]] = [next[j], next[i]]
+    void writeVersion(next, `Moved ${i + 1} to ${j + 1}`)
   }
   const remove = (i: number) => {
     if (slides.length < 2) { toast.error('A post needs at least one file — replace it instead'); return }
@@ -777,6 +789,12 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
                     <RefreshCw className="h-3.5 w-3.5" aria-hidden /> Replace
                   </Button>
                 )}
+                {!frozenCard && slides.length > 1 && (
+                  <span className="inline-flex">
+                    <Button variant="ghost" size="sm" className="h-9 rounded-full px-2" disabled={working !== null || i === 0} onClick={() => move(i, -1)} aria-label={`Move ${i + 1} earlier`}><ArrowLeft className="h-3.5 w-3.5" aria-hidden /></Button>
+                    <Button variant="ghost" size="sm" className="h-9 rounded-full px-2" disabled={working !== null || i === slides.length - 1} onClick={() => move(i, 1)} aria-label={`Move ${i + 1} later`}><ArrowRight className="h-3.5 w-3.5" aria-hidden /></Button>
+                  </span>
+                )}
                 {!gone && !frozenCard && slides.length > 1 && (
                   <Button variant="ghost" size="sm" className="h-9 rounded-full" disabled={working !== null} onClick={() => remove(i)}>
                     <Trash2 className="h-3.5 w-3.5" aria-hidden /> Remove
@@ -870,7 +888,8 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
         <input ref={replaceInput} type="file" accept="image/*,video/*" className="hidden"
           onChange={e => { void onReplacePicked(Array.from(e.target.files ?? [])); e.target.value = '' }} />
         <input ref={addInput} type="file" multiple accept="image/*,video/*" className="hidden"
-          onChange={e => { void onAddPicked(Array.from(e.target.files ?? [])); e.target.value = '' }} />
+          onChange={e => { const picked = Array.from(e.target.files ?? []); e.target.value = ''; if (picked.length > 1) setToOrder(picked); else void onAddPicked(picked) }} />
+        <PickOrderDialog files={toOrder} onCancel={() => setToOrder(null)} onDone={ordered => { setToOrder(null); void onAddPicked(ordered) }} />
       </div>
       )}
 
