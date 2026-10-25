@@ -554,10 +554,24 @@ function HoverFrames({ frames, thumb, board, src = null, driveId = null }: { fra
   // "one trendy doesnt have a thumbnail")
   // Drive's own picture of it first, when it came from Drive (live, 23 Oct 2026: Trendy_Letter's frame never loaded — a
   // browser loads only a few videos at once)…
+  // NO SAVED FRAMES BUT THE VIDEO IS OURS (the owner, 25 Oct 2026: "the timeline when hover … with the vertical line not
+  // there"): the cursor scrubs the video itself — the line follows it and the picture is that moment of the video
+  const poster = driveId ? `https://drive.google.com/thumbnail?id=${encodeURIComponent(driveId)}&sz=w480` : undefined
+  if (!thumb && !board && src) return (
+    <span className="absolute inset-0 block"
+      onMouseMove={e => {
+        const r = e.currentTarget.getBoundingClientRect(); const x = Math.min(0.999, Math.max(0, (e.clientX - r.left) / r.width))
+        setAt(x)
+        const v = e.currentTarget.querySelector('video')
+        if (v && Number.isFinite(v.duration) && v.duration > 0) v.currentTime = x * v.duration
+      }}
+      onMouseLeave={e => { setAt(null); const v = e.currentTarget.querySelector('video'); if (v) v.currentTime = Math.min(1, v.duration || 1) }}>
+      <video src={`${src}#t=1`} poster={poster} preload="metadata" muted playsInline aria-hidden className="h-full w-full object-cover" />
+      {at !== null && <span className="pointer-events-none absolute inset-y-0 w-0.5 bg-white shadow-[0_0_0_1px_rgba(0,0,0,0.4)]" style={{ left: `${at * 100}%` }} />}
+    </span>
+  )
   // eslint-disable-next-line @next/next/no-img-element -- Drive's thumbnail, sized by Drive
-  if (!thumb && !board && driveId) return <img src={`https://drive.google.com/thumbnail?id=${encodeURIComponent(driveId)}&sz=w480`} alt="" referrerPolicy="no-referrer" className="absolute inset-0 h-full w-full object-cover" />
-  // …else the video's own frame
-  if (!thumb && !board && src) return <video src={`${src}#t=1`} preload="metadata" muted playsInline aria-hidden className="absolute inset-0 h-full w-full object-cover" />
+  if (!thumb && !board && driveId) return <img src={poster} alt="" referrerPolicy="no-referrer" className="absolute inset-0 h-full w-full object-cover" />
   if (!thumb && !board) return <span className="flex h-full items-center justify-center"><Film className="h-5 w-5 text-muted-foreground" aria-hidden /></span>
   const fallback = at !== null && frames.length ? frames[Math.min(frames.length - 1, Math.floor(at * frames.length))].url : thumb
   return (
