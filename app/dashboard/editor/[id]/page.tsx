@@ -536,11 +536,49 @@ function ElsewhereCard({ id, title, files, cut }: { id: string; title: string; f
 }
 
 /** one frame of a storyboard, by its place in the tiled picture */
+/** each storyboard's own size, once per page — so its frames are cropped to fill a tile, never stretched */
+const boardSizes = new Map<string, { w: number; h: number }>()
+function useBoardSize(url: string): { w: number; h: number } | null {
+  const [size, setSize] = useState(() => boardSizes.get(url) ?? null)
+  useEffect(() => {
+    if (boardSizes.has(url)) { setSize(boardSizes.get(url)!); return }
+    const img = new Image()
+    img.onload = () => { const s = { w: img.naturalWidth, h: img.naturalHeight }; boardSizes.set(url, s); setSize(s) }
+    img.src = url
+  }, [url])
+  return size
+}
+
+/**
+ * ONE FRAME OF THE STORYBOARD, COVERING THE TILE (the owner, 25 Oct 2026: "why does it seem cramped when hovered"): the
+ * frame keeps its own shape and is cropped to the tile, as the still picture is — it was stretched to the tile's shape.
+ */
 function BoardFrame({ board, index, className = '' }: { board: Board; index: number; className?: string }) {
   const i = Math.max(0, Math.min(board.count - 1, index))
-  const x = board.cols > 1 ? ((i % board.cols) / (board.cols - 1)) * 100 : 0
-  const y = board.rows > 1 ? (Math.floor(i / board.cols) / (board.rows - 1)) * 100 : 0
-  return <span className={`block bg-black bg-no-repeat ${className}`} style={{ backgroundImage: `url(${board.url})`, backgroundSize: `${board.cols * 100}% ${board.rows * 100}%`, backgroundPosition: `${x}% ${y}%` }} />
+  const col = i % board.cols, row = Math.floor(i / board.cols)
+  const size = useBoardSize(board.url)
+  const box = useRef<HTMLSpanElement | null>(null)
+  const [dims, setDims] = useState<{ w: number; h: number } | null>(null)
+  useEffect(() => {
+    const el = box.current
+    if (!el) return
+    const read = () => setDims({ w: el.clientWidth, h: el.clientHeight })
+    read()
+    const ro = new ResizeObserver(read)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+  let style: React.CSSProperties = { backgroundImage: `url(${board.url})`, backgroundSize: `${board.cols * 100}% ${board.rows * 100}%`, backgroundPosition: `${board.cols > 1 ? (col / (board.cols - 1)) * 100 : 0}% ${board.rows > 1 ? (row / (board.rows - 1)) * 100 : 0}%` }
+  if (size && dims && dims.w && dims.h) {
+    const cw = size.w / board.cols, ch = size.h / board.rows
+    const k = Math.max(dims.w / cw, dims.h / ch)
+    style = {
+      backgroundImage: `url(${board.url})`,
+      backgroundSize: `${size.w * k}px ${size.h * k}px`,
+      backgroundPosition: `${-col * cw * k + (dims.w - cw * k) / 2}px ${-row * ch * k + (dims.h - ch * k) / 2}px`,
+    }
+  }
+  return <span ref={box} className={`block overflow-hidden bg-black bg-no-repeat ${className}`} style={style} />
 }
 
 /**
