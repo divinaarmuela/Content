@@ -377,8 +377,10 @@ export function MonthGrid({
                   </span>
                 )}
               </span>
-              <div className="flex flex-wrap gap-1">
-                {list.slice(0, 4).map(p => {
+              {/* EVERY POST OF THE DAY, as a line with its time and name (Karly, 26 Oct 2026: "it's cutting off … is there
+                  a way we can have it show like the weekly display to see the whole month at a time?") — no "+N more" */}
+              <div className="flex flex-col gap-1">
+                {[...list].sort((a, b) => String(a.scheduled_for ?? '').localeCompare(String(b.scheduled_for ?? ''))).map(p => {
                   const warn = p.facts.alert ?? (p.facts.missed ? p.facts.label : null)
                   // the same sentence to the eye and to a screen reader: the
                   // thumbnail's alt names the post but not where it stands
@@ -406,26 +408,27 @@ export function MonthGrid({
                       aria-label={said}
                       title={said}
                       className={cn(
-                        'relative h-11 w-11 overflow-hidden rounded-tile border border-border focus-visible:z-10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent-blue',
+                        'relative flex min-h-9 w-full items-center gap-1.5 overflow-hidden rounded-tile border border-border bg-surface p-1 text-left focus-visible:z-10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent-blue',
                         STAGE_DIM[p.facts.tone],
                         STAGE_RING[p.facts.tone],
-                        drag.moving?.postId === p.id && 'rotate-2 ring-2 ring-accent-blue',
+                        drag.moving?.postId === p.id && 'rotate-1 ring-2 ring-accent-blue',
                         drag.saving.has(p.id) && 'animate-pulse opacity-60',
                       )}
                     >
-                      <Thumb slide={p.slides[0] ?? null} label={p.item_title ?? 'Post'} className="h-full w-full" />
-                      <StageDot tone={p.facts.tone} className="absolute left-0.5 top-0.5 h-2 w-2 border" />
-                      {warn && <AlertMark label={warn} className="absolute right-0.5 top-0.5 h-3 w-3 text-[9px]" />}
+                      <span className="relative h-7 w-7 shrink-0 overflow-hidden rounded-[4px]">
+                        <Thumb slide={p.slides[0] ?? null} label={p.item_title ?? 'Post'} className="h-full w-full" />
+                        <StageDot tone={p.facts.tone} className="absolute left-0.5 top-0.5 h-2 w-2 border" />
+                      </span>
+                      <span className="min-w-0 flex-1 leading-tight">
+                        <span className="block text-[10px] font-semibold tabular-nums text-muted-foreground">{clockLabel(p.scheduled_for ?? null, tz)}</span>
+                        <span className="block truncate text-[11px] font-semibold">{p.item_title ?? 'Post'}</span>
+                      </span>
+                      {warn && <AlertMark label={warn} className="h-3 w-3 shrink-0 text-[9px]" />}
                       {/* every network, small — a post for two is not a post for one (audit S14) */}
-                      <NetworkLogos platforms={p.platforms} size={8} max={2} className="absolute bottom-0.5 right-0.5" />
+                      <NetworkLogos platforms={p.platforms} size={9} max={3} className="shrink-0" />
                     </button>
                   )
                 })}
-                {list.length > 4 && (
-                  <span className="self-center text-[11px] font-semibold text-muted-foreground">
-                    +{list.length - 4} more
-                  </span>
-                )}
               </div>
             </div>
           )
