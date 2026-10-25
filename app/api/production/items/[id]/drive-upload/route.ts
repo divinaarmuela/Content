@@ -2,7 +2,9 @@ import { NextResponse } from 'next/server'
 import { withRequestCache } from '@/lib/db'
 import { authzErrorResponse, requireRole } from '@/app/lib/authz'
 import { loadItemForUser } from '@/app/lib/production-access'
-import { cardUploadState, finishCardUploads, makeCardFolder, renameCardFolder, startCardUpload } from '@/app/lib/card-upload'
+import { logActivity } from '@/app/lib/workflow'
+import { announceItemChange } from '@/app/lib/production-live'
+import { cardUploadState, deleteCardFile, finishCardUploads, makeCardFolder, renameCardFolder, startCardUpload } from '@/app/lib/card-upload'
 
 /**
  * THE CARD'S DRIVE UPLOAD (card-upload-core.ts has the why; card-upload.ts the Drive writes).
@@ -48,8 +50,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
             ? await makeCardFolder(item as never, body.parent, body.name)
             : body.action === 'rename'
               ? await renameCardFolder(item as never, body.id, body.name)
-              : { ok: false as const, status: 400, error: 'Unknown action' }
+              : body.action === 'delete'
+                ? await deleteCardFile(user, item as never, body.file_id)
+                : { ok: false as const, status: 400, error: 'Unknown action' }
       if (!answer.ok) return NextResponse.json({ error: answer.error }, { status: answer.status })
+      if (body.action === 'delete' && 'drive' in answer) {
+        await logActivity({ actor: user, clientId: item.client_id, entityType: 'content_item', entityId: item.id, action: 'file_deleted', oldValue: String((answer as { name?: string }).name ?? ''), detail: `Drive: ${String(answer.drive)}` })
+        announceItemChange({ item_id: item.id, client_id: item.client_id, status: item.status, kind: 'updated' })
+      }
       return NextResponse.json(answer)
     } catch (e) {
       const { error, status } = authzErrorResponse(e)

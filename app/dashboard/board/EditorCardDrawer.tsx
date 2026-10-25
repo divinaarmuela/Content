@@ -3,6 +3,7 @@
 import { driveHandInsOf, submitWaitsWords, lastCutPerVersion, pendingHandIn } from '../../lib/drive-handin-core'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import CardDriveUpload, { type CardUploadHandle } from '../editor/[id]/CardDriveUpload'
+import { deleteRefusal } from '../../lib/card-upload-core'
 import { toast } from 'sonner'
 import { AlertTriangle, Check, ExternalLink, FolderDown, Pencil, Upload, X } from 'lucide-react'
 import { DriveHandInDialog, DriveHandInStatus } from './DriveHandIn'
@@ -267,6 +268,30 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
     window.addEventListener('card-replace', on)
     return () => window.removeEventListener('card-replace', on)
   })
+  // DELETE A FILE (the owner, 25 Oct 2026: "we can delete the files there and reflect in drive too") — asked once, here
+  // in the list; Delete on a video's picture on the card page opens the same question
+  const [deleting, setDeleting] = useState<string | null>(null)
+  useEffect(() => {
+    const on = (e: Event) => {
+      const d = (e as CustomEvent<{ fileId: string }>).detail
+      if (!d?.fileId) return
+      setTab('work'); setDeleting(d.fileId)
+      setTimeout(() => document.querySelector(`[data-file="${d.fileId}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50)
+    }
+    window.addEventListener('card-delete', on)
+    return () => window.removeEventListener('card-delete', on)
+  })
+  const deleteFile = async (fid: string) => {
+    if (!item) return
+    setWorking('Deleting the file')
+    try {
+      const res = await fetch(`/api/production/items/${item.id}/drive-upload`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'delete', file_id: fid }) })
+      const j = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(j.error ?? 'Could not delete it')
+      toast.success(j.drive === 'binned' ? `${j.name} deleted — and moved to Drive’s bin` : j.drive === 'failed' ? `${j.name} is off the card — Drive would not bin its copy` : `${j.name} deleted`)
+      setDeleting(null)
+    } catch (e) { toast.error(e instanceof Error ? e.message : 'Could not delete it') } finally { setWorking(null) }
+  }
   const addFinalFiles = async (picked: File[]) => {
     if (!item || picked.length === 0) return
     setUploading(`Uploading ${picked.length} ${picked.length === 1 ? 'file' : 'files'}`)
@@ -725,7 +750,7 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
                     const dropped = typeof f.retired_round === 'number'
                     const earlier = lastCutPerVersion(assetHistory(item as never, a).filter(x => x.id !== f.id && x.version < f.version))
                     return (
-                      <li key={a} className="flex flex-col gap-1 py-2 text-[13px]" data-asset={a}>
+                      <li key={a} className="flex flex-col gap-1 py-2 text-[13px]" data-asset={a} data-file={f.id}>
                         <div className="flex min-h-11 flex-wrap items-center gap-2">
                           <span className="inline-flex h-6 items-center rounded-full bg-foreground/[0.06] px-2 text-[11px] font-semibold uppercase">{kindOf(f.mime, f.name)}</span>
                           <a href={f.url} target="_blank" rel="noreferrer noopener" className="min-w-0 flex-1 truncate underline-offset-4 hover:underline" title={f.name}>{f.name}</a>
@@ -744,6 +769,10 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
                           {driveFiling && !dropped && (
                             <button type="button" onClick={() => { setReplacing(a); replaceInput.current?.click() }}
                               className="inline-flex min-h-11 items-center px-1 text-[12px] font-semibold underline underline-offset-4">+ New version</button>
+                          )}
+                          {driveFiling && me && deleteRefusal(item as never, f.id, { id: me.id, role: me.role }) === null && deleting !== f.id && (
+                            <button type="button" disabled={busy} onClick={() => setDeleting(f.id)}
+                              className="inline-flex min-h-11 items-center px-1 text-[12px] text-muted-foreground underline underline-offset-4 disabled:opacity-50">Delete</button>
                           )}
                           {!driveFiling && designCard && (holder || isManager) && !frozen && (
                             dropped ? (
@@ -768,6 +797,13 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
                             )
                           )}
                         </div>
+                        {deleting === f.id && driveFiling && (
+                          <div role="alert" className="flex flex-wrap items-center gap-2 rounded-inner bg-tint-red/60 px-3 py-2 text-[13px]">
+                            <span className="mr-auto">{earlier.length > 0 || assetHistory(item as never, a).length > 1 ? `Delete this cut of ${f.name}? The cut before it is back on the card.` : `Delete ${f.name}? It comes off the card and its copy goes to Drive’s bin (kept there 30 days).`}</span>
+                            <Button size="sm" variant="destructive" disabled={busy} onClick={() => void deleteFile(f.id)} className="h-9 rounded-full px-4">Delete</Button>
+                            <Button size="sm" variant="outline" disabled={busy} onClick={() => setDeleting(null)} className="h-9 rounded-full px-4">Keep it</Button>
+                          </div>
+                        )}
                         {/* THE FILE'S TIMELINE (the owner, 22 Oct 2026: "make sure we have timeline of when the files added"):
                             every cut of this piece, oldest first — when it went on, who put it on, and the cut itself */}
                         {driveFiling ? (

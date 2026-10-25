@@ -21,6 +21,9 @@
  * Pure: names, links, the switch, the resume rule. No I/O.
  */
 import { isTestClient } from './test-clients-core'
+import { finalFilesOf } from './final-files-core'
+import { handInRound } from './edit-round-core'
+import { clipApprovalsOf } from './clip-approvals-core'
 
 /** on for every client; `test` keeps it on the test clients only (gdrive-policy.ts, trap 13) */
 export const DRIVE_CARD_FILING = 'DRIVE_CARD_FILING'
@@ -91,5 +94,43 @@ export function resumableMatch(
   if ((row.replaces ?? null) !== (want.replaces ?? null)) return false
   const at = Date.parse(String(row.created_at ?? ''))
   return Number.isFinite(at) && nowMs - at < RESUME_FOR_MS
+}
+
+/**
+ * FINISHED WORK ONLY: videos, pictures and PDFs. A zip plays nowhere and shows no picture (live, 25 Oct 2026: a
+ * 682 MB "drive-download-….zip" — a whole Drive folder downloaded — went into V1 and onto no card).
+ */
+export function uploadKindRefusal(name: string, mime: string | null | undefined): string | null {
+  const m = String(mime ?? '').toLowerCase()
+  if (m.startsWith('video/') || m.startsWith('image/') || m === 'application/pdf') return null
+  if (/\.(mp4|mov|m4v|mxf|avi|mkv|webm|jpe?g|png|gif|webp|heic|heif|tiff?|psd|pdf)$/i.test(name)) return null
+  if (/\.(zip|rar|7z|tar|gz)$/i.test(name) || /zip|compressed|x-tar|x-7z/.test(m)) return `${name} is a zip — unzip it and upload the videos inside`
+  return `${name} is not a video, picture or PDF`
+}
+
+/**
+ * MAY THIS FILE BE DELETED FROM THE CARD (the owner, 25 Oct 2026: "once a card is present we can delete the files there
+ * and reflect in drive too")? Deleting takes it off the card and puts the card's Drive copy in Drive's bin.
+ *   - anyone on the team (the owner, 25 Oct 2026: "anyone can delete");
+ *   - never once the card is booked in or posted — the channel has the files;
+ *   - only the newest cut of a video — an older cut is what the newer one replaced;
+ *   - only in the version being worked on — an earlier version went to the client and stays as they saw it;
+ *   - never a file the client approved.
+ */
+export function deleteRefusal(
+  item: { status?: unknown; owner_id?: unknown; final_files?: unknown; clip_approvals?: unknown; edit_round?: unknown; client_round?: unknown; client_rounds?: unknown },
+  fileId: string,
+  viewer: { id: string; role: string },
+): string | null {
+  const files = finalFilesOf(item)
+  const f = files.find(x => x.id === fileId)
+  if (!f) return 'That file is not on the card any more'
+  if (viewer.role === 'client') return 'Only the team can delete a file'
+  const status = String(item.status ?? '')
+  if (status === 'scheduled' || status === 'published') return 'This card is booked in or posted — its files stay'
+  if (files.some(x => x.replaces === f.id)) return `A newer cut of ${f.name} is on the card — delete that one first`
+  if (f.version < handInRound(item as never)) return `${f.name} is part of an earlier version the client has seen — it stays`
+  if (clipApprovalsOf(item).some(a => a.file_id === f.id)) return `The client approved ${f.name} — it stays`
+  return null
 }
 

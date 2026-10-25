@@ -1,7 +1,7 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
-  DIRECT_CHUNK, PROXY_CHUNK, RESUME_FOR_MS, cardFilingAllowed, folderNameOf, isVersionFolderName, resumableMatch, sharingUrl, uniqueName, versionFolderName,
+  DIRECT_CHUNK, PROXY_CHUNK, RESUME_FOR_MS, cardFilingAllowed, deleteRefusal, folderNameOf, uploadKindRefusal, isVersionFolderName, resumableMatch, sharingUrl, uniqueName, versionFolderName,
 } from '@/app/lib/card-upload-core'
 import { TEST_CLIENT_IDS } from '@/app/lib/test-clients-core'
 
@@ -63,7 +63,7 @@ describe('carrying on tomorrow', () => {
 
 // every exported function in card-upload.ts that can write to Drive checks the switch first (trap 13)
 describe('the guard is in the source', () => {
-  const WRITERS = ['ensureCardFolders', 'startCardUpload', 'finishCardUploads', 'makeCardFolder', 'renameCardFolder']
+  const WRITERS = ['ensureCardFolders', 'startCardUpload', 'finishCardUploads', 'makeCardFolder', 'renameCardFolder', 'deleteCardFile']
   const READS = ['cardFolderTree', 'cardUploadState', 'cardUploadRow', 'backfillFilesOf', 'linkVideosOf']
   // THE ONE-OFF FILING OF EVERY CARD'S EARLIER FILES (the owner, 22 Oct 2026: "merge all existing ones to the folders
   // correctly"): every client by the owner's order, so no switch — but reached only from its job, which only a super
@@ -178,5 +178,52 @@ describe('who is told', () => {
   it('a client comment also tells the editor holding the card', () => {
     const src = readFileSync('app/api/production/items/[id]/comments/route.ts', 'utf8')
     expect(src).toContain("holder.role === 'editor'")
+  })
+})
+
+// the owner, 25 Oct 2026: "once a card is present we can delete the files there and reflect in drive too"
+describe('delete a file', () => {
+  const file = (id: string, extra: Record<string, unknown> = {}) =>
+    ({ id, name: `${id}.mp4`, url: `https://r2/${id}`, mime: 'video/mp4', size: 10, version: 1, uploaded_at: '2026-10-25T00:00:00.000Z', by: 'ed', ...extra })
+  const card = (extra: Record<string, unknown> = {}) => ({ status: 'in_progress', owner_id: 'ed', edit_round: 1, final_files: [file('a'), file('b')], ...extra })
+  const am = { id: 'am', role: 'account_manager' }, ed = { id: 'ed', role: 'editor' }, other = { id: 'x', role: 'editor' }
+  it('anyone on the team (the owner: "anyone can delete"), at any stage before it is booked', () => {
+    expect(deleteRefusal(card(), 'a', am)).toBeNull()
+    expect(deleteRefusal(card(), 'a', ed)).toBeNull()
+    expect(deleteRefusal(card(), 'a', other)).toBeNull()
+    expect(deleteRefusal(card({ status: 'client_review' }), 'a', other)).toBeNull()
+    expect(deleteRefusal(card(), 'a', { id: 'c', role: 'client' })).toMatch(/Only the team/)
+  })
+  it('never once booked in or posted, never a client-approved file', () => {
+    expect(deleteRefusal(card({ status: 'scheduled' }), 'a', am)).toMatch(/booked in or posted/)
+    expect(deleteRefusal(card({ status: 'published' }), 'a', am)).toMatch(/booked in or posted/)
+    expect(deleteRefusal(card({ clip_approvals: [{ file_id: 'a', name: 'a', at: 'x', by: 'c' }] }), 'a', am)).toMatch(/approved/)
+  })
+  it('only the newest cut, only in the version being worked on', () => {
+    const cuts = card({ final_files: [file('a'), file('a2', { asset_id: 'a', replaces: 'a' })] })
+    expect(deleteRefusal(cuts, 'a', am)).toMatch(/newer cut/)
+    expect(deleteRefusal(cuts, 'a2', am)).toBeNull()
+    expect(deleteRefusal(card({ edit_round: 2 }), 'a', am)).toMatch(/earlier version/)
+  })
+  it('the Drive copy goes to the bin, never deleted for good, and only inside the card folder', () => {
+    const src = readFileSync('app/lib/card-upload.ts', 'utf8')
+    const body = src.slice(src.indexOf('export async function deleteCardFile'), src.indexOf('/** NEW FOLDER'))
+    expect(body).toContain('binFile(')
+    expect(body).toContain("(await isInside(d, folderId)) !== 'inside'")
+    const files = readFileSync('app/lib/gdrive-files.ts', 'utf8')
+    const bin = files.slice(files.indexOf('export async function binFile'), files.indexOf('export async function binFile') + 900)
+    expect(bin).toContain("JSON.stringify({ trashed: true })")
+    expect(bin).not.toContain("method: 'DELETE'")
+  })
+})
+
+describe('finished work only', () => {
+  it('videos, pictures and PDFs go in; a zip is refused with what to do', () => {
+    expect(uploadKindRefusal('a.mp4', 'video/mp4')).toBeNull()
+    expect(uploadKindRefusal('a.MOV', '')).toBeNull()
+    expect(uploadKindRefusal('a.png', 'image/png')).toBeNull()
+    expect(uploadKindRefusal('brief.pdf', 'application/pdf')).toBeNull()
+    expect(uploadKindRefusal('drive-download-1.zip', 'application/zip')).toMatch(/unzip it/)
+    expect(uploadKindRefusal('notes.docx', '')).toMatch(/not a video/)
   })
 })

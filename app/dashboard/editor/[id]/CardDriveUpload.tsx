@@ -6,7 +6,7 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { formatBytes } from '../../../lib/drive-pull-core'
-import { PARALLEL_FILES, PROXY_CHUNK, versionFolderName } from '../../../lib/card-upload-core'
+import { PARALLEL_FILES, PROXY_CHUNK, uploadKindRefusal, versionFolderName } from '../../../lib/card-upload-core'
 
 /**
  * THE CARD'S DRIVE FOLDER AND ITS UPLOADER (card-upload-core.ts has the why). Files go from this computer straight
@@ -156,8 +156,10 @@ export default function CardDriveUpload({ itemId, onAllowed, ref }: {
     }
   }
 
-  const start = async (files: File[], replaces?: { id: string; name: string }) => {
-    if (files.length === 0) return
+  const start = async (picked: File[], replaces?: { id: string; name: string }) => {
+    // finished work only — a zip of a Drive folder plays nowhere (25 Oct 2026)
+    const files = picked.filter(f => { const no = uploadKindRefusal(f.name, f.type); if (no) toast.error(no); return !no })
+    if (files.length === 0) { if (input.current) input.current.value = ''; return }
     const parent = target
     const added: Job[] = files.map(f => ({ key: `${f.name}:${f.size}:${f.lastModified}:${Math.random()}`, file: f, sent: 0, status: 'waiting', ...(replaces ? { replaces } : {}) }))
     setJobs(js => [...js.filter(j => j.status !== 'done'), ...added])
@@ -233,7 +235,7 @@ export default function CardDriveUpload({ itemId, onAllowed, ref }: {
             <Upload className="h-5 w-5 text-muted-foreground" aria-hidden />
             <p className="text-[13px]">Drop videos here, or</p>
             <Button size="sm" onClick={() => input.current?.click()} className="h-9 rounded-full px-4 text-[13px] font-semibold">Choose files</Button>
-            <input ref={input} type="file" multiple className="hidden" onChange={e => void start([...(e.target.files ?? [])])} />
+            <input ref={input} type="file" multiple accept="video/*,image/*,application/pdf" className="hidden" onChange={e => void start([...(e.target.files ?? [])])} />
             <p className="text-[12px] text-muted-foreground">New files go into {vName} in Drive and onto the card. To add a new version of a video, press “+ New version” on it. Keep this page open until it says done.</p>
           </div>
       </>

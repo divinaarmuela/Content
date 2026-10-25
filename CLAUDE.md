@@ -139,7 +139,7 @@ and `npm run build` must pass. Do not report completion on tests alone.
     ONE EXCEPTION, by the owner's word (22 Oct 2026): a card's upload goes
     straight into `Clients/{Client}/{Card}/V{n}` in Drive (`app/lib/card-upload.ts`),
     behind its own switch `DRIVE_CARD_FILING` — every client since 22 Oct 2026
-    (`DRIVE_CARD_FILING=test` = test clients only). It writes only inside a card's own folder, never moves or deletes,
+    (`DRIVE_CARD_FILING=test` = test clients only). It writes only inside a card's own folder, never moves; the one removal is a person's Delete on a card file (the owner, 25 Oct 2026), which puts that card's own copy in Drive's bin (`binFile`) — never a permanent delete, never outside the card's folder,
     and V1/V2 keep their names; `tests/card-upload.test.ts` pins the guard.
     Its one-off back-fill (`backfillPlan` / `backfillFile`, job `drive-card-backfill`, started only by a super
     admin's `POST /api/production/drive-backfill`) files every client's earlier card files into those folders —

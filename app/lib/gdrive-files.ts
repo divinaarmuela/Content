@@ -765,6 +765,25 @@ export async function shareableLink(id: string): Promise<DriveResult<{ url: stri
 }
 
 /**
+ * INTO DRIVE'S BIN — never a permanent delete. Only the card's own Delete calls this (card-upload.deleteCardFile),
+ * after checking the file sits inside that card's folder; the bin keeps it for 30 days, so a wrong press is undone
+ * from Drive. Already in the bin, or already gone, is the same outcome.
+ */
+export async function binFile(id: string): Promise<DriveResult<{ binned: true }>> {
+  if (!isDriveId(id)) return asError('That file could not be found')
+  const auth = await accessToken()
+  if (!auth.ok) return auth
+  const url = `${FILES}/${encodeURIComponent(id)}?` + new URLSearchParams({ fields: 'id,trashed', ...ALL_DRIVES })
+  const res = await fetch(url, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${auth.token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ trashed: true }),
+  })
+  if (!res.ok && res.status !== 404) return asError(`Google Drive ${res.status} moving the file to the bin`, await res.text())
+  return { ok: true, binned: true }
+}
+
+/**
  * The bytes of a file, or of its Drive-made thumbnail, as a live stream.
  *
  * Both go through the server for one reason: the access token. A

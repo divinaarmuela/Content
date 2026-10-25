@@ -3,13 +3,13 @@ import { table } from '@/lib/db'
 import type { Client, ContentItem, DriveUpload } from '@/lib/db-types'
 import type { TeamUser } from './authz'
 import { createSubfolder, ensureChain, ensureFolder, findSubfolder, listFolderNames, listSubfolders, renameFolder, rootFolderId } from './gdrive'
-import { entryDetail, isInside, listPermissions, openUploadSession, pushUploadChunk, revokePermission, shareableLink, uploadStreamToFolder } from './gdrive-files'
+import { binFile, entryDetail, isInside, listPermissions, openUploadSession, pushUploadChunk, revokePermission, shareableLink, uploadStreamToFolder } from './gdrive-files'
 import { isDriveId } from './files-core'
 import { handInRound } from './edit-round-core'
 import { startDriveHandIn } from './drive-handin'
 import { assetHistory, assetIdOf, currentFiles, finalFilesOf, type FinalFile } from './final-files-core'
 import {
-  DIRECT_CHUNK, cardFilingAllowed, folderNameOf, isVersionFolderName, resumableMatch, sharingUrl, uniqueName, versionFolderName,
+  DIRECT_CHUNK, cardFilingAllowed, deleteRefusal, folderNameOf, uploadKindRefusal, isVersionFolderName, resumableMatch, sharingUrl, uniqueName, versionFolderName,
 } from './card-upload-core'
 
 /**
@@ -19,7 +19,8 @@ import {
  * client's folder and the card's folder inside the app's own "Clients" folder, shares the card's folder view-only
  * with anyone who has the link (no person may edit it — viewOnlyFolder), opens upload sessions into it, and makes or
  * renames folders a person asks for inside it. Nothing else: nothing outside a card's folder is written, nothing is
- * ever moved or deleted, and V1 / V2 keep their names. Every entry point checks `cardFilingAllowed` first.
+ * ever moved, and V1 / V2 keep their names. The one removal is a person's Delete on a card file (deleteCardFile): its
+ * copy in this card's folder goes to Drive's bin (the owner, 25 Oct 2026) — never a permanent delete. Every entry point checks `cardFilingAllowed` first.
  */
 
 export type CardFolders = { folderId: string; url: string; versionId: string; version: number }
@@ -178,6 +179,8 @@ export async function startCardUpload(user: TeamUser, item: ContentItem, body: {
   const size = Number(body.size)
   if (!name) return { ok: false, status: 400, error: 'That file has no name' }
   if (!Number.isFinite(size) || size <= 0) return { ok: false, status: 400, error: 'That file is empty' }
+  const wrongKind = uploadKindRefusal(name, String(body.mime ?? ''))
+  if (wrongKind) return { ok: false, status: 400, error: wrongKind }
   const folders = await ensureCardFolders(item)
   if (!folders.ok) return folders
   // A NEW CUT OF A VIDEO (the owner, 23 Oct 2026): it goes in the same folders the video sits in (V2/SCHEDULED/1.mov,
@@ -293,6 +296,46 @@ export async function finishCardUploads(user: TeamUser, item: ContentItem, ids: 
     handedIn += ok.length
   }
   return { ok: true, handedIn, waiting: false }
+}
+
+/**
+ * DELETE A FILE FROM THE CARD, AND FROM DRIVE (the owner, 25 Oct 2026: "once a card is present we can delete the files
+ * there and reflect in drive too"). The rules are card-upload-core.deleteRefusal. The file comes off the card (one
+ * winner — the card is claimed, trap 11), then its copy in the card's folder goes to Drive's bin — never a permanent
+ * delete, and never a file outside this card's folder. Which Drive file is the card's copy: the file itself when it
+ * was uploaded through the card, else the copy the back-fill made of it (claim_locks).
+ */
+export async function deleteCardFile(user: TeamUser, item: ContentItem, fileId: unknown): Promise<
+  { ok: true; name: string; drive: 'binned' | 'not in drive' | 'failed' } | Fail
+> {
+  if (!cardFilingAllowed(item.client_id)) return OFF
+  const id = String(fileId ?? '')
+  let gone: FinalFile | null = null
+  let refusal: string | null = null
+  const took = await items().claim(item.id, cur => {
+    if (!cur) return null
+    refusal = deleteRefusal(cur as never, id, { id: user.id, role: user.role })
+    if (refusal) return null
+    gone = finalFilesOf(cur).find(f => f.id === id) ?? null
+    return { ...cur, final_files: finalFilesOf(cur).filter(f => f.id !== id) as never, updated_at: new Date().toISOString() }
+  })
+  if (refusal) return { ok: false, status: 409, error: refusal }
+  const f = gone as FinalFile | null
+  if (!took.claimed || !f) return { ok: false, status: 409, error: 'The card changed — refresh and try again' }
+  const folderId = String(item.upload_folder_id ?? '').trim()
+  const locks = await table<BackfillLock>('claim_locks').list({
+    where: r => r.item_id === item.id && r.status === 'done' && !!r.drive_id
+      && (r.file_id === f.id || (!!f.drive_file_id && r.file_id === `${f.drive_file_id}@${f.version}`)),
+  })
+  const candidates = [...new Set([f.drive_file_id, ...locks.map(l => l.drive_id)].filter((x): x is string => isDriveId(x)))]
+  let drive: 'binned' | 'not in drive' | 'failed' = 'not in drive'
+  for (const d of folderId ? candidates : []) {
+    if ((await isInside(d, folderId)) !== 'inside') continue
+    const binned = await binFile(d)
+    drive = binned.ok ? 'binned' : 'failed'
+    if (!binned.ok) console.error('[card-upload] binning the deleted file failed:', binned.message)
+  }
+  return { ok: true, name: f.name, drive }
 }
 
 /** NEW FOLDER inside the card's folder (the owner: "or add folders?") */

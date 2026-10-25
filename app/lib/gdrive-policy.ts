@@ -149,8 +149,8 @@ export const AUTO_FILING_NOTE =
  * via drive"; "what i thought uploading here uploaded straight to drive"). An editor's upload on a card goes straight
  * into `Clients / {Client} / {Card} / V{n}` in Drive — folders the app makes inside its own Clients folder, the
  * card's shared view-only by link, no person given edit access (files go in through the card). A person may also add folders inside a card's
- * folder and rename the ones that are not V1 / V2. Nothing outside a card's folder is written; nothing is moved or
- * deleted.
+ * folder and rename the ones that are not V1 / V2. Nothing outside a card's folder is written; nothing is moved. The one removal: a person's
+ * Delete on a card file puts that card's own copy in Drive's bin (the owner, 25 Oct 2026) — never a permanent delete.
  *
  * It is its own switch, `DRIVE_CARD_FILING` (card-upload-core.ts `cardFilingAllowed`), and neither of the two above
  * turns it on or off: it runs on every client since 22 Oct 2026; `DRIVE_CARD_FILING=test` keeps it to the test clients.

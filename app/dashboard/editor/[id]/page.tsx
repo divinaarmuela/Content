@@ -28,6 +28,8 @@ import { usesMakerDrawer } from '../../../lib/card-sheet-core'
 import { shootCardId } from '../../../lib/deliverable-group-core'
 import { cardUsesPlan, workFrom } from '../../../lib/editor-sop-core'
 import { reviewPath } from '../../../lib/video-review-core'
+import { deleteRefusal } from '../../../lib/card-upload-core'
+import { useRole } from '../../useRole'
 import EditorCardClassicPage from './classic/page'
 import EditorCardDrawer from '../../board/EditorCardDrawer'
 import PreviewFrame, { AiScanning, ScanSteps, usePreviewAccess } from '../preview/PreviewFrame'
@@ -260,6 +262,20 @@ const TONES: Record<NextTone, string> = {
 function Workspace({ item, rows, needsGrade, gradeSince, sourceCreated, framesOf, holder = null }: { item: ContentItem; rows: DriveSeen[]; needsGrade: boolean; gradeSince: string | null; sourceCreated: Map<string, string>; framesOf: FramesMap; holder?: string | null }) {
   const all = useMemo(() => stackVersions(stackFilesOf(item, rows, framesOf)), [item, rows, framesOf])
   const rowById = useMemo(() => new Map(rows.map(r => [r.id, r])), [rows])
+  const { me } = useRole()
+  // DELETE ON THE VIDEO ITSELF (the owner, 25 Oct 2026: "make sure its easy to delete on the card … like the video card")
+  const [delAsk, setDelAsk] = useState<string | null>(null)
+  const [delBusy, setDelBusy] = useState(false)
+  const deleteFile = async (fid: string) => {
+    setDelBusy(true)
+    try {
+      const res = await fetch(`/api/production/items/${item.id}/drive-upload`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'delete', file_id: fid }) })
+      const j = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(j.error ?? 'Could not delete it')
+      toast.success(j.drive === 'binned' ? `${j.name} deleted — and moved to Drive’s bin` : `${j.name} deleted`)
+      setDelAsk(null)
+    } catch (e) { toast.error(e instanceof Error ? e.message : 'Could not delete it') } finally { setDelBusy(false) }
+  }
   // a file that is only a copy of ANOTHER card's video is that card's, not a video here (the owner, 22 Oct 2026: "why
   // are videos getting checked with their own videos?" — the Flinders draft sat in the shoot's folder and on its card)
   // A VIDEO THAT IS ANOTHER CARD'S — a copy of it, or a new cut of it — is never added here: the card says where it is,
@@ -446,6 +462,23 @@ function Workspace({ item, rows, needsGrade, gradeSince, sourceCreated, framesOf
                           className="absolute right-1.5 top-1.5 rounded-full bg-foreground px-2.5 py-1 text-[11px] font-semibold text-background shadow opacity-90 hover:opacity-100">
                           + New version
                         </button>
+                      )}
+                      {!selecting && info(s).file && me && deleteRefusal(item as never, info(s).file!.id, { id: me.id, role: me.role }) === null && (
+                        delAsk === info(s).file!.id ? (
+                          <div role="alert" className="absolute inset-x-1.5 top-1.5 flex flex-col gap-1.5 rounded-inner bg-background/95 p-2 text-[12px] shadow">
+                            <span className="font-semibold">Delete {info(s).file!.name}?</span>
+                            <span className="text-muted-foreground">Off the card, and into Drive’s bin for 30 days.</span>
+                            <span className="flex gap-1.5">
+                              <Button size="sm" variant="destructive" disabled={delBusy} onClick={() => void deleteFile(info(s).file!.id)} className="h-8 rounded-full px-3 text-[12px]">{delBusy ? 'Deleting…' : 'Delete'}</Button>
+                              <Button size="sm" variant="outline" disabled={delBusy} onClick={() => setDelAsk(null)} className="h-8 rounded-full px-3 text-[12px]">Keep it</Button>
+                            </span>
+                          </div>
+                        ) : (
+                          <button type="button" onClick={() => setDelAsk(info(s).file!.id)}
+                            className="absolute right-1.5 top-8 rounded-full bg-background/90 px-2.5 py-1 text-[11px] font-semibold text-destructive shadow hover:bg-background">
+                            Delete
+                          </button>
+                        )
                       )}
                     </li>
                   )
