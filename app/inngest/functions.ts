@@ -1074,6 +1074,32 @@ export const videoStoryboard = inngest.createFunction(
 )
 
 /**
+ * EVERY CARD VIDEO'S PICTURES, MADE ONCE (card-frames.ts; the owner, 25 Oct 2026: "every hover is quick and instant once
+ * its uploaded"): its frames, then its storyboard — ffmpeg on our own stored copy, no AI. Sent when a file lands on a
+ * card; `video-frames-due` sends the ones missed. NEW functions — re-sync after deploying them (trap 5b).
+ */
+export const videoFrames = inngest.createFunction(
+  { id: 'video-frames', name: 'Editor: card video pictures', triggers: [{ event: 'video/frames' }], retries: 1, concurrency: { limit: 3 } },
+  async ({ event, step }) => {
+    const url = String((event.data as { url?: unknown })?.url ?? '')
+    if (!/^https:\/\//.test(url)) return { skipped: 'no video' }
+    const frames = await step.run('frames', async () => (await import('../lib/card-frames')).measureCardVideo(url))
+    if (!frames.ok) return { frames }
+    const board = await step.run('storyboard', async () => (await import('../lib/card-frames')).storyboardCardVideo(url))
+    return { frames, board }
+  },
+)
+
+export const videoFramesDue = inngest.createFunction(
+  { id: 'video-frames-due', name: 'Editor: card videos still without pictures', triggers: [{ cron: 'TZ=Australia/Melbourne */5 * * * *' }], retries: 0 },
+  async ({ step }) => {
+    const urls = await step.run('due', async () => withRequestCache(async () => (await import('../lib/card-frames')).framesDue(12)))
+    if (urls.length) await step.sendEvent('frames', urls.map(url => ({ name: 'video/frames', data: { url } })))
+    return { sent: urls.length }
+  },
+)
+
+/**
  * THE CARDS' FILES BEFORE THEIR FOLDERS, FILED (card-upload.ts backfillPlan / backfillFile; the owner, 22 Oct 2026:
  * "merge all existing ones to the folders correctly"). One card per run, the folders made first, then one file per
  * step — a step is one file streamed from our storage into V{n}, so a retry repeats one file, never the card. A NEW
@@ -1167,6 +1193,8 @@ export const functions = [
   driveScanFile,
   driveCardBackfill,
   videoStoryboard,
+  videoFrames,
+  videoFramesDue,
   metaIgTokenRefresh,
 ]
 

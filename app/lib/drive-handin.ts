@@ -16,6 +16,8 @@ import { kindOf, type FileKind } from './files-core'
 /** what a whole-link hand-in takes: what an upload takes (image/*, video/*, PDF) */
 const HANDIN_KINDS: FileKind[] = ['video', 'image', 'pdf']
 import { announceItemChange } from './production-live'
+import { inngest } from '../inngest/client'
+import { isVideo } from './drive-scan-core'
 
 /**
  * A VERSION HANDED IN FROM GOOGLE DRIVE — the server half (drive-handin-core.ts has the rules and the why).
@@ -208,6 +210,12 @@ export async function settleDriveHandIn(pullId: string): Promise<{ settled: bool
       : done.result.error,
   }).catch(() => undefined)
   announceItemChange({ item_id: item.id, client_id: item.client_id, status: String(fresh?.status ?? item.status), kind: 'updated' })
+  // ITS PICTURES, MADE NOW (card-frames.ts; the owner, 25 Oct 2026: "every hover is quick and instant once its uploaded")
+  if (done.result.ok && done.result.added.length > 0) {
+    const added = new Set(done.result.added)
+    const urls = done.result.files.filter(f => added.has(f.id) && isVideo({ mime: f.mime, name: f.name })).map(f => f.url)
+    if (urls.length) await inngest.send(urls.map(url => ({ name: 'video/frames', data: { url } }))).catch(e => console.error('[drive-handin] asking for the pictures failed:', e instanceof Error ? e.message : e))
+  }
   // UPLOADED ON THE CARD → THE CLIENT'S ACCOUNT MANAGERS ARE TOLD (the owner, 23 Oct 2026: "notify AM when its uploaded")
   if (done.result.ok && done.handIn.any_time === true && done.result.added.length > 0) {
     await tellManagersOfUpload((fresh ?? item) as ContentItem, (by as TeamUser | null) ?? null, done.result.added.length, done.round, done.handIn.id)

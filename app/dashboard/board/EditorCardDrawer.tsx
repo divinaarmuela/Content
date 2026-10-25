@@ -255,7 +255,10 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
   // THE CARD'S OWN DRIVE FOLDER (card-upload-core.ts): on a client whose cards upload into Drive, the uploader below
   // takes the place of the Drive-link hand-in and the plain upload, and every file can be replaced at any stage
   const cardUpload = useRef<CardUploadHandle | null>(null)
-  const [driveFiling, setDriveFiling] = useState(false)
+  // A VIDEO CARD UPLOADS INTO ITS DRIVE FOLDER FROM THE START — never the old upload while the uploader is still asking
+  // (live, 25 Oct 2026: Justin's October Video went on through "Upload instead", into our storage only, no Drive folder)
+  const [filingAnswer, setDriveFiling] = useState<boolean | null>(null)
+  const driveFiling = filingAnswer ?? !designCard
   // Replace pressed on a video's picture on the card page: the new cut comes here, to the uploader
   useEffect(() => {
     const on = (e: Event) => {
@@ -865,7 +868,7 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
         )}
         {/* UPLOAD INSTEAD OF A LINK (the owner, 24 Sep 2026): a card handed in by link offered nothing but the
             Drive box, so an editor asked to redo the cut had no way to put the new files anywhere. */}
-        {!filesCard && mayFile && !frozen && (
+        {!filesCard && !driveFiling && mayFile && !frozen && (
           <button type="button" onClick={() => { setFileMode(true); setUploadOpen(true) }} className="min-h-11 w-fit text-[12px] text-muted-foreground underline underline-offset-4">
             Upload the files here instead
           </button>
