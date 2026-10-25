@@ -50,7 +50,7 @@ export default function ContentPage() {
                 Book production
               </a>
               <a
-                href="https://calendly.com/mdmmarketing-info/10-minute-content-subscription-discovery-call-m-clone"
+                href="https://calendly.com/mdmmarketing-info/10-minute-content-subscription-discovery-call-m-clone?utm_source=website&utm_medium=book-a-call&utm_campaign=content"
                 target="_blank"
                 rel="noreferrer noopener"
                 className="hero-glow-btn hero-glow-btn-sharp hero-glow-btn-pulse"

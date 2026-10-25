@@ -111,7 +111,7 @@ const services = [
     text: "I'm not sure yet",
     desc: "That's fine. Book a free call and we'll figure out what makes sense for your business. No pressure, no pitch. Just a conversation.",
     cta: 'Book a Free Call',
-    href: 'https://calendly.com/mdmmarketing-info/10-minute-content-subscription-discovery-call-m-clone',
+    href: 'https://calendly.com/mdmmarketing-info/10-minute-content-subscription-discovery-call-m-clone?utm_source=website&utm_medium=book-a-call&utm_campaign=servicesnav',
     icon: (
       <svg width="36" height="36" viewBox="0 0 28 28" fill="none" aria-hidden="true">
         <rect x="4" y="5" width="20" height="18" rx="2" stroke="white" strokeWidth="1.8" />

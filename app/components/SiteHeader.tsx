@@ -30,7 +30,7 @@ export default function SiteHeader() {
             <a href="/work">Work</a>
           </div>
           <a
-            href="https://calendly.com/mdmmarketing-info/10-minute-content-subscription-discovery-call-m-clone"
+            href="https://calendly.com/mdmmarketing-info/10-minute-content-subscription-discovery-call-m-clone?utm_source=website&utm_medium=book-a-call&utm_campaign=siteheader"
             className="nav-cta"
             target="_blank"
             rel="noreferrer noopener"

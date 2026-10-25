@@ -69,7 +69,7 @@ export async function POST(req: NextRequest) {
         <p style="font-size:16px;line-height:1.7;color:#5A5A55;margin:0 0 32px;">
           Want to lock in a time now? Grab a spot below and we'll come prepared.
         </p>
-        <a href="https://calendly.com/mdmmarketing-info/10-minute-content-subscription-discovery-call-m-clone"
+        <a href="https://calendly.com/mdmmarketing-info/10-minute-content-subscription-discovery-call-m-clone?utm_source=lead-email&utm_medium=email&utm_campaign=form-confirmation"
           style="display:inline-block;background:#0057FF;color:#F4F0E6;font-family:monospace;font-size:12px;font-weight:600;letter-spacing:0.15em;text-decoration:none;padding:16px 28px;margin-bottom:40px;">
           Book a 10-min call →
         </a>

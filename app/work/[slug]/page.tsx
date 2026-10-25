@@ -10,7 +10,7 @@ import SiteMedia from '../../components/SiteMedia'
 import { clients } from '../../components/lama/workData'
 import { getSiteProject, getSiteProjects } from '../../lib/websiteData'
 
-const CALENDLY = 'https://calendly.com/mdmmarketing-info/10-minute-content-subscription-discovery-call-m-clone'
+const CALENDLY = 'https://calendly.com/mdmmarketing-info/10-minute-content-subscription-discovery-call-m-clone?utm_source=website&utm_medium=book-a-call&utm_campaign=work-post'
 
 // case pages refresh from the CMS at most every 5 minutes; slugs added via
 // the dashboard render on demand (dynamicParams defaults to true)

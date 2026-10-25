@@ -81,7 +81,7 @@ export default function SiteNav() {
           <a href="#contact" onClick={e => handleAnchor(e, '#contact')}>Contact</a>
         </nav>
         <a
-          href="https://calendly.com/mdmmarketing-info/10-minute-content-subscription-discovery-call-m-clone"
+          href="https://calendly.com/mdmmarketing-info/10-minute-content-subscription-discovery-call-m-clone?utm_source=website&utm_medium=book-a-call&utm_campaign=sitenav"
           target="_blank"
           rel="noreferrer noopener"
           className="site-nav-cta"

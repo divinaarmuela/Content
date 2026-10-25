@@ -2,7 +2,7 @@ import Reveal from './Reveal'
 import { Scramble } from './Scramble'
 import LamaContactForm from './LamaContactForm'
 
-const CALENDLY = 'https://calendly.com/mdmmarketing-info/10-minute-content-subscription-discovery-call-m-clone'
+const CALENDLY = 'https://calendly.com/mdmmarketing-info/10-minute-content-subscription-discovery-call-m-clone?utm_source=website&utm_medium=book-a-call&utm_campaign=lama-lamacontact'
 
 export default function LamaContact({ gate = true }: { gate?: boolean } = {}) {
   return (
