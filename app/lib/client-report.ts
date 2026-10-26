@@ -3,7 +3,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { table } from '@/lib/db'
 import type { AudienceSnapshot, Client, ClientReport } from '@/lib/db-types'
 import {
-  GENDER_WORDS, monthRange, previousMonth, reportId, reportPrompt, toBreakdown,
+  GENDER_WORDS, monthRange, previousMonth, readReportData, reportId, reportPrompt, toBreakdown,
   type Audience, type MonthKey, type PlatformFigures, type ReportData, type TopPost,
 } from './client-report-core'
 
@@ -216,7 +216,7 @@ const anthropic = new Anthropic()
 export async function generateReport(clientId: string, m: MonthKey, by: string, opts: { objective: string; notes: string }): Promise<{ ok: true; body: string } | { ok: false; error: string }> {
   const id = reportId(clientId, m)
   const saved = await table<ClientReport>('client_reports').get(id)
-  const data = (saved?.data as ReportData | null) ?? await loadReportData(clientId, m)
+  const data = readReportData(saved?.data) ?? await loadReportData(clientId, m)
   const before = await table<ClientReport>('client_reports').get(reportId(clientId, previousMonth(m))).catch(() => null)
   const { system, user } = reportPrompt({ data, objective: opts.objective, notes: opts.notes, shootConcepts: await nextShootConcepts(clientId, m), previousReport: before?.body ?? null })
   // what Claude's account says, in words — a top-up is a person's job, not a retry (live, 26 Oct 2026: out of credit)

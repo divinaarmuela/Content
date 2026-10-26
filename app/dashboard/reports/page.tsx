@@ -16,7 +16,7 @@ import TintCard from '../ui/TintCard'
 import { useRole } from '../useRole'
 import LeadsReportCard from './LeadsReportCard'
 import {
-  REVIEW_CHECKS, allChecked, change, fmt, monthLabel, monthRange, recentMonths, reportHtml,
+  REVIEW_CHECKS, allChecked, change, fmt, monthLabel, monthRange, readReportData, recentMonths, reportHtml,
   type Breakdown, type MonthKey, type PlatformFigures, type ReportData, type TopPost,
 } from '../../lib/client-report-core'
 
@@ -68,7 +68,8 @@ export default function ReportsPage() {
   }, [clientId, month])
   useEffect(() => { setReport(null); void load() }, [load])
 
-  const data = report?.data ?? null
+  // the saved figures with every list put back (the database keeps no empty list)
+  const data = useMemo(() => readReportData(report?.data), [report?.data])
   const clientName = clients?.find(c => c.id === clientId)?.name ?? ''
 
   return (

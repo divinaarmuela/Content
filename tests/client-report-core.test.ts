@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   REVIEW_CHECKS, allChecked, change, isMonthKey, mayDeleteReport, mayOpenReports, monthLabel, monthRange, previousMonth,
-  recentMonths, reportHtml, reportId, reportPrompt, toBreakdown, type ReportData,
+  readReportData, recentMonths, reportHtml, reportId, reportPrompt, toBreakdown, type ReportData,
 } from '@/app/lib/client-report-core'
 
 // the owner, 26 Oct 2026: "we need to build a client reporting page" — the team's Monthly Client Reports Guide
@@ -62,5 +62,17 @@ describe('the written report', () => {
     expect(user).toContain('push carousels')
     expect(user).toContain('Shoot 4 (2026-11-03): office day')
     expect(user).toMatch(/Do not include ads/)
+  })
+})
+
+describe('a saved report read back', () => {
+  it('gets every list back the database dropped (live: an empty gaps list crashed a month)', () => {
+    const d = readReportData({ clientId: 'c', month: '2026-10', platforms: [{ platform: 'instagram', followers: { end: 5 } }], audience: { asOf: 'x' } })!
+    expect(d.gaps).toEqual([])
+    expect(d.platforms[0].topPosts).toEqual([])
+    expect(d.platforms[0].daily).toEqual([])
+    expect(d.platforms[0].followers.end).toBe(5)
+    expect(d.audience!.cities).toEqual([])
+    expect(readReportData(null)).toBeNull()
   })
 })

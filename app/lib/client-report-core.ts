@@ -256,3 +256,29 @@ export function reportHtml(md: string): string {
   flushPara(); flushList(); flushTable()
   return out.join('\n')
 }
+
+/**
+ * A SAVED REPORT'S FIGURES, WHOLE. The database keeps no empty list (an empty `gaps`, a platform's empty `topPosts` or
+ * `daily` come back missing — live, 26 Oct 2026: Justin's October crashed reading `gaps.length`), so every list is put
+ * back before anything reads it.
+ */
+export function readReportData(raw: unknown): ReportData | null {
+  if (!raw || typeof raw !== 'object') return null
+  const d = raw as Partial<ReportData>
+  const list = <T,>(v: unknown): T[] => (Array.isArray(v) ? v as T[] : [])
+  const a = d.audience as Partial<Audience> | null | undefined
+  return {
+    clientId: String(d.clientId ?? ''), clientName: String(d.clientName ?? ''), industry: d.industry ?? null,
+    month: String(d.month ?? ''), fetchedAt: String(d.fetchedAt ?? ''),
+    gaps: list<string>(d.gaps),
+    audience: a ? { asOf: a.asOf ?? null, gender: list(a.gender), age: list(a.age), cities: list(a.cities), countries: list(a.countries) } : null,
+    platforms: list<Partial<PlatformFigures>>(d.platforms).map(p => ({
+      ...(p as PlatformFigures),
+      followers: { start: null, end: null, previousEnd: null, gained: null, ...(p.followers ?? {}) },
+      previous: { views: null, reach: null, interactions: null, ...(p.previous ?? {}) },
+      daily: list(p.daily),
+      topPosts: list(p.topPosts),
+      posts: Number(p.posts ?? 0),
+    })),
+  }
+}
