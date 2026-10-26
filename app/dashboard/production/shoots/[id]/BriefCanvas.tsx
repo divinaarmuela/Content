@@ -26,7 +26,9 @@ import {
   CANVAS_NOTE_COLORS, TEXT_SIZE_LABEL, cardTakesHeight, minCardWidth, mockupPlatformFor, resizeCard,
   seedCardsFromReferences, stepTextSize, textSizeOf,
   type CanvasCard, type CanvasTextSize, type ReferenceMedia, CANVAS_TEXT_COLORS, textColorOf, CANVAS_TEXT_ALIGNS, textAlignOf,
-  hasTextStyle, defaultAlignOf, textBoldOf, boldWordsIn, inBoldRun } from '../../../../lib/batch-brief-core'
+  hasTextStyle, defaultAlignOf, textBoldOf, boldWordsIn, inBoldRun,
+  CANVAS_FONTS, CANVAS_FONTS_HREF, FONT_LABEL, FONT_STACK, fontOf, hasFontChoice, type CanvasFont } from '../../../../lib/batch-brief-core'
+import { FONT_CLASS, fontVars } from './canvasFont'
 import { applyBold } from './BoldBox'
 import { holdPageScroll } from '../../../../lib/hold-page-scroll'
 import { cardLinkOf, opensOnClick } from '../../../../lib/canvas-link-open-core'
@@ -1229,6 +1231,13 @@ export default function BriefCanvas({
   // are never drawn behind the card next to it. Written to the DOM by hand:
   // a drag writes zIndex straight to the element and clears it on pointerup,
   // and React never re-applies an inline style it thinks is unchanged.
+  // the serif and handwritten typefaces a card can pick (26 Oct 2026) — loaded once, only where a board is
+  useEffect(() => {
+    if (document.querySelector('link[data-canvas-fonts]')) return
+    const l = document.createElement('link')
+    l.rel = 'stylesheet'; l.href = CANVAS_FONTS_HREF; l.setAttribute('data-canvas-fonts', '')
+    document.head.appendChild(l)
+  }, [])
   useLayoutEffect(() => {
     const root = viewportRef.current
     if (!root) return
@@ -1254,6 +1263,19 @@ export default function BriefCanvas({
     return (
       <>
         <span className="px-1.5 font-mono text-[11px] uppercase tracking-wider text-muted-foreground">{KIND_WORD[card.kind]}</span>
+        {/* THE TYPEFACE (the owner, 26 Oct 2026) — notes, headings, to-dos, board names, columns, documents */}
+        {hasFontChoice(card.kind) && (
+          <>
+            <span className="mx-0.5 h-5 w-px bg-foreground/[0.08]" />
+            <select aria-label="Font" title="Font" value={fontOf(card) ?? ''}
+              onChange={e => { const f = e.target.value as CanvasFont | ''; const next = { ...card, font: f || undefined }; upsertLocal(next); persist([next]) }}
+              className="h-8 rounded-md border border-border bg-popover px-1.5 text-secondary-13 text-foreground [@media(pointer:coarse)]:h-11"
+              style={{ fontFamily: fontOf(card) ? FONT_STACK[fontOf(card)!] : undefined }}>
+              <option value="">Default font</option>
+              {CANVAS_FONTS.map(f => <option key={f} value={f} style={{ fontFamily: FONT_STACK[f] }}>{FONT_LABEL[f]}</option>)}
+            </select>
+          </>
+        )}
         {(card.kind === 'note' || card.kind === 'todo') && (
           <>
             <span className="mx-0.5 h-5 w-px bg-foreground/[0.08]" />
@@ -1752,10 +1774,10 @@ export default function BriefCanvas({
               data-kind={card.kind}
               tabIndex={0}
               aria-label={card.kind === 'board' ? `Board: ${card.name ?? 'Board'}` : `${card.kind}${card.text ? `: ${card.text.slice(0, 40)}` : ''}`}
-              className={`absolute left-0 top-0 outline-none ${viewOnly ? '' : 'cursor-grab active:cursor-grabbing'} ${
+              className={`absolute left-0 top-0 outline-none ${fontOf(card) ? FONT_CLASS : ''} ${viewOnly ? '' : 'cursor-grab active:cursor-grabbing'} ${
                 selected === card.id ? 'rounded-inner ring-2 ring-accent-blue/25 ring-offset-2 ring-offset-background' : ''
               }`}
-              style={{ transform: `translate(${card.x}px, ${card.y}px)` }}
+              style={{ transform: `translate(${card.x}px, ${card.y}px)`, ...fontVars(card) }}
               onPointerDown={e => viewOnly ? undefined : onCardPointerDown(e, card)}
               onPointerMove={e => onCardPointerMove(e, card)}
               onPointerUp={e => onCardPointerUp(e, card)}

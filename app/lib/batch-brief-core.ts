@@ -246,6 +246,30 @@ export function textAlignOf(card: { align?: string | null; kind?: string | null 
   return (CANVAS_TEXT_ALIGNS as readonly string[]).includes(String(v)) ? (v as CanvasTextAlign) : defaultAlignOf(card?.kind)
 }
 
+/** THE WORDS' TYPEFACE (the owner, 26 Oct 2026: "add font family options as
+ *  well across different parts of notes, headers, columns etc"). Absent = the
+ *  card's own look (the app's sans; a heading's mono). Serif and handwritten
+ *  are loaded by the canvas itself (CANVAS_FONTS_HREF); the rest already are. */
+export const CANVAS_FONTS = ['sans', 'serif', 'mono', 'display', 'hand'] as const
+export type CanvasFont = (typeof CANVAS_FONTS)[number]
+export const FONT_LABEL: Record<CanvasFont, string> = { sans: 'Sans', serif: 'Serif', mono: 'Mono', display: 'Display', hand: 'Handwritten' }
+export const FONT_STACK: Record<CanvasFont, string> = {
+  sans: 'var(--font-sans), ui-sans-serif, system-ui, sans-serif',
+  serif: "'Playfair Display', Georgia, 'Times New Roman', serif",
+  mono: "'JetBrains Mono', ui-monospace, monospace",
+  display: "'Inter Tight', var(--font-sans), sans-serif",
+  hand: "'Caveat', 'Segoe Print', cursive",
+}
+export const CANVAS_FONTS_HREF = 'https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Caveat:wght@400;600;700&display=swap'
+/** the kinds whose words can take a typeface — the styled ones, plus a column's and a document's */
+export function hasFontChoice(kind: string | null | undefined): boolean {
+  return hasTextStyle(kind) || kind === 'column' || kind === 'document'
+}
+export function fontOf(card: { font?: string | null; kind?: string | null } | null | undefined): CanvasFont | null {
+  const v = card?.font
+  return hasFontChoice(card?.kind) && (CANVAS_FONTS as readonly string[]).includes(String(v)) ? (v as CanvasFont) : null
+}
+
 export const CANVAS_TEXT_SIZES = ['sm', 'md', 'lg', 'xl'] as const
 export type CanvasTextSize = (typeof CANVAS_TEXT_SIZES)[number]
 export const TEXT_SIZE_LABEL: Record<CanvasTextSize, string> = { sm: 'Small', md: 'Normal', lg: 'Large', xl: 'Heading' }
@@ -294,6 +318,8 @@ export type CanvasCard = {
   /** BOLD WORDS (the owner, 15 Sep 2026: "add a Bold text feature on the shoot
    *  brief board") — a note, a heading, a to-do or a board's name, in bold */
   bold?: boolean
+  /** the words' typeface (26 Oct 2026); absent = the card's own look */
+  font?: CanvasFont
   /** arrow endpoints — ids of the two cards it connects */
   from?: string
   to?: string
@@ -498,27 +524,31 @@ export function minCardWidth(kind: CanvasCard['kind'], text?: string, size: Canv
 
 export type CardSizeLimits = { minW: number; maxW: number; minH: number | null; maxH: number }
 
+/** ANY LENGTH (the owner, 26 Oct 2026: "allow me to stretch their boxes across any length") — a box may be as wide
+ *  or as tall as the board needs; only the minimums stop a card collapsing to nothing. */
+const ANY = 20000
+
 /** Per-kind minimums so nothing collapses to nothing, and generous maximums.
  *  `minH: null` means the kind has no height of its own — it is width-only
  *  and `h` is dropped on the way in. */
 export const CANVAS_SIZE_LIMITS: Record<CanvasCard['kind'], CardSizeLimits> = {
-  note:   { minW: 160, maxW: 1200, minH: 80,  maxH: 2400 },
-  todo:   { minW: 160, maxW: 1200, minH: 80,  maxH: 2400 },
-  image:  { minW: 120, maxW: 1200, minH: 90,  maxH: 2400 },
-  link:   { minW: 120, maxW: 1200, minH: 90,  maxH: 2400 },
-  board:  { minW: 140, maxW: 1200, minH: 140, maxH: 2400 },
+  note:   { minW: 160, maxW: ANY, minH: 80,  maxH: ANY },
+  todo:   { minW: 160, maxW: ANY, minH: 80,  maxH: ANY },
+  image:  { minW: 120, maxW: ANY, minH: 90,  maxH: ANY },
+  link:   { minW: 120, maxW: ANY, minH: 90,  maxH: ANY },
+  board:  { minW: 140, maxW: ANY, minH: 140, maxH: ANY },
   // a heading is as tall as its text; a mockup is its platform's frame,
   // which follows the width; an arrow is two endpoints, not a box
-  label:  { minW: 120, maxW: 1200, minH: null, maxH: 2400 },
-  mockup: { minW: 120, maxW: 1200, minH: null, maxH: 2400 },
-  arrow:  { minW: 120, maxW: 1200, minH: null, maxH: 2400 },
+  label:  { minW: 120, maxW: ANY, minH: null, maxH: ANY },
+  mockup: { minW: 120, maxW: ANY, minH: null, maxH: ANY },
+  arrow:  { minW: 120, maxW: ANY, minH: null, maxH: ANY },
   // Milanote's kinds — wide enough for its widest columns and tables
-  column:    { minW: 160, maxW: 2400, minH: null, maxH: 20000 },
-  document:  { minW: 160, maxW: 1200, minH: null, maxH: 2400 },
-  table:     { minW: 160, maxW: 4000, minH: null, maxH: 8000 },
-  swatch:    { minW: 80,  maxW: 1200, minH: 80,   maxH: 2400 },
-  file:      { minW: 120, maxW: 1200, minH: null, maxH: 2400 },
-  boardlink: { minW: 140, maxW: 1200, minH: 140,  maxH: 2400 },
+  column:    { minW: 160, maxW: ANY, minH: null, maxH: ANY },
+  document:  { minW: 160, maxW: ANY, minH: null, maxH: ANY },
+  table:     { minW: 160, maxW: ANY, minH: null, maxH: ANY },
+  swatch:    { minW: 80,  maxW: ANY, minH: 80,   maxH: ANY },
+  file:      { minW: 120, maxW: ANY, minH: null, maxH: ANY },
+  boardlink: { minW: 140, maxW: ANY, minH: 140,  maxH: ANY },
 }
 
 /** Does this kind remember a height at all? */
@@ -667,6 +697,9 @@ export function sanitiseCanvasCards(raw: unknown): CanvasCard[] {
         ? { align: String(r.align) as CanvasTextAlign }
         : {}),
       ...(hasTextStyle(kind) && r.bold === true ? { bold: true } : {}),
+      ...(hasFontChoice(kind) && (CANVAS_FONTS as readonly string[]).includes(String(r.font ?? ''))
+        ? { font: String(r.font) as CanvasFont }
+        : {}),
       ...(kind === 'arrow' ? { ...(from ? { from } : {}), ...(to ? { to } : {}), ...(line ? { line } : {}) } : {}),
       // ── Milanote's shape (20 Oct 2026) ──
       ...(HEX_COLOUR.test(String(r.hex ?? '')) ? { hex: String(r.hex).toLowerCase() } : {}),

@@ -176,7 +176,7 @@ describe('canvas cards', () => {
     ])
     expect(cards.map(c => c.id)).toEqual(['a', 'c'])
     expect(cards[0]).toMatchObject({ text: 'kept-last', x: 5 })
-    expect(cards[1].w).toBe(1200)
+    expect(cards[1].w).toBe(9999)
   })
 
   it('applyCanvasOp merges upserts by id then applies removes', async () => {
@@ -388,7 +388,7 @@ describe('canvas card sizes — resize any card both ways, and smaller', () => {
     expect(clampCardSize('image', 10, 5)).toEqual({ w: 120, h: 90 })
     expect(clampCardSize('link', 10, 5)).toEqual({ w: 120, h: 90 })
     expect(clampCardSize('board', 10, 5)).toEqual({ w: 140, h: 140 })
-    expect(clampCardSize('note', 99999, 99999)).toEqual({ w: 1200, h: 2400 })
+    expect(clampCardSize('note', 99999, 99999)).toEqual({ w: 20000, h: 20000 })
     // a rubbish height is a card that follows its content, not a crash
     expect(clampCardSize('note', 300, NaN)).toEqual({ w: 300 })
     expect(clampCardSize('note', 300, 0)).toEqual({ w: 300 })
@@ -720,5 +720,25 @@ describe('pictures dropped onto the brief board (17 Sep 2026)', () => {
     expect(s).toContain('void addImages(pictures)')
     expect(s).toContain('Drop the pictures here — each one becomes a card')
     expect(s).toContain('if (viewOnly || !dragHasFiles(e)) return')
+  })
+})
+
+describe('a card\'s typeface (26 Oct 2026)', () => {
+  it('keeps a known font on notes, headings, columns and documents, and drops it elsewhere', async () => {
+    const { sanitiseCanvasCards, fontOf } = await import('../app/lib/batch-brief-core')
+    const cards = sanitiseCanvasCards([
+      { id: 'n', kind: 'note', x: 0, y: 0, w: 200, z: 1, text: 'hi', font: 'hand' },
+      { id: 'l', kind: 'label', x: 0, y: 0, w: 200, z: 2, text: 'HEAD', font: 'serif' },
+      { id: 'c', kind: 'column', x: 0, y: 0, w: 300, z: 3, name: 'Col', font: 'display' },
+      { id: 'i', kind: 'image', x: 0, y: 0, w: 200, z: 4, url: 'https://x.test/a.jpg', font: 'serif' },
+      { id: 'b', kind: 'note', x: 0, y: 0, w: 200, z: 5, text: 'x', font: 'comic' },
+    ])
+    const by = Object.fromEntries(cards.map(c => [c.id, c]))
+    expect(by.n.font).toBe('hand')
+    expect(by.l.font).toBe('serif')
+    expect(by.c.font).toBe('display')
+    expect(by.i?.font).toBeUndefined()
+    expect(by.b.font).toBeUndefined()
+    expect(fontOf(by.b)).toBeNull()
   })
 })

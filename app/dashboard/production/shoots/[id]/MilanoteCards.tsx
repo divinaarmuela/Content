@@ -2,7 +2,8 @@
 
 import React from 'react'
 import { Check, ExternalLink, FileText, LayoutGrid, Paperclip } from 'lucide-react'
-import { type CanvasCard as Card } from '../../../../lib/batch-brief-core'
+import { type CanvasCard as Card, fontOf } from '../../../../lib/batch-brief-core'
+import { FONT_CLASS, fontVars } from './canvasFont'
 import { isGlyphIcon } from '../../../../lib/board-icons-core'
 import { isBoardIcon } from '../../../../lib/board-canvas-core'
 import { ICON } from '../../../boards/canvasTone'
@@ -137,7 +138,7 @@ export function MilanoteCard({ card, editing, onUpdate, onOpen, insideLabel, col
         </div>
         {!card.collapsed && kids.length > 0 && (
           <div className="flex flex-col gap-2 px-2 pb-2">
-            {kids.map(k => <div key={k.id} data-col-child={k.id} className="relative">{renderChild?.({ ...k, w: card.w - 16 })}</div>)}
+            {kids.map(k => <div key={k.id} data-col-child={k.id} className={`relative ${fontOf(k) ? FONT_CLASS : ''}`} style={fontVars(k)}>{renderChild?.({ ...k, w: card.w - 16 })}</div>)}
           </div>
         )}
         {/* an empty column, as Milanote draws a new one: a pale well to drop cards into */}
