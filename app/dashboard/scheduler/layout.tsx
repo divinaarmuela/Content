@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Kanban, Send } from 'lucide-react'
+import { CalendarDays, Kanban, Send } from 'lucide-react'
 import NewPostButton from './NewPostButton'
 import PageTitle from '../ui/PageTitle'
 import { SCHEDULE_PAGE } from '../../lib/page-access-core'
@@ -22,6 +22,14 @@ const VIEWS = [
     label: 'Board',
     icon: Kanban,
     blurb: 'Get each post approved: Draft, then the quality check, then the client when it goes to them. Approved posts are booked in on the Schedule page.',
+  },
+  // WHAT IS GOING OUT, ON A CALENDAR (the owner, 26 Oct 2026: "on post approval page add a calendar view … so we know
+  // what's going out") — every booked and posted post, per client, by month or week
+  {
+    href: '/dashboard/scheduler/calendar',
+    label: 'Calendar',
+    icon: CalendarDays,
+    blurb: 'What is going out, and what went out — every booked post on the day it goes, by month or week.',
   },
 ]
 
