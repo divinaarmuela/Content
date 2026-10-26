@@ -287,6 +287,21 @@ function Workspace({ item, rows, needsGrade, gradeSince, sourceCreated, framesOf
   const gradedThisRound = gradedRoundOf(item) === round
   const approvedFiles = new Set(clipApprovalsOf(item).map(a => a.file_id))
   const current = currentFiles(item)
+  // READY FOR SCHEDULING ONCE APPROVED (the owner, 26 Oct 2026: "once a tag is approved can we please add a feature to
+  // move it ready for scheduling") — a manager's press, logging the client's approval, once videos are approved
+  const manager = me?.role === 'super_admin' || me?.role === 'account_manager'
+  const approvable = current.filter(f => isVideo({ mime: f.mime, name: f.name }) || /^image\//.test(f.mime))
+  const approvedN = approvable.filter(f => approvedFiles.has(f.id)).length
+  const [moving, setMoving] = useState(false)
+  const moveToScheduling = async () => {
+    setMoving(true)
+    try {
+      const res = await fetch(`/api/production/items/${item.id}/transition`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ to: 'approved_for_scheduling' }) })
+      const j = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(j.error ?? 'Could not move it')
+      toast.success('Moved to Ready for scheduling')
+    } catch (e) { toast.error(e instanceof Error ? e.message : 'Could not move it') } finally { setMoving(false) }
+  }
   const atGrade = String(item.status) === 'colour_grade'
   const beforeGrade = new Set(atGrade ? rows.filter(r => r.state === 'scanned' && gradeStanding(r, sourceCreated.get(r.source_id), gradeSince) === 'before').map(r => r.id) : [])
   for (const r of rows) if (atGrade && r.state === 'scanned' && !beforeGrade.has(r.id) && (r.scan as { kind?: string } | null)?.kind !== 'graded') beforeGrade.add(r.id)
@@ -389,6 +404,18 @@ function Workspace({ item, rows, needsGrade, gradeSince, sourceCreated, framesOf
           {sel && entry && <Player item={item} s={sel} entry={entry} info={info(sel)} rowById={rowById} beforeGrade={beforeGrade} onEntry={k => setPick({ stack: sel.key, entry: k })} />}
         </DialogContent>
       </Dialog>
+      {manager && String(item.status) === 'client_review' && approvedN > 0 && (
+        <div role="status" className="flex flex-wrap items-center gap-3 rounded-inner border border-accent-green/40 bg-tint-green px-4 py-3">
+          <Check className="h-4 w-4 shrink-0" aria-hidden />
+          <span className="mr-auto text-[14px]">
+            <span className="font-semibold">{approvedN === approvable.length ? 'Every video is approved' : `${approvedN} of ${approvable.length} approved`}</span>
+            {approvedN < approvable.length && <span className="text-muted-foreground"> — the rest have not been approved yet</span>}
+          </span>
+          <Button onClick={() => void moveToScheduling()} disabled={moving} className="h-10 rounded-full px-4">
+            {moving ? 'Moving…' : approvedN === approvable.length ? 'Move to Ready for scheduling' : 'Move to Ready for scheduling anyway'}
+          </Button>
+        </div>
+      )}
       <div>
         <header className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <h2 className="flex items-center gap-2 text-[16px] font-semibold"><Film className="h-4 w-4" aria-hidden /> Videos <span className="text-muted-foreground">({stacks.length})</span></h2>
