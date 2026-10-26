@@ -102,6 +102,8 @@ export default function TodoPanel({
   useEffect(() => { setTitle(t.title) }, [t.title])
   useEffect(() => { setNote(t.note ?? '') }, [t.note])
   const [sure, setSure] = useState(false)
+  const [clientQuery, setClientQuery] = useState('')
+  const clientSearch = useRef<HTMLInputElement | null>(null)
   const [editingNote, setEditingNote] = useState(false)
   const noteRef = useRef<HTMLTextAreaElement | null>(null)
   /** **bold**, *italic*, "- " and "1. " — wraps the selection or starts the lines */
@@ -313,11 +315,24 @@ export default function TodoPanel({
             <div className="flex min-h-9 items-center gap-3">
               <dt className={label}>Client</dt>
               <dd className="flex min-w-0 flex-wrap items-center gap-2">
-                <Select disabled={!editable} value={t.client_id ?? 'none'} onValueChange={v => void patch({ client_id: v === 'none' ? null : v })}>
+                {/* A SEARCH ON THE CLIENT LIST (the owner, 26 Oct 2026) — typing filters the list; the chosen client always stays in it */}
+                <Select disabled={!editable} value={t.client_id ?? 'none'}
+                  onOpenChange={o => { setClientQuery(''); if (o) setTimeout(() => clientSearch.current?.focus(), 30) }}
+                  onValueChange={v => void patch({ client_id: v === 'none' ? null : v })}>
                   <SelectTrigger className="h-8 w-56 rounded-md border-transparent px-2 text-[14px] hover:border-border" aria-label="Client"><SelectValue /></SelectTrigger>
                   <SelectContent>
+                    <div className="sticky top-0 z-10 bg-popover p-1">
+                      <input ref={clientSearch} value={clientQuery} onChange={e => setClientQuery(e.target.value)}
+                        onKeyDown={e => { if (e.key !== 'Escape') e.stopPropagation() }}
+                        placeholder="Search clients…" aria-label="Search clients"
+                        className="h-8 w-full rounded-md border border-border bg-background px-2 text-[13px] outline-none focus:border-foreground" />
+                    </div>
                     <SelectItem value="none">No client</SelectItem>
-                    {clients.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                    {clients.filter(c => c.id === t.client_id || !clientQuery.trim() || c.name.toLowerCase().includes(clientQuery.trim().toLowerCase()))
+                      .map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                    {clientQuery.trim() && !clients.some(c => c.name.toLowerCase().includes(clientQuery.trim().toLowerCase())) && (
+                      <p className="px-2 py-1.5 text-[13px] text-muted-foreground">No client matches</p>
+                    )}
                   </SelectContent>
                 </Select>
               </dd>
