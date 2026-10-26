@@ -99,6 +99,8 @@ export type Audience = {
   age: Breakdown[]
   cities: Breakdown[]
   countries: Breakdown[]
+  /** WHO ENGAGED THIS MONTH, not just who follows (the owner, 26 Oct 2026) — Instagram's engaged-audience breakdown */
+  engaged?: { gender: Breakdown[]; age: Breakdown[]; cities: Breakdown[]; countries: Breakdown[] } | null
 }
 export type ReportData = {
   clientId: string
@@ -271,7 +273,10 @@ export function readReportData(raw: unknown): ReportData | null {
     clientId: String(d.clientId ?? ''), clientName: String(d.clientName ?? ''), industry: d.industry ?? null,
     month: String(d.month ?? ''), fetchedAt: String(d.fetchedAt ?? ''),
     gaps: list<string>(d.gaps),
-    audience: a ? { asOf: a.asOf ?? null, gender: list(a.gender), age: list(a.age), cities: list(a.cities), countries: list(a.countries) } : null,
+    audience: a ? {
+      asOf: a.asOf ?? null, gender: list(a.gender), age: list(a.age), cities: list(a.cities), countries: list(a.countries),
+      engaged: a.engaged ? { gender: list(a.engaged.gender), age: list(a.engaged.age), cities: list(a.engaged.cities), countries: list(a.engaged.countries) } : null,
+    } : null,
     platforms: list<Partial<PlatformFigures>>(d.platforms).map(p => ({
       ...(p as PlatformFigures),
       followers: { start: null, end: null, previousEnd: null, gained: null, ...(p.followers ?? {}) },

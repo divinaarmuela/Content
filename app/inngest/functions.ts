@@ -1096,7 +1096,7 @@ export const videoFrames = inngest.createFunction(
  * of a month is the one its report shows. Read only. A NEW function — re-sync after deploying it (trap 5b).
  */
 export const audienceSnapshot = inngest.createFunction(
-  { id: 'audience-snapshot', name: 'Reports: keep each client’s Instagram audience', triggers: [{ cron: 'TZ=Australia/Melbourne 30 23 * * *' }], retries: 1 },
+  { id: 'audience-snapshot', name: 'Reports: keep each client’s Instagram audience', triggers: [{ cron: 'TZ=Australia/Melbourne 30 23 * * *' }, { event: 'reports/audience.snapshot' }], retries: 1 },
   async ({ step }) => step.run('snapshot', async () => withRequestCache(async () => (await import('../lib/client-report')).snapshotAllAudiences())),
 )
 

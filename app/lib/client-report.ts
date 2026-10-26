@@ -86,15 +86,24 @@ async function audienceOf(acc: Account, clientId: string, m: MonthKey, now: Date
 
 /** read Instagram's audience now and keep it as this month's (the daily job and the page both call this) */
 export async function snapshotAudience(accountId: string, clientId: string | null, m: MonthKey): Promise<Audience | null> {
-  const r = await zernio<{ demographics?: unknown }>('/analytics/instagram/demographics', { accountId, metric: 'follower_demographics', breakdown: 'age,gender,city,country', timeframe: 'this_month' })
-  if (!r.ok) return null
-  const d = obj(r.data.demographics)
+  const read = async (metric: string) => {
+    const r = await zernio<{ demographics?: unknown }>('/analytics/instagram/demographics', { accountId, metric, breakdown: 'age,gender,city,country', timeframe: 'this_month' })
+    if (!r.ok) return null
+    const d = obj(r.data.demographics)
+    return {
+      gender: toBreakdown(arr(d.gender), 3, s => GENDER_WORDS[s] ?? s),
+      age: toBreakdown(arr(d.age), 8).sort((a, b) => a.label.localeCompare(b.label)),
+      cities: toBreakdown(arr(d.city), 8),
+      countries: toBreakdown(arr(d.country), 6),
+    }
+  }
+  const followers = await read('follower_demographics')
+  if (!followers) return null
+  // who engaged this month, beside who follows — Instagram's own engaged-audience breakdown
+  const engaged = await read('engaged_audience_demographics')
   const audience: Audience = {
-    asOf: new Date().toISOString(),
-    gender: toBreakdown(arr(d.gender), 3, s => GENDER_WORDS[s] ?? s),
-    age: toBreakdown(arr(d.age), 8).sort((a, b) => a.label.localeCompare(b.label)),
-    cities: toBreakdown(arr(d.city), 8),
-    countries: toBreakdown(arr(d.country), 6),
+    asOf: new Date().toISOString(), ...followers,
+    engaged: engaged && (engaged.gender.length || engaged.age.length || engaged.cities.length) ? engaged : null,
   }
   if (!audience.gender.length && !audience.age.length && !audience.cities.length) return null
   const now = new Date().toISOString()

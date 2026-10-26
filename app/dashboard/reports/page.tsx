@@ -257,6 +257,16 @@ function AudienceSection({ a }: { a: NonNullable<ReportData['audience']> }) {
         <Bars title="Age" rows={a.age} />
         <Bars title="Top cities" rows={a.cities} />
       </div>
+      {a.engaged && (
+        <>
+          <p className="mt-2 text-[14px] font-semibold">Who engaged this month <span className="font-normal text-muted-foreground">— the people who liked, commented, shared or saved, not just followers</span></p>
+          <div className="grid gap-3 md:grid-cols-3">
+            <Bars title="Gender" rows={a.engaged.gender} />
+            <Bars title="Age" rows={a.engaged.age} />
+            <Bars title="Top cities" rows={a.engaged.cities} />
+          </div>
+        </>
+      )}
     </section>
   )
 }
@@ -438,6 +448,7 @@ function PrintReport({ data, report, clientName }: { data: ReportData; report: S
           <h2>Audience</h2>
           <p className="pr-small">{[...data.audience.gender, ...data.audience.age.slice(0, 4)].map(b => `${b.label} ${b.pct}%`).join(' · ')}</p>
           <p className="pr-small">Top cities: {data.audience.cities.slice(0, 5).map(b => `${b.label} ${b.pct}%`).join(' · ')}</p>
+          {data.audience.engaged && <p className="pr-small">Who engaged this month: {[...data.audience.engaged.gender, ...data.audience.engaged.age.slice(0, 4)].map(b => `${b.label} ${b.pct}%`).join(' · ')}</p>}
         </div>
       )}
       {report?.body && <div className="pr-block report-prose" dangerouslySetInnerHTML={{ __html: reportHtml(report.body) }} />}
