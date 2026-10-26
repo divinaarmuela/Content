@@ -303,8 +303,9 @@ export function MonthGrid({
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-auto rounded-inner border border-border bg-surface">
-      <div className="grid grid-cols-7">
+    // no box of its own to scroll — the page scrolls (page.tsx: the month is as tall as its posts)
+    <div className="flex flex-col rounded-inner border border-border bg-surface">
+      <div className="sticky top-0 z-10 grid grid-cols-7 bg-surface">
         {WEEKDAYS.map(d => (
           <div key={d} className="border-b border-border px-2 py-2 text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">
             {d}

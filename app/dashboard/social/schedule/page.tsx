@@ -664,7 +664,9 @@ export default function SchedulePage() {
     // off the viewport is what makes the rail and the grid reach the bottom of
     // the window instead of stopping half way. The 9rem fallback is only for a
     // render outside the shell (a test, a storybook), never the source of truth.
-    <div className="flex h-[calc(100vh-var(--dbx-chrome,9rem))] min-h-[560px] flex-col">
+    // THE MONTH IS AS TALL AS ITS POSTS (the team, 26 Oct 2026: "scroll y is not good in this section … it looks cut
+    // off"): in Month the page itself scrolls, never a box inside it; the rail stays in view beside it
+    <div className={cn('flex min-h-[560px] flex-col', monthView ? 'min-h-[calc(100vh-var(--dbx-chrome,9rem))]' : 'h-[calc(100vh-var(--dbx-chrome,9rem))]')}>
       <PageTitle
         title="Schedule"
         summary="One client's week. Approved media on the left, what is going out on the right."
@@ -674,7 +676,7 @@ export default function SchedulePage() {
         {/* The rail is a full-height column beside the calendar on a desktop
             and a bottom sheet on a phone: at 390px a 236px column would leave
             no calendar at all. */}
-        <aside className="hidden w-[236px] shrink-0 flex-col border-r border-border py-1 pr-3.5 lg:flex">
+        <aside className={cn('hidden w-[236px] shrink-0 flex-col border-r border-border py-1 pr-3.5 lg:flex', monthView && 'sticky top-0 h-[calc(100vh-var(--dbx-chrome,9rem))] self-start')}>
           {rail}
         </aside>
 
