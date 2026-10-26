@@ -411,9 +411,18 @@ function Workspace({ item, rows, needsGrade, gradeSince, sourceCreated, framesOf
             <span className="font-semibold">{approvedN === approvable.length ? 'Every video is approved' : `${approvedN} of ${approvable.length} approved`}</span>
             {approvedN < approvable.length && <span className="text-muted-foreground"> — the rest have not been approved yet</span>}
           </span>
-          <Button onClick={() => void moveToScheduling()} disabled={moving} className="h-10 rounded-full px-4">
-            {moving ? 'Moving…' : approvedN === approvable.length ? 'Move to Ready for scheduling' : 'Move to Ready for scheduling anyway'}
-          </Button>
+          {/* SOME APPROVED: tick them and post them — the card is not moved "anyway" (the owner, 26 Oct 2026: "the feature to
+              post should be ticking the files there not schedule anyway") */}
+          {approvedN < approvable.length && (
+            <Button variant="outline" onClick={() => window.dispatchEvent(new CustomEvent('card-post-pick', { detail: { fileIds: approvable.filter(f => approvedFiles.has(f.id)).map(f => f.id) } }))} className="h-10 rounded-full px-4">
+              Post the approved ones…
+            </Button>
+          )}
+          {approvedN === approvable.length && (
+            <Button onClick={() => void moveToScheduling()} disabled={moving} className="h-10 rounded-full px-4">
+              {moving ? 'Moving…' : 'Move to Ready for scheduling'}
+            </Button>
+          )}
         </div>
       )}
       <div>

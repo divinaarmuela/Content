@@ -279,6 +279,17 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
   const [postPick, setPostPick] = useState<string[] | null>(null)
   const [postTo, setPostTo] = useState<string>('')
   const [postTogether, setPostTogether] = useState(false)
+  // "Post the approved ones…" on the card page: the picker opens here with them ticked
+  useEffect(() => {
+    const on = (e: Event) => {
+      const d = (e as CustomEvent<{ fileIds: string[] }>).detail
+      if (!d) return
+      setTab('work'); setPostPick(d.fileIds ?? []); setPostTo(me?.id ?? '')
+      setTimeout(() => document.querySelector('[data-post-pick]')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50)
+    }
+    window.addEventListener('card-post-pick', on)
+    return () => window.removeEventListener('card-post-pick', on)
+  })
   const posters = team.filter(u => u.active_status !== false && ['scheduler', 'super_admin', 'account_manager'].includes(String(u.role)))
   const makePosts = async () => {
     if (!item || !postPick?.length) return
