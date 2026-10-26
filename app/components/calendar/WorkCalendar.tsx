@@ -132,7 +132,10 @@ function EventChip({ e, viewer, onMove, dense, onDragStart, onDragEnd }: {
         ev.preventDefault()
         void onMove?.(e, shiftDay(e.day, step))
       }}
-      className={`group flex items-center gap-1 rounded-tile px-1.5 py-1 text-left leading-tight transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-foreground ${
+      // TWO LINES, KEPT INSIDE THE DAY (the owner, 26 Oct 2026: "the calendar ui is broken" — the one-line chip's
+      // pill, time and status could not shrink, so in a week column each chip ran into the next day and the
+      // post's name was squeezed to nothing). Who and what on top; where, when and how it stands underneath.
+      className={`group flex min-w-0 flex-col gap-0.5 overflow-hidden rounded-tile px-1.5 py-1 text-left leading-tight transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-foreground ${
         dense ? 'text-[11px]' : 'text-xs'
       } ${FACE[e.tone]} ${
         // the due layer is the QUIETER one: outlined rather than filled, so a
@@ -143,19 +146,23 @@ function EventChip({ e, viewer, onMove, dense, onDragStart, onDragEnd }: {
       } ${
         movable ? 'cursor-grab active:cursor-grabbing' : ''
       }`}>
-      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${DOT[clientTone(e.clientId)]}`}
-        aria-hidden />
-      {/* the same 12/600 pill the boards wear — a 9px mono chip was the one
-          piece of type on the calendar nobody could read at arm's length */}
-      <span className="shrink-0 rounded-full bg-black/[0.06] px-2 py-0.5 text-chip-12 uppercase dark:bg-white/[0.12]">
-        {e.typeChip}
+      <span className="flex min-w-0 items-center gap-1">
+        <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${DOT[clientTone(e.clientId)]}`}
+          aria-hidden />
+        <span className="truncate font-semibold">{e.clientName ? `${e.clientName} · ${e.title}` : e.title}</span>
+        {e.live && e.liveUrl && <ExternalLink className="h-2.5 w-2.5 shrink-0" aria-hidden />}
       </span>
-      {time && <span className="shrink-0 font-mono text-[10px] tabular-nums">{time}</span>}
-      <span className="truncate">{e.title}</span>
-      <span className="ml-auto hidden shrink-0 whitespace-nowrap text-[10px] opacity-70 sm:inline">
-        {e.statusWord}
+      <span className="flex min-w-0 items-center gap-1">
+        {/* the same 12/600 pill the boards wear — a 9px mono chip was the one
+            piece of type on the calendar nobody could read at arm's length */}
+        <span className="min-w-0 truncate rounded-full bg-black/[0.06] px-1.5 py-0.5 text-chip-12 uppercase dark:bg-white/[0.12]">
+          {e.typeChip}
+        </span>
+        {time && <span className="shrink-0 whitespace-nowrap font-mono text-[10px] tabular-nums">{time}</span>}
+        <span className="ml-auto hidden min-w-0 truncate text-[10px] opacity-70 sm:inline">
+          {e.statusWord}
+        </span>
       </span>
-      {e.live && e.liveUrl && <ExternalLink className="h-2.5 w-2.5 shrink-0" aria-hidden />}
     </Link>
   )
 }
@@ -314,7 +321,7 @@ export default function WorkCalendar({
         onDragOver={ev => { if (takes) { ev.preventDefault(); setOver(c.key) } }}
         onDragLeave={() => setOver(o => (o === c.key ? null : o))}
         onDrop={ev => { ev.preventDefault(); drop(c.key) }}
-        className={`flex flex-col bg-surface p-1.5 transition-colors ${
+        className={`flex min-w-0 flex-col bg-surface p-1.5 transition-colors ${
           view === 'month' ? 'min-h-[104px]' : 'min-h-[132px]'
         } ${c.inMonth ? '' : 'opacity-45'} ${
           over === c.key && takes ? 'ring-2 ring-inset ring-foreground' : ''
@@ -335,7 +342,7 @@ export default function WorkCalendar({
             </span>
           )}
         </div>
-        <ul className="mt-1 flex flex-col gap-1">
+        <ul className="mt-1 flex min-w-0 flex-col gap-1">
           {shown.map(e => (
             <li key={e.uid}>
               <EventChip e={e} viewer={viewer} onMove={onMove} dense={view === 'month'}
