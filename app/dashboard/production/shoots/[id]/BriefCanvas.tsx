@@ -1966,6 +1966,8 @@ export default function BriefCanvas({
                     // (the owner, 13 Sep 2026: "the toolbar is getting overlapped")
                     className="absolute flex w-max max-w-[min(92vw,680px)] flex-wrap items-center justify-center gap-1 rounded-inner border border-border bg-surface p-1 shadow-md"
                     style={{
+                      // the app's own type, whatever font the card picked (canvasFont.ts)
+                      fontFamily: FONT_STACK.sans,
                       left: card.w / 2,
                       ...(nearTop ? { top: 'calc(100% + 12px)' } : { bottom: 'calc(100% + 12px)' }),
                       transform: `translateX(-50%) scale(${1 / s})`,
