@@ -274,6 +274,27 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
   // DELETE A FILE (the owner, 25 Oct 2026: "we can delete the files there and reflect in drive too") — asked once, here
   // in the list; Delete on a video's picture on the card page opens the same question
   const [deleting, setDeleting] = useState<string | null>(null)
+  // POST THESE (the owner, 26 Oct 2026: "I just want the videos/images to be post not the card"): files picked on the card,
+  // approved or not, go to Post approval as posts — for me, or handed to someone who schedules
+  const [postPick, setPostPick] = useState<string[] | null>(null)
+  const [postTo, setPostTo] = useState<string>('')
+  const [postTogether, setPostTogether] = useState(false)
+  const posters = team.filter(u => u.active_status !== false && ['scheduler', 'super_admin', 'account_manager'].includes(String(u.role)))
+  const makePosts = async () => {
+    if (!item || !postPick?.length) return
+    setWorking('Sending to Post approval')
+    try {
+      const res = await fetch(`/api/production/items/${item.id}/make-posts`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ file_ids: postPick, to: postTo || me?.id, together: postTogether }),
+      })
+      const j = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(j.error ?? 'Could not make the posts')
+      const who = postTo && postTo !== me?.id ? (team.find(t => t.id === postTo)?.name ?? 'them') : 'you'
+      toast.success(j.made === 0 ? 'Those posts are already in Post approval' : `${j.made} ${j.made === 1 ? 'post' : 'posts'} in Post approval for ${who}`)
+      setPostPick(null)
+    } catch (e) { toast.error(e instanceof Error ? e.message : 'Could not make the posts') } finally { setWorking(null) }
+  }
   useEffect(() => {
     const on = (e: Event) => {
       const d = (e as CustomEvent<{ fileId: string }>).detail
@@ -743,6 +764,30 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
             {currentFiles(item as never).length === 0
               ? (driveCopying ? null : <p className="text-[13px] text-muted-foreground">{frozen ? 'Booked in or posted — the files are the channel’s now.' : `Nothing on the card for ${roundLabel(handInRound(item as never))} yet.`}</p>)
               : (
+                <>
+                {postPick === null ? (
+                  <button type="button" onClick={() => { setPostPick([]); setPostTo(me?.id ?? '') }}
+                    className="inline-flex min-h-11 w-fit items-center text-[13px] font-semibold underline underline-offset-4">Post some of these…</button>
+                ) : (
+                  <div className="flex flex-col gap-2 rounded-inner border border-border bg-muted/40 p-3 text-[13px]" data-post-pick>
+                    <p className="font-semibold">Tick the videos and pictures to post — approved or not. {postPick.length > 0 && <span className="font-normal text-muted-foreground">{postPick.length} picked</span>}</p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <label className="flex items-center gap-1.5">Posted by
+                        <select value={postTo} onChange={e => setPostTo(e.target.value)} className="rounded-inner border border-border bg-background px-2 py-1.5">
+                          {me && <option value={me.id}>Me</option>}
+                          {posters.filter(u => u.id !== me?.id).map(u => <option key={u.id} value={u.id}>{personLabel(u.name, u.email)} — {String(u.role).replace('_', ' ')}</option>)}
+                        </select>
+                      </label>
+                      <label className="flex items-center gap-1.5"><input type="checkbox" checked={postTogether} onChange={e => setPostTogether(e.target.checked)} className="h-4 w-4 accent-foreground" /> All in one post (in the order ticked)</label>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Button size="sm" disabled={busy || postPick.length === 0} onClick={() => void makePosts()} className="h-9 rounded-full px-4">
+                        {postTogether || postPick.length <= 1 ? 'Send 1 post to Post approval' : `Send ${postPick.length} posts to Post approval`}
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={() => setPostPick(null)} className="h-9 rounded-full px-4">Cancel</Button>
+                    </div>
+                  </div>
+                )}
                 <ul className="flex flex-col divide-y divide-border" aria-label="The finished files">
                   {currentFiles(item as never).map(f => {
                     const a = assetIdOf(f)
@@ -755,6 +800,11 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
                     return (
                       <li key={a} className="flex flex-col gap-1 py-2 text-[13px]" data-asset={a} data-file={f.id}>
                         <div className="flex min-h-11 flex-wrap items-center gap-2">
+                          {postPick !== null && (
+                            <input type="checkbox" aria-label={`Post ${f.name}`} className="h-5 w-5 accent-foreground" checked={postPick.includes(f.id)}
+                              onChange={e => setPostPick(p => (e.target.checked ? [...(p ?? []), f.id] : (p ?? []).filter(x => x !== f.id)))} />
+                          )}
+                          {postPick !== null && postPick.includes(f.id) && <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-foreground text-[11px] font-bold text-background">{postPick.indexOf(f.id) + 1}</span>}
                           <span className="inline-flex h-6 items-center rounded-full bg-foreground/[0.06] px-2 text-[11px] font-semibold uppercase">{kindOf(f.mime, f.name)}</span>
                           <a href={f.url} target="_blank" rel="noreferrer noopener" className="min-w-0 flex-1 truncate underline-offset-4 hover:underline" title={f.name}>{f.name}</a>
                           <span className="shrink-0 text-[12px] text-muted-foreground">{roundLabel(f.version)}</span>
@@ -827,6 +877,7 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
                     )
                   })}
                 </ul>
+                </>
               )}
             <input ref={replaceInput} type="file" accept="image/*,video/*,application/pdf" className="hidden" aria-label="The new version of this file"
               onChange={e => {
