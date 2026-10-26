@@ -219,6 +219,16 @@ export async function generateReport(clientId: string, m: MonthKey, by: string, 
   const data = (saved?.data as ReportData | null) ?? await loadReportData(clientId, m)
   const before = await table<ClientReport>('client_reports').get(reportId(clientId, previousMonth(m))).catch(() => null)
   const { system, user } = reportPrompt({ data, objective: opts.objective, notes: opts.notes, shootConcepts: await nextShootConcepts(clientId, m), previousReport: before?.body ?? null })
+  // what Claude's account says, in words — a top-up is a person's job, not a retry (live, 26 Oct 2026: out of credit)
+  const said = (e: unknown) => {
+    const m = e instanceof Error ? e.message : String(e)
+    if (/credit balance is too low/i.test(m)) return 'The Anthropic account is out of credit — top it up under Plans & Billing at console.anthropic.com, then press Generate again'
+    if (e instanceof Anthropic.RateLimitError) return 'Claude is busy right now — try again in a minute'
+    if (e instanceof Anthropic.AuthenticationError) return 'The Anthropic API key is not valid — check ANTHROPIC_API_KEY'
+    return `Claude could not write the report: ${m.slice(0, 200)}`
+  }
+  let msg: { stop_reason: string; content: { type: string; text?: string }[] }
+  try {
   const stream = anthropic.beta.messages.stream({
     model: 'claude-opus-5-5',
     max_tokens: 32000,
@@ -228,7 +238,11 @@ export async function generateReport(clientId: string, m: MonthKey, by: string, 
     system,
     messages: [{ role: 'user', content: user }],
   } as never)
-  const msg = await stream.finalMessage() as unknown as { stop_reason: string; content: { type: string; text?: string }[] }
+  msg = await stream.finalMessage() as unknown as typeof msg
+  } catch (e) {
+    console.error('[client-report] writing the report failed:', e instanceof Error ? e.message : e)
+    return { ok: false, error: said(e) }
+  }
   if (msg.stop_reason === 'refusal') return { ok: false, error: 'Claude declined to write this report — try again, or write it by hand' }
   const body = msg.content.filter(b => b.type === 'text').map(b => b.text ?? '').join('').trim()
   if (!body) return { ok: false, error: 'Claude returned no report — try again' }
