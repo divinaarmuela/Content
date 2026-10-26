@@ -95,6 +95,9 @@ export type DriveHandIn = {
    *  file picked with Replace becomes that piece's new version whatever was asked for (the owner, 22 Oct 2026: "we
    *  can enter files at any given time"; "to replace a version we pick the file and put the new version with it") */
   any_time?: boolean
+  /** READY FOR THE CLIENT (the owner, 26 Oct 2026): the link pasted on a new card is the finished work — once it has
+   *  landed the card goes past In progress and the quality check straight to With client (drive-handin.ts settle) */
+  to_client?: boolean
   /** the pieces dropped from this version because they were not in the link */
   retired?: string[]
   /** of file_ids, the ones that are new pieces (the rest are new cuts of pieces already on the card) */

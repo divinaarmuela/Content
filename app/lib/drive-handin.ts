@@ -52,7 +52,7 @@ export async function listDriveHandIn(rawUrl: unknown): Promise<HandInListing> {
 export type StartResult = { ok: true; handIn: DriveHandIn; round: number } | { ok: false; status: number; error: string }
 
 /** record the hand-in on the card and queue the copy of the picked files */
-export async function startDriveHandIn(user: TeamUser, item: ContentItem, body: { url?: unknown; ids?: unknown; map?: unknown }, opts: { anyStage?: boolean; anyTime?: boolean } = {}): Promise<StartResult> {
+export async function startDriveHandIn(user: TeamUser, item: ContentItem, body: { url?: unknown; ids?: unknown; map?: unknown }, opts: { anyStage?: boolean; anyTime?: boolean; toClient?: boolean } = {}): Promise<StartResult> {
   // the colourist hands in the graded cut at colour grade (COLOUR_GRADE_SPLIT_SPEC C4) — a manager's say, there only
   const colourist = (user as { colourist?: unknown }).colourist === true && String(item.status) === 'colour_grade'
   const manager = user.role === 'account_manager' || user.role === 'super_admin' || colourist
@@ -86,7 +86,7 @@ export async function startDriveHandIn(user: TeamUser, item: ContentItem, body: 
   const names = Object.fromEntries(listing.files.filter(f => picked.ids.includes(f.id)).map(f => [f.id, f.name]))
   const handIn: DriveHandIn = {
     id: `${pull}#${now}`, pull_id: pull, link: listing.url, drive_ids: picked.ids, names, map, round, ...(whole ? { whole: true } : {}),
-    by: user.id, manager: mayChange, requested_at: now, status: 'copying', ...(anyTime ? { any_time: true } : {}),
+    by: user.id, manager: mayChange, requested_at: now, status: 'copying', ...(anyTime ? { any_time: true } : {}), ...(opts.toClient ? { to_client: true } : {}),
   }
   const items = table<ContentItem>('content_items')
   const put = await items.claim(item.id, cur => {
@@ -216,6 +216,14 @@ export async function settleDriveHandIn(pullId: string): Promise<{ settled: bool
     const urls = done.result.files.filter(f => added.has(f.id) && isVideo({ mime: f.mime, name: f.name })).map(f => f.url)
     if (urls.length) await inngest.send(urls.map(url => ({ name: 'video/frames', data: { url } }))).catch(e => console.error('[drive-handin] asking for the pictures failed:', e instanceof Error ? e.message : e))
   }
+  // READY FOR THE CLIENT (the owner, 26 Oct 2026): the finished work's Drive link, pasted on a new card — once it has
+  // landed the card goes straight to With client, and its videos are filed into the card's own Drive folder
+  if (done.result.ok && done.handIn.to_client === true && done.result.added.length > 0 && by) {
+    await sendStraightToClient(item.id, by as TeamUser)
+      .catch(e => console.error('[drive-handin] sending the ready card to the client failed:', e instanceof Error ? e.message : e))
+    await inngest.send({ name: 'drive/card.backfill', data: { item_id: item.id } })
+      .catch(e => console.error('[drive-handin] filing the ready card into its Drive folder failed:', e instanceof Error ? e.message : e))
+  }
   // UPLOADED ON THE CARD → THE CLIENT'S ACCOUNT MANAGERS ARE TOLD (the owner, 23 Oct 2026: "notify AM when its uploaded")
   if (done.result.ok && done.handIn.any_time === true && done.result.added.length > 0) {
     await tellManagersOfUpload((fresh ?? item) as ContentItem, (by as TeamUser | null) ?? null, done.result.added.length, done.round, done.handIn.id)
@@ -225,6 +233,22 @@ export async function settleDriveHandIn(pullId: string): Promise<{ settled: bool
 }
 
 /** one bell and email per upload (not per file) to each active account manager of the client — never the uploader */
+/**
+ * PAST IN PROGRESS AND THE QUALITY CHECK, TO WITH CLIENT (the owner, 26 Oct 2026: "when we upload it passes through in
+ * progress and quality check and goes straight to with client"). Made in the name of the person who pasted the link,
+ * wearing the two hats this one move needs — the person chose "ready for the client" when they made the card. Only a
+ * card still at its first stage moves; the quality check step is quiet (nobody is asked to check what was not sent).
+ */
+async function sendStraightToClient(itemId: string, by: TeamUser): Promise<void> {
+  const { performTransition } = await import('./workflow')
+  const row = await table<ContentItem>('content_items').get(itemId, { fresh: true })
+  if (!row || String(row.status) !== 'draft_uploaded') return
+  const note = 'Ready for the client — the finished work came from a Drive link, with no quality check'
+  // the quality reviewer's hat is a hat, not a Role — granted for this one move only
+  const checked = await performTransition(by, row as never, 'quality_check', { grantedHats: ['editor'], quiet: true, note })
+  await performTransition(by, checked, 'client_review', { grantedHats: ['quality_reviewer' as never], note })
+}
+
 async function tellManagersOfUpload(item: ContentItem, by: TeamUser | null, count: number, round: number, handInId: string): Promise<void> {
   if (!item.client_id) return
   const { managesClients } = await import('./identity-core')

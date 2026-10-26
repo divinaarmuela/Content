@@ -442,6 +442,8 @@ function Workspace({ item, rows, needsGrade, gradeSince, sourceCreated, framesOf
                           <span className="absolute left-1.5 top-1.5 flex gap-1">
                             {s.versions.map(v => <span key={v} className={`rounded-full px-1.5 text-[10px] font-bold ${v === s.latest.label ? 'bg-foreground text-background' : 'bg-background/80 text-foreground'}`}>{v}</span>)}
                             {s.latest.graded && <span className="rounded-full bg-tint-green px-1.5 text-[10px] font-bold">Graded</span>}
+                            {/* APPROVED ON ITS PICTURE (the owner, 26 Oct 2026: "when videos are approved it doesn't have an approved tag in the card") */}
+                            {info(s).file && (approvedFiles.has(info(s).file!.id) || ['approved_for_scheduling', 'scheduled', 'published'].includes(String(item.status))) && <span className="inline-flex items-center gap-0.5 rounded-full bg-accent-green px-1.5 text-[10px] font-bold text-white"><Check className="h-2.5 w-2.5" aria-hidden />Approved</span>}
                           </span>
                         </span>
                         <span className="flex flex-col gap-1 p-2">

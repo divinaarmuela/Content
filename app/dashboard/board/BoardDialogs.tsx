@@ -579,6 +579,10 @@ export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer
   const uploading = useUploadGroup(uploadGroup)
   const stillUploading = uploading.some(u => !u.url && !u.error)
   const [folder, setFolder] = useState('')
+  /** THE FINISHED WORK, READY FOR THE CLIENT (the owner, 26 Oct 2026): a Drive link whose videos go on the card as
+   *  Version 1 — the card then goes past In progress and the quality check straight to With client */
+  const [readyLink, setReadyLink] = useState('')
+  const readyOk = readyLink.trim() === '' || /^https:\/\/drive\.google\.com\//i.test(readyLink.trim())
   /** DELIVER ONLY (the playbook, 11 Sep 2026): the client posts this
    *  themselves — the card ends at their approval, no scheduler */
   const [deliverOnlyCard, setDeliverOnlyCard] = useState(false)
@@ -621,7 +625,7 @@ export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer
     // page's own client, or the only one there is — otherwise the person chooses
     setClientId(defaultClientId && defaultClientId !== 'all' ? defaultClientId : (clients.length === 1 ? clients[0].id : ''))
     setTitle(''); setKind(''); setLink(''); setBrief(''); setDue(''); setOwner(forPosting ? '' : viewer.id)
-    setShootId(''); setGroupId(''); setShootText(''); setWorkFiles([]); setUploadGroup(null); setFolder('')
+    setShootId(''); setGroupId(''); setShootText(''); setWorkFiles([]); setUploadGroup(null); setFolder(''); setReadyLink('')
   }, [open, defaultClientId, clients, viewer.id, forPosting])
   // a late clients load still seeds the picker, without clobbering a choice
   useEffect(() => {
@@ -633,7 +637,7 @@ export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer
   const linkCheck = linkKindOf(link)
   const folderCheck = linkKindOf(folder)
   const canSave = !!clientId && !!title.trim() && (simple || !!normaliseKindName(kind)) && (link.trim() === '' || linkCheck.ok) && (folder.trim() === '' || folderCheck.ok)
-    && (!forPosting || !!owner)
+    && (!forPosting || !!owner) && readyOk
 
   const save = async () => {
     if (!canSave) return
@@ -703,6 +707,20 @@ export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer
           method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: cardLink }),
         })
         if (!put.ok) toast.error('The card is made, but the link did not save — add it from the card')
+      }
+      // the finished work's link: its videos are copied onto the card, then it goes straight to With client
+      if (id && !forPosting && readyLink.trim()) {
+        const ready = await fetch(`/api/production/items/${id}/ready-for-client`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: readyLink.trim() }),
+        })
+        const j = await ready.json().catch(() => ({}))
+        if (ready.ok) {
+          toast.success('Card made — its videos are copying in from Drive, then it goes straight to With client')
+          if (id) onCreated?.(id)
+          onOpenChange(false)
+          return
+        }
+        toast.error(`The card is made, but the Drive link could not be used: ${j.error ?? 'try again from the card'}`)
       }
       toast.success(forPosting ? 'Card made' : 'Card made — it is in the In Progress column')
       if (id) onCreated?.(id)
@@ -865,6 +883,15 @@ export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer
                   )}
                 </>
               )}
+            </div>
+          )}
+          {!forPosting && !filesOnly && (
+            <div className="flex flex-col gap-2 rounded-[20px] border border-border p-3">
+              <Label htmlFor="new-ready-link">Drive link that's ready for the client (optional)</Label>
+              <Input id="new-ready-link" value={readyLink} onChange={e => setReadyLink(e.target.value)} placeholder="https://drive.google.com/…" className={field} />
+              <p className="text-[13px] text-muted-foreground">{readyLink.trim() === ''
+                ? 'Already finished? Paste the folder here: its videos go on the card as Version 1 and the card goes straight to With client — no editing, no quality check.'
+                : readyOk ? 'Its videos are copied onto the card, then it goes straight to With client. The folder must be shared with anyone who has the link.' : 'This must be a Google Drive link.'}</p>
             </div>
           )}
           <div className="grid gap-4 sm:grid-cols-2">
