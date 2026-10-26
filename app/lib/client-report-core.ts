@@ -95,12 +95,13 @@ export type PlatformFigures = {
 export type Audience = {
   /** when it was read — Instagram only gives "this month", so a past month shows its month-end snapshot or nothing */
   asOf: string | null
-  gender: Breakdown[]
+  // NO GENDER (the owner, 26 Oct 2026: "ignore the gender check, remove it, it will not work") — read, shown,
+  // printed and sent to the writer nowhere; a month saved before then keeps it in the database, unused
   age: Breakdown[]
   cities: Breakdown[]
   countries: Breakdown[]
   /** WHO ENGAGED THIS MONTH, not just who follows (the owner, 26 Oct 2026) — Instagram's engaged-audience breakdown */
-  engaged?: { gender: Breakdown[]; age: Breakdown[]; cities: Breakdown[]; countries: Breakdown[] } | null
+  engaged?: { age: Breakdown[]; cities: Breakdown[]; countries: Breakdown[] } | null
 }
 export type ReportData = {
   clientId: string
@@ -121,7 +122,6 @@ export function toBreakdown(rows: readonly { dimension?: unknown; value?: unknow
   return clean.sort((a, b) => b.value - a.value).slice(0, top).map(r => ({ ...r, pct: total ? Math.round((r.value / total) * 1000) / 10 : 0 }))
 }
 
-export const GENDER_WORDS: Record<string, string> = { F: 'Women', M: 'Men', U: 'Not specified' }
 
 /** a change in words and a sign: "+12%" / "−8%" / "new" / null when there is nothing to compare */
 export function change(now: number | null | undefined, before: number | null | undefined): { text: string; up: boolean } | null {
@@ -207,7 +207,8 @@ export function reportPrompt(input: {
     ...(input.previousReport ? ['', 'Last month’s report for this client, for continuity of structure and to compare against:', input.previousReport.slice(0, 20000)] : []),
     '',
     'With the following analytics below:',
-    JSON.stringify(data, null, 1),
+    // an older month's audience may still carry a gender split — it is never sent
+    JSON.stringify(data, (k, v) => (k === 'gender' ? undefined : v), 1),
   ].join('\n')
   return { system, user }
 }
@@ -274,8 +275,8 @@ export function readReportData(raw: unknown): ReportData | null {
     month: String(d.month ?? ''), fetchedAt: String(d.fetchedAt ?? ''),
     gaps: list<string>(d.gaps),
     audience: a ? {
-      asOf: a.asOf ?? null, gender: list(a.gender), age: list(a.age), cities: list(a.cities), countries: list(a.countries),
-      engaged: a.engaged ? { gender: list(a.engaged.gender), age: list(a.engaged.age), cities: list(a.engaged.cities), countries: list(a.engaged.countries) } : null,
+      asOf: a.asOf ?? null, age: list(a.age), cities: list(a.cities), countries: list(a.countries),
+      engaged: a.engaged ? { age: list(a.engaged.age), cities: list(a.engaged.cities), countries: list(a.engaged.countries) } : null,
     } : null,
     platforms: list<Partial<PlatformFigures>>(d.platforms).map(p => ({
       ...(p as PlatformFigures),

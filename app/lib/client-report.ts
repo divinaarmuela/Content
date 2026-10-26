@@ -3,7 +3,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { table } from '@/lib/db'
 import type { AudienceSnapshot, Client, ClientReport } from '@/lib/db-types'
 import {
-  GENDER_WORDS, monthRange, previousMonth, readReportData, reportId, reportPrompt, toBreakdown,
+  monthRange, previousMonth, readReportData, reportId, reportPrompt, toBreakdown,
   type Audience, type MonthKey, type PlatformFigures, type ReportData, type TopPost,
 } from './client-report-core'
 
@@ -87,11 +87,10 @@ async function audienceOf(acc: Account, clientId: string, m: MonthKey, now: Date
 /** read Instagram's audience now and keep it as this month's (the daily job and the page both call this) */
 export async function snapshotAudience(accountId: string, clientId: string | null, m: MonthKey): Promise<Audience | null> {
   const read = async (metric: string) => {
-    const r = await zernio<{ demographics?: unknown }>('/analytics/instagram/demographics', { accountId, metric, breakdown: 'age,gender,city,country', timeframe: 'this_month' })
+    const r = await zernio<{ demographics?: unknown }>('/analytics/instagram/demographics', { accountId, metric, breakdown: 'age,city,country', timeframe: 'this_month' })
     if (!r.ok) return null
     const d = obj(r.data.demographics)
     return {
-      gender: toBreakdown(arr(d.gender), 3, s => GENDER_WORDS[s] ?? s),
       age: toBreakdown(arr(d.age), 8).sort((a, b) => a.label.localeCompare(b.label)),
       cities: toBreakdown(arr(d.city), 8),
       countries: toBreakdown(arr(d.country), 6),
@@ -103,9 +102,9 @@ export async function snapshotAudience(accountId: string, clientId: string | nul
   const engaged = await read('engaged_audience_demographics')
   const audience: Audience = {
     asOf: new Date().toISOString(), ...followers,
-    engaged: engaged && (engaged.gender.length || engaged.age.length || engaged.cities.length) ? engaged : null,
+    engaged: engaged && (engaged.age.length || engaged.cities.length) ? engaged : null,
   }
-  if (!audience.gender.length && !audience.age.length && !audience.cities.length) return null
+  if (!audience.age.length && !audience.cities.length) return null
   const now = new Date().toISOString()
   const id = `${accountId}_${m}`
   await table<AudienceSnapshot>('audience_snapshots').claim(id, cur => ({
