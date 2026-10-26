@@ -1090,6 +1090,16 @@ export const videoFrames = inngest.createFunction(
   },
 )
 
+/**
+ * THE MONTH'S AUDIENCE, KEPT (client-report.ts snapshotAllAudiences; the monthly client report): Instagram gives the age,
+ * gender and location breakdown for the current month only, so each night it is saved as this month's — the last night
+ * of a month is the one its report shows. Read only. A NEW function — re-sync after deploying it (trap 5b).
+ */
+export const audienceSnapshot = inngest.createFunction(
+  { id: 'audience-snapshot', name: 'Reports: keep each client’s Instagram audience', triggers: [{ cron: 'TZ=Australia/Melbourne 30 23 * * *' }], retries: 1 },
+  async ({ step }) => step.run('snapshot', async () => withRequestCache(async () => (await import('../lib/client-report')).snapshotAllAudiences())),
+)
+
 export const videoFramesDue = inngest.createFunction(
   { id: 'video-frames-due', name: 'Editor: card videos still without pictures', triggers: [{ cron: 'TZ=Australia/Melbourne */5 * * * *' }], retries: 0 },
   async ({ step }) => {
@@ -1195,6 +1205,7 @@ export const functions = [
   videoStoryboard,
   videoFrames,
   videoFramesDue,
+  audienceSnapshot,
   metaIgTokenRefresh,
 ]
 

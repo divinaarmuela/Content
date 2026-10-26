@@ -14,6 +14,7 @@ export type TableName =
   | 'assets'
   | 'assistant_chats'
   | 'assistant_prefs'
+  | 'audience_snapshots'
   | 'automation_sends'
   | 'batch_comments'
   | 'batches'
@@ -34,6 +35,7 @@ export type TableName =
   | 'client_contacts'
   | 'client_credentials'
   | 'client_notes'
+  | 'client_reports'
   | 'clients'
   | 'comment_automations'
   | 'content_applications'
@@ -237,6 +239,16 @@ export interface AssistantPref {
   updated_at: string
   updated_by: string
   id: string
+}
+
+export interface AudienceSnapshot {
+  id: string
+  account_id: string
+  client_id: string | null
+  month: string
+  audience: unknown | null
+  created_at: string
+  updated_at: string
 }
 
 export interface AutomationSend {
@@ -558,6 +570,22 @@ export interface ClientNote {
   author_id: string | null
   author_name: string
   visibility: string | null
+}
+
+export interface ClientReport {
+  id: string
+  client_id: string
+  month: string
+  data: unknown | null
+  body: string | null
+  objective: string | null
+  notes: string | null
+  checks: unknown | null
+  generated_at: string | null
+  generated_by: string | null
+  updated_by: string | null
+  created_at: string
+  updated_at: string
 }
 
 export interface Client {
@@ -1835,6 +1863,7 @@ export const TABLE_COLUMNS = {
   assets: ['id', 'created_at', 'client_id', 'project_id', 'kind', 'orientation', 'purpose', 'url', 'alt'],
   assistant_chats: ['id', 'created_at', 'updated_at', 'clerk_user_id', 'title', 'messages'],
   assistant_prefs: ['clerk_user_id', 'email', 'instructions', 'updated_at', 'updated_by', 'id'],
+  audience_snapshots: ['id', 'account_id', 'client_id', 'month', 'audience', 'created_at', 'updated_at'],
   automation_sends: ['id', 'automation_id', 'client_id', 'account_id', 'platform_post_id', 'comment_id', 'commenter', 'commenter_name', 'comment_text', 'status', 'error', 'reply_status', 'reply_error', 'dm_text', 'created_at', 'updated_at'],
   batch_comments: ['id', 'created_at', 'batch_id', 'author_id', 'body', 'card_id', 'assigned_to', 'resolved'],
   batches: ['status', 'concept', 'location', 'shot_list', 'planned_deliverables', 'reference_media', 'locked_at', 'locked_by', 'shot_at', 'proposal_id', 'archived_at', 'archived_by', 'share_board', 'board_name', 'last_edited_by', 'last_edited_at', 'canvas_cards', 'drive_folder_id', 'drive_url', 'plan_reviewed_at', 'plan_reviewed_by', 'plan_sent_back_at', 'plan_sent_back_by', 'plan_sent_back_note', 'shared_with_client', 'id', 'created_at', 'updated_at', 'client_id', 'title', 'description', 'shoot_date', 'month', 'year', 'owner_id', 'brief_skipped', 'deliver_only', 'footage_due_nudged_at', 'footage_received_at', 'footage_received_by', 'footage_receipt_nudged_at', 'footage_url', 'for_contact_id', 'portal_show_business', 'portal_show_person', 'created_by', 'aligned_by', 'client_confirmed_by', 'reminder_sent_by', 'client_shared_at', 'client_shared_by', 'client_decision', 'client_decided_at', 'client_decision_note', 'review_asked_at', 'review_asked_by', 'review_asked_to', 'scripts', 'objective', 'script', 'call_time', 'talent', 'props_wardrobe', 'client_availability', 'editor_priorities', 'edit_deadline', 'editor_id', 'crew_ids', 'acknowledgements', 'brief_shared_at', 'brief_shared_by', 'aligned_at', 'client_confirmed_at', 'go_at', 'go_by', 'reminder_sent_at', 'footage_handed_at', 'footage_handed_by', 'late_nudged_at', 'go_override_reason', 'go_override_by', 'late_share_nudged_at'],
@@ -1855,6 +1884,7 @@ export const TABLE_COLUMNS = {
   client_contacts: ['id', 'created_at', 'updated_at', 'client_id', 'name', 'role', 'email', 'phone', 'is_primary', 'notes', 'share_token'],
   client_credentials: ['id', 'created_at', 'updated_at', 'client_id', 'platform', 'label', 'username', 'secret_cipher', 'url', 'notes', 'updated_by', 'updated_by_name'],
   client_notes: ['id', 'created_at', 'updated_at', 'client_id', 'body', 'author_id', 'author_name', 'visibility'],
+  client_reports: ['id', 'client_id', 'month', 'data', 'body', 'objective', 'notes', 'checks', 'generated_at', 'generated_by', 'updated_by', 'created_at', 'updated_at'],
   clients: ['brand_profile', 'brand_profile_updated_at', 'brand_profile_updated_by', 'upload_folder_id', 'timezone', 'posts_own_content', 'website', 'source', 'default_scheduler_ids', 'share_token', 'social_profile_id', 'id', 'created_at', 'name', 'slug', 'industry', 'contact_name', 'email', 'phone', 'clerk_user_id', 'status', 'notes', 'portal_one', 'instagram_locations', 'instagram_via_meta', 'client_approval_required', 'drive_folder_id', 'drive_folder_origin'],
   comment_automations: ['id', 'client_id', 'social_account_id', 'provider_account_id', 'platform', 'zernio_automation_id', 'runner', 'social_post_id', 'platform_post_id', 'zernio_post_id', 'post_title', 'post_thumb', 'post_date', 'name', 'keywords', 'match_mode', 'dm_message', 'button_title', 'link', 'comment_reply', 'dm_variations', 'reply_variations', 'active', 'paused_reason', 'created_by', 'created_at', 'updated_at'],
   content_applications: ['id', 'created_at', 'first_name', 'last_name', 'email', 'phone', 'business', 'industry', 'model_interest', 'content_needed', 'budget', 'timeline'],
@@ -1941,6 +1971,7 @@ export const NULLABLE_COLUMNS = {
   assets: ['client_id', 'project_id', 'orientation', 'purpose', 'alt'],
   assistant_chats: [],
   assistant_prefs: [],
+  audience_snapshots: ['client_id', 'audience'],
   automation_sends: ['commenter_name', 'comment_text', 'error', 'reply_status', 'reply_error', 'dm_text'],
   batch_comments: ['author_id', 'card_id', 'assigned_to', 'resolved'],
   batches: ['status', 'concept', 'location', 'shot_list', 'planned_deliverables', 'reference_media', 'locked_at', 'locked_by', 'shot_at', 'proposal_id', 'archived_at', 'archived_by', 'share_board', 'board_name', 'last_edited_by', 'last_edited_at', 'canvas_cards', 'drive_folder_id', 'drive_url', 'plan_reviewed_at', 'plan_reviewed_by', 'plan_sent_back_at', 'plan_sent_back_by', 'plan_sent_back_note', 'shared_with_client', 'description', 'shoot_date', 'month', 'year', 'owner_id', 'brief_skipped', 'deliver_only', 'footage_due_nudged_at', 'footage_received_at', 'footage_received_by', 'footage_receipt_nudged_at', 'footage_url', 'for_contact_id', 'portal_show_business', 'portal_show_person', 'created_by', 'aligned_by', 'client_confirmed_by', 'reminder_sent_by', 'client_shared_at', 'client_shared_by', 'client_decision', 'client_decided_at', 'client_decision_note', 'review_asked_at', 'review_asked_by', 'review_asked_to', 'scripts', 'objective', 'script', 'call_time', 'talent', 'props_wardrobe', 'client_availability', 'editor_priorities', 'edit_deadline', 'editor_id', 'crew_ids', 'acknowledgements', 'brief_shared_at', 'brief_shared_by', 'aligned_at', 'client_confirmed_at', 'go_at', 'go_by', 'reminder_sent_at', 'footage_handed_at', 'footage_handed_by', 'late_nudged_at', 'go_override_reason', 'go_override_by', 'late_share_nudged_at'],
@@ -1961,6 +1992,7 @@ export const NULLABLE_COLUMNS = {
   client_contacts: ['share_token'],
   client_credentials: ['secret_cipher', 'updated_by'],
   client_notes: ['author_id', 'visibility'],
+  client_reports: ['data', 'body', 'objective', 'notes', 'checks', 'generated_at', 'generated_by', 'updated_by'],
   clients: ['brand_profile', 'brand_profile_updated_at', 'brand_profile_updated_by', 'upload_folder_id', 'timezone', 'posts_own_content', 'website', 'source', 'default_scheduler_ids', 'share_token', 'social_profile_id', 'industry', 'contact_name', 'email', 'phone', 'clerk_user_id', 'notes', 'portal_one', 'instagram_via_meta', 'client_approval_required', 'drive_folder_id', 'drive_folder_origin'],
   comment_automations: ['zernio_automation_id', 'runner', 'social_post_id', 'platform_post_id', 'zernio_post_id', 'post_title', 'post_thumb', 'post_date', 'button_title', 'link', 'comment_reply', 'dm_variations', 'reply_variations', 'paused_reason', 'created_by'],
   content_applications: ['industry', 'model_interest', 'content_needed', 'budget', 'timeline'],
@@ -2054,6 +2086,7 @@ export const JSON_COLUMNS = {
   assets: [],
   assistant_chats: ['messages'],
   assistant_prefs: [],
+  audience_snapshots: ['audience'],
   automation_sends: [],
   batch_comments: [],
   batches: ['shot_list', 'planned_deliverables', 'reference_media', 'canvas_cards', 'brief_skipped', 'review_asked_to', 'scripts', 'crew_ids', 'acknowledgements'],
@@ -2074,6 +2107,7 @@ export const JSON_COLUMNS = {
   client_contacts: [],
   client_credentials: [],
   client_notes: [],
+  client_reports: ['data', 'checks'],
   clients: ['brand_profile', 'default_scheduler_ids', 'instagram_locations'],
   comment_automations: ['keywords', 'dm_variations', 'reply_variations'],
   content_applications: [],
@@ -2166,6 +2200,7 @@ export const JSON_ARRAY_COLUMNS = {
   assets: [],
   assistant_chats: ['messages'],
   assistant_prefs: [],
+  audience_snapshots: [],
   automation_sends: [],
   batch_comments: [],
   batches: ['shot_list', 'planned_deliverables', 'reference_media', 'canvas_cards', 'crew_ids', 'acknowledgements'],
@@ -2186,6 +2221,7 @@ export const JSON_ARRAY_COLUMNS = {
   client_contacts: [],
   client_credentials: [],
   client_notes: [],
+  client_reports: [],
   clients: ['default_scheduler_ids', 'instagram_locations'],
   comment_automations: ['keywords', 'dm_variations', 'reply_variations'],
   content_applications: [],
@@ -2260,7 +2296,7 @@ export const JSON_ARRAY_COLUMNS = {
   workflow_activity: [],
 } as const satisfies Record<TableName, readonly string[]>
 
-export const UPDATED_AT_TABLES: ReadonlySet<TableName> = new Set<TableName>(['agency_credentials', 'automation_sends', 'batches', 'board_items', 'boards', 'client_agreements', 'client_contacts', 'client_credentials', 'client_notes', 'comment_automations', 'content_items', 'data_deletion_requests', 'drive_pulls', 'drive_seen', 'drive_sources', 'drive_uploads', 'encode_jobs', 'inbox_touches', 'instagram_videos', 'journal_posts', 'post_comments', 'projects', 'report_settings', 'schedule_notes', 'social_posts', 'team_users', 'todo_comments', 'todo_sections', 'todos', 'video_frames'])
+export const UPDATED_AT_TABLES: ReadonlySet<TableName> = new Set<TableName>(['agency_credentials', 'audience_snapshots', 'automation_sends', 'batches', 'board_items', 'boards', 'client_agreements', 'client_contacts', 'client_credentials', 'client_notes', 'client_reports', 'comment_automations', 'content_items', 'data_deletion_requests', 'drive_pulls', 'drive_seen', 'drive_sources', 'drive_uploads', 'encode_jobs', 'inbox_touches', 'instagram_videos', 'journal_posts', 'post_comments', 'projects', 'report_settings', 'schedule_notes', 'social_posts', 'team_users', 'todo_comments', 'todo_sections', 'todos', 'video_frames'])
 
 export function encodeKey(s: string): string {
   return s.replace(/[.#$\[\]\/%]/g, ch => '%' + ch.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0'))

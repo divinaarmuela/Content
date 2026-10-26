@@ -1010,13 +1010,41 @@ const GHOST_TABLES = {
     ['created_at', col('string', false)],
     ['updated_at', col('string', false)],
   ],
+  // client_reports / audience_snapshots — THE MONTHLY CLIENT REPORT (the owner, 26 Oct 2026; client-report-core.ts).
+  // One report per client per month (id `${client_id}_${YYYY-MM}`): the figures read from Zernio, the written report,
+  // the team's checks. Instagram gives the audience breakdown for the current month only, so it is kept per account per
+  // month (id `${zernio account id}_${YYYY-MM}`), overwritten through the month — its last write is the month's.
+  client_reports: [
+    ['id', col('string', false)],
+    ['client_id', col('string', false)],
+    ['month', col('string', false)],
+    ['data', col('unknown', true, true)],
+    ['body', col('string', true)],
+    ['objective', col('string', true)],
+    ['notes', col('string', true)],
+    ['checks', col('unknown', true, true)],
+    ['generated_at', col('string', true)],
+    ['generated_by', col('string', true)],
+    ['updated_by', col('string', true)],
+    ['created_at', col('string', false)],
+    ['updated_at', col('string', false)],
+  ],
+  audience_snapshots: [
+    ['id', col('string', false)],
+    ['account_id', col('string', false)],
+    ['client_id', col('string', true)],
+    ['month', col('string', false)],
+    ['audience', col('unknown', true, true)],
+    ['created_at', col('string', false)],
+    ['updated_at', col('string', false)],
+  ],
 }
 for (const [ghost, cols] of Object.entries(GHOST_TABLES)) {
   if (!tables.has(ghost)) tables.set(ghost, new Map(cols.map(([c, def]) => [c, { ...def }])))
 }
 // Ghost tables have no `create trigger` line to be read from, so the ones that
 // carry updated_at say so here — lib/db.ts stamps the column from this set.
-for (const ghost of ['social_posts', 'post_comments', 'todos', 'todo_comments', 'todo_sections', 'schedule_notes', 'drive_uploads', 'drive_pulls', 'encode_jobs', 'drive_sources', 'drive_seen', 'video_frames', 'boards', 'board_items', 'instagram_videos', 'inbox_touches', 'comment_automations', 'automation_sends', 'data_deletion_requests']) updatedAt.add(ghost)
+for (const ghost of ['social_posts', 'post_comments', 'todos', 'todo_comments', 'todo_sections', 'schedule_notes', 'drive_uploads', 'drive_pulls', 'encode_jobs', 'drive_sources', 'drive_seen', 'video_frames', 'boards', 'board_items', 'instagram_videos', 'inbox_touches', 'comment_automations', 'automation_sends', 'data_deletion_requests', 'client_reports', 'audience_snapshots']) updatedAt.add(ghost)
 
 // Columns the code writes but no SQL ever created.
 //   notification_log.claimed_at — when a retrier last took the row. The stale

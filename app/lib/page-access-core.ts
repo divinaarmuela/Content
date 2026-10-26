@@ -70,9 +70,9 @@ const GRANTABLE_HREFS = new Set(GRANTABLE_PAGES.map(p => p.href))
  * hand it to every super admin or invent a role for four people. So it is
  * granted per person, and the default for everyone is no.
  */
-// Reports is hidden for now (the owner, 14 Sep 2026: "hide reports page for
-// now") — grant-only, so nobody's default, super admins included
-export const GRANT_ONLY_PAGES = new Set<string>(['/dashboard/bookings', '/dashboard/reports'])
+// Reports was hidden (the owner, 14 Sep 2026: "hide reports page for now") until the monthly client report was built
+// (26 Oct 2026): super admins and account managers by default (client-report-core.mayOpenReports), nobody else
+export const GRANT_ONLY_PAGES = new Set<string>(['/dashboard/bookings'])
 
 /**
  * The Schedule page — the posting calendar under Social. It is a CHILD of
@@ -139,6 +139,8 @@ export function defaultAllows(role: Role | null, href: string): boolean {
   // Posts: everyone else reaches the children THROUGH Social (canSeePage
   // falls back to the parent), so hiding Social hides all of it in one move
   if (socialParentOf(href)) return (role === 'scheduler' || role === 'general') && SCHEDULER_SOCIAL_PAGES.includes(href)
+  // the monthly client report: a super admin's and an account manager's, nobody else's by default
+  if (href === '/dashboard/reports') return role === 'super_admin' || role === 'account_manager'
   if (role === 'editor') {
     return [...PERSONAL_PAGES, '/dashboard/editor', '/dashboard/designer'].includes(href)
   }
