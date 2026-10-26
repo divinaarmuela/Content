@@ -65,7 +65,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         ids.push(postId)
         if (res.created) { made++; announceAfter('schedule', { client_id: item.client_id, post_id: postId, kind: 'created' }) }
       }
-      await logActivity({
+      // a repeat press that made nothing new is not history
+      if (made > 0) await logActivity({
         actor: user, clientId: item.client_id, entityType: 'content_item', entityId: item.id, action: 'posts_made',
         detail: `${picked.length} ${picked.length === 1 ? 'file' : 'files'} sent to Post approval as ${groups.length} ${groups.length === 1 ? 'post' : 'posts'}${to ? ` for ${to.name || to.email}` : ''}`,
       }).catch(() => undefined)
