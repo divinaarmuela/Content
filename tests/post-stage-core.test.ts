@@ -967,12 +967,12 @@ describe('Schedule it — a super admin books a Draft or a post at the quality c
   const sa: PostActor = { id: 'u-akmal', hats: ['sa'] }
   const nameOf = (id: string | null | undefined) => (id === 'u-akmal' ? 'Akmal' : null)
 
-  it('is one row: Draft or Quality check → Booked in, super admin only, asks for the time, never Post now', () => {
+  it('is one row: Draft or Quality check → Booked in, a super admin, account manager or scheduler (26 Oct 2026), asks for the time, never Post now', () => {
     const row = ROW_OF.schedule_direct
     expect([...row.from].sort()).toEqual(['draft', 'quality_check'])
     expect(row.to).toBe('booked')
     // …and, on a test client's post only, an account manager (the Meta review account) — the test below
-    expect(row.who).toEqual(['sa', 'tester'])
+    expect(row.who).toEqual(['sa', 'am', 'scheduler', 'tester'])
     expect(row.label).toBe('Schedule it')
     expect(row.needs).toEqual(['time'])
     // Post now is still only from Ready to post
@@ -993,15 +993,15 @@ describe('Schedule it — a super admin books a Draft or a post at the quality c
     expect(POST_TRANSITIONS.filter(r => r.who.includes('tester')).map(r => r.action)).toEqual(['schedule_direct'])
 
     const real = post('draft', { draft_version: 1, sent_version: null })
-    expect(checkPostTransition(real, 'schedule_direct', { id: 'u-review', hats: hatsFor(am, real) }, { expect_rev: 5 }, CTX))
-      .toMatchObject({ ok: false, code: 'not_allowed' })
+    // since 26 Oct 2026 every account manager may, on any client
+    expect(checkPostTransition(real, 'schedule_direct', { id: 'u-review', hats: hatsFor(am, real) }, { expect_rev: 5 }, CTX).ok).toBe(true)
 
     const test = post('draft', { draft_version: 1, sent_version: null, client_id: '459e2564-1089-45ed-abd7-56d5f53c2cf6' })
     const plan = planPostTransition(test, 'schedule_direct', { id: 'u-review', hats: hatsFor(am, test) }, { expect_rev: 5 }, CTX)
     if (!plan.ok) throw new Error(plan.reason)
     expect(plan.to).toBe('booked')
     expect(plan.patch.approval).toMatchObject({ by: 'u-review', hat: 'account_manager', skipped_check: true })
-    expect(plan.event).toMatchObject({ action: 'schedule_direct', hat: 'tester', note: 'Scheduled by an account manager on a test client without the quality check' })
+    expect(plan.event).toMatchObject({ action: 'schedule_direct', hat: 'am', note: 'Scheduled by an account manager without the quality check' })
   })
 
   it('from Draft: the working copy is frozen as version N, recorded as a super admin\'s, the check marked skipped, booked for its time', () => {
@@ -1062,8 +1062,18 @@ describe('Schedule it — a super admin books a Draft or a post at the quality c
     expect(byDefault.patch.approval?.without_client).toBe(true)
   })
 
-  it('nobody else may: scheduler, account manager, quality checker, the maker, the client', () => {
-    for (const hats of [['scheduler'], ['am'], ['qr'], ['creator'], ['am', 'qr'], ['creator', 'scheduler'], ['client']] as PostHat[][]) {
+  it('a scheduler and an account manager may too (the owner, 26 Oct 2026: "they should have options to go through or not")', () => {
+    for (const hats of [['scheduler'], ['am'], ['am', 'qr'], ['creator', 'scheduler']] as PostHat[][]) {
+      for (const stage of ['draft', 'quality_check'] as PostStage[]) {
+        expect(checkPostTransition(post(stage), 'schedule_direct', { id: 'u-x', hats }, { expect_rev: 5, version: 1 }, CTX).ok, `${hats} ${stage}`).toBe(true)
+      }
+    }
+    const plan = planPostTransition(post('draft'), 'schedule_direct', { id: 'u-s', hats: ['scheduler'] }, { expect_rev: 5 }, CTX)
+    expect(plan.ok && plan.event.note).toMatch(/^Scheduled by a scheduler without the quality check/)
+  })
+
+  it('nobody else may: a quality checker alone, a maker who is not a scheduler, the client', () => {
+    for (const hats of [['qr'], ['creator'], ['client']] as PostHat[][]) {
       for (const stage of ['draft', 'quality_check'] as PostStage[]) {
         expect(checkPostTransition(post(stage), 'schedule_direct', { id: 'u-x', hats }, { version: 1 }, CTX), `${hats} ${stage}`)
           .toMatchObject({ ok: false, code: 'not_allowed' })
@@ -1105,12 +1115,12 @@ describe('Schedule it — a super admin books a Draft or a post at the quality c
     expect(checkPostTransition(post('draft', { slides: slides(10) }), 'schedule_direct', sa, {}, CTX)).toMatchObject({ ok: true })
   })
 
-  it('is offered only to a super admin, only on Draft and Quality check, never as the main button', () => {
+  it('is offered to a super admin, account manager or scheduler, only on Draft and Quality check, never as the main button', () => {
     for (const stage of POST_STAGES) {
       for (const role of [...TEAM_ROLES, 'quality_checker'] as const) {
         const list = postActions(post(stage), viewerHats(role), NOW, { accounts: ACCOUNTS, clientHasContact: true })
         const all = [list.primary, ...list.secondary, list.danger].filter(Boolean).map(a => a!.action)
-        const want = role === 'super_admin' && (stage === 'draft' || stage === 'quality_check')
+        const want = viewerHats(role).some(h => h === 'sa' || h === 'am' || h === 'scheduler') && (stage === 'draft' || stage === 'quality_check')
         expect(all.includes('schedule_direct'), `${stage} × ${role}`).toBe(want)
         expect(list.primary?.action).not.toBe('schedule_direct')
       }

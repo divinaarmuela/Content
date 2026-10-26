@@ -244,7 +244,9 @@ describe('a drop onto a lane is a button, or the rule’s own reason (audit B1, 
 
   it('a draft onto With client or Approved is refused: the check comes first (decision 3)', () => {
     expect(dropOnPostLane(post('draft'), 'with_client', HATS.sa, NOW, CTX)).toEqual({ ok: false, reason: FIRST_THE_CHECK })
-    expect(dropOnPostLane(post('draft'), 'approved', HATS.am, NOW, CTX)).toEqual({ ok: false, reason: FIRST_THE_CHECK })
+    // …and a quality checker alone cannot skip it; a manager's drop onto Approved is Schedule it (26 Oct 2026), asking the time
+    expect(dropOnPostLane(post('draft'), 'approved', HATS.joy, NOW, CTX).ok).toBe(false)
+    expect(dropOnPostLane(post('draft'), 'approved', HATS.am, NOW, CTX)).toMatchObject({ ok: true, action: { action: 'schedule_direct', needs: ['time'] } })
   })
 
   it('the checker drops onto Approved to pass it, onto With client to pass and send, onto Draft to ask for a change', () => {
@@ -257,10 +259,9 @@ describe('a drop onto a lane is a button, or the rule’s own reason (audit B1, 
     expect(dropOnPostLane(p, 'draft', HATS.joy, NOW, CTX)).toMatchObject({ ok: true, action: { action: 'ask_change', needs: expect.arrayContaining(['note']) } })
   })
 
-  it('a manager who is not the checker cannot pass by dragging either', () => {
+  it('a manager who is not the checker never PASSES by dragging — onto Approved it is Schedule it, recorded as skipping the check', () => {
     const d = dropOnPostLane(post('quality_check'), 'approved', HATS.am, NOW, CTX)
-    expect(d.ok).toBe(false)
-    if (!d.ok) expect(d.reason).toMatch(/^Only .*quality checker/)
+    expect(d.ok && d.action.action).toBe('schedule_direct')
   })
 
   it('a With client post dragged onto Approved: a scheduler is told why not; a manager gets the question', () => {
@@ -420,7 +421,8 @@ describe('Schedule it on the Post approval board (a super admin, 29 Sep 2026)', 
       expect(offered, stage).toMatchObject({ label: 'Schedule it', blocked: null, needs: ['time'] })
       expect(sa.primary?.action).not.toBe('schedule_direct')
       for (const [name, hats] of Object.entries(HATS)) {
-        if (hats.includes('sa')) continue
+        // a super admin, account manager or scheduler has it (26 Oct 2026); a quality checker alone does not
+        if (hats.some(h => h === 'sa' || h === 'am' || h === 'scheduler')) continue
         expect(offeredList(boardActions(post(stage), hats, NOW, CTX)).map(a => a.action), `${stage} ${name}`).not.toContain('schedule_direct')
       }
     }

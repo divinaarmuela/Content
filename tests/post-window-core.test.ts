@@ -447,13 +447,14 @@ describe('every stage has a way forward in the window (no dead ends, audit W2)',
 })
 
 describe('Schedule it in the window (a super admin, 29 Sep 2026)', () => {
-  it('is a footer button for a super admin on a Draft and at the quality check — not for anyone else', () => {
+  it('is a footer button for a super admin, account manager or scheduler on a Draft and at the quality check — not for a checker alone', () => {
     for (const stage of ['draft', 'quality_check'] as const) {
       const p = post({ stage, sent_version: stage === 'draft' ? null : 1, draft_version: stage === 'draft' ? 1 : 2 })
       expect(footerButtons(postActions(p, ['sa'], NOW, { accounts: ACCOUNTS })).map(b => b.offered.action), stage).toContain('schedule_direct')
-      for (const hats of [['scheduler'], ['am'], ['qr'], ['creator', 'scheduler']] as PostHat[][]) {
-        expect(footerButtons(postActions(p, hats, NOW, { accounts: ACCOUNTS })).map(b => b.offered.action), `${stage} ${hats}`).not.toContain('schedule_direct')
+      for (const hats of [['scheduler'], ['am'], ['creator', 'scheduler']] as PostHat[][]) {
+        expect(footerButtons(postActions(p, hats, NOW, { accounts: ACCOUNTS })).map(b => b.offered.action), `${stage} ${hats}`).toContain('schedule_direct')
       }
+      expect(footerButtons(postActions(p, ['qr'], NOW, { accounts: ACCOUNTS })).map(b => b.offered.action), `${stage} qr`).not.toContain('schedule_direct')
     }
   })
 

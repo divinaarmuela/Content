@@ -338,7 +338,7 @@ export function isAgreedVia(v: unknown): v is AgreedVia {
 }
 
 /** Who approved WHICH version. A manager's yes for the client is theirs, with `on_behalf_of_client`. */
-export type ApprovalHat = 'quality_reviewer' | 'account_manager' | 'super_admin' | 'client'
+export type ApprovalHat = 'quality_reviewer' | 'account_manager' | 'super_admin' | 'scheduler' | 'client'
 export type Approval = {
   version: number
   by: string | null
@@ -452,7 +452,7 @@ function readApproval(v: unknown): Approval | null {
   if (!isObj(v)) return null
   const version = num(v.version)
   const hat = v.hat
-  if (version == null || !['quality_reviewer', 'account_manager', 'super_admin', 'client'].includes(String(hat))) return null
+  if (version == null || !['quality_reviewer', 'account_manager', 'super_admin', 'scheduler', 'client'].includes(String(hat))) return null
   return {
     version, by: str(v.by), hat: hat as ApprovalHat,
     on_behalf_of_client: v.on_behalf_of_client === true,
@@ -859,7 +859,9 @@ export const POST_TRANSITIONS: readonly TransitionRow[] = [
   // books a Draft (its working copy frozen, as Send for quality check freezes it) or a post waiting on
   // the check (the version sent), at its time, WITHOUT the check. Never now: Post now stays on Ready.
   // Versioned from the quality check only — a Draft has no version the person saw (see the check).
-  { action: 'schedule_direct', spec: 'owner 29 Sep', from: ['quality_check', 'draft'], to: 'booked', who: ['sa', 'tester'], label: 'Schedule it', needs: ['time'], versioned: true },
+  // …and an account manager or a scheduler too (the owner, 26 Oct 2026: "some posts AM or scheduler or super admin they don't
+  // need to go through quality check … they should have options to go through or not"): Send for quality check stays
+  { action: 'schedule_direct', spec: 'owner 29 Sep / 26 Oct', from: ['quality_check', 'draft'], to: 'booked', who: ['sa', 'am', 'scheduler', 'tester'], label: 'Schedule it', needs: ['time'], versioned: true },
   { action: 'post_now', spec: 'T12', from: ['ready'], to: 'booked', who: BOOKERS, label: 'Post now', needs: ['confirm'], confirm:'This goes out on the client\'s accounts now.' },
   // …and from the quality check: a time that has passed (or will) is fixed there, without a full re-check
   { action: 'change_time', spec: 'T13/T15', from: ['quality_check', 'ready', 'booked'], to: 'same', who: BOOKERS, label: 'Change time', needs: ['time'] },
@@ -1343,12 +1345,14 @@ function eventNote(act: PostAction, note: string | null, post: PostState, input:
   if (act === 'change_time' && post.approval) return 'Time changed after approval'
   if (act === 'booking_failed') return String(input.problem ?? '').trim() || null
   if (act === 'remind_client') return `Reminded ${joinNames((input.delivered_to ?? []).filter(Boolean))}`
-  if (act === 'schedule_direct') return `Scheduled by ${patch.approval?.hat === 'account_manager' ? 'an account manager on a test client' : 'a super admin'} without the quality check${patch.approval?.without_client ? ' and without the client' : ''}`
+  if (act === 'schedule_direct') return `Scheduled by ${SCHEDULED_BY[patch.approval?.hat ?? 'super_admin'] ?? 'a super admin'} without the quality check${patch.approval?.without_client ? ' and without the client' : ''}`
   return null
 }
 
+const SCHEDULED_BY: Partial<Record<ApprovalHat, string>> = { account_manager: 'an account manager', super_admin: 'a super admin', scheduler: 'a scheduler' }
+
 const APPROVAL_HAT: Partial<Record<PostHat, ApprovalHat>> = {
-  qr: 'quality_reviewer', am: 'account_manager', sa: 'super_admin', tester: 'account_manager', client: 'client',
+  qr: 'quality_reviewer', am: 'account_manager', sa: 'super_admin', scheduler: 'scheduler', tester: 'account_manager', client: 'client',
 }
 
 /** The event row's id: one per rev, so a retried write cannot log twice. */
@@ -1897,7 +1901,7 @@ export function approvalLine(approval: Approval | null | undefined, nameOf: Name
   if (!approval) return null
   // a super admin's Schedule it: never worded as a pass (the owner, 29 Sep 2026)
   if (approval.skipped_check) {
-    return `Scheduled without the quality check${approval.without_client ? ' and without the client' : ''} by ${nameOf(approval.by) || (approval.hat === 'account_manager' ? 'an account manager' : 'a super admin')}`
+    return `Scheduled without the quality check${approval.without_client ? ' and without the client' : ''} by ${nameOf(approval.by) || SCHEDULED_BY[approval.hat] || 'a super admin'}`
   }
   const name = nameOf(approval.by) || 'the team'
   if (approval.hat === 'client') return 'Approved by the client'

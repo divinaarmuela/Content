@@ -772,16 +772,16 @@ describe('Schedule it — the one writer', () => {
     expect(q.now).toBe(false)
   })
 
-  it('a scheduler, an account manager and a quality checker are refused, and nothing changes', async () => {
+  it('a quality checker alone is refused, and nothing changes (a scheduler and an account manager may, 26 Oct 2026)', async () => {
     const id = await newDraft()
     let p = await stateOf(id)
-    for (const who of [SCHED, AM, QR]) {
+    for (const who of [QR]) {
       const r = await actOnPost(who, id, { action: 'schedule_direct', expect_rev: p.rev })
       expect(r).toMatchObject({ ok: false, code: 'not_allowed' })
     }
     await performPostTransition(id, 'send_to_qc', await as(SCHED, id), { expect_rev: p.rev })
     p = await stateOf(id)
-    for (const who of [SCHED, AM, QR]) {
+    for (const who of [QR]) {
       const r = await actOnPost(who, id, { action: 'schedule_direct', expect_rev: p.rev, version: p.sent_version })
       expect(r).toMatchObject({ ok: false, code: 'not_allowed' })
     }
