@@ -15,7 +15,7 @@ import Tour, { useTourOnce } from './Tour'
 import { POST_WINDOW_TOUR } from '@/app/lib/tour-core'
 import {
   clockPillLabel, composerReducer, groupOptions, initialComposer, moreOptionsFor, optionsFromExtras,
-  readLocations, durationWords,
+  readLocations, durationWords, mediaUsedBefore,
   type ChannelExtras, type SavedLocation,
 } from '@/app/lib/schedule-compose-core'
 import {
@@ -496,7 +496,11 @@ export default function PostWindow({
    *  grid the client's review page shows — this post first, then the newest
    *  posts already live there. Only when Instagram is one of its channels. */
   const clientPostsKey = useMemo(() => ({ client_id: context.clientId }), [context.clientId])
-  const clientPosts = useTable<SocialPost>('social_posts', { by: clientPostsKey, enabled: pane === 'preview' })
+  const clientPosts = useTable<SocialPost>('social_posts', { by: clientPostsKey, enabled: pane === 'preview' || picking })
+  // the picker's "Used before" tab — every file on this client's other posts (26 Oct 2026)
+  const usedBefore = useMemo(
+    () => mediaUsedBefore(clientPosts.rows as unknown as Parameters<typeof mediaUsedBefore>[0], context.clientId, id),
+    [clientPosts.rows, context.clientId, id])
   const grid = useMemo(() => {
     const all = context.allAccounts ?? accounts
     const platformOf = (acc: string) => all.find(a => a.id === acc)?.platform ?? null
@@ -1318,6 +1322,7 @@ export default function PostWindow({
           onEditSlide={index => { setPicking(false); editSlide(index) }}
           saving={busy}
           saveProblems={mediaProblems}
+          usedBefore={usedBefore}
           allowUploads
         />
       )}

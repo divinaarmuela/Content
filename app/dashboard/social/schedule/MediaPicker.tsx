@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  ArrowLeft, ArrowRight, FolderOpen, Layers, Upload, Wand2, X,
+  ArrowLeft, ArrowRight, FolderOpen, History, Layers, Upload, Wand2, X,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { usePreviewRows } from '@/app/components/media/usePreviewRows'
@@ -44,6 +44,8 @@ import type { VersionGroup } from '@/app/lib/social-schedule-core'
 
 const SOURCES: { key: MediaSource; label: string }[] = [
   { key: 'approved', label: 'This piece' },
+  // every file on this client's other posts, drafts included (the owner, 26 Oct 2026)
+  { key: 'used', label: 'Used before' },
   { key: 'drive', label: 'Google Drive' },
   { key: 'upload', label: 'Upload' },
 ]
@@ -55,8 +57,10 @@ const DRAG_TYPE = 'application/x-md-slide'
 
 export default function MediaPicker({
   open, onClose, itemId, approved, versions, versionLabel, slides, platforms, onSave,
-  onEditSlide, saving, allowUploads = true, saveProblems = [],
+  onEditSlide, saving, allowUploads = true, saveProblems = [], usedBefore = [],
 }: {
+  /** files already on this client's other posts — the "Used before" tab (mediaUsedBefore) */
+  usedBefore?: Slide[]
   /** why the last Save was refused — shown HERE, not behind this window (28 Sep 2026), and only after a
    *  Save pressed in THIS opening: an older refusal from the post window is not this window's (audit W7) */
   saveProblems?: readonly string[]
@@ -139,9 +143,10 @@ export default function MediaPicker({
 
   const library: Slide[] = useMemo(() => {
     if (source === 'approved') return approved
+    if (source === 'used') return usedBefore
     if (source === 'drive') return []
     return brought.filter(s => s.source === 'upload' && !approvedUrls.has(s.url))
-  }, [source, approved, brought, approvedUrls])
+  }, [source, approved, brought, approvedUrls, usedBefore])
 
   /** the Drive ids already sitting in this post, so the row can say "Added"
    *  and stop the same 40 MB file being downloaded twice. Comparing a Drive
@@ -339,7 +344,7 @@ export default function MediaPicker({
         {/* ── left: the library ── */}
         <div className="hidden w-[380px] shrink-0 flex-col gap-3 border-r border-border bg-paper p-4 md:flex">
           <div className="flex gap-2">
-            {SOURCES.filter(s => allowUploads || s.key === 'approved').map(s => (
+            {SOURCES.filter(s => allowUploads || s.key === 'approved' || s.key === 'used').map(s => (
               <button
                 key={s.key}
                 type="button"
@@ -353,6 +358,7 @@ export default function MediaPicker({
                 )}
               >
                 {s.key === 'approved' && <Layers className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />}
+                {s.key === 'used' && <History className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />}
                 {s.key === 'drive' && <FolderOpen className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />}
                 {s.key === 'upload' && <Upload className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />}
                 {s.label}
@@ -360,6 +366,14 @@ export default function MediaPicker({
             ))}
           </div>
 
+          {source === 'used' && (
+            <div className="flex items-center justify-between gap-2">
+              <span className="truncate text-[13px] font-semibold">On this client&apos;s other posts</span>
+              <span className="shrink-0 text-[12px] font-semibold text-muted-foreground">
+                {usedBefore.length} {usedBefore.length === 1 ? 'file' : 'files'}
+              </span>
+            </div>
+          )}
           {source === 'approved' && (
             <div className="flex items-center justify-between gap-2">
               <span className="truncate text-[13px] font-semibold">{versionLabel}</span>
@@ -386,6 +400,14 @@ export default function MediaPicker({
                 onAdd={s => (tray.length > 0 ? setPlacing(s) : setTray(t => addToPost(t, s)))}
                 inTray={url => inPost(tray, url)}
                 onDragStart={dragOut}
+              />
+            ) : source === 'used' ? (
+              <LibraryGrid
+                files={library}
+                inTray={url => inPost(tray, url)}
+                onAdd={s => setTray(t => addToPost(t, s))}
+                onDragStart={dragOut}
+                empty="Nothing on this client's other posts yet."
               />
             ) : (
               <PieceLibrary
@@ -423,7 +445,7 @@ export default function MediaPicker({
               390px screen do not both fit */}
           <div className="md:hidden">
             <div className="flex gap-2 overflow-x-auto pb-2">
-              {SOURCES.map(s => (
+              {SOURCES.filter(s => allowUploads || s.key === 'approved' || s.key === 'used').map(s => (
                 <button
                   key={s.key}
                   type="button"
@@ -450,6 +472,12 @@ export default function MediaPicker({
                   uploads={uploads} onFiles={takeFiles}
                   files={library} onAdd={s => (tray.length > 0 ? setPlacing(s) : setTray(t => addToPost(t, s)))}
                   inTray={url => inPost(tray, url)} onDragStart={dragOut}
+                />
+              ) : source === 'used' ? (
+                <LibraryGrid
+                  files={library} inTray={url => inPost(tray, url)}
+                  onAdd={s => setTray(t => addToPost(t, s))} onDragStart={dragOut}
+                  empty="Nothing on this client's other posts yet."
                 />
               ) : (
                 <PieceLibrary

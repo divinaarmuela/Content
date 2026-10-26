@@ -34,7 +34,7 @@ import {
   type TikTokPrivacy, type TrialGraduation, type UserTag, type YoutubeVisibility,
 } from './publish-core'
 import { NETWORK_LABEL } from './publish-core'
-import { reorder, type Slide, type SlideSource } from './version-files-core'
+import { normaliseSlides, reorder, type Slide, type SlideSource } from './version-files-core'
 import { fromZonedInput, wallTimeIn } from './timezone-core'
 import type { PostAutomation } from './comment-automation-core'
 
@@ -1194,7 +1194,36 @@ export function clockPillLabel(
 /* ── the media picker's selection rules ─────────────────────────────────── */
 
 /** Where a file in the picker's left pane came from. */
-export type MediaSource = 'approved' | SlideSource
+export type MediaSource = 'approved' | 'used' | SlideSource
+
+/**
+ * USED BEFORE (the owner, 26 Oct 2026: "whatever was uploaded in the dashboard through other posts, whether in
+ * drafts etc, we can re-pick those assets"). Every file on this client's OTHER posts — drafts, scheduled, posted,
+ * cancelled alike — once each (matched on URL), the newest post's first. Nothing is copied: the file is the
+ * same stored file, so a post that picks it simply points at it too.
+ */
+export const USED_BEFORE_MAX = 300
+export function mediaUsedBefore(
+  posts: readonly { id?: string | null; client_id?: string | null; slides?: unknown; updated_at?: string | null; created_at?: string | null }[],
+  clientId: string | null | undefined,
+  excludePostId?: string | null,
+): Slide[] {
+  if (!clientId) return []
+  const newest = [...posts]
+    .filter(p => p.client_id === clientId && (!excludePostId || p.id !== excludePostId))
+    .sort((a, b) => String(b.updated_at ?? b.created_at ?? '').localeCompare(String(a.updated_at ?? a.created_at ?? '')))
+  const seen = new Set<string>()
+  const out: Slide[] = []
+  for (const p of newest) {
+    for (const s of normaliseSlides(p.slides)) {
+      if (seen.has(s.url)) continue
+      seen.add(s.url)
+      out.push(s)
+      if (out.length === USED_BEFORE_MAX) return out
+    }
+  }
+  return out
+}
 
 export type PickerFile = Slide & {
   source: MediaSource

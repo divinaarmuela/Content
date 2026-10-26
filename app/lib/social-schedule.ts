@@ -967,9 +967,16 @@ export async function addMediaVersion(
     // anyway (lib/db.ts lists the node and filters here), so this costs
     // nothing beyond the read that already happened, and it is what makes a
     // pasted URL belonging to somebody else's piece safe from this.
-    const everywhere = new Set(
-      (await table<AssetVersion>('asset_versions').list().catch(() => []))
-        .flatMap(v => slidesOf(v).map(sl => sl.url)))
+    // …and held by ANY POST or post version (26 Oct 2026): the picker's "Used before" tab puts another post's
+    // file in this one, and a refused save must not delete it out from under the post it came from
+    const everywhere = new Set([
+      ...(await table<AssetVersion>('asset_versions').list().catch(() => []))
+        .flatMap(v => slidesOf(v).map(sl => sl.url)),
+      ...(await table('social_posts').list().catch(() => [] as Record<string, unknown>[]))
+        .flatMap(r => normaliseSlides((r as Record<string, unknown>).slides).map(sl => sl.url)),
+      ...(await table('post_versions').list().catch(() => [] as Record<string, unknown>[]))
+        .flatMap(r => normaliseSlides((r as Record<string, unknown>).slides).map(sl => sl.url)),
+    ])
     for (const slide of offered) {
       if (known.has(slide.url)) continue
       if (everywhere.has(slide.url)) continue
