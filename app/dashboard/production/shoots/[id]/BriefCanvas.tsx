@@ -29,6 +29,7 @@ import {
   hasTextStyle, defaultAlignOf, textBoldOf, boldWordsIn, inBoldRun,
   CANVAS_FONTS, CANVAS_FONTS_HREF, FONT_LABEL, FONT_STACK, fontOf, hasFontChoice, type CanvasFont } from '../../../../lib/batch-brief-core'
 import { FONT_CLASS, fontVars } from './canvasFont'
+import { pastedTableWidth, tableFromClipboard } from '../../../../lib/canvas-paste-core'
 import { applyBold } from './BoldBox'
 import { holdPageScroll } from '../../../../lib/hold-page-scroll'
 import { cardLinkOf, opensOnClick } from '../../../../lib/canvas-link-open-core'
@@ -1217,6 +1218,28 @@ export default function BriefCanvas({
     return () => window.removeEventListener('keydown', onKey)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cards, selected, editing, fullscreen, viewOnly, board, trail])
+
+  /* ── PASTE A TABLE (the owner, 26 Oct 2026 — as Milanote does: a table copied out of ChatGPT, Claude or a
+   *    spreadsheet lands on the board as a table, exactly). Only a paste on the board itself, never into a
+   *    note being typed, and only when what was copied is plainly a table. */
+  const addCardRef = useRef(addCard)
+  addCardRef.current = addCard
+  useEffect(() => {
+    if (viewOnly) return
+    const onPaste = (e: ClipboardEvent) => {
+      const t = e.target as HTMLElement | null
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
+      const onBoard = !t || t === document.body || !!viewportRef.current?.contains(t)
+      if (!onBoard || !e.clipboardData) return
+      const table = tableFromClipboard(e.clipboardData.getData('text/html'), e.clipboardData.getData('text/plain'))
+      if (!table) return
+      e.preventDefault()
+      addCardRef.current({ kind: 'table', rows: table.rows, header: table.header, w: pastedTableWidth(table) })
+      toast.success(`Table pasted — ${table.rows.length} rows`)
+    }
+    window.addEventListener('paste', onPaste)
+    return () => window.removeEventListener('paste', onPaste)
+  }, [viewOnly])
 
   const selectedCard = cards.find(c => c.id === selected) ?? null
   // MILANOTE'S COLUMNS (20 Oct 2026, docs/MILANOTE_MERGE.md): a card inside a column is drawn by the column, in the
