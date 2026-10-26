@@ -1,7 +1,9 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Check, FolderOpen, Search, Upload, X } from 'lucide-react'
+import { Check, FolderOpen, History, Search, Upload, X } from 'lucide-react'
+import { useTable } from '@/lib/db-client'
+import { mediaUsedBefore } from '@/app/lib/schedule-compose-core'
 import { cn } from '@/lib/utils'
 import { mayApproveWithoutClient, NOT_CLIENT_APPROVED } from '@/app/lib/social-schedule-core'
 import {
@@ -211,6 +213,18 @@ export default function NewPostSources({
 
   /** take a file out of the pick — and out of the queue, or the effect above
    *  would put a landed upload straight back */
+  /* ── USED BEFORE (26 Oct 2026): every file on this client's posts, tapped in the order wanted ── */
+  const usedKey = useMemo(() => ({ client_id: clientId ?? '' }), [clientId])
+  const otherPosts = useTable<{ id: string; client_id?: string | null; slides?: unknown }>('social_posts', {
+    by: usedKey, enabled: source === 'used' && !!clientId,
+  })
+  const usedBefore = useMemo(
+    () => mediaUsedBefore(otherPosts.rows, clientId),
+    [otherPosts.rows, clientId])
+  const toggleUsed = useCallback((slide: Slide) => {
+    setChosen(c => (c.some(x => x.url === slide.url) ? c.filter(x => x.url !== slide.url) : [...c, slide]))
+  }, [])
+
   const removeChosen = useCallback((i: number) => {
     const gone = chosen[i]
     // outside the updater: a state updater must not carry side effects
@@ -320,6 +334,7 @@ export default function NewPostSources({
             >
               {s.key === 'upload' && <Upload className="h-4 w-4" strokeWidth={2} aria-hidden />}
               {s.key === 'drive' && <FolderOpen className="h-4 w-4" strokeWidth={2} aria-hidden />}
+              {s.key === 'used' && <History className="h-4 w-4" strokeWidth={2} aria-hidden />}
               {s.key === 'approved' && <Check className="h-4 w-4" strokeWidth={2.2} aria-hidden />}
               {s.label}
             </button>
@@ -372,6 +387,39 @@ export default function NewPostSources({
                 />
               </label>
               <UploadRows uploads={uploads} onDismiss={dismissUpload} />
+              <ChosenStrip files={chosen} onRemove={removeChosen} />
+            </div>
+          ) : source === 'used' ? (
+            <div className="flex flex-col gap-3">
+              {otherPosts.loading ? (
+                <p className="py-6 text-center text-[13px] text-muted-foreground">Looking at this client’s posts…</p>
+              ) : usedBefore.length === 0 ? (
+                <p className="py-6 text-center text-[13px] text-muted-foreground">Nothing on this client’s posts yet.</p>
+              ) : (
+                <div className="grid grid-cols-3 gap-2.5 sm:grid-cols-5">
+                  {usedBefore.map(slide => {
+                    const at = chosen.findIndex(c => c.url === slide.url)
+                    return (
+                      <button key={slide.url} type="button" onClick={() => toggleUsed(slide)}
+                        aria-pressed={at >= 0}
+                        aria-label={at >= 0 ? `${slide.name} — number ${at + 1}, tap to take out` : `Use ${slide.name}`}
+                        title={slide.name}
+                        className={cn('relative aspect-square overflow-hidden rounded-tile border bg-foreground/[0.06]',
+                          at >= 0 ? 'border-foreground ring-2 ring-foreground' : 'border-border hover:shadow-md')}>
+                        <Thumb slide={slide} label={slide.name} className="pointer-events-none h-full w-full" />
+                        {at >= 0 && (
+                          <span className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-foreground text-[12px] font-bold text-background">
+                            {at + 1}
+                          </span>
+                        )}
+                        <span className="pointer-events-none absolute inset-x-0 bottom-0 truncate bg-ink/70 px-1.5 py-1 text-left text-[11px] font-medium text-cream">
+                          {slide.name}
+                        </span>
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
               <ChosenStrip files={chosen} onRemove={removeChosen} />
             </div>
           ) : source === 'drive' ? (

@@ -16,18 +16,18 @@ import {
 describe('the sources New post opens on', () => {
   it('puts Upload first, always — that is the step this change removes', () => {
     const sources = newPostSources({ driveAvailable: true, approvedCount: 9 })
-    expect(sources.map(s => s.key)).toEqual(['upload', 'drive', 'approved'])
+    expect(sources.map(s => s.key)).toEqual(['upload', 'drive', 'used', 'approved'])
     expect(firstSource(sources)).toBe('upload')
   })
 
-  it('offers Upload alone on an empty workspace — never a dead end', () => {
+  it('offers Upload, and what this client already posted, on an empty workspace — never a dead end', () => {
     const sources = newPostSources({ driveAvailable: false, approvedCount: 0 })
-    expect(sources.map(s => s.key)).toEqual(['upload'])
+    expect(sources.map(s => s.key)).toEqual(['upload', 'used'])
   })
 
   it('hides Google Drive where this client has no folder to read', () => {
     const sources = newPostSources({ driveAvailable: false, approvedCount: 3 })
-    expect(sources.map(s => s.key)).toEqual(['upload', 'approved'])
+    expect(sources.map(s => s.key)).toEqual(['upload', 'used', 'approved'])
   })
 
   it('says what each source is, in plain words and never "graphic"', () => {

@@ -773,6 +773,21 @@ export async function updatePost(
   const allowed = [...editableSlides, ...onPost.filter(s => !editableSlides.some(e => e.url === s.url))]
   // …and any version of this card's files (the owner, 30 Sep 2026: "they can use from any version")
   for (const s of anyVersionSlides(item, versions)) if (!allowed.some(a => a.url === s.url)) allowed.push(s)
+  // …and a file already on another of THIS client's posts — the picker's "Used before" tab (the owner, 26 Oct
+  // 2026: "whatever was uploaded … through other posts, whether in drafts etc, we can re-pick"). Same client only.
+  if (input.slides !== undefined) {
+    const asked = new Set(asArray<{ url?: unknown }>(input.slides).map(r => String(r?.url ?? '')).filter(u => u && !allowed.some(a => a.url === u)))
+    if (asked.size > 0) {
+      const clientId = String(item.client_id ?? '')
+      const others = await table<{ id: string; client_id?: string | null; slides?: unknown }>('social_posts')
+        .list({ where: r => !!clientId && r.client_id === clientId && r.id !== post.id }).catch(() => [])
+      for (const r of others) {
+        for (const sl of normaliseSlides(r.slides)) {
+          if (asked.has(sl.url) && !allowed.some(a => a.url === sl.url)) allowed.push(sl)
+        }
+      }
+    }
+  }
   // …and a file uploaded through the app for this post — a client's change is made HERE (uploadedForPost)
   if (input.slides !== undefined) {
     const asked = asArray<{ url?: unknown }>(input.slides).map(r => String(r?.url ?? '')).filter(u => u && !allowed.some(a => a.url === u))

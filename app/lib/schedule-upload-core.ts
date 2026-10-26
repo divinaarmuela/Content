@@ -40,7 +40,7 @@ export function isAdHocUploadVersion(
 
 /* ── the sources New post opens on ──────────────────────────────────────── */
 
-export type NewPostSourceKey = 'upload' | 'drive' | 'approved'
+export type NewPostSourceKey = 'upload' | 'drive' | 'used' | 'approved'
 
 export type NewPostSource = {
   key: NewPostSourceKey
@@ -89,6 +89,12 @@ export function newPostSources(input: {
       help: 'Pick from this client’s Drive folder. We copy the file — nothing in Drive changes.',
     })
   }
+  // every file already on this client's posts, drafts included (the owner, 26 Oct 2026)
+  out.push({
+    key: 'used',
+    label: 'Used before',
+    help: 'Files already on this client’s other posts — drafts, booked and posted. Tap them in the order you want.',
+  })
   if (input.approvedCount > 0) {
     out.push({
       key: 'approved',
