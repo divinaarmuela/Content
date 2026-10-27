@@ -1,8 +1,8 @@
 'use client'
 
 import Link from 'next/link'
+import GlobalSearch from './GlobalSearch'
 import { useMemo, useState, type CSSProperties } from 'react'
-import { useRouter } from 'next/navigation'
 import { UserButton, useUser } from '@clerk/nextjs'
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/sheet'
 import {
@@ -348,38 +348,7 @@ function SidebarHeader() {
   )
 }
 
-/**
- * The search pill.
- *
- * NOT WIRED YET. There is no global search in the dashboard today — no command
- * palette, and no page (production included) reads a `q` query parameter — so
- * there is nothing honest to point this at. Rather than show a box that
- * swallows what you type, it renders disabled and says so, and the first task
- * that ships a real search should replace this whole component.
- */
-/** THE AI SEARCH (the owner, 16 Sep 2026: "an AI search format"): a
- *  question typed here opens the assistant on it — "Capila cards on version
- *  2", "what is Ryan holding", "leads this week" — and the assistant
- *  answers from the same tables the pages read, with links to open. */
-function SearchPill() {
-  const router = useRouter()
-  const [q, setQ] = useState('')
-  const ask = () => { const t = q.trim(); if (!t) return; setQ(''); router.push(`/dashboard/ai?q=${encodeURIComponent(t)}`) }
-  return (
-    <div className="relative hidden min-w-0 flex-1 sm:block sm:max-w-sm">
-      <Search className="pointer-events-none absolute left-4 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-muted-foreground" strokeWidth={1.8} />
-      <input
-        type="search"
-        value={q}
-        onChange={e => setQ(e.target.value)}
-        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); ask() } }}
-        aria-label="Ask the assistant"
-        placeholder="Search anything — clients, cards, shoots, leads"
-        className="h-11 w-full rounded-full border border-border bg-surface pl-11 pr-4 text-[15px] text-foreground placeholder:text-muted-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent-blue"
-      />
-    </div>
-  )
-}
+/* the search bar is GlobalSearch.tsx: tasks, people and messages as you type, the assistant on Enter (27 Oct 2026) */
 
 /** name + initials, from the viewer Clerk already gives the shell */
 function AvatarPill() {
@@ -488,7 +457,7 @@ export default function Shell({
               per-page titles land. */}
           <h1 className="shrink-0 text-[15px] font-semibold tracking-tight md:hidden">{pageTitle(path)}</h1>
 
-          <SearchPill />
+          <GlobalSearch />
 
           <div className="ml-auto flex items-center gap-2">
             {/* Beta: this is in daily use while still being built, so the state

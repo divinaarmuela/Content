@@ -94,6 +94,9 @@ export default function TodosPage() {
   useEffect(() => {
     const saved = store.get('mdm.todos.place')
     if (saved === 'inbox' || saved === 'mine' || saved === 'all' || saved?.startsWith('project:') || saved?.startsWith('person:')) setPlace(saved as Place)
+    // a person picked in the search bar (`?person=`) opens their tasks (27 Oct 2026)
+    const fromLink = new URLSearchParams(location.search).get('person')
+    if (fromLink) { setPlace(`person:${fromLink}`); store.set('mdm.todos.place', `person:${fromLink}`) }
     // a project reopens as it opened: by who is doing what
     if (saved?.startsWith('project:')) setGroupBy('project')
     fetch('/api/todos/projects', { cache: 'no-store' }).then(r => (r.ok ? r.json() : { projects: [] })).then(j => setProjects(j.projects ?? [])).catch(() => undefined)
@@ -171,7 +174,8 @@ export default function TodosPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const lastPicked = useRef<string | null>(null)
   const [party, setParty] = useState(0)
-  const open = openId ? visibleAll.find(t => t.id === openId) ?? null : null
+  // a task opened from the search bar may be someone else's: anyone on the team may see it (27 Oct 2026)
+  const open = openId ? visibleAll.find(t => t.id === openId) ?? (viewer ? (raw as TodoRow[]).find(t => t.id === openId) ?? null : null) : null
   // a link from an email or the bell: /dashboard/todos?task=<id>
   useEffect(() => { const id = new URLSearchParams(location.search).get('task'); if (id) setOpenId(id) }, [])
   const openTask = useCallback((id: string | null) => {
