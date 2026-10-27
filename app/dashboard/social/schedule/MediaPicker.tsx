@@ -1,5 +1,6 @@
 'use client'
 
+import { inNameOrder } from '@/app/lib/schedule-upload-core'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowLeft, ArrowRight, FolderOpen, History, Layers, Upload, Wand2, X,
@@ -852,7 +853,7 @@ function UploadTab({ uploads, onFiles, files, onAdd, inTray, onDragStart }: {
         onDragOver={e => e.preventDefault()}
         onDrop={e => {
           e.preventDefault()
-          onFiles([...(e.dataTransfer.files ?? [])])
+          onFiles(inNameOrder([...(e.dataTransfer.files ?? [])]))
         }}
         className="flex min-h-[88px] cursor-pointer flex-col items-center justify-center gap-1 rounded-inner border-2 border-dashed border-border px-3 text-center text-[13px] text-muted-foreground hover:bg-muted"
       >
@@ -871,7 +872,7 @@ function UploadTab({ uploads, onFiles, files, onAdd, inTray, onDragStart }: {
           accept="image/*,video/*"
           className="sr-only"
           onChange={e => {
-            onFiles([...(e.target.files ?? [])])
+            onFiles(inNameOrder([...(e.target.files ?? [])]))
             e.target.value = ''
           }}
         />

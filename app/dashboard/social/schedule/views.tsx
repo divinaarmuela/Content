@@ -11,7 +11,7 @@ import { feedWords, type LiveTile } from '@/app/lib/feed-preview-core'
 import Chip from '../../ui/Chip'
 import { AlertMark, NetworkLogos, STAGE_DIM, STAGE_RING, StageDot, Thumb, clockLabel } from './tiles'
 import { automationLine } from '@/app/lib/comment-automation-core'
-import { isFileDrag } from '@/app/lib/schedule-upload-core'
+import { isFileDrag, inNameOrder } from '@/app/lib/schedule-upload-core'
 import { RAIL_DRAG_TYPE } from './MediaRail'
 import { DROP_KINDS } from './WeekGrid'
 import { POST_ID_ATTR, TILE_DRAG_TYPE, type DragSchedule } from './useDragSchedule'
@@ -346,7 +346,7 @@ export function MonthGrid({
               onDrop={e => {
                 e.preventDefault()
                 setOver(null)
-                const dropped = Array.from(e.dataTransfer.files ?? [])
+                const dropped = inNameOrder(Array.from(e.dataTransfer.files ?? []))
                 if (dropped.length > 0) {
                   const start = moveToDay(null, cell.key, tz, defaultTime)
                   if (start) onDropFiles(dropped, start)

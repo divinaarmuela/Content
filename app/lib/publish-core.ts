@@ -1645,6 +1645,9 @@ export type RemotePlatformRow = {
   platform?: string; name?: string; status?: string
   errorMessage?: string | null; error?: string | null
   platformPostUrl?: string | null
+  /** the network's own id for the post and the account's handle, when the provider gives them */
+  platformPostId?: string | null
+  accountUsername?: string | null
   /** `isDraft: true` — handed to the creator's inbox / Publishing Tools, not live */
   platformSpecificData?: { isDraft?: boolean } | null
 }

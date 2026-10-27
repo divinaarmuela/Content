@@ -230,3 +230,14 @@ export type UploadedPostSummary = {
    *  `draft_uploaded` until they send it; a manager's is already cleared */
   itemStatus?: string
 }
+
+/**
+ * FILES PICKED TOGETHER GO IN BY NAME (27 Oct 2026). Windows' file picker hands a multi-selection over in its own
+ * order — the file clicked last often comes first or last — so MGMT's four slides 351–354 went in as 352, 353, 354,
+ * 351, the cover went out as the last slide, and the post was deleted and put up again by hand. Numbered slides are
+ * named in the order they are meant to be swiped, so files chosen or dropped at once are laid out by name, numbers
+ * counted as numbers ("2" before "10"). Files added afterwards still go on the end, and the strip can be reordered.
+ */
+export function inNameOrder<F extends { name: string }>(files: readonly F[]): F[] {
+  return [...files].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }))
+}

@@ -320,6 +320,9 @@ function rowsOf(post: Record<string, unknown>, data: Record<string, unknown>): R
         platform, status: str(r.status).toLowerCase() || undefined,
         errorMessage: str(r.errorMessage) || str(r.error) || null,
         platformPostUrl: urlOf(r) || null,
+        // the network's id and the handle: a link can be built from them while the provider has none (27 Oct 2026)
+        ...(str(r.platformPostId) ? { platformPostId: str(r.platformPostId) } : {}),
+        ...(str(r.accountUsername) || str(r.username) ? { accountUsername: str(r.accountUsername) || str(r.username) } : {}),
       })
     }
   }

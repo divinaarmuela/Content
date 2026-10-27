@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils'
 import { mayApproveWithoutClient, NOT_CLIENT_APPROVED } from '@/app/lib/social-schedule-core'
 import {
   UPLOAD_OUTCOME_LINE, firstSource, newPostSources, refusedFilesLine,
-  UPLOAD_ACCEPT, usableUploadFiles,
+  UPLOAD_ACCEPT, inNameOrder, usableUploadFiles,
   type NewPostSourceKey, type UploadedPostSummary,
 } from '@/app/lib/schedule-upload-core'
 import { friendlyError } from '@/app/lib/support-core'
@@ -364,7 +364,7 @@ export default function NewPostSources({
                 onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy' }}
                 onDrop={e => {
                   e.preventDefault()
-                  void takeFiles(Array.from(e.dataTransfer.files ?? []))
+                  void takeFiles(inNameOrder(Array.from(e.dataTransfer.files ?? [])))
                 }}
                 className="flex min-h-[132px] cursor-pointer flex-col items-center justify-center gap-2 rounded-card border-2 border-dashed border-border bg-paper px-4 py-6 text-center hover:bg-muted"
               >
@@ -381,7 +381,7 @@ export default function NewPostSources({
                   accept={UPLOAD_ACCEPT}
                   className="sr-only"
                   onChange={e => {
-                    void takeFiles(Array.from(e.target.files ?? []))
+                    void takeFiles(inNameOrder(Array.from(e.target.files ?? [])))
                     e.target.value = ''
                   }}
                 />

@@ -130,8 +130,46 @@ export type RemoteRow = {
   platform?: string; name?: string; status?: string
   errorMessage?: string | null; error?: string | null
   platformPostUrl?: string | null
+  /** the network's own id for the post, and the account's handle — what `liveLinkFromId` builds a link from */
+  platformPostId?: string | null
+  accountUsername?: string | null
   publishedAt?: string | null
   platformSpecificData?: { isDraft?: boolean } | null
+}
+
+/**
+ * THE LINK WHEN THE PROVIDER HAS NONE YET (the owner, 27 Oct 2026: "why is the link for this not showing … in the card
+ * all the links"). Zernio reports Facebook, LinkedIn and TikTok live with their post ids at once, but leaves
+ * `platformPostUrl` empty until its analytics sync catches up — hours, sometimes never — so MGMT's 6 pm post showed
+ * Instagram's link and nothing for the other three. Each of those networks opens a post from its id alone:
+ *   LinkedIn  urn:li:ugcPost:… / urn:li:share:…   → linkedin.com/feed/update/<urn>/
+ *   Facebook  <page id>_<post id>                  → facebook.com/<page id>/posts/<post id>
+ *   TikTok    <id>, with the handle                → tiktok.com/@<handle>/video|photo/<id>
+ *   YouTube   <video id>                           → youtu.be/<id>
+ *   X         <id>, with the handle                → x.com/<handle>/status/<id>
+ * Instagram and Threads open by a shortcode the id does not give, so they wait for the provider's own link.
+ */
+export function liveLinkFromId(platform: string, id: string | null | undefined, handle?: string | null, kind?: string | null): string | null {
+  const pid = String(id ?? '').trim()
+  if (!pid) return null
+  const who = String(handle ?? '').trim().replace(/^@/, '')
+  switch (platform.toLowerCase()) {
+    case 'linkedin':
+      return /^urn:li:(ugcPost|share|activity):\d+$/.test(pid) ? `https://www.linkedin.com/feed/update/${pid}/` : null
+    case 'facebook': {
+      const m = /^(\d+)_(\d+)$/.exec(pid)
+      return m ? `https://www.facebook.com/${m[1]}/posts/${m[2]}` : /^\d+$/.test(pid) ? `https://www.facebook.com/${pid}` : null
+    }
+    case 'tiktok':
+      return who && /^\d+$/.test(pid) ? `https://www.tiktok.com/@${who}/${/carousel|photo|image|slide/i.test(String(kind ?? '')) ? 'photo' : 'video'}/${pid}` : null
+    case 'youtube':
+      return /^[\w-]{6,}$/.test(pid) ? `https://youtu.be/${pid}` : null
+    case 'twitter':
+    case 'x':
+      return who && /^\d+$/.test(pid) ? `https://x.com/${who}/status/${pid}` : null
+    default:
+      return null
+  }
 }
 
 const LIVE = ['published', 'posted', 'success']
@@ -191,7 +229,7 @@ function fromRow(platform: string, kindIn: string, r: RemoteRow, at: string, fal
   return {
     platform, kind, status: verdict,
     reason: verdict === 'failed' ? (platformErrorWords(why) || 'no reason given') : null,
-    url: r.platformPostUrl ?? null,
+    url: r.platformPostUrl || (verdict === 'published' ? liveLinkFromId(platform, r.platformPostId, r.accountUsername, kind) : null) || null,
     at: verdict === 'published' ? (r.publishedAt ?? at) : at,
   }
 }
@@ -606,7 +644,8 @@ export function foldResends<J extends ResendJob>(jobs: readonly J[]): J[] {
  *  live, and re-failing it every sweep re-sent it — twice — on 24 Sep 2026 */
 export function keepLive(stored: readonly PlatformOutcome[] | null | undefined, fresh: readonly PlatformOutcome[]): PlatformOutcome[] {
   const live = new Map((stored ?? []).filter(o => o.status === 'published').map(o => [o.platform, o]))
-  return fresh.map(o => live.get(o.platform) ?? o)
+  // …though a kept row with no link takes the one that has arrived since
+  return fresh.map(o => { const kept = live.get(o.platform); return kept ? (kept.url || !o.url ? kept : { ...kept, url: o.url }) : o })
 }
 
 /* ── THE POST'S OWN RECORD, PER NETWORK (the posting rebuild, 29 Sep 2026) ──
