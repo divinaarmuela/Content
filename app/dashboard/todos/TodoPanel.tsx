@@ -99,8 +99,10 @@ export default function TodoPanel({
 
   const [title, setTitle] = useState(t.title)
   const [note, setNote] = useState(t.note ?? '')
-  useEffect(() => { setTitle(t.title) }, [t.title])
-  useEffect(() => { setNote(t.note ?? '') }, [t.note])
+  const typingTitle = useRef(false)
+  const typingNote = useRef(false)
+  useEffect(() => { if (!typingTitle.current) setTitle(t.title) }, [t.title])
+  useEffect(() => { if (!typingNote.current) setNote(t.note ?? '') }, [t.note])
   const [sure, setSure] = useState(false)
   const [clientQuery, setClientQuery] = useState('')
   const clientSearch = useRef<HTMLInputElement | null>(null)
@@ -144,6 +146,41 @@ export default function TodoPanel({
     } catch (e) { toast.error(e instanceof Error ? e.message : 'Could not save that'); return false }
   }, [])
   const patch = (body: Record<string, unknown>, said?: string) => send(`/api/todos/${t.id}`, { method: 'PATCH', body: JSON.stringify(body) }, said).then(ok => { if (ok) void loadActivity(); return ok })
+
+  /**
+   * AUTOSAVE (the team, 27 Oct 2026: "sometimes won't save tasks … can you make it autosave"). The name and the
+   * description save themselves a moment after the typing stops — no click away needed — and whatever is still
+   * unsaved is saved when the panel closes or moves to another task.
+   */
+  const AUTOSAVE_MS = 700
+  const unsaved = useRef<{ id: string; title?: string; note?: string }>({ id: t.id })
+  const saveNow = useCallback((id: string, body: { title?: string; note?: string }) => {
+    if (body.title === undefined && body.note === undefined) return
+    void send(`/api/todos/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
+  }, [send])
+  useEffect(() => {
+    if (!editable) return
+    const v = title.trim()
+    if (!v || v === t.title) { delete unsaved.current.title; return }
+    unsaved.current = { ...unsaved.current, id: t.id, title: v }
+    const h = window.setTimeout(() => { delete unsaved.current.title; void patch({ title: v }) }, AUTOSAVE_MS)
+    return () => window.clearTimeout(h)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [title])
+  useEffect(() => {
+    if (!editable) return
+    if (note.trim() === (t.note ?? '').trim()) { delete unsaved.current.note; return }
+    unsaved.current = { ...unsaved.current, id: t.id, note }
+    const h = window.setTimeout(() => { delete unsaved.current.note; void patch({ note }) }, AUTOSAVE_MS)
+    return () => window.clearTimeout(h)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [note])
+  // the panel closing, or opening another task: what was typed and not yet saved goes now
+  useEffect(() => () => {
+    const { id, ...body } = unsaved.current
+    unsaved.current = { id: '' }
+    if (id) saveNow(id, body)
+  }, [t.id, saveNow])
 
   useEffect(() => {
     const esc = (e: KeyboardEvent) => { if (e.key === 'Escape' && !(e.target as HTMLElement)?.closest?.('input,textarea,[role=listbox]')) onClose() }
@@ -288,7 +325,8 @@ export default function TodoPanel({
             </button>
           )}
           <textarea value={title} rows={1} readOnly={!editable} aria-label="Task name" onChange={e => setTitle(e.target.value)}
-            onBlur={() => { const v = title.trim(); if (v && v !== t.title) void patch({ title: v }); else setTitle(t.title) }}
+            onFocus={() => { typingTitle.current = true }}
+            onBlur={() => { typingTitle.current = false; const v = title.trim(); if (v && v !== t.title) { delete unsaved.current.title; void patch({ title: v }) } else if (!v) setTitle(t.title) }}
             onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLTextAreaElement).blur() } }}
             className={`-mx-1.5 resize-none rounded-md border border-transparent bg-transparent px-1.5 py-1 text-[24px] font-semibold leading-tight outline-none [field-sizing:content] hover:border-border focus:border-foreground/30 ${done ? 'text-muted-foreground' : ''}`} />
 
@@ -409,7 +447,8 @@ export default function TodoPanel({
                 <textarea ref={noteRef} autoFocus value={note} rows={4} placeholder="What is this to-do about?" aria-label="Description"
                   onChange={e => setNote(e.target.value)}
                   onKeyDown={e => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') { e.preventDefault(); format('bold') } if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'i') { e.preventDefault(); format('italic') } }}
-                  onBlur={() => { setEditingNote(false); if (note.trim() !== (t.note ?? '').trim()) void patch({ note }) }}
+                  onFocus={() => { typingNote.current = true }}
+                  onBlur={() => { typingNote.current = false; setEditingNote(false); if (note.trim() !== (t.note ?? '').trim()) { delete unsaved.current.note; void patch({ note }) } }}
                   className="-mx-2 min-h-24 resize-none rounded-md border border-foreground/30 bg-transparent px-2 py-1.5 text-[14px] outline-none [field-sizing:content]" />
               </>
             ) : (

@@ -30,14 +30,26 @@ export function FieldControl({ def, value, editable, onChange, compact = false }
   compact?: boolean
 }) {
   const shown = fieldDisplay(def, value)
+  // A LIST ROW DRAWS A LABEL, NOT A CONTROL, until somebody clicks it (the team, 27 Oct 2026: "the to-do list keeps
+  // lagging" — every row drew a full dropdown or text box per custom field, measured at ~1s to draw Everyone's tasks)
+  const [live, setLive] = useState(!compact)
   const [draft, setDraft] = useState(value === undefined || value === null ? '' : String(value))
   useEffect(() => { setDraft(value === undefined || value === null ? '' : String(value)) }, [value])
   const box = `h-8 min-w-0 rounded-md border bg-transparent px-2 text-[13px] outline-none ${compact ? 'border-transparent hover:border-border focus:border-foreground/40' : 'border-border'}`
 
+  if (editable && !live) {
+    return (
+      <button type="button" aria-label={def.name} onClick={e => { e.stopPropagation(); setLive(true) }}
+        className="flex h-8 w-full min-w-0 items-center rounded-md border border-transparent px-1.5 text-left text-[13px] hover:border-border">
+        {shown ? (def.type === 'select' ? <FieldPill text={shown.text} colour={shown.colour} /> : <span className="truncate">{shown.text}</span>) : <span className="text-muted-foreground">—</span>}
+      </button>
+    )
+  }
   if (def.type === 'select') {
     if (!editable) return shown ? <FieldPill text={shown.text} colour={shown.colour} /> : <span className="text-muted-foreground">—</span>
     return (
-      <Select value={typeof value === 'string' ? value : '__none'} onValueChange={v => onChange(v === '__none' ? null : v)}>
+      <Select defaultOpen={compact} onOpenChange={o => { if (!o && compact) setLive(false) }}
+        value={typeof value === 'string' ? value : '__none'} onValueChange={v => onChange(v === '__none' ? null : v)}>
         <SelectTrigger aria-label={def.name} onClick={e => e.stopPropagation()}
           className={`h-8 w-full min-w-0 justify-start gap-1 rounded-md bg-transparent px-1.5 text-[13px] shadow-none [&>svg]:ml-auto [&>svg]:opacity-0 hover:[&>svg]:opacity-60 ${compact ? 'border-transparent hover:border-border' : 'border-border'}`}>
           <SelectValue placeholder={<span className="text-muted-foreground">—</span>}>
@@ -59,7 +71,7 @@ export function FieldControl({ def, value, editable, onChange, compact = false }
     onChange(v === '' ? null : def.type === 'number' ? Number(v) : v)
   }
   return (
-    <input aria-label={def.name} value={draft} onClick={e => e.stopPropagation()} onChange={e => setDraft(e.target.value)} onBlur={commit}
+    <input aria-label={def.name} value={draft} autoFocus={compact} onClick={e => e.stopPropagation()} onChange={e => setDraft(e.target.value)} onBlur={() => { commit(); if (compact) setLive(false) }}
       onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); if (e.key === 'Escape') { setDraft(value == null ? '' : String(value)); (e.target as HTMLInputElement).blur() } }}
       type={def.type === 'number' ? 'number' : def.type === 'date' ? 'date' : 'text'} placeholder="—" className={`${box} w-full`} />
   )

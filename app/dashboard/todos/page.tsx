@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowUpDown, Calendar, ChevronDown, ChevronLeft, ChevronRight, Filter, GitBranch, GripVertical, Hourglass, Keyboard, Layers, MessageSquare,
   MoreHorizontal, Paperclip, Plus, Sparkles, ThumbsUp, X, Repeat } from 'lucide-react'
@@ -334,7 +334,26 @@ export default function TodosPage() {
   const filterPersonName = person ? (names.get(person) ?? null) : null
   const filterCount = (person ? 1 : 0) + (client ? 1 : 0)
   const linkOf = (t: TodoRow) => (t.client_id ? { label: clientNames.get(t.client_id) ?? null } : null)
-  const meta = (t: TodoRow) => ({ subs: subCount.get(t.id) ?? 0, comments: commentCount.get(t.id) ?? 0, files: todoFilesOf(t.files).length, likes: idsOf(t.likes).length, blocked: openBlockers(t, visibleAll).length })
+  // the open tasks by id, once per change: a row's "waiting on" count was a scan of every task, for every row
+  const openIds = useMemo(() => new Set(visibleAll.filter(x => x.status !== 'done').map(x => String(x.id))), [visibleAll])
+  const meta = (t: TodoRow) => ({ subs: subCount.get(t.id) ?? 0, comments: commentCount.get(t.id) ?? 0, files: todoFilesOf(t.files).length, likes: idsOf(t.likes).length, blocked: idsOf((t as { blocked_by?: unknown }).blocked_by).filter(id => openIds.has(id)).length })
+  /**
+   * A ROW'S ACTIONS, THROUGH ONE STABLE CHANNEL (the team, 27 Oct 2026: "the to-do list keeps lagging"). Every row
+   * used to get new functions on every redraw, so a change anywhere redrew all of them — ~1s on Everyone's tasks.
+   * The row is memoised and calls these by the task's id; the object is replaced each render, so what runs is always
+   * the page as it is now, never a stale copy.
+   */
+  const rowActs = useRef<RowActs>(null as never)
+  rowActs.current = {
+    open: (id, e) => { if (e.metaKey || e.ctrlKey || e.shiftKey) pick(id, e); else { if (selected.size) setSelected(new Set()); openTask(id) } },
+    pick: (id, e) => pick(id, e),
+    tick: (id, d) => { const t = visibleAll.find(x => x.id === id); if (t) void tick(t, d) },
+    dragStart: id => setDragId(id),
+    dragEnd: () => { setDragId(null); setDropAt(null) },
+    dragOver: id => { if (dragId && dragId !== id) setDropAt(`row:${id}`) },
+    rename: (id, title) => void patchTodo(id, { title }),
+    field: (id, fid, v) => void patchTodo(id, { fields: { [fid]: v } }),
+  }
   const [dragId, setDragId] = useState<string | null>(null)
   const [dropAt, setDropAt] = useState<string | null>(null)
   const tool = 'inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-[12px] font-medium'
@@ -474,13 +493,8 @@ export default function TodosPage() {
                       <TaskRow key={t.id} t={t} today={today!} open={openId === t.id} picked={selected.has(t.id)} editable={mayEditTodo(viewer, t as never)}
                         owner={t.owner_id ? (t.owner_id === me?.id ? 'Me' : names.get(t.owner_id) ?? 'Someone') : null}
                         ownerName={t.owner_id ? names.get(t.owner_id) ?? '?' : null}
-                        link={linkOf(t)} meta={meta(t)} dropBefore={dropAt === `row:${t.id}`}
-                        onOpen={e => { if (e.metaKey || e.ctrlKey || e.shiftKey) pick(t.id, e); else { if (selected.size) setSelected(new Set()); openTask(t.id) } }}
-                        onPick={e => pick(t.id, e)} onTick={d => void tick(t, d)}
-                        onDragStart={() => setDragId(t.id)} onDragEnd={() => { setDragId(null); setDropAt(null) }}
-                        onDragOverRow={() => { if (dragId && dragId !== t.id) setDropAt(`row:${t.id}`) }}
-                        onRename={title => void patchTodo(t.id, { title })}
-                        gridStyle={gridCols} fieldDefs={fieldDefs} onField={(fid, v) => void patchTodo(t.id, { fields: { [fid]: v } })} />
+                        linkLabel={linkOf(t)?.label ?? null} meta={meta(t)} dropBefore={dropAt === `row:${t.id}`}
+                        acts={rowActs} gridStyle={gridCols} fieldDefs={fieldDefs} />
                     ))}
                     {viewer && g.key !== 'done' && (adding === g.key ? (
                       <NewRow onCancel={() => setAdding(null)} onAdd={title => create(title, g)} />
@@ -661,13 +675,35 @@ function LinkChip({ link }: { link: { label: string | null } | null }) {
 }
 
 type Mods = { shiftKey: boolean; metaKey: boolean; ctrlKey: boolean }
-function TaskRow({ t, today, open, picked, editable, owner, ownerName, link, meta, dropBefore, onOpen, onPick, onTick, onRename, onDragStart, onDragEnd, onDragOverRow, gridStyle, fieldDefs = [], onField }: {
-  gridStyle?: React.CSSProperties; fieldDefs?: TodoFieldDef[]; onField?: (fieldId: string, value: string | number | null) => void
+/** what a row can do, by its task's id — always the page's current handlers (see `rowActs`) */
+type RowActs = {
+  open: (id: string, e: Mods) => void; pick: (id: string, e: Mods) => void; tick: (id: string, done: boolean) => void
+  dragStart: (id: string) => void; dragEnd: () => void; dragOver: (id: string) => void
+  rename: (id: string, title: string) => void; field: (id: string, fieldId: string, value: string | number | null) => void
+}
+type TaskRowProps = {
   t: TodoRow; today: string; open: boolean; picked: boolean; editable: boolean
-  owner: string | null; ownerName: string | null; link: { label: string | null } | null; meta: Meta; dropBefore: boolean
-  onOpen: (e: Mods) => void; onPick: (e: Mods) => void; onTick: (done: boolean) => void; onRename: (title: string) => void
-  onDragStart: () => void; onDragEnd: () => void; onDragOverRow: () => void
-}) {
+  owner: string | null; ownerName: string | null; linkLabel: string | null; meta: Meta; dropBefore: boolean
+  acts: React.MutableRefObject<RowActs>; gridStyle?: React.CSSProperties; fieldDefs?: TodoFieldDef[]
+}
+/** a row redraws only when what it shows changes — its task, its place in the selection, its counts */
+const sameRow = (a: TaskRowProps, b: TaskRowProps) =>
+  a.t === b.t && a.today === b.today && a.open === b.open && a.picked === b.picked && a.editable === b.editable
+  && a.owner === b.owner && a.ownerName === b.ownerName && a.linkLabel === b.linkLabel && a.dropBefore === b.dropBefore
+  && a.gridStyle === b.gridStyle && a.fieldDefs === b.fieldDefs && a.acts === b.acts
+  && a.meta.subs === b.meta.subs && a.meta.comments === b.meta.comments && a.meta.files === b.meta.files
+  && a.meta.likes === b.meta.likes && a.meta.blocked === b.meta.blocked
+const TaskRow = memo(TaskRowView, sameRow)
+function TaskRowView({ t, today, open, picked, editable, owner, ownerName, linkLabel, meta, dropBefore, acts, gridStyle, fieldDefs = [] }: TaskRowProps) {
+  const link = linkLabel ? { label: linkLabel } : null
+  const onOpen = (e: Mods) => acts.current.open(t.id, e)
+  const onPick = (e: Mods) => acts.current.pick(t.id, e)
+  const onTick = (done: boolean) => acts.current.tick(t.id, done)
+  const onRename = (title: string) => acts.current.rename(t.id, title)
+  const onDragStart = () => acts.current.dragStart(t.id)
+  const onDragEnd = () => acts.current.dragEnd()
+  const onDragOverRow = () => acts.current.dragOver(t.id)
+  const onField = (fieldId: string, value: string | number | null) => acts.current.field(t.id, fieldId, value)
   const done = t.status === 'done'
   const [editing, setEditing] = useState(false)
   const [title, setTitle] = useState(t.title)
