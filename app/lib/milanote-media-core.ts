@@ -16,8 +16,10 @@ export function isMilanoteSrc(src: string | null | undefined): boolean {
 }
 
 export const MAX_ATTEMPTS = 3
-/** the most one file may be — Milanote's largest here is a few hundred MB of video */
-export const MAX_BYTES = 500 * 1024 * 1024
+/** the most one file may be: R2's single-upload ceiling. Anything past STREAM_FROM is streamed through, never held in
+ *  memory — four videos of 541 MB to 1.3 GB were refused at the old 500 MB wall (27 Oct 2026) */
+export const MAX_BYTES = 4.9 * 1024 * 1024 * 1024
+export const STREAM_FROM = 100 * 1024 * 1024
 /** a `copying` row older than this was left by a run that died; it is picked up again */
 export const STALE_COPYING_MS = 10 * 60 * 1000
 

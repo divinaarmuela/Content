@@ -4,6 +4,7 @@ import {
   CreateMultipartUploadCommand, UploadPartCommand, CompleteMultipartUploadCommand, AbortMultipartUploadCommand,
 } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
+import { Readable } from 'node:stream'
 
 /**
  * Where uploaded media lives.
@@ -83,6 +84,18 @@ export async function putObject(
 
   await r2().send(new PutObjectCommand({
     Bucket: R2_BUCKET!, Key: key, Body: bytes, ContentType: contentType,
+  }))
+  return { publicUrl: `${R2_PUBLIC_BASE!.replace(/\/$/, '')}/${key}`, key }
+}
+
+/** putObject for a body too big to hold in memory: streamed through to R2 with its length known up front. */
+export async function putStream(
+  filename: string, body: ReadableStream<Uint8Array>, length: number, contentType: string,
+): Promise<{ publicUrl: string; key: string }> {
+  if (!r2Configured()) throw new Error('File storage is not configured')
+  const key = objectKey(filename)
+  await r2().send(new PutObjectCommand({
+    Bucket: R2_BUCKET!, Key: key, Body: Readable.fromWeb(body as never), ContentLength: length, ContentType: contentType,
   }))
   return { publicUrl: `${R2_PUBLIC_BASE!.replace(/\/$/, '')}/${key}`, key }
 }

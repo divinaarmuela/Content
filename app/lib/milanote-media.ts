@@ -1,8 +1,8 @@
 import 'server-only'
 import { table } from '@/lib/db'
 import type { MilanoteMedia } from '@/lib/db-types'
-import { putObject } from './storage'
-import { MAX_ATTEMPTS, MAX_BYTES, isMilanoteSrc, nextToCopy } from './milanote-media-core'
+import { putObject, putStream } from './storage'
+import { MAX_ATTEMPTS, MAX_BYTES, STREAM_FROM, isMilanoteSrc, nextToCopy } from './milanote-media-core'
 
 /**
  * COPYING MILANOTE'S IMAGES AND FILES INTO OUR STORAGE — the server half (20 Oct 2026, docs/MILANOTE_MERGE.md).
@@ -29,11 +29,19 @@ export async function copyMilanoteBatch(limit = 6): Promise<{ copied: number; fa
       if (!res.ok) throw new Error(`Milanote answered ${res.status}`)
       const length = Number(res.headers.get('content-length') ?? 0)
       if (length > MAX_BYTES) throw new Error(`Too big (${Math.round(length / 1048576)} MB)`)
-      const bytes = Buffer.from(await res.arrayBuffer())
-      if (bytes.length > MAX_BYTES) throw new Error('Too big')
       const mime = row.mime || res.headers.get('content-type') || 'application/octet-stream'
-      const { publicUrl } = await putObject(`milanote-${row.name}`, bytes, mime)
-      await rows().update(row.id, { status: 'done', url: publicUrl, mime, size: bytes.length, error: null, updated_at: new Date().toISOString() } as never)
+      let publicUrl: string, size: number
+      if (length > STREAM_FROM && res.body) {
+        // a big video goes straight through to storage, never whole in memory
+        ;({ publicUrl } = await putStream(`milanote-${row.name}`, res.body, length, mime))
+        size = length
+      } else {
+        const bytes = Buffer.from(await res.arrayBuffer())
+        if (bytes.length > MAX_BYTES) throw new Error('Too big')
+        ;({ publicUrl } = await putObject(`milanote-${row.name}`, bytes, mime))
+        size = bytes.length
+      }
+      await rows().update(row.id, { status: 'done', url: publicUrl, mime, size, error: null, updated_at: new Date().toISOString() } as never)
       copied++
     } catch (e) {
       const attempts = Number(row.attempts ?? 0) + 1
