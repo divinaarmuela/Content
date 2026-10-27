@@ -1023,6 +1023,8 @@ const GHOST_TABLES = {
     ['objective', col('string', true)],
     ['notes', col('string', true)],
     ['checks', col('unknown', true, true)],
+    // the post breakdowns, UNLK.AI's way (27 Oct 2026; post-breakdown-core.ts): scores, ranked reasons, Claude's teardowns
+    ['posts_explained', col('unknown', true, true)],
     ['generated_at', col('string', true)],
     ['generated_by', col('string', true)],
     ['updated_by', col('string', true)],

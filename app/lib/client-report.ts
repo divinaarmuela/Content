@@ -6,6 +6,7 @@ import {
   monthRange, previousMonth, readReportData, reportId, reportPrompt, toBreakdown,
   type Audience, type MonthKey, type PlatformFigures, type ReportData, type TopPost,
 } from './client-report-core'
+import { breakdownLines, readPostsExplained } from './post-breakdown-core'
 
 /**
  * THE MONTHLY CLIENT REPORT — the server half (client-report-core.ts has the why). Reads every figure from the client's
@@ -34,9 +35,9 @@ const obj = (v: unknown): Record<string, unknown> => (v && typeof v === 'object'
 const arr = (v: unknown): Record<string, unknown>[] => (Array.isArray(v) ? v.filter(x => x && typeof x === 'object') as Record<string, unknown>[] : [])
 const metricTotal = (metrics: Record<string, unknown>, k: string) => num(obj(metrics[k]).total ?? metrics[k])
 
-type Account = { id: string; platform: 'instagram' | 'facebook'; handle: string | null }
+export type Account = { id: string; platform: 'instagram' | 'facebook'; handle: string | null }
 
-async function accountsOf(clientId: string): Promise<Account[]> {
+export async function accountsOf(clientId: string): Promise<Account[]> {
   const rows = await table<{ id: string; client_id: string | null; platform: string; provider_account_id: string | null; username: string | null; name: string | null; active?: boolean | null }>('social_accounts')
     .list({ where: a => a.client_id === clientId && a.active !== false && (a.platform === 'instagram' || a.platform === 'facebook') && !!a.provider_account_id })
   const seen = new Set<string>()
@@ -45,31 +46,55 @@ async function accountsOf(clientId: string): Promise<Account[]> {
     .sort((a, b) => (a.platform === 'instagram' ? -1 : 1) - (b.platform === 'instagram' ? -1 : 1))
 }
 
-/** the month's posts on one account, with their caption, picture, link and numbers */
+/** one post as Zernio lists it, with its caption, picture, link and numbers */
+function toTopPost(p: Record<string, unknown>, platform: Account['platform']): TopPost {
+  const a = obj(p.analytics ?? p.metrics)
+  const plat = arr(p.platforms).find(x => String(x.platform ?? '') === platform) ?? {}
+  const items = arr(p.mediaItems)
+  return {
+    id: String(p._id ?? p.id ?? p.postId ?? ''),
+    platform,
+    publishedAt: String(p.publishedAt ?? plat.publishedAt ?? p.scheduledFor ?? '') || null,
+    url: String(p.platformPostUrl ?? plat.platformPostUrl ?? '') || null,
+    thumbnail: String(p.thumbnailUrl ?? items[0]?.url ?? '') || null,
+    caption: String(p.content ?? p.caption ?? '').slice(0, 600),
+    format: String(p.mediaType ?? items[0]?.type ?? '') || null,
+    views: num(a.views) ?? num(a.impressions) ?? 0,
+    reach: num(a.reach) ?? 0,
+    likes: num(a.likes) ?? 0,
+    comments: num(a.comments) ?? 0,
+    shares: num(a.shares) ?? 0,
+    saves: num(a.saves) ?? 0,
+    engagementRate: num(a.engagementRate),
+    // Instagram's own per-post signals — read live off Justin's October (27 Oct 2026): reels carry their length,
+    // average watch time and 3-second skip rate; feed posts carry the follows and profile visits they brought
+    durationSec: num(a.videoDurationSeconds) || null,
+    avgWatchMs: num(a.igReelsAvgWatchTime) || null,
+    skipRate: num(a.reelsSkipRate) || null,
+    follows: num(a.follows) || null,
+    profileVisits: num(a.profileViews) || null,
+    slides: items.length > 1 ? items.length : null,
+    // a carousel's first slides, for the breakdown to look at (Instagram's links expire; used the day they are read)
+    images: items.filter(i => String(i.type ?? '') === 'image').slice(0, 3).map(i => String(i.url ?? '')).filter(u => u.startsWith('https://')),
+  }
+}
+
+/** every post on one account between two dates, page by page (at most `pages` pages of 100) */
+export async function postsBetween(acc: Account, from: string, to: string, pages = 5): Promise<TopPost[]> {
+  const out: TopPost[] = []
+  for (let page = 1; page <= pages; page++) {
+    const r = await zernio<{ posts?: unknown; pagination?: { pages?: number } }>('/analytics', { platform: acc.platform, accountId: acc.id, fromDate: from, toDate: to, limit: 100, page, source: 'all' })
+    if (!r.ok) break
+    out.push(...arr(r.data.posts).map(p => toTopPost(p, acc.platform)).filter(p => p.id))
+    if (!(Number(r.data.pagination?.pages) > page)) break
+  }
+  return out
+}
+
+/** the month's posts on one account */
 async function postsOf(acc: Account, m: MonthKey): Promise<TopPost[]> {
   const { from, to } = monthRange(m)
-  const r = await zernio<{ posts?: unknown }>('/analytics', { platform: acc.platform, accountId: acc.id, fromDate: from, toDate: to, limit: 100, source: 'all' })
-  if (!r.ok) return []
-  return arr(r.data.posts).map(p => {
-    const a = obj(p.analytics ?? p.metrics)
-    const plat = arr(p.platforms).find(x => String(x.platform ?? '') === acc.platform) ?? {}
-    return {
-      id: String(p._id ?? p.id ?? p.postId ?? ''),
-      platform: acc.platform,
-      publishedAt: String(p.publishedAt ?? plat.publishedAt ?? p.scheduledFor ?? '') || null,
-      url: String(p.platformPostUrl ?? plat.platformPostUrl ?? '') || null,
-      thumbnail: String(p.thumbnailUrl ?? arr(p.mediaItems)[0]?.url ?? '') || null,
-      caption: String(p.content ?? p.caption ?? '').slice(0, 600),
-      format: String(p.mediaType ?? arr(p.mediaItems)[0]?.type ?? '') || null,
-      views: num(a.views) ?? num(a.impressions) ?? 0,
-      reach: num(a.reach) ?? 0,
-      likes: num(a.likes) ?? 0,
-      comments: num(a.comments) ?? 0,
-      shares: num(a.shares) ?? 0,
-      saves: num(a.saves) ?? 0,
-      engagementRate: num(a.engagementRate),
-    }
-  }).filter(p => p.id)
+  return postsBetween(acc, from, to, 1)
 }
 
 /** the audience breakdown: live for the current month (and saved as the month's snapshot), else the saved snapshot */
@@ -226,7 +251,7 @@ export async function generateReport(clientId: string, m: MonthKey, by: string, 
   const saved = await table<ClientReport>('client_reports').get(id)
   const data = readReportData(saved?.data) ?? await loadReportData(clientId, m)
   const before = await table<ClientReport>('client_reports').get(reportId(clientId, previousMonth(m))).catch(() => null)
-  const { system, user } = reportPrompt({ data, objective: opts.objective, notes: opts.notes, shootConcepts: await nextShootConcepts(clientId, m), previousReport: before?.body ?? null })
+  const { system, user } = reportPrompt({ data, objective: opts.objective, notes: opts.notes, shootConcepts: await nextShootConcepts(clientId, m), previousReport: before?.body ?? null, breakdowns: (() => { const x = readPostsExplained(saved?.posts_explained); return x ? breakdownLines(x.items, x.posts) : [] })() })
   // what Claude's account says, in words — a top-up is a person's job, not a retry (live, 26 Oct 2026: out of credit)
   const said = (e: unknown) => {
     const m = e instanceof Error ? e.message : String(e)

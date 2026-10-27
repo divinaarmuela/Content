@@ -5,6 +5,7 @@ import { AuthzError, authzErrorResponse, requireRole, type TeamUser } from '@/ap
 import { accessibleClientIds } from '@/app/lib/production-access'
 import { isMonthKey, mayDeleteReport, mayOpenReports, reportId, REVIEW_CHECKS, type MonthKey } from '@/app/lib/client-report-core'
 import { generateReport, loadReportData } from '@/app/lib/client-report'
+import { explainMonth } from '@/app/lib/post-breakdown'
 import { logActivity } from '@/app/lib/workflow'
 
 /**
@@ -13,6 +14,7 @@ import { logActivity } from '@/app/lib/workflow'
  *   GET    ?client_id&month[&refresh=1]   the clients this person may report on; the month's figures (read from
  *                                         Zernio when there are none yet, or on refresh) and the saved report
  *   POST   { client_id, month, action: 'generate', objective, notes }   Claude writes the report from the figures
+ *   POST   { client_id, month, action: 'explain' }   the month's posts scored and explained, UNLK.AI's way
  *   PATCH  { client_id, month, body?, notes?, objective?, checks? }     the team's edits and ticks
  *   DELETE ?client_id&month                                            a super admin removes the saved report
  *
@@ -67,8 +69,15 @@ export async function POST(req: Request) {
     try {
       const user = await who()
       const body = await req.json().catch(() => ({})) as { client_id?: string; month?: string; action?: string; objective?: string; notes?: string }
-      if (!body.client_id || !isMonthKey(body.month) || body.action !== 'generate') return NextResponse.json({ error: 'Pick a client and a month' }, { status: 400 })
+      if (!body.client_id || !isMonthKey(body.month) || (body.action !== 'generate' && body.action !== 'explain')) return NextResponse.json({ error: 'Pick a client and a month' }, { status: 400 })
       await mayReportOn(user, body.client_id)
+      if (body.action === 'explain') {
+        const x = await explainMonth(body.client_id, body.month)
+        const report = await table<ClientReport>('client_reports').get(reportId(body.client_id, body.month))
+        if (!x.ok) return NextResponse.json({ error: x.error, report }, { status: 502 })
+        await logActivity({ actor: user, clientId: body.client_id, entityType: 'client_report', entityId: reportId(body.client_id, body.month), action: 'report_posts_explained', newValue: body.month }).catch(() => undefined)
+        return NextResponse.json({ ok: true, report })
+      }
       const r = await generateReport(body.client_id, body.month, user.id, { objective: String(body.objective ?? '').slice(0, 300), notes: String(body.notes ?? '').slice(0, 6000) })
       if (!r.ok) return NextResponse.json({ error: r.error }, { status: 502 })
       await logActivity({ actor: user, clientId: body.client_id, entityType: 'client_report', entityId: reportId(body.client_id, body.month), action: 'report_generated', newValue: body.month }).catch(() => undefined)

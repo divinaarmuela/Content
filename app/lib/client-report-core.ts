@@ -70,6 +70,16 @@ export type TopPost = {
   format: string | null
   views: number; reach: number; likes: number; comments: number; shares: number; saves: number
   engagementRate: number | null
+  /** Instagram's own per-post signals (27 Oct 2026, the post breakdowns): a reel's length, its average watch time,
+   *  the share who skipped it in the first 3 seconds (Meta's estimate), and the follows a feed post brought */
+  durationSec?: number | null
+  avgWatchMs?: number | null
+  skipRate?: number | null
+  follows?: number | null
+  profileVisits?: number | null
+  /** a carousel's slide count, and the first slides' pictures */
+  slides?: number | null
+  images?: string[]
 }
 export type PlatformFigures = {
   platform: 'instagram' | 'facebook'
@@ -165,6 +175,8 @@ export function reportPrompt(input: {
   notes: string
   shootConcepts: string[]
   previousReport: string | null
+  /** the month's post breakdowns, as lines (post-breakdown-core.ts breakdownLines) */
+  breakdowns?: string[]
 }): { system: string; user: string } {
   const { data } = input
   const platforms = data.platforms.map(p => p.platform === 'instagram' ? 'Instagram' : 'Facebook').join(' and ') || 'Instagram'
@@ -205,6 +217,7 @@ export function reportPrompt(input: {
     ...(input.shootConcepts.length ? ['', 'Shoot concepts already planned for next month (align the strategy and ideas with these):', ...input.shootConcepts.map(c => `• ${c}`)] : []),
     ...(input.notes.trim() ? ['', 'Notes from the team (take these into account):', input.notes.trim()] : []),
     ...(input.previousReport ? ['', 'Last month’s report for this client, for continuity of structure and to compare against:', input.previousReport.slice(0, 20000)] : []),
+    ...(input.breakdowns ?? []),
     '',
     'With the following analytics below:',
     // an older month's audience may still carry a gender split — it is never sent

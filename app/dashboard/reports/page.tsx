@@ -15,6 +15,8 @@ import PageTitle from '../ui/PageTitle'
 import TintCard from '../ui/TintCard'
 import { useRole } from '../useRole'
 import LeadsReportCard from './LeadsReportCard'
+import PostBreakdowns from './PostBreakdowns'
+import { readPostsExplained } from '../../lib/post-breakdown-core'
 import {
   REVIEW_CHECKS, allChecked, change, fmt, monthLabel, monthRange, readReportData, recentMonths, reportHtml,
   type Breakdown, type MonthKey, type PlatformFigures, type ReportData, type TopPost,
@@ -30,6 +32,8 @@ import {
 type Saved = {
   id: string; month: MonthKey; data: ReportData | null; body: string | null; objective: string | null; notes: string | null
   checks: Record<string, boolean> | null; generated_at: string | null; updated_at: string
+  /** the post breakdowns (PostBreakdowns.tsx), as saved */
+  posts_explained?: unknown
 }
 const OBJECTIVES = ['Growth', 'Engagement', 'Leads', 'Positioning']
 const PREF_KEY = 'reports:last'
@@ -113,7 +117,14 @@ export default function ReportsPage() {
               <ul className="list-disc pl-5 text-[14px]">{data.gaps.map(g => <li key={g}>{g}</li>)}</ul>
             </TintCard>
           )}
-          {data.platforms.map(p => <PlatformSection key={p.platform} p={p} month={data.month} />)}
+          {data.platforms.map(p => (
+            <div key={p.platform} className="flex flex-col gap-6">
+              <PlatformSection p={p} month={data.month} />
+              {p.platform === 'instagram' && (
+                <PostBreakdowns raw={report?.posts_explained} clientId={clientId} month={month} onChange={r => setReport(r as Saved)} />
+              )}
+            </div>
+          ))}
           {data.audience && <AudienceSection a={data.audience} />}
           {report && <Writer report={report} clientId={clientId} month={month} mayDelete={mayDelete} onChange={setReport} onDeleted={() => void load()} />}
           <PrintReport data={data} report={report} clientName={clientName} />
@@ -397,6 +408,27 @@ function Writer({ report, clientId, month, mayDelete, onChange, onDeleted }: {
   )
 }
 
+/** the post breakdowns in the PDF: each post's score and the one-line verdict */
+function PrintBreakdowns({ raw }: { raw: unknown }) {
+  const x = readPostsExplained(raw)
+  const items = (x?.items ?? []).filter(i => i.breakdown)
+  if (!items.length) return null
+  const byId = new Map((x?.posts ?? []).map(p => [p.id, p]))
+  return (
+    <>
+      <h3>Why the posts worked</h3>
+      {items.map(i => {
+        const p = byId.get(i.postId)
+        return (
+          <p key={i.postId} className="pr-small">
+            <strong>{p?.publishedAt ? new Date(p.publishedAt).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' }) : ''} · score {i.index.score} ({i.index.multiple}× a typical post).</strong> {i.breakdown!.verdict}
+          </p>
+        )
+      })}
+    </>
+  )
+}
+
 /* ── the PDF: the print view — the figures, the top posts, the audience and the report ── */
 
 function PrintReport({ data, report, clientName }: { data: ReportData; report: Saved | null; clientName: string }) {
@@ -439,6 +471,7 @@ function PrintReport({ data, report, clientName }: { data: ReportData; report: S
               </div>
             </>
           )}
+          {p.platform === 'instagram' && <PrintBreakdowns raw={report?.posts_explained} />}
         </div>
       ))}
       {data.audience && (
