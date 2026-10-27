@@ -113,7 +113,7 @@ export function useClientWord(post: PostState | null): string | null {
   if (!post || !onePortal(client) || isAgencyClient(post.client_id)) return null
   if (post.stage === 'posted' || post.stage === 'cancelled') return null
   const review = readClientReview(post.client_review)
-  if (post.stage !== 'booked' && !review) return 'sees it once booked'
+  if (post.stage !== 'booked' && !review) return 'Sees it once booked'
   const state = reviewState(post as never)
   return state === 'not_approved' ? 'Not approved' : REVIEW_WORDS[state]
 }

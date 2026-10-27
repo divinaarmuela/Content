@@ -1271,7 +1271,9 @@ export default function PostWindow({
             { key: 'caption', label: 'Caption', show: true },
             { key: 'channels', label: 'Per channel', count: chosen.length, show: !allStory && chosen.length > 0 },
             { key: 'media', label: 'Media', count: shown.slides.length, show: true },
-            { key: 'options', label: 'Options', show: !!options || !!automation || !!alsoPost },
+            // the comment-to-DM section draws nothing on a post that cannot change and has none set (live check, 27 Oct
+            // 2026: MGMT's booked REEL 4 opened an empty Options tab)
+            { key: 'options', label: 'Options', show: !!options || !!alsoPost || (!!automation && (editable || !!shown.automation)) },
             { key: 'notes', label: 'Notes', count: noteCount, show: !!notesBox },
           ]
           const visible = tabs.filter(t => t.show)
@@ -1279,7 +1281,16 @@ export default function PostWindow({
           return (
             <div data-window-body className="grid min-h-0 flex-1 grid-cols-[minmax(300px,0.85fr)_minmax(0,1.5fr)] overflow-hidden">
               <div data-window-side data-window-scroll className="flex min-h-0 flex-col gap-3 overflow-y-auto border-r border-border bg-paper/50 px-4 py-3">
-                {previewPane('mx-auto max-w-[max(200px,min(100%,calc((100dvh-27rem)*0.5625)))]')}
+                {/* no channel picked yet: the network preview has nothing to draw, so the post's own media stands in
+                    (live check on a draft, 27 Oct 2026: the left side was empty) */}
+                {preview.networks.length > 0
+                  ? previewPane('mx-auto max-w-[max(200px,min(100%,calc((100dvh-27rem)*0.5625)))]')
+                  : (
+                    <>
+                      {mainMedia('mx-auto aspect-[4/5] max-w-[max(200px,min(100%,calc((100dvh-24rem)*0.8)))]')}
+                      <p className="text-center text-[12px] text-muted-foreground">Pick a channel and the post shows here as that network will show it.</p>
+                    </>
+                  )}
                 {thumbs}
                 {igGrid}
               </div>
@@ -1315,7 +1326,10 @@ export default function PostWindow({
                   )}
                   {open === 'channels' && (
                     <>
-                      <p className="text-[13px] text-muted-foreground">Each channel posts the caption from the Caption tab, unless it has its own here.</p>
+                      {!editable && !chosen.some(a => shown.perChannel[a.id]?.caption?.trim())
+                        // read only and nothing set per channel: the section itself draws nothing, so say what is true
+                        ? <p className="text-[13px] text-muted-foreground">All {chosen.length} channels post the same caption — none has words of its own.</p>
+                        : <p className="text-[13px] text-muted-foreground">Each channel posts the caption from the Caption tab, unless it has its own here.</p>}
                       {channelCaptions}
                     </>
                   )}
