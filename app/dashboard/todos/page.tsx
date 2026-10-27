@@ -93,7 +93,7 @@ export default function TodosPage() {
   const [projects, setProjects] = useState<Project[]>([])
   useEffect(() => {
     const saved = store.get('mdm.todos.place')
-    if (saved === 'inbox' || saved === 'mine' || saved === 'all' || saved?.startsWith('project:')) setPlace(saved as Place)
+    if (saved === 'inbox' || saved === 'mine' || saved === 'all' || saved?.startsWith('project:') || saved?.startsWith('person:')) setPlace(saved as Place)
     // a project reopens as it opened: by who is doing what
     if (saved?.startsWith('project:')) setGroupBy('project')
     fetch('/api/todos/projects', { cache: 'no-store' }).then(r => (r.ok ? r.json() : { projects: [] })).then(j => setProjects(j.projects ?? [])).catch(() => undefined)
@@ -101,6 +101,8 @@ export default function TodosPage() {
   const inbox = useTodoInbox()
   const project = place.startsWith('project:') ? projects.find(p => `project:${p.id}` === place) ?? null : null
   const projectId = place.startsWith('project:') ? place.slice(8) : null
+  // SOMEONE'S TASKS (27 Oct 2026): every task theirs that this person can see
+  const personId = place.startsWith('person:') ? place.slice(7) : null
   const projectSections = useMemo(() => orderedSections(projectSectionRows.filter(x => x.client_id === projectId)).map(x => ({ id: x.id, name: x.name })), [projectSectionRows, projectId])
   const [view, setView] = useState<View>('list')
   const [sort, setSort] = useState<TodoSort>('due')
@@ -137,12 +139,15 @@ export default function TodosPage() {
   }
 
   // the top-level to-dos (subtasks live in their parent's panel, as in Asana's My Tasks)
-  const shown = useMemo(() => visibleAll.filter(t => !t.parent_id
+  // SOMEONE'S TASKS ARE EVERYONE'S TO SEE (the owner, 27 Oct 2026: "anyone should be able to see it"): on a person's
+  // page every member of the team sees all of that person's tasks, not only the ones they are on
+  const pool = useMemo(() => (personId && viewer ? raw as TodoRow[] : visibleAll), [personId, viewer, raw, visibleAll])
+  const shown = useMemo(() => pool.filter(t => !t.parent_id
     && (status === 'all' || (status === 'done' ? t.status === 'done' : t.status !== 'done'))
     // MY TASKS is mine alone; a project is that client's, everyone's on it; Everyone's tasks is a super admin's all
-    && (place === 'mine' ? t.owner_id === me?.id : projectId ? t.client_id === projectId : true)
+    && (place === 'mine' ? t.owner_id === me?.id : personId ? t.owner_id === personId : projectId ? t.client_id === projectId : true)
     && (!person || place === 'mine' || (!canFilterPeople && !projectId) || t.owner_id === person)
-    && (!client || !!projectId || t.client_id === client)), [visibleAll, status, person, client, canFilterPeople, place, projectId, me?.id])
+    && (!client || !!projectId || t.client_id === client)), [pool, status, person, client, canFilterPeople, place, projectId, personId, me?.id])
   const nameOf = useCallback((id: string | null) => (id ? names.get(id) ?? 'Someone' : ''), [names])
   const clientOf = useCallback((id: string | null) => (id ? clientNames.get(id) ?? 'A client' : ''), [clientNames])
   const listGroups = useMemo(() => {
@@ -191,7 +196,7 @@ export default function TodosPage() {
     if (ok && done && celebrate && Math.random() < 0.34) setParty(p => p + 1)
   }, [patchTodo, visibleAll, celebrate])
   const create = (title: string, g: TodoGroup<TodoRow> | null, due?: string | null) => {
-    const body: Record<string, unknown> = { title, owner_id: person || me?.id || null, client_id: projectId || client || null, files: [] }
+    const body: Record<string, unknown> = { title, owner_id: personId || person || me?.id || null, client_id: projectId || client || null, files: [] }
     body.due_date = due !== undefined ? due : g?.dateKey ? dueForGroup(g.dateKey, today!) : null
     if (g?.key.startsWith('assignee:')) body.owner_id = g.key.slice(9) || me?.id || null
     if (g?.key.startsWith('client:')) body.client_id = g.key.slice(7) || null
@@ -226,6 +231,26 @@ export default function TodosPage() {
     if (Object.keys(body).length === 0) return
     if (body.position !== undefined && sort !== 'manual') { pickSort('manual'); toast('Sorted by your own order now — change it under Sort') }
     void patchTodo(id, body)
+  }
+  /**
+   * RENAME A SECTION, wherever its title is (the team, 27 Oct 2026: "I can't edit this title — Untitled section"). A
+   * real section is renamed; a project's "Untitled section" — its tasks with no section yet — becomes a real section
+   * of that name, first on the project, and its tasks move into it, as Asana's does.
+   */
+  const renameGroup = async (g: { key: string; rows: TodoRow[]; sectionId?: string | null; projectSectionId?: string | null }, name: string) => {
+    const clean = name.trim()
+    if (!clean) return
+    if (g.projectSectionId) { await send(`/api/todo-project-sections/${g.projectSectionId}`, { method: 'PATCH', body: JSON.stringify({ name: clean }) }); return }
+    if (g.sectionId) { await send(`/api/todo-sections/${g.sectionId}`, { method: 'PATCH', body: JSON.stringify({ name: clean }) }); return }
+    if (g.key !== 'psec:' || !projectId) return
+    try {
+      const first = projectSectionRows.filter(x => x.client_id === projectId).reduce((m, x) => Math.min(m, Number(x.position ?? 0)), 1024)
+      const res = await fetch('/api/todo-project-sections', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ client_id: projectId, name: clean, position: first - 1024 }) })
+      const made = await res.json().catch(() => ({})) as { id?: string; error?: string }
+      if (!res.ok || !made.id) throw new Error(made.error ?? 'Could not name the section')
+      await Promise.all(g.rows.map(t => fetch(`/api/todos/${t.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ project_section_id: made.id }) })))
+      toast.success(`Section named ${clean}`)
+    } catch (e) { toast.error(e instanceof Error ? e.message : 'Could not name the section') }
   }
   const addProjectSection = async (name: string) => {
     if (!name.trim() || !projectId) return
@@ -318,15 +343,17 @@ export default function TodosPage() {
     // the sidebar in its own column; everything else in the second (Asana's layout)
     <div className="grid min-h-0 grid-cols-1 md:grid-cols-[220px_minmax(0,1fr)] md:gap-x-6 md:[&>*:not([data-todo-nav])]:col-start-2" data-todos-page>
       <div data-todo-nav className="md:col-start-1 md:row-start-1 md:[grid-row:1/span_999]">
-        <TodoSidebar place={place} onPlace={goPlace} projects={projects} unread={inbox.unread} everyone={viewer?.role === 'super_admin'} />
+        <TodoSidebar place={place} onPlace={goPlace} projects={projects} unread={inbox.unread} everyone={viewer?.role === 'super_admin'}
+          people={people.filter(p => p.id !== me?.id).sort((a, b) => a.name.localeCompare(b.name))} />
       </div>
       <header className="flex flex-col border-b border-border">
         <div className="flex h-14 items-center gap-2.5">
-          {project ? <ProjectIcon p={project} size={28} /> : <Avatar name={(me && names.get(me.id)) || 'Me'} size="md" />}
+          {project ? <ProjectIcon p={project} size={28} /> : <Avatar name={(personId ? names.get(personId) : me && names.get(me.id)) || 'Me'} size="md" />}
           <h1 className="text-[20px] font-semibold tracking-tight">
-            {place === 'inbox' ? 'Inbox' : place === 'all' ? 'Everyone’s tasks' : project ? project.name : projectId ? 'Project' : 'My tasks'}
+            {place === 'inbox' ? 'Inbox' : place === 'all' ? 'Everyone’s tasks' : personId ? `${(names.get(personId) ?? 'Someone').split(/[\s@]/)[0]}’s tasks` : project ? project.name : projectId ? 'Project' : 'My tasks'}
           </h1>
           {project && <span className="text-[13px] text-muted-foreground">everyone&rsquo;s tasks for this client, by who is doing them</span>}
+
           <button type="button" onClick={() => setHelpOpen(true)} aria-label="Keyboard shortcuts" title="Keyboard shortcuts (?)" className="ml-auto flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted"><Keyboard className="h-4 w-4" aria-hidden /></button>
         </div>
         <nav className={`flex h-9 items-end gap-5 ${place === 'inbox' ? 'hidden' : ''}`} role="tablist" aria-label="Views">
@@ -434,10 +461,9 @@ export default function TodosPage() {
                 onDrop={e => { e.preventDefault(); const id = e.dataTransfer.getData('text/todo'); const before = dropAt?.startsWith('row:') ? dropAt.slice(4) : null; setDropAt(null); setDragId(null); if (id) dropRow(id, g, before) }}
                 className={dropAt === `group:${g.key}` ? 'rounded bg-accent-blue-deep/5' : ''}>
                 <SectionHeader g={g} shut={shut} editable={!!g.sectionId || !!g.projectSectionId}
+                  renamable={!!g.sectionId || !!g.projectSectionId || (g.key === 'psec:' && !!projectId)}
                   onToggle={() => setCollapsed(c => { const n = new Set(c); if (n.has(g.key)) n.delete(g.key); else n.add(g.key); return n })}
-                  onRename={name => void (g.projectSectionId
-                    ? send(`/api/todo-project-sections/${g.projectSectionId}`, { method: 'PATCH', body: JSON.stringify({ name }) })
-                    : send(`/api/todo-sections/${g.sectionId}`, { method: 'PATCH', body: JSON.stringify({ name }) }))}
+                  onRename={name => void renameGroup(g as never, name)}
                   onDelete={() => void (g.projectSectionId
                     ? send(`/api/todo-project-sections/${g.projectSectionId}`, { method: 'DELETE' }, 'Section deleted — its tasks stay on the project')
                     : send(`/api/todo-sections/${g.sectionId}`, { method: 'DELETE' }, 'Section deleted — its tasks moved to Recently assigned'))}
@@ -497,7 +523,8 @@ export default function TodosPage() {
           <Board groups={listGroups as never} today={today!} names={names} openId={openId} viewer={viewer}
             link={linkOf} meta={meta} onOpen={openTask} onTick={(t, d) => void tick(t, d)} onMove={moveTo}
             onDropTo={(id, key) => { const g = listGroups.find(x => x.key === key); if (g) dropRow(id, g, null) }}
-            onAdd={(title, key) => create(title, listGroups.find(x => x.key === key) ?? null)} addNonce={addNonce} />
+            onAdd={(title, key) => create(title, listGroups.find(x => x.key === key) ?? null)} addNonce={addNonce}
+            onRename={(key, name) => { const g = listGroups.find(x => x.key === key); if (g) void renameGroup(g as never, name) }} />
         ) : (
           <Board groups={boardGroups} today={today!} names={names} openId={openId} viewer={viewer}
             link={linkOf} meta={meta} onOpen={openTask} onTick={(t, d) => void tick(t, d)} onMove={moveTo} onAdd={(title, key) => create(title, null, dueForGroup(key, today!))} addNonce={addNonce} />
@@ -565,8 +592,10 @@ export default function TodosPage() {
   )
 }
 
-function SectionHeader({ g, shut, editable, onToggle, onRename, onDelete, onAdd }: {
+function SectionHeader({ g, shut, editable, renamable = editable, onToggle, onRename, onDelete, onAdd }: {
   g: TodoGroup<TodoRow>; shut: boolean; editable: boolean
+  /** the title can be renamed — a real section, or a project's "Untitled section" (which becomes one) */
+  renamable?: boolean
   onToggle: () => void; onRename: (name: string) => void; onDelete: () => void; onAdd: () => void
 }) {
   const [editing, setEditing] = useState(false)
@@ -586,7 +615,10 @@ function SectionHeader({ g, shut, editable, onToggle, onRename, onDelete, onAdd 
           onBlur={() => { setEditing(false); if (name.trim() && name.trim() !== g.label) onRename(name.trim()) }}
           className="h-8 rounded border border-border bg-transparent px-1.5 text-[16px] font-medium outline-none" />
       ) : (
-        <h2 onDoubleClick={() => editable && setEditing(true)} className={`text-[16px] font-medium ${g.tone === 'red' ? 'text-accent-red-deep' : ''}`}>{g.label}</h2>
+        // ONE CLICK RENAMES IT, as Asana's does (a double-click was nobody's guess)
+        renamable
+          ? <h2><button type="button" onClick={() => setEditing(true)} title="Click to rename" className={`rounded px-0.5 text-left text-[16px] font-medium hover:bg-muted ${g.tone === 'red' ? 'text-accent-red-deep' : ''}`}>{g.label}</button></h2>
+          : <h2 className={`text-[16px] font-medium ${g.tone === 'red' ? 'text-accent-red-deep' : ''}`}>{g.label}</h2>
       )}
       <span className="ml-1 text-[12px] text-muted-foreground">{shut || g.rows.length ? g.rows.length : ''}</span>
       <button type="button" aria-label={`Add a task to ${g.label}`} onClick={onAdd} className="ml-1 flex h-7 w-7 items-center justify-center rounded text-muted-foreground opacity-0 hover:bg-muted focus:opacity-100 group-hover/sec:opacity-100"><Plus className="h-4 w-4" aria-hidden /></button>
@@ -701,7 +733,9 @@ function NewRow({ onAdd, onCancel }: { onAdd: (title: string) => void; onCancel:
 }
 
 /** BOARD — one column per date section; drag a card to another to give it that date (Done completes it) */
-function Board({ groups, today, names, openId, viewer, link, meta, onOpen, onTick, onMove, onAdd, onDropTo, addNonce = 0 }: {
+function Board({ groups, today, names, openId, viewer, link, meta, onOpen, onTick, onMove, onAdd, onDropTo, onRename, addNonce = 0 }: {
+  /** a project's columns are its sections: a click on a title renames it (27 Oct 2026) */
+  onRename?: (key: TodoGroupKey, name: string) => void
   /** the page's Add task, pressed: a new card at the end of the first column */
   addNonce?: number
   /** a project's board: a card dropped on a column moves it to that section, not a date */
@@ -727,7 +761,10 @@ function Board({ groups, today, names, openId, viewer, link, meta, onOpen, onTic
           onDragOver={e => { e.preventDefault(); setOver(g.key) }} onDragLeave={() => setOver(o => (o === g.key ? null : o))}
           onDrop={e => { e.preventDefault(); setOver(null); const id = e.dataTransfer.getData('text/todo'); if (!id) return; if (onDropTo) onDropTo(id, g.key); else onMove(id, g.key === 'done' ? null : dueForGroup(g.key, today), g.key === 'done') }}
           className={`flex w-[272px] shrink-0 flex-col gap-2 rounded-lg p-2 ${over === g.key ? 'bg-accent-blue-deep/10' : 'bg-muted/50'}`}>
-          <h2 className={`flex h-8 items-center gap-2 px-1 text-[14px] font-semibold ${g.key === 'overdue' ? 'text-accent-red-deep' : ''}`}>{g.label}<span className="text-[12px] font-normal text-muted-foreground">{g.rows.length}</span></h2>
+          <h2 className={`flex h-8 items-center gap-2 px-1 text-[14px] font-semibold ${g.key === 'overdue' ? 'text-accent-red-deep' : ''}`}>
+            {onRename ? <ColumnTitle label={g.label} onRename={name => onRename(g.key, name)} /> : g.label}
+            <span className="text-[12px] font-normal text-muted-foreground">{g.rows.length}</span>
+          </h2>
           {g.rows.map(t => {
             const done = t.status === 'done'
             const editable = mayEditTodo(viewer, t as never)
@@ -846,3 +883,18 @@ function CalendarView({ rows, today, names, openId, onOpen, onMove, onAdd, canAd
   )
 }
 
+/** a board column's title that renames on a click — Enter or leaving it saves, Escape puts it back */
+function ColumnTitle({ label, onRename }: { label: string; onRename: (name: string) => void }) {
+  const [editing, setEditing] = useState(false)
+  const [name, setName] = useState(label)
+  useEffect(() => { if (!editing) setName(label) }, [label, editing])
+  if (!editing) {
+    return <button type="button" onClick={() => setEditing(true)} title="Click to rename" className="min-w-0 truncate rounded px-0.5 text-left hover:bg-muted">{label}</button>
+  }
+  return (
+    <input autoFocus value={name} aria-label="Section name" onChange={e => setName(e.target.value)}
+      onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); if (e.key === 'Escape') { setName(label); setEditing(false) } }}
+      onBlur={() => { setEditing(false); if (name.trim() && name.trim() !== label) onRename(name.trim()) }}
+      className="h-7 min-w-0 flex-1 rounded border border-border bg-transparent px-1.5 text-[14px] font-semibold outline-none" />
+  )
+}

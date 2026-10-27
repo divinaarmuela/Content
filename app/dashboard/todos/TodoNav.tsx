@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Bell, CheckCircle2, FolderKanban, Users } from 'lucide-react'
+import { Bell, CheckCircle2, FolderKanban, Search, Users } from 'lucide-react'
 import { agoWords, inboxDay, inboxFor, type InboxItem, type InboxTab } from '../../lib/todo-inbox-core'
 
 /**
@@ -12,8 +12,65 @@ import { agoWords, inboxDay, inboxFor, type InboxItem, type InboxTab } from '../
  */
 
 export type Project = { id: string; name: string; logo: string | null; colour: string; open: number; mine: boolean }
-/** where the page is: the inbox, my tasks, everyone's (a super admin), or one client's project */
-export type Place = 'inbox' | 'mine' | 'all' | `project:${string}`
+/** where the page is: the inbox, my tasks, everyone's (a super admin), one client's project, or one person's tasks */
+export type Place = 'inbox' | 'mine' | 'all' | `project:${string}` | `person:${string}`
+
+/** a person's initials, for the round mark beside their name (Asana's "YM") */
+export function initialsOf(name: string): string {
+  const parts = name.replace(/@.*$/, '').split(/[\s._-]+/).filter(Boolean)
+  return ((parts[0]?.[0] ?? '') + (parts[1]?.[0] ?? '')).toUpperCase() || '•'
+}
+export function PersonMark({ name, size = 20 }: { name: string; size?: number }) {
+  return (
+    <span aria-hidden className="flex shrink-0 items-center justify-center rounded-full bg-accent-blue/20 font-semibold text-accent-blue-deep" style={{ width: size, height: size, fontSize: Math.round(size * 0.42) }}>
+      {initialsOf(name)}
+    </span>
+  )
+}
+
+/**
+ * SOMEONE'S TASKS (the owner, 27 Oct 2026, Asana's "Yusuf's tasks": "is there a way to view each team's tasks — if I
+ * search their name, it would show all tasks under them"). Type a name, pick them, and the page is theirs — every
+ * one of their tasks, for anyone on the team ("anyone should be able to see it").
+ */
+function PeopleSearch({ people, place, onPlace, item }: {
+  people: { id: string; name: string }[]
+  place: Place
+  onPlace: (p: Place) => void
+  item: (on: boolean) => string
+}) {
+  const [q, setQ] = useState('')
+  const open = place.startsWith('person:') ? people.find(p => `person:${p.id}` === place) ?? null : null
+  const found = q.trim() ? people.filter(p => p.name.toLowerCase().includes(q.trim().toLowerCase())).slice(0, 8) : []
+  return (
+    <div className="mt-3 flex flex-col gap-1">
+      <p className="flex items-center gap-1.5 px-2.5 text-[12px] font-semibold text-muted-foreground"><Users className="h-3.5 w-3.5" aria-hidden /> People</p>
+      <label className="relative mx-0.5 flex items-center">
+        <Search className="pointer-events-none absolute left-2.5 h-3.5 w-3.5 text-muted-foreground" aria-hidden />
+        <input value={q} onChange={e => setQ(e.target.value)} placeholder="Find someone’s tasks" aria-label="Find someone’s tasks"
+          onKeyDown={e => { if (e.key === 'Enter' && found[0]) { onPlace(`person:${found[0].id}`); setQ('') } if (e.key === 'Escape') setQ('') }}
+          className="h-9 w-full rounded-md border border-border bg-surface pl-8 pr-2 text-[13px] outline-none focus:border-foreground/40" />
+      </label>
+      {q.trim() && (
+        <ul className="flex flex-col gap-0.5" aria-label="People found">
+          {found.length === 0 && <li className="px-2.5 py-1 text-[12px] text-muted-foreground">Nobody by that name</li>}
+          {found.map(p => (
+            <li key={p.id}>
+              <button type="button" onClick={() => { onPlace(`person:${p.id}`); setQ('') }} className={item(false)}>
+                <PersonMark name={p.name} /> <span className="min-w-0 flex-1 truncate">{p.name}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {open && !q.trim() && (
+        <button type="button" aria-current="page" className={item(true)} onClick={() => onPlace(place)}>
+          <PersonMark name={open.name} /> <span className="min-w-0 flex-1 truncate">{open.name}</span>
+        </button>
+      )}
+    </div>
+  )
+}
 
 /** a project's own mark: its logo, or Asana's coloured square with its first letter */
 export function ProjectIcon({ p, size = 20 }: { p: Pick<Project, 'name' | 'logo' | 'colour'>; size?: number }) {
@@ -29,10 +86,12 @@ export function ProjectIcon({ p, size = 20 }: { p: Pick<Project, 'name' | 'logo'
   )
 }
 
-export function TodoSidebar({ place, onPlace, projects, unread, everyone }: {
+export function TodoSidebar({ place, onPlace, projects, unread, everyone, people = [] }: {
   place: Place
   onPlace: (p: Place) => void
   projects: Project[]
+  /** the team, for "Find someone's tasks" */
+  people?: { id: string; name: string }[]
   unread: number
   /** a super admin also has "Everyone's tasks" */
   everyone: boolean
@@ -75,6 +134,7 @@ export function TodoSidebar({ place, onPlace, projects, unread, everyone }: {
           </li>
         )}
       </ul>
+      {people.length > 0 && <PeopleSearch people={people} place={place} onPlace={onPlace} item={item} />}
       {projects.length > 0 && (
         <div className="mt-3 hidden min-h-0 flex-1 flex-col gap-1 overflow-y-auto [overflow-anchor:none] md:flex">
           <p className="flex items-center gap-1.5 px-2.5 text-[12px] font-semibold text-muted-foreground"><FolderKanban className="h-3.5 w-3.5" aria-hidden /> Projects</p>
