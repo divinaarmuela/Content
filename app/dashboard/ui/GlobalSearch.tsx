@@ -123,7 +123,7 @@ export default function GlobalSearch() {
     const i = ++at
     return (
       <button key={r.key} type="button" role="option" aria-selected={hi === i} onMouseEnter={() => setHi(i)} onClick={() => go(r)}
-        className={`flex w-full min-w-0 items-center gap-3 rounded-md px-3 py-1.5 text-left text-[14px] ${hi === i ? 'bg-muted' : 'hover:bg-muted/70'}`}>
+        className={`flex w-full min-w-0 items-center gap-3 rounded-lg px-1.5 py-1.5 text-left text-[14px] ${hi === i ? 'bg-muted' : 'hover:bg-muted/70'}`}>
         {children}
       </button>
     )
@@ -166,9 +166,9 @@ export default function GlobalSearch() {
       {who && <Avatar name={who} />}
     </>)
   }
-  const heading = (label: string) => <p className="px-3 pb-1 pt-2.5 text-[12px] font-medium text-muted-foreground">{label}</p>
+  const heading = (label: string) => <p className="px-1.5 pb-1 pt-2.5 text-[12px] font-medium text-muted-foreground">{label}</p>
   const more = (k: SearchKind, n: number, label: string) => kind === null && n > FIRST_SHOWN && (
-    <button type="button" onClick={() => { setKind(k); input.current?.focus() }} className="px-3 py-1 text-left text-[13px] font-medium text-accent-blue-deep hover:underline">Show more {label}</button>
+    <button type="button" onClick={() => { setKind(k); input.current?.focus() }} className="px-1.5 py-1 text-left text-[13px] font-medium text-accent-blue-deep hover:underline">Show more {label}</button>
   )
 
   let ri = 0
@@ -178,7 +178,7 @@ export default function GlobalSearch() {
       {open && (
         // the box grows into the panel: it starts behind the box and runs down from it
         <div role="listbox" aria-label="Search" data-global-search
-          className="absolute -left-2 -top-2 flex max-h-[80vh] w-[min(600px,calc(100vw-2rem))] flex-col overflow-hidden rounded-[18px] border border-border bg-popover pt-[60px] shadow-[0_16px_48px_rgba(11,11,11,0.22)]">
+          className="absolute -left-3 -top-3 flex max-h-[80vh] w-[min(600px,calc(100vw-2rem))] flex-col overflow-hidden rounded-[22px] border border-border bg-popover pt-[66px] shadow-[0_16px_48px_rgba(11,11,11,0.22)]">
           <div className="flex shrink-0 flex-wrap gap-2 px-3 pb-2">
             {SEARCH_KINDS.map(k => {
               const Icon = KIND_ICON[k.key]
@@ -192,7 +192,7 @@ export default function GlobalSearch() {
             })}
           </div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto px-1.5 pb-1.5">
+          <div className="min-h-0 flex-1 overflow-y-auto px-1.5 pb-2">
             {!typed && (
               recentRows.length > 0 ? (
                 <section className="flex flex-col">
@@ -205,7 +205,7 @@ export default function GlobalSearch() {
                   })}
                 </section>
               ) : (
-                <p className="px-3 py-3 text-[13px] text-muted-foreground">Search the team&rsquo;s tasks, projects, people and messages. What you open from here shows up as Recents.</p>
+                <p className="px-1.5 py-3 text-[13px] text-muted-foreground">Search the team&rsquo;s tasks, projects, people and messages. What you open from here shows up as Recents.</p>
               )
             )}
 
@@ -222,12 +222,12 @@ export default function GlobalSearch() {
               <section className="flex flex-col">{heading('Messages')}{msgs.map(m => messageLine(m, nextRow()))}{more('messages', found.messages.length, 'messages')}</section>
             )}
             {typed && rows.length === 0 && (
-              <p className="px-3 py-3 text-[13px] text-muted-foreground">{todos.length || people.length ? `Nothing matches “${q.trim()}”.` : 'Looking…'}</p>
+              <p className="px-1.5 py-3 text-[13px] text-muted-foreground">{todos.length || people.length ? `Nothing matches “${q.trim()}”.` : 'Looking…'}</p>
             )}
           </div>
 
           {typed && (
-            <button type="button" onClick={ask} className="flex shrink-0 items-center gap-2 border-t border-border px-4 py-2.5 text-left text-[13px] text-muted-foreground hover:bg-muted/70">
+            <button type="button" onClick={ask} className="flex shrink-0 items-center gap-2 border-t border-border px-3 py-2.5 text-left text-[13px] text-muted-foreground hover:bg-muted/70">
               <Search className="h-4 w-4 shrink-0" aria-hidden />
               <kbd className="rounded border border-border px-1.5 py-0.5 font-sans text-[11px]">↵ Enter</kbd>
               <span className="truncate">to ask the assistant about &ldquo;{q.trim()}&rdquo;</span>
@@ -252,11 +252,12 @@ export default function GlobalSearch() {
         aria-label="Search tasks, projects, people and messages, or ask the assistant"
         aria-expanded={open}
         placeholder="Search tasks, people, messages — or ask"
-        className={`relative h-11 w-full rounded-full border bg-surface pl-11 pr-10 text-[15px] text-foreground placeholder:text-muted-foreground focus-visible:outline-none ${open ? 'border-foreground/60' : 'border-border'}`}
+        className={`relative h-11 rounded-full border bg-surface pl-11 pr-11 ${open ? 'w-[calc(min(600px,100vw-2rem)-24px)]' : 'w-full'} text-[15px] text-foreground placeholder:text-muted-foreground focus-visible:outline-none ${open ? 'border-foreground/60' : 'border-border'}`}
       />
       {open && q && (
         <button type="button" aria-label="Clear" onClick={() => { setQ(''); input.current?.focus() }}
-          className="absolute right-3 top-1/2 z-10 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full bg-muted-foreground/70 text-background hover:bg-muted-foreground">
+          style={{ left: 'calc(min(600px, 100vw - 2rem) - 24px - 36px)' }}
+          className="absolute top-1/2 z-10 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full bg-muted-foreground/70 text-background hover:bg-muted-foreground">
           <X className="h-3.5 w-3.5" aria-hidden />
         </button>
       )}
