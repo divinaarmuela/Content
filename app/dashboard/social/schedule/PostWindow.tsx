@@ -1150,17 +1150,34 @@ export default function PostWindow({
               stage={saved?.stage ?? null}
             />
           )
-          const options = editable && groups.length > 0 && (
+          // A REQUIRED TICK IS NEVER TUCKED AWAY (the owner, 27 Oct 2026: "if they select tiktok the tickbox is all the
+          // way in options"): on a laptop TikTok's consent — and any other tick a post cannot go out without — sits
+          // under the caption; the Options tab keeps what is optional
+          const isRequiredTick = (o: { control: string }) => o.control === 'consent'
+          const optionGroups = groups
+            .map(g => ({ ...g, options: g.options.filter(o => o.key !== 'trialReel' && !(wide && isRequiredTick(o))) }))
+            .filter(g => g.options.length > 0)
+          const requiredTicks = editable && wide ? groups.flatMap(g => g.options.filter(isRequiredTick)) : []
+          const ticks = requiredTicks.length > 0 && (
+            <div data-required-ticks className="flex flex-col gap-2 rounded-inner border border-accent-amber/50 bg-tint-amber/40 p-3">
+              <span className="text-[12px] font-semibold">Needed before it can go out</span>
+              {requiredTicks.map(o => (
+                <ExtraRow key={o.key} option={o} channels={chosen.filter(a => o.platforms.includes(String(a.platform)))}
+                  state={state} dispatch={dispatch} locations={locations} lists={lists} />
+              ))}
+            </div>
+          )
+          const options = editable && optionGroups.length > 0 && (
             <div data-tour="post-options" className="flex flex-col gap-2.5">
               <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">More options</span>
-              {groups.map(group => (
+              {optionGroups.map(group => (
                 <div key={group.platform ?? 'shared'} className="flex flex-col gap-2.5">
                   <span className="flex items-center gap-1.5 text-[12px] font-semibold text-muted-foreground">
                     {group.platform && <PlatformIcon platform={group.platform} size={14} className="rounded-full" />}
                     {group.label}
                   </span>
                   {group.platform === 'tiktok' && tiktokLimit && <p className="text-[12px] text-muted-foreground">{tiktokLimit}</p>}
-                  {group.options.filter(o => o.key !== 'trialReel').map(o => (
+                  {group.options.map(o => (
                     <ExtraRow key={o.key} option={o} channels={chosen.filter(a => o.platforms.includes(String(a.platform)))}
                       state={state} dispatch={dispatch} locations={locations} lists={lists} />
                   ))}
@@ -1318,6 +1335,7 @@ export default function PostWindow({
                   {open === 'caption' && (
                     <>
                       {captionBox(10, true)}
+                      {ticks}
                       {chosen.length > 1 && !allStory && (
                         <button type="button" onClick={() => setSection('channels')} className="self-start text-[12px] font-semibold text-muted-foreground underline underline-offset-4 hover:text-foreground">
                           Give one channel its own caption
