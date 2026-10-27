@@ -1365,8 +1365,20 @@ export default function PostWindow({
              asks and any refusal sit right here, above the buttons, in the
              sticky footer — never below the fold, never hidden by a question
              (decision 2; audit W8). ── */}
-        <div className="sticky bottom-0 z-20 mt-auto flex flex-col gap-2 border-t border-border bg-popover p-3.5 lg:px-4 lg:py-2">
-          <div ref={messagesRef} className="flex flex-col gap-2 scroll-mt-4">
+        <div className="sticky bottom-0 z-20 mt-auto flex flex-col gap-2 border-t border-border bg-popover p-3.5 lg:flex-row lg:items-center lg:gap-4 lg:px-4 lg:py-2">
+          <div ref={messagesRef} className="flex flex-col gap-2 scroll-mt-4 lg:min-w-0 lg:max-w-[560px] lg:flex-1 lg:gap-1.5">
+            {/* ON A LAPTOP THE BUTTONS SIT IN ONE LINE (the owner's screenshot, 27 Oct 2026: a reason under a button pushed it
+                up and the row ran at four heights). Each reason is said here instead, naming its button, once. */}
+            {wide && buttons.map((b, i) => {
+              const why = b.offered.blocked
+              if (!why || buttons.findIndex(x => x.offered.blocked === why) !== i) return null
+              if ((editable ? composition : []).includes(why) || caps.stops.includes(why)) return null
+              return (
+                <p key={`why-${b.offered.action}`} id={`why-${b.offered.action}`} className="text-[12px] leading-snug text-muted-foreground">
+                  <span className="font-semibold text-foreground">{b.offered.label}:</span> {why}
+                </p>
+              )
+            })}
             {editable && composition.length > 0 && (
               <ul className="flex max-h-28 flex-col gap-1 overflow-y-auto" aria-label="What to fix before it can be sent" data-composition-problems>
                 {composition.map(p => (
@@ -1404,7 +1416,7 @@ export default function PostWindow({
             )}
           </div>
 
-          <div className="flex flex-wrap items-center gap-2" data-footer-buttons>
+          <div className="flex flex-wrap items-center gap-2 lg:ml-auto lg:shrink-0" data-footer-buttons>
             {changed && <span className="text-[12px] font-medium text-muted-foreground">Not saved yet</span>}
             {!me && <span className="text-[12px] text-muted-foreground">Checking who you are…</span>}
             {me && post && buttons.length === 0 && (
@@ -1438,7 +1450,7 @@ export default function PostWindow({
                     {kind === 'danger' && <Trash2 className="h-4 w-4" strokeWidth={1.8} aria-hidden />}
                     {busy && asking?.q.action === offered.action ? 'Working…' : offered.label}
                   </button>
-                  {sayReason && (
+                  {sayReason && !wide && (
                     <span id={`why-${offered.action}`} className="max-w-[260px] text-right text-[11px] leading-snug text-muted-foreground">{offered.blocked}</span>
                   )}
                 </span>

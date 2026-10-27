@@ -12,7 +12,7 @@ describe('the post window bin', () => {
   // Cancel post for anything else — and its question is drawn in the sticky
   // footer, right above the buttons, before the press goes to the act route
   const src = readFileSync('app/dashboard/social/schedule/PostWindow.tsx', 'utf8').replace(/\r\n/g, '\n')
-  const footer = src.indexOf('<div className="sticky bottom-0 z-20 mt-auto flex flex-col gap-2 border-t border-border bg-popover p-3.5 lg:px-4 lg:py-2">')
+  const footer = src.indexOf('<div className="sticky bottom-0 z-20 mt-auto flex flex-col gap-2 border-t border-border bg-popover p-3.5 lg:flex-row lg:items-center lg:gap-4 lg:px-4 lg:py-2">')
   it('asks its question inside the sticky footer, above the buttons', () => {
     const question = src.indexOf('<QuestionPanel')
     const buttons = src.indexOf('data-footer-buttons')
