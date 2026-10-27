@@ -25,7 +25,7 @@ import {
 /**
  * REPORTS — THE MONTHLY CLIENT REPORT (the owner, 26 Oct 2026: "we need to build a client reporting page … we should view
  * in ui and click generate report … make it nice ui"; the team's Monthly Client Reports Guide). Pick a client and a
- * month: every figure is read from their own accounts, Claude writes the analysis, the team edits it and ticks the
+ * month: every figure is read from their own accounts, the AI drafts the analysis, the team edits it and ticks the
  * guide's checks, then downloads the PDF. Super admins and account managers (their own clients) only.
  */
 
@@ -351,7 +351,7 @@ function Writer({ report, clientId, month, mayDelete, onChange, onDeleted }: {
         <Button onClick={() => (report.body ? setAsking('regen') : void generate())} disabled={writing} className="h-11 gap-2 rounded-full px-5">
           <Sparkles className={`h-4 w-4 ${writing ? 'animate-pulse' : ''}`} aria-hidden /> {writing ? 'Writing the report…' : report.body ? 'Generate again' : 'Generate report'}
         </Button>
-        {writing && <span className="text-[13px] text-muted-foreground">Claude is reading the month — this takes a minute or two.</span>}
+        {writing && <span className="text-[13px] text-muted-foreground">The AI is reading the month — this takes a minute or two.</span>}
       </div>
 
       {report.body ? (

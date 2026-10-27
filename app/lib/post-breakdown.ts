@@ -1,9 +1,9 @@
 import 'server-only'
-import Anthropic from '@anthropic-ai/sdk'
 import { table } from '@/lib/db'
 import type { ClientReport } from '@/lib/db-types'
 import { monthRange, readReportData, reportId, type MonthKey, type TopPost } from './client-report-core'
 import { accountsOf, postsBetween } from './client-report'
+import { aiClient, aiError, inlinePicture, postsModel } from './ai-gateway'
 import {
   BREAKDOWN_SYSTEM, BREAKDOWN_TOOL, buildBreakdownPrompt, codesFor, evidenceFor, indexPosts, pickComparison, postKind,
   postsToExplain, tidyBreakdown, type ExplainedPost, type PostsExplained,
@@ -12,52 +12,34 @@ import {
 /**
  * THE POST BREAKDOWNS — the server half (post-breakdown-core.ts has the why). For one client's month: every Instagram
  * post of the month and the 90 days before it, read from Zernio (read only), scored against the account's own normal;
- * the five best and up to three that fell behind each get their ranked reasons and Claude's breakdown, kept on the
- * month's report (`client_reports.posts_explained`). The numbers are kept even when Claude cannot be asked.
+ * the five best and up to three that fell behind each get their ranked reasons and the AI's breakdown (ai-gateway.ts: UNLK's Qwen through Vercel's AI Gateway, or Claude), kept on the
+ * month's report (`client_reports.posts_explained`). The numbers are kept even when the AI cannot be asked.
  */
 
-const MODEL = 'claude-opus-5-5'
 const HISTORY_DAYS = 90
-const anthropic = new Anthropic()
 
 const minusDays = (iso: string, d: number) => new Date(Date.parse(`${iso}T00:00:00Z`) - d * 86_400_000).toISOString().slice(0, 10)
 
-/** what Claude's account says, in words — the same wording the report's Generate uses */
-function said(e: unknown): string {
-  const m = e instanceof Error ? e.message : String(e)
-  if (/credit balance is too low/i.test(m)) return 'The Anthropic account is out of credit — top it up under Plans & Billing at console.anthropic.com'
-  if (e instanceof Anthropic.RateLimitError) return 'Claude is busy right now — try again in a minute'
-  if (e instanceof Anthropic.AuthenticationError) return 'The Anthropic API key is not valid — check ANTHROPIC_API_KEY'
-  return `Claude could not explain this post: ${m.slice(0, 200)}`
-}
-
-async function ask(prompt: string, pictures: string[]): Promise<{ ok: true; input: unknown } | { ok: false; error: string }> {
-  const call = (withPictures: boolean) => anthropic.messages.create({
-    model: MODEL,
-    max_tokens: 4000,
-    system: BREAKDOWN_SYSTEM,
-    tools: [BREAKDOWN_TOOL],
-    tool_choice: { type: 'tool', name: BREAKDOWN_TOOL.name },
-    messages: [{
-      role: 'user',
-      content: [
-        ...(withPictures ? pictures.map(url => ({ type: 'image' as const, source: { type: 'url' as const, url } })) : []),
-        { type: 'text' as const, text: withPictures || !pictures.length ? prompt : `${prompt}\n\n(The pictures could not be loaded: judge from the numbers and the caption only, and leave firstLook empty.)` },
-      ],
-    }],
-  })
+async function ask(prompt: string, pictureUrls: string[]): Promise<{ ok: true; input: unknown } | { ok: false; error: string }> {
+  // fetched by us and sent inline — the providers cannot always download Instagram's links themselves
+  const pictures = (await Promise.all(pictureUrls.map(inlinePicture))).filter(p => p !== null)
+  const note = pictureUrls.length && !pictures.length ? '\n\n(The pictures could not be loaded: judge from the numbers and the caption only, and leave firstLook empty.)' : ''
   let msg
   try {
-    msg = await call(pictures.length > 0)
+    msg = await aiClient().messages.create({
+      model: postsModel(),
+      max_tokens: 4000,
+      system: BREAKDOWN_SYSTEM,
+      tools: [BREAKDOWN_TOOL],
+      tool_choice: { type: 'tool', name: BREAKDOWN_TOOL.name },
+      messages: [{ role: 'user', content: [...pictures, { type: 'text' as const, text: prompt + note }] }],
+    })
   } catch (e) {
-    // Instagram's picture links expire: a picture Claude cannot fetch must not lose the breakdown
-    if (pictures.length && e instanceof Anthropic.BadRequestError && /image|url|fetch|download/i.test(e.message)) {
-      try { msg = await call(false) } catch (e2) { return { ok: false, error: said(e2) } }
-    } else return { ok: false, error: said(e) }
+    return { ok: false, error: aiError(e, 'explain this post') }
   }
-  if (msg.stop_reason === 'refusal') return { ok: false, error: 'Claude declined to explain this post' }
+  if (msg.stop_reason === 'refusal') return { ok: false, error: 'The AI declined to explain this post' }
   const use = msg.content.find(b => b.type === 'tool_use')
-  if (!use || use.type !== 'tool_use') return { ok: false, error: 'Claude returned no breakdown — try again' }
+  if (!use || use.type !== 'tool_use') return { ok: false, error: 'The AI returned no breakdown — try again' }
   return { ok: true, input: use.input }
 }
 
@@ -95,7 +77,7 @@ export async function explainMonth(clientId: string, m: MonthKey): Promise<{ ok:
     const r = await ask(prompt, pictures)
     if (!r.ok) return { ...base, breakdown: null, error: r.error }
     const breakdown = tidyBreakdown(r.input, codes)
-    return breakdown ? { ...base, breakdown } : { ...base, breakdown: null, error: 'Claude’s answer could not be read — try again' }
+    return breakdown ? { ...base, breakdown } : { ...base, breakdown: null, error: 'The AI’s answer could not be read — try again' }
   })
 
   // the posts each breakdown names (the explained ones and every hit and flop they cite), so the page can show them
@@ -103,7 +85,7 @@ export async function explainMonth(clientId: string, m: MonthKey): Promise<{ ok:
   const named = new Set(items.flatMap(i => [i.postId, ...(i.breakdown?.vsFlops ?? []).flatMap(c => [...c.hitIds, ...c.flopIds])]))
   const explained: PostsExplained = {
     at: new Date().toISOString(),
-    model: MODEL,
+    model: postsModel(),
     items,
     posts: history.filter(p => named.has(p.id)).map(p => ({ ...p, images: undefined })),
   }

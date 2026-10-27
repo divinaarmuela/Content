@@ -13,7 +13,7 @@ import { logActivity } from '@/app/lib/workflow'
  *
  *   GET    ?client_id&month[&refresh=1]   the clients this person may report on; the month's figures (read from
  *                                         Zernio when there are none yet, or on refresh) and the saved report
- *   POST   { client_id, month, action: 'generate', objective, notes }   Claude writes the report from the figures
+ *   POST   { client_id, month, action: 'generate', objective, notes }   the AI writes the report from the figures
  *   POST   { client_id, month, action: 'explain' }   the month's posts scored and explained, UNLK.AI's way
  *   PATCH  { client_id, month, body?, notes?, objective?, checks? }     the team's edits and ticks
  *   DELETE ?client_id&month                                            a super admin removes the saved report

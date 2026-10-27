@@ -1,5 +1,4 @@
 import 'server-only'
-import Anthropic from '@anthropic-ai/sdk'
 import { table } from '@/lib/db'
 import type { AudienceSnapshot, Client, ClientReport } from '@/lib/db-types'
 import {
@@ -7,6 +6,7 @@ import {
   type Audience, type MonthKey, type PlatformFigures, type ReportData, type TopPost,
 } from './client-report-core'
 import { breakdownLines, readPostsExplained } from './post-breakdown-core'
+import { aiClient, aiError, viaGateway, writerModel } from './ai-gateway'
 
 /**
  * THE MONTHLY CLIENT REPORT — the server half (client-report-core.ts has the why). Reads every figure from the client's
@@ -240,11 +240,10 @@ async function nextShootConcepts(clientId: string, m: MonthKey): Promise<string[
   return shoots.slice(0, 6).map(s => `${s.title}${s.shoot_date ? ` (${String(s.shoot_date).slice(0, 10)})` : ''}${s.concept ? `: ${String(s.concept).slice(0, 400)}` : ''}`)
 }
 
-const anthropic = new Anthropic()
-
 /**
- * WRITE THE REPORT — Claude Opus 5.5, streamed (a long report), with the guide's prompt and the page's figures. The draft
- * replaces the body; the team then edits it. Refused or cut short: said, never saved half-written.
+ * WRITE THE REPORT — streamed (a long report), with the guide's prompt and the page's figures; the model is
+ * ai-gateway.ts's writer (Claude Sonnet 5.5 through Vercel's AI Gateway, or Claude Opus directly). The draft replaces
+ * the body; the team then edits it. Refused or cut short: said, never saved half-written.
  */
 export async function generateReport(clientId: string, m: MonthKey, by: string, opts: { objective: string; notes: string }): Promise<{ ok: true; body: string } | { ok: false; error: string }> {
   const id = reportId(clientId, m)
@@ -252,33 +251,29 @@ export async function generateReport(clientId: string, m: MonthKey, by: string, 
   const data = readReportData(saved?.data) ?? await loadReportData(clientId, m)
   const before = await table<ClientReport>('client_reports').get(reportId(clientId, previousMonth(m))).catch(() => null)
   const { system, user } = reportPrompt({ data, objective: opts.objective, notes: opts.notes, shootConcepts: await nextShootConcepts(clientId, m), previousReport: before?.body ?? null, breakdowns: (() => { const x = readPostsExplained(saved?.posts_explained); return x ? breakdownLines(x.items, x.posts) : [] })() })
-  // what Claude's account says, in words — a top-up is a person's job, not a retry (live, 26 Oct 2026: out of credit)
-  const said = (e: unknown) => {
-    const m = e instanceof Error ? e.message : String(e)
-    if (/credit balance is too low/i.test(m)) return 'The Anthropic account is out of credit — top it up under Plans & Billing at console.anthropic.com, then press Generate again'
-    if (e instanceof Anthropic.RateLimitError) return 'Claude is busy right now — try again in a minute'
-    if (e instanceof Anthropic.AuthenticationError) return 'The Anthropic API key is not valid — check ANTHROPIC_API_KEY'
-    return `Claude could not write the report: ${m.slice(0, 200)}`
-  }
   let msg: { stop_reason: string; content: { type: string; text?: string }[] }
   try {
-  const stream = anthropic.beta.messages.stream({
-    model: 'claude-opus-5-5',
-    max_tokens: 32000,
-    output_config: { effort: 'high' },
-    betas: ['server-side-fallback-2026-07-01'],
-    fallbacks: 'default',
-    system,
-    messages: [{ role: 'user', content: user }],
-  } as never)
-  msg = await stream.finalMessage() as unknown as typeof msg
+    // Anthropic's own extras (effort, its server-side fallback) only where Anthropic is called directly; the
+    // gateway is sent the plain Messages API
+    const stream = viaGateway()
+      ? aiClient().messages.stream({ model: writerModel(), max_tokens: 32000, system, messages: [{ role: 'user', content: user }] })
+      : aiClient().beta.messages.stream({
+        model: writerModel(),
+        max_tokens: 32000,
+        output_config: { effort: 'high' },
+        betas: ['server-side-fallback-2026-07-01'],
+        fallbacks: 'default',
+        system,
+        messages: [{ role: 'user', content: user }],
+      } as never)
+    msg = await stream.finalMessage() as unknown as typeof msg
   } catch (e) {
     console.error('[client-report] writing the report failed:', e instanceof Error ? e.message : e)
-    return { ok: false, error: said(e) }
+    return { ok: false, error: `${aiError(e, 'write the report')} — then press Generate again` }
   }
-  if (msg.stop_reason === 'refusal') return { ok: false, error: 'Claude declined to write this report — try again, or write it by hand' }
+  if (msg.stop_reason === 'refusal') return { ok: false, error: 'The AI declined to write this report — try again, or write it by hand' }
   const body = msg.content.filter(b => b.type === 'text').map(b => b.text ?? '').join('').trim()
-  if (!body) return { ok: false, error: 'Claude returned no report — try again' }
+  if (!body) return { ok: false, error: 'The AI returned no report — try again' }
   if (msg.stop_reason === 'max_tokens') return { ok: false, error: 'The report was cut short — try again' }
   const now = new Date().toISOString()
   await table<ClientReport>('client_reports').claim(id, cur => ({

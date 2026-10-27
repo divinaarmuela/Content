@@ -10,7 +10,7 @@ import { postKind, readPostsExplained, type ExplainedPost, type Factor } from '.
 /**
  * WHY THE POSTS WORKED — UNLK.AI's breakdowns on the report (the owner, 27 Oct 2026). Every Instagram post of the month
  * is scored against the account's own usual (50 = a normal post); the five best and up to three that fell behind get
- * the reasons the numbers support and Claude's read of them. What is saved here also goes into the written report.
+ * the reasons the numbers support and the AI's read of them. What is saved here also goes into the written report.
  */
 
 const MODE_WORDS: Record<ExplainedPost['mode'], string> = { work: 'Worked', underperform: 'Fell behind', early: 'Too early to tell' }
@@ -36,7 +36,7 @@ export default function PostBreakdowns({ raw, clientId, month, onChange }: {
     try {
       const r = await fetch('/api/reports/monthly', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ client_id: clientId, month, action: 'explain' }) })
       const j = await r.json().catch(() => ({}))
-      // the scores and reasons are kept even when Claude could not be asked
+      // the scores and reasons are kept even when the AI could not be asked
       if (j.report) onChange(j.report)
       if (!r.ok) throw new Error(j.error ?? 'Could not explain the posts')
       toast.success('Posts explained — they also go into the written report')
