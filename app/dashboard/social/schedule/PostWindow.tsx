@@ -789,6 +789,7 @@ export default function PostWindow({
               </div>
             )}
 
+          <div className="flex flex-col gap-1.5 lg:grid lg:grid-cols-2 lg:items-start lg:gap-5">
           {header && (
             <div className="flex flex-col gap-0.5 text-[13px]">
               <p className="font-medium" data-waiting-line>{header.line}</p>
@@ -819,6 +820,7 @@ export default function PostWindow({
               }}
             />
           )}
+          </div>
           {gone && <p role="alert" className="text-[13px] font-medium">This post no longer exists.</p>}
           {notMigrated && <p role="alert" className="text-[13px] font-medium">This post has not been moved onto the new stages yet. It opens here once that is done.</p>}
           {movedUnder && (
@@ -1073,7 +1075,7 @@ export default function PostWindow({
             {caps.lines.length > 0 && (
               <div className="flex flex-col gap-0.5">{caps.lines.map(l => <p key={l.id} className="text-[12px] text-muted-foreground">{l.line}</p>)}</div>
             )}
-            {beforeBooking && shown.slides.length > 0 && checkPlatforms.length > 0 && (
+            {!wide && beforeBooking && shown.slides.length > 0 && checkPlatforms.length > 0 && (
               <div data-tour="post-check">
                 <AssetCheck
                   probes={probes} platforms={checkPlatforms} kinds={checkKinds} copies={copyPlatforms} playable={playable} compact
@@ -1216,19 +1218,29 @@ export default function PostWindow({
                   </ul>
                 )}
 
-                {!wide && id && post && (
+                {wide && beforeBooking && shown.slides.length > 0 && checkPlatforms.length > 0 && (
+                  <div data-tour="post-check">
+                    <AssetCheck
+                      probes={probes} platforms={checkPlatforms} kinds={checkKinds} copies={copyPlatforms} playable={playable} compact
+                      linkedinPersonal={chosen.some(a => String(a.platform) === 'linkedin' && !shown.perChannel[a.id]?.organizationUrn)}
+                    />
+                  </div>
+                )}
+
+                {id && post && (
                   <PostNotes slides={shown.slides} notes={notes} version={noteVersionOf(post)} onAdd={addNote} />
                 )}
               </>
             )}
           </div>
 
-          {/* the third column, on a wide screen: the post as each network will show it, always in view, then the
-              notes — the two things people kept scrolling down to find */}
+          {/* the third column, on a wide screen: the post as each network will show it, always in view, sized to the
+              screen (the notes and the file checks sit under the writing, where there is room) */}
           {wide && (
             <div data-window-side data-window-scroll className="flex min-w-0 flex-col gap-4 lg:min-h-0 lg:overflow-y-auto lg:pr-1">
               <p className="text-[12px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">Preview</p>
               <PostPreviewPane playable={playable} videoFor={(url, label) => videoView({ url, type: 'video' }, label, 'h-full w-full')} previews={preview.networks} intro={PREVIEW_INTRO}
+                frameClassName="mx-auto max-w-[max(220px,min(100%,calc((100dvh-42rem)*0.5625)))]"
                 empty="Pick a channel and the post appears here as that network will show it." />
               {grid && grid.length > 0 && (
                 <div className="flex flex-col gap-2" data-instagram-grid>
@@ -1246,9 +1258,6 @@ export default function PostWindow({
                   </ul>
                   <p className="text-[12px] text-muted-foreground">This post is outlined, before the newest posts already live.</p>
                 </div>
-              )}
-              {id && post && (
-                <PostNotes slides={shown.slides} notes={notes} version={noteVersionOf(post)} onAdd={addNote} />
               )}
             </div>
           )}

@@ -278,8 +278,10 @@ export function PostPreviewFrame({ preview, className, playable, videoFor }: {
 
 /* ── the whole pane: the marks, the frame, and anything wrong ───────────── */
 
-export default function PostPreviewPane({ previews, intro, empty, className, playable, videoFor }: {
+export default function PostPreviewPane({ previews, intro, empty, className, frameClassName, playable, videoFor }: {
   previews: readonly PreviewFrameData[]
+  /** the frame's own size — the post window caps it by the screen's height, so a 9:16 reel fits beside the writing */
+  frameClassName?: string
   /** the file a browser can play for a master (the encoder's copy) */
   playable?: (url: string) => string
   videoFor?: VideoFor
@@ -327,7 +329,7 @@ export default function PostPreviewPane({ previews, intro, empty, className, pla
         </div>
       )}
 
-      <PostPreviewFrame preview={shown} playable={playable} videoFor={videoFor} />
+      <PostPreviewFrame preview={shown} playable={playable} videoFor={videoFor} className={frameClassName} />
     </div>
   )
 }
