@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { matchesAll, plainText, searchAll, snippet } from '../app/lib/global-search-core'
+import { addRecent, highlightParts, matchesAll, plainText, readRecents, searchAll, snippet } from '../app/lib/global-search-core'
 
 describe('the search bar (Asana-style, 27 Oct 2026)', () => {
   const tasks = [
@@ -31,10 +31,29 @@ describe('the search bar (Asana-style, 27 Oct 2026)', () => {
     expect(plainText('<p>a&amp;b</p>')).toBe('a&b')
   })
   it('returns nothing for nothing typed', () => {
-    expect(searchAll({ tasks, people, comments }, '  ')).toEqual({ tasks: [], people: [], messages: [] })
+    expect(searchAll({ tasks, people, comments }, '  ')).toEqual({ tasks: [], projects: [], people: [], messages: [] })
   })
   it('shows the part of a long comment around the match', () => {
     const long = 'x '.repeat(80) + 'the deadline moved to Friday'
     expect(snippet(long, 'deadline')).toContain('deadline moved')
+  })
+  it('finds projects by name, closest first', () => {
+    const projects = [{ id: 'p1', name: 'Real Deal Property' }, { id: 'p2', name: 'Releeph' }]
+    expect(searchAll({ tasks, projects, people, comments }, 'rele').projects.map(p => p.id)).toEqual(['p2'])
+  })
+  it('bolds the letters typed, as Asana does ("rele" in Releeph)', () => {
+    expect(highlightParts('Monthly EDMs for Releeph', 'rele')).toEqual([{ text: 'Monthly EDMs for ', hit: false }, { text: 'Rele', hit: true }, { text: 'eph', hit: false }])
+    expect(highlightParts('Releeph EDMs', 'edm rele').filter(p => p.hit).map(p => p.text)).toEqual(['Rele', 'EDM'])
+    expect(highlightParts('abc', 'zz')).toEqual([{ text: 'abc', hit: false }])
+  })
+  it('keeps recents newest first, once each, eight at most, and survives bad storage', () => {
+    let r = addRecent([], { kind: 'task', id: '1' })
+    r = addRecent(r, { kind: 'person', id: 'a' })
+    r = addRecent(r, { kind: 'task', id: '1' })
+    expect(r).toEqual([{ kind: 'task', id: '1' }, { kind: 'person', id: 'a' }])
+    for (let i = 0; i < 20; i++) r = addRecent(r, { kind: 'project', id: String(i) })
+    expect(r).toHaveLength(8)
+    expect(readRecents('not json')).toEqual([])
+    expect(readRecents('[{"kind":"evil","id":"x"},{"kind":"task","id":"2"}]')).toEqual([{ kind: 'task', id: '2' }])
   })
 })

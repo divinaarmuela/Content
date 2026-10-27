@@ -144,11 +144,11 @@ describe('the editor\u2019s card draws every SOP section, empty or not', () => {
     expect(page).toContain('<EditorCardDrawer key={id} id={id} onClose={back} hideFolderFiles />')
     expect(page).toContain('<ManagerActions design={filesOnly} item={item} client={client ?? null} viewer=')
     // the top bar's box asks the assistant (the AI search, 16 Sep 2026) — since 27 Oct 2026 from the search
-    // dropdown, its last row and Enter with nothing picked (GlobalSearch.tsx)
+    // panel, its footer and Enter with nothing picked (GlobalSearch.tsx)
     const shell = src('app/dashboard/ui/Shell.tsx')
     expect(shell).not.toContain('Search — coming soon')
     expect(shell).toContain('<GlobalSearch />')
-    expect(src('app/dashboard/ui/GlobalSearch.tsx')).toContain("href: `/dashboard/ai?q=${encodeURIComponent(q.trim())}`")
+    expect(src('app/dashboard/ui/GlobalSearch.tsx')).toContain("router.push(`/dashboard/ai?q=${encodeURIComponent(t)}`)")
     expect(src('app/dashboard/ai/Assistant.tsx')).toContain("q = url.searchParams.get('q') ?? ''")
     expect(src('app/api/assistant/route.ts')).toContain('go to search_cards')
     // columns or a list, remembered per page (16 Sep 2026)

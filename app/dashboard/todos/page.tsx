@@ -97,8 +97,11 @@ export default function TodosPage() {
     // a person picked in the search bar (`?person=`) opens their tasks (27 Oct 2026)
     const fromLink = new URLSearchParams(location.search).get('person')
     if (fromLink) { setPlace(`person:${fromLink}`); store.set('mdm.todos.place', `person:${fromLink}`) }
+    // …and a project picked there (`?project=`) opens that client's project
+    const projectLink = new URLSearchParams(location.search).get('project')
+    if (projectLink) { setPlace(`project:${projectLink}`); store.set('mdm.todos.place', `project:${projectLink}`) }
     // a project reopens as it opened: by who is doing what
-    if (saved?.startsWith('project:')) setGroupBy('project')
+    if (saved?.startsWith('project:') || projectLink) setGroupBy('project')
     fetch('/api/todos/projects', { cache: 'no-store' }).then(r => (r.ok ? r.json() : { projects: [] })).then(j => setProjects(j.projects ?? [])).catch(() => undefined)
   }, [])
   const inbox = useTodoInbox()
@@ -181,6 +184,20 @@ export default function TodosPage() {
   const openTask = useCallback((id: string | null) => {
     setOpenId(id)
     try { const u = new URL(location.href); if (id) u.searchParams.set('task', id); else u.searchParams.delete('task'); history.replaceState(null, '', u) } catch { /* fine */ }
+  }, [])
+  // a pick from the search bar while this page is already open: the page stays mounted, so it is told, not reloaded
+  const goPlaceNow = useRef(goPlace)
+  goPlaceNow.current = goPlace
+  useEffect(() => {
+    const picked = (e: Event) => {
+      const link = new URL(String((e as CustomEvent<string>).detail), location.origin).searchParams
+      const project = link.get('project'), person = link.get('person'), task = link.get('task')
+      if (project) goPlaceNow.current(`project:${project}`)
+      else if (person) goPlaceNow.current(`person:${person}`)
+      if (task) setOpenId(task)
+    }
+    window.addEventListener('mdm:todos-link', picked)
+    return () => window.removeEventListener('mdm:todos-link', picked)
   }, [])
 
   const send = useCallback(async (path: string, init: RequestInit, said?: string) => {
