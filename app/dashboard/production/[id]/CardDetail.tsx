@@ -580,7 +580,9 @@ export default function CardDetail({ id, layout = 'page', onClose }: {
   const rawTransitions = isBrief
     ? availableBriefTaskTransitionsAs(hats, detail.status)
     : isInternal ? availableTaskTransitionsAs(hats, detail.status)
-    : availableTransitionsAs(hats, detail.status)
+    // NO CARD IS BOOKED IN BY HAND (27 Oct 2026, the same rule as board-view-core cardActions): its videos go through
+    // Post approval, which moves the card; "Posted" stays only on a card already marked booked in by hand
+    : availableTransitionsAs(hats, detail.status).filter(t => t.to !== 'scheduled' && (t.to !== 'published' || detail.status === 'scheduled'))
   const turns = isBrief ? BRIEF_STATUS_TURN : isInternal ? TASK_STATUS_TURN : STATUS_TURN
   const turn = whoseTurn(detail.status, detail, viewer, turns)
   const { primary, secondary } = presentTransitions(

@@ -357,7 +357,13 @@ export function cardActions(
   // …and a deliver-only card is never booked in or posted from here: the
   // client does that, and a file they say went live is logged by hand
   const noBooking = adhoc || deliverOnly(card, card.clients)
-  const kept = noBooking ? all.filter(a => !(a.kind === 'transition' && (a.to === 'scheduled' || a.to === 'published'))) : all
+  // …and NO CARD IS BOOKED IN BY HAND ANY MORE (the owner, 27 Oct 2026: Justin's approved October card wore a
+  // "Booked in" button that read as if its videos were booked — none were). A card's videos go out through Post
+  // approval, and the posting recorder moves the card itself ("2 of 7 posted", then Posted — production-publish
+  // rollUpItem). "Posted" stays only on a card somebody already marked booked in by hand: nothing else finishes it.
+  const handBooked = card.status === 'scheduled'
+  const manual = (a: CardAction) => a.kind === 'transition' && (a.to === 'scheduled' || (a.to === 'published' && (noBooking || !handBooked)))
+  const kept = all.filter(a => !manual(a))
   // with no filled button, the face shows the constructive answer, not the
   // destructive one: "Log the client's approval" before "Send back for
   // changes" (the audit of 10 Sep 2026)
@@ -378,6 +384,7 @@ export type DropDecision =
  *  or the machine's plain reason it cannot. */
 export const NEEDS_CLIENT_REASON = "This card needs the client's approval first"
 export const ADHOC_MOVE_REASON = 'An uploaded post is booked from the Schedule page, and marked posted one file at a time'
+export const BOOKED_BY_POSTS_REASON = 'A card is booked in when its videos go through Post approval, and moves to Posted on its own when they go out'
 
 /**
  * A card that needs the client cannot be approved past them by a drag any
@@ -416,6 +423,10 @@ export function dropAction(card: BoardViewCard, column: BoardColumnKey, viewer: 
   }
   if (deliverOnly(card, card.clients) && (d.to === 'scheduled' || d.to === 'published')) {
     return { ok: false, reason: DELIVER_ONLY_REASON }
+  }
+  // the same rule as the buttons: booking is Post approval's, and Posted is the recorder's (27 Oct 2026)
+  if (d.to === 'scheduled' || (d.to === 'published' && card.status !== 'scheduled')) {
+    return { ok: false, reason: BOOKED_BY_POSTS_REASON }
   }
   return { ok: true, action: actionFor(d.to, d.label, hats), column }
 }

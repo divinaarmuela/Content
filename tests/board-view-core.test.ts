@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  BOOKED_LABEL, NEEDS_CLIENT_REASON, POSTED_LABEL, READY_FOR_CHECK_LABEL, SEND_BACK_LABEL, SHOW_FILTERS, SHOW_LABELS,
+  BOOKED_LABEL, BOOKED_BY_POSTS_REASON, NEEDS_CLIENT_REASON, POSTED_LABEL, READY_FOR_CHECK_LABEL, SEND_BACK_LABEL, SHOW_FILTERS, SHOW_LABELS,
   COLUMN_EMPTY, LANE_EMPTY, OLDER_POSTS_NOTE, POSTED_DAYS,
   applyShow, boardHref, cardActions, cardLines, dropAction, dropOnLane, groupByLane, handedOver, handedToWords, initialsOf, isAssignedTo, needsWorkFirst, UPLOAD_FIRST,
   laneOf, moveTargets, overviewTiles, pageCards, pageLanes, reachableLanes, recentlyPosted, shortDate,
@@ -189,9 +189,13 @@ describe('the control on a card', () => {
     expect([booked.primary, ...booked.more].filter(Boolean).some(a => a!.kind === 'transition' && a!.to === 'published')).toBe(false)
   })
 
-  it('a scheduler moves a ready card to Booked in, then to Posted — plain moves, nothing asked', () => {
-    expect(cardActions(card({ status: 'approved_for_scheduling' }), scheduler).primary)
-      .toEqual({ kind: 'transition', to: 'scheduled', label: BOOKED_LABEL })
+  it('nobody books a card in by hand: its videos go through Post approval, which moves the card (27 Oct 2026)', () => {
+    // Justin's approved October card wore "Booked in" as a button and read as booked — none of its videos were
+    for (const v of [scheduler, manager, admin]) {
+      const ready = cardActions(card({ status: 'approved_for_scheduling' }), v)
+      expect([ready.primary, ...ready.more].filter(Boolean).some(a => a!.kind === 'transition' && (a!.to === 'scheduled' || a!.to === 'published'))).toBe(false)
+    }
+    // a card somebody already marked booked in by hand can still be finished: nothing else will post it
     expect(cardActions(card({ status: 'scheduled' }), scheduler).primary)
       .toEqual({ kind: 'transition', to: 'published', label: POSTED_LABEL })
     expect(BOOKED_LABEL).toBe('Booked in')
@@ -255,11 +259,11 @@ describe('dragging a card', () => {
     expect(d.ok && d.action.kind).toBe('send_back')
   })
 
-  it('a scheduler dropping on Booked in just moves the card — "Booked in", no dialog', () => {
-    const d = dropAction(card({ status: 'approved_for_scheduling' }), 'booked', scheduler)
-    expect(d).toEqual({ ok: true, column: 'booked', action: { kind: 'transition', to: 'scheduled', label: BOOKED_LABEL } })
-    // …and never onto Posted: that column is for what is live
+  it('a card is not dragged into Booked in or Posted: Post approval books it, and posting moves it (27 Oct 2026)', () => {
+    expect(dropAction(card({ status: 'approved_for_scheduling' }), 'booked', scheduler)).toEqual({ ok: false, reason: BOOKED_BY_POSTS_REASON })
     expect(dropAction(card({ status: 'approved_for_scheduling' }), 'posted', scheduler).ok).toBe(false)
+    // …but a card already booked in by hand can still be dropped on Posted
+    expect(dropAction(card({ status: 'scheduled' }), 'posted', scheduler).ok).toBe(true)
   })
 
   it('a refused drop carries the machine\'s own reason', () => {
@@ -436,10 +440,9 @@ describe('the lanes each page arranges the eight columns into', () => {
     })
 
     it('a drop lands on the stage the rules allow, whoever drops it', () => {
-      // the Editor's Done rail: a ready card dropped there is booked in, the
-      // first stage inside the rail the rules allow
+      // the Editor's Done rail: a ready card is no longer booked in by a drop — Post approval does that (27 Oct 2026)
       const d = dropOnLane(card({ status: 'approved_for_scheduling' }), lane('editor', 'done'), scheduler)
-      expect(d).toEqual({ ok: true, lane: 'done', column: 'booked', action: { kind: 'transition', to: 'scheduled', label: BOOKED_LABEL } })
+      expect(d.ok).toBe(false)
       const joy = { id: 'u-joy', role: 'editor' as const, quality_reviewer: true }
       const free = dropOnLane(card({ status: 'quality_check', client_approval_required: false }), lane('editor', 'for_handoff'), joy)
       expect(free.ok && free.column).toBe('ready_to_post')
