@@ -67,7 +67,7 @@ export default function OnePortalPostLine({ post, editable, onMoved, onOwnChange
   }
 
   return (
-    <div className="flex flex-col gap-1.5 rounded-inner border border-border p-2.5 text-[13px]" data-one-portal-line>
+    <div className="flex flex-col gap-1.5 rounded-inner border border-border p-2.5 text-[13px] lg:flex-row lg:flex-wrap lg:items-center lg:gap-x-4 lg:py-1.5" data-one-portal-line>
       {post.stage === 'booked' || review ? (
         <p>
           <span className="font-semibold">The client:</span>{' '}

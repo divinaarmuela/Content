@@ -748,16 +748,16 @@ export default function PostWindow({
       aria-modal="true"
       aria-label={header ? `Post — ${header.label}` : 'Post'}
       onMouseDown={e => { if (e.target === e.currentTarget) requestClose() }}
-      className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-ink/55 p-3 sm:items-center sm:p-6 lg:p-5"
+      className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-ink/55 p-3 sm:items-center sm:p-6 lg:p-3"
     >
       <div
         ref={card}
         tabIndex={-1}
         data-post-window
-        data-window-scroll className="flex max-h-[calc(100dvh-1.5rem)] w-full max-w-[760px] flex-col overflow-y-auto overscroll-contain rounded-card bg-popover text-popover-foreground shadow-xl outline-none sm:max-h-[calc(100dvh-3rem)] lg:h-[calc(100dvh-2.5rem)] lg:max-h-none lg:max-w-[1440px] lg:overflow-hidden"
+        data-window-scroll className="flex max-h-[calc(100dvh-1.5rem)] w-full max-w-[760px] flex-col overflow-y-auto overscroll-contain rounded-card bg-popover text-popover-foreground shadow-xl outline-none sm:max-h-[calc(100dvh-3rem)] lg:h-[calc(100dvh-1.5rem)] lg:max-h-none lg:max-w-[1440px] lg:overflow-hidden"
       >
         {/* ── TOP: the stage, and what happens next ── */}
-        <div className="sticky top-0 z-20 flex flex-col gap-1.5 border-b border-border bg-popover p-3.5">
+        <div className="sticky top-0 z-20 flex flex-col gap-1.5 border-b border-border bg-popover p-3.5 lg:gap-1 lg:px-4 lg:py-2">
           <div className="flex items-center gap-2.5">
             {header && <Chip tone={header.tone} className="shrink-0 font-semibold" ><span data-stage-chip>{header.label}</span></Chip>}
             {header?.missed && <Chip tone="red" className="shrink-0 font-semibold">{header.missed}</Chip>}
@@ -791,7 +791,7 @@ export default function PostWindow({
 
           <div className="flex flex-col gap-1.5 lg:grid lg:grid-cols-2 lg:items-start lg:gap-5">
           {header && (
-            <div className="flex flex-col gap-0.5 text-[13px]">
+            <div className="flex flex-col gap-0.5 text-[13px] lg:flex-row lg:flex-wrap lg:items-baseline lg:gap-x-3 lg:gap-y-0">
               <p className="font-medium" data-waiting-line>{header.line}</p>
               {header.checkLine && <p className="text-muted-foreground" data-check-line>{header.checkLine}</p>}
               {header.changeLine && (
@@ -831,7 +831,7 @@ export default function PostWindow({
         </div>
 
         {/* ── MIDDLE: the post ── */}
-        <div className="flex flex-wrap items-center gap-2.5 border-b border-border px-3.5 py-2.5">
+        <div className="flex flex-wrap items-center gap-2.5 border-b border-border px-3.5 py-2.5 lg:px-4 lg:py-2">
           <div data-tour="post-channels">
             <Dropdown
               label={(
@@ -966,7 +966,7 @@ export default function PostWindow({
           </div>
         )}
 
-        <div data-window-body className="flex flex-col gap-5 p-3.5 sm:flex-row lg:grid lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(260px,340px)_minmax(0,1fr)_minmax(320px,400px)] lg:gap-5 lg:overflow-hidden lg:px-5 lg:py-4">
+        <div data-window-body className="flex flex-col gap-5 p-3.5 sm:flex-row lg:grid lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(260px,340px)_minmax(0,1fr)_minmax(320px,400px)] lg:gap-4 lg:overflow-hidden lg:px-4 lg:py-3">
           <div data-window-media data-window-scroll className="flex w-full shrink-0 flex-col gap-2.5 sm:w-[240px] lg:w-auto lg:min-h-0 lg:overflow-y-auto lg:pr-1">
             <div className="relative aspect-square w-full overflow-hidden rounded-inner border border-border bg-foreground/[0.06] lg:aspect-[4/5]">
               {videoView(shownSlide, title, 'h-full w-full') ?? <Thumb slide={shownSlide} label={title} className="h-full w-full" />}
@@ -1269,7 +1269,7 @@ export default function PostWindow({
              asks and any refusal sit right here, above the buttons, in the
              sticky footer — never below the fold, never hidden by a question
              (decision 2; audit W8). ── */}
-        <div className="sticky bottom-0 z-20 mt-auto flex flex-col gap-2 border-t border-border bg-popover p-3.5">
+        <div className="sticky bottom-0 z-20 mt-auto flex flex-col gap-2 border-t border-border bg-popover p-3.5 lg:px-4 lg:py-2">
           <div ref={messagesRef} className="flex flex-col gap-2 scroll-mt-4">
             {editable && composition.length > 0 && (
               <ul className="flex max-h-28 flex-col gap-1 overflow-y-auto" aria-label="What to fix before it can be sent" data-composition-problems>
