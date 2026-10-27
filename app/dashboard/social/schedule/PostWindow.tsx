@@ -5,7 +5,7 @@ import { Clock, Eye, Pencil, Plus, Trash2, Wand2, X, Zap } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { AssetVersion, ClientContact, ContentItem, EncodeJob, PostComment, PostVersion, SocialAccount, SocialPost } from '@/lib/db-types'
 import { useRow, useTable } from '@/lib/db-client'
-import OnePortalPostLine, { useClientWord } from './OnePortalPostLine'
+import OnePortalPostLine from './OnePortalPostLine'
 import { accountSections, ownerLabel } from '../../../lib/account-owner-core'
 import { copiesReadyAt, earliestSafeTime } from '@/app/lib/encode-eta-core'
 import { TRIAL_CHOICES, TRIAL_SENTENCE, postTrial } from '@/app/lib/trial-reel-core'
@@ -310,8 +310,6 @@ export default function PostWindow({
   const showPreview = wide || pane === 'preview'
   /** the open section of the wide window's right side */
   const [section, setSection] = useState<WindowSection>('caption')
-  /** where the client's word stands, for the laptop window's "The client: …" menu */
-  const clientWord = useClientWord(saved && !unsaved ? saved : null)
   const [chosenSlide, setChosenSlide] = useState(0)
 
   // measure a slide nobody measured, so the checks below can judge its shape
@@ -745,6 +743,16 @@ export default function PostWindow({
   const whenWords = (iso: string | null) => (iso ? formatInZone(iso, tz, 'full') ?? clockPillLabel(iso, tz) : 'No time yet')
   const locked = !editable
 
+  const portalOwnChange = (phase: 'start' | 'end', after: PostState | null) => {
+    savingRef.current = phase === 'start'
+    if (phase === 'end' && after) {
+      // the same post, one rev on: keep the screen, hold the new rev so the next Save is accepted
+      loadedKey.current = `${after.id}:${after.rev}`
+      setAnswered(after)
+      setMovedUnder(false)
+    }
+  }
+  const portalInline = saved && !unsaved ? <OnePortalPostLine post={saved} editable={!!saved} onOwnChange={portalOwnChange} inline /> : null
   const portalLine = saved && !unsaved ? (
     <OnePortalPostLine
       post={saved} editable={!!saved}
@@ -930,14 +938,8 @@ export default function PostWindow({
             )}
           </span>
 
-          {wide && portalLine && clientWord && (
-            <div className="ml-auto" data-client-word>
-              <Dropdown align="right" width={520} closeOnPick={false}
-                label={<span className="flex items-center gap-1.5"><span className="text-muted-foreground">The client:</span>{clientWord}</span>}>
-                <div className="p-1">{portalLine}</div>
-              </Dropdown>
-            </div>
-          )}
+          {/* the client's choice in plain sight on a laptop (the owner, 27 Oct 2026) */}
+          {wide && portalInline && <div className="ml-auto min-w-0" data-client-word>{portalInline}</div>}
         </div>
 
         {editable && personHasNoAccounts && (

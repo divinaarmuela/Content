@@ -22,8 +22,11 @@ import {
  *     already had it; a post did not. Shown once the post is booked, which is when the client can see it.
  * Nothing is drawn for any other client.
  */
-export default function OnePortalPostLine({ post, editable, onMoved, onOwnChange }: {
+export default function OnePortalPostLine({ post, editable, onMoved, onOwnChange, inline = false }: {
   post: PostState
+  /** ON THE CHANNEL BAR (the laptop window, 27 Oct 2026 — the owner: "this should be immediately shown … the 'The
+   *  client' tag is the wrong thing"): the choice in plain sight, no box; the client's word only once there is one */
+  inline?: boolean
   /** the person may change the post's settings (the window's own rule) */
   editable: boolean
   onMoved?: () => void
@@ -66,8 +69,45 @@ export default function OnePortalPostLine({ post, editable, onMoved, onOwnChange
       .catch(() => toast.error('Could not copy — the link is: ' + portalLink))
   }
 
+  const select = (
+    <select value={choice} disabled={!editable || busy} onChange={e => void set(e.target.value as IfNoAnswer)}
+      className="min-h-9 rounded-full border border-border bg-surface px-3 text-[13px] font-semibold" aria-label="If the client hasn't approved">
+      {(['post', 'wait'] as const).map(k => <option key={k} value={k}>{IF_NO_ANSWER_WORDS[k]}</option>)}
+    </select>
+  )
+
+  if (inline) {
+    const word = state === 'not_approved' && review ? 'Not approved' : REVIEW_WORDS[state]
+    return (
+      <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1.5 text-[13px]" data-one-portal-line>
+        {(post.stage === 'booked' || review) && (
+          <span className={`rounded-full px-2.5 py-1 text-[12px] font-semibold ${state === 'approved' ? 'bg-tint-green' : state === 'not_approved' ? 'bg-tint-red' : 'bg-foreground/[0.06]'}`}
+            title={state === 'not_approved' && review?.note ? `“${review.note}”` : undefined}>
+            {word}{state === 'approved' && review?.by && review.by !== 'the client' ? ` by ${review.by}` : ''}
+          </span>
+        )}
+        {changedSinceApproval(post as never) && (
+          <span className="rounded-full bg-tint-amber px-2.5 py-1 text-[12px] font-semibold" title="Their approval stands; send them the preview if they should look again.">Changed since approved</span>
+        )}
+        <label className="flex items-center gap-2">
+          <span className="text-muted-foreground">If the client hasn&apos;t approved:</span>
+          {select}
+        </label>
+        {portalLink && (
+          <>
+            <button type="button" onClick={copyLink} data-copy-portal-link
+              className="inline-flex min-h-9 items-center rounded-full border border-border bg-surface px-3 text-[13px] font-semibold hover:bg-muted">
+              Copy portal link
+            </button>
+            <NotifyClientButton clientId={post.client_id} tab="scheduling" id={post.id} className="h-9 rounded-full px-3 text-[13px] font-semibold" />
+          </>
+        )}
+      </div>
+    )
+  }
+
   return (
-    <div className="flex flex-col gap-1.5 rounded-inner border border-border p-2.5 text-[13px] lg:flex-row lg:flex-wrap lg:items-center lg:gap-x-4 lg:py-1.5" data-one-portal-line>
+    <div className="flex flex-col gap-1.5 rounded-inner border border-border p-2.5 text-[13px]" data-one-portal-line>
       {post.stage === 'booked' || review ? (
         <p>
           <span className="font-semibold">The client:</span>{' '}
@@ -85,10 +125,7 @@ export default function OnePortalPostLine({ post, editable, onMoved, onOwnChange
       )}
       <label className="flex flex-wrap items-center gap-2">
         <span className="font-semibold">If the client hasn&apos;t approved:</span>
-        <select value={choice} disabled={!editable || busy} onChange={e => void set(e.target.value as IfNoAnswer)}
-          className="min-h-9 rounded-full border border-border bg-surface px-3 text-[13px]" aria-label="If the client hasn't approved">
-          {(['post', 'wait'] as const).map(k => <option key={k} value={k}>{IF_NO_ANSWER_WORDS[k]}</option>)}
-        </select>
+        {select}
       </label>
       {portalLink && (
         <div className="flex flex-wrap items-center gap-2">
@@ -102,18 +139,4 @@ export default function OnePortalPostLine({ post, editable, onMoved, onOwnChange
       )}
     </div>
   )
-}
-
-/**
- * WHERE THE CLIENT'S WORD STANDS, in a few words — the wide post window's one-row header shows it as a menu ("The
- * client: Not reviewed yet"), and this line opens inside it (27 Oct 2026). Null when the line above draws nothing.
- */
-export function useClientWord(post: PostState | null): string | null {
-  const { row: client } = useRow<{ id: string; portal_one?: boolean | null }>('clients', post?.client_id ?? null)
-  if (!post || !onePortal(client) || isAgencyClient(post.client_id)) return null
-  if (post.stage === 'posted' || post.stage === 'cancelled') return null
-  const review = readClientReview(post.client_review)
-  if (post.stage !== 'booked' && !review) return 'Sees it once booked'
-  const state = reviewState(post as never)
-  return state === 'not_approved' ? 'Not approved' : REVIEW_WORDS[state]
 }
