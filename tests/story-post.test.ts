@@ -46,6 +46,6 @@ describe('the gate and the composer (source pins)', () => {
     expect(d).toContain('const allStory = chosen.length > 0 && chosen.every(a => {')
     expect(d).toContain("return k === 'story'")
     expect(d).toContain('A Story has no caption — put any words into the picture or video itself.')
-    expect(d).toMatch(/\{allStory \? \(\s*<p className="[^"]*" data-story-no-caption>/)
+    expect(d).toMatch(/allStory \? \(\s*<p className="[^"]*" data-story-no-caption>/)
   })
 })

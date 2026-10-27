@@ -103,3 +103,17 @@ export default function OnePortalPostLine({ post, editable, onMoved, onOwnChange
     </div>
   )
 }
+
+/**
+ * WHERE THE CLIENT'S WORD STANDS, in a few words — the wide post window's one-row header shows it as a menu ("The
+ * client: Not reviewed yet"), and this line opens inside it (27 Oct 2026). Null when the line above draws nothing.
+ */
+export function useClientWord(post: PostState | null): string | null {
+  const { row: client } = useRow<{ id: string; portal_one?: boolean | null }>('clients', post?.client_id ?? null)
+  if (!post || !onePortal(client) || isAgencyClient(post.client_id)) return null
+  if (post.stage === 'posted' || post.stage === 'cancelled') return null
+  const review = readClientReview(post.client_review)
+  if (post.stage !== 'booked' && !review) return 'sees it once booked'
+  const state = reviewState(post as never)
+  return state === 'not_approved' ? 'Not approved' : REVIEW_WORDS[state]
+}

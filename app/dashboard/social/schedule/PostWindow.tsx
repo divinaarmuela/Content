@@ -5,7 +5,7 @@ import { Clock, Eye, Pencil, Plus, Trash2, Wand2, X, Zap } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { AssetVersion, ClientContact, ContentItem, EncodeJob, PostComment, PostVersion, SocialAccount, SocialPost } from '@/lib/db-types'
 import { useRow, useTable } from '@/lib/db-client'
-import OnePortalPostLine from './OnePortalPostLine'
+import OnePortalPostLine, { useClientWord } from './OnePortalPostLine'
 import { accountSections, ownerLabel } from '../../../lib/account-owner-core'
 import { copiesReadyAt, earliestSafeTime } from '@/app/lib/encode-eta-core'
 import { TRIAL_CHOICES, TRIAL_SENTENCE, postTrial } from '@/app/lib/trial-reel-core'
@@ -307,8 +307,11 @@ export default function PostWindow({
   // no more scrolling in the popup"): from 1024px the window is three columns — the media, the writing, and the
   // preview with the notes — so nothing is behind a tab or below the fold. A phone keeps the one column and the tabs.
   const wide = useWideWindow()
-  const showWrite = wide || pane === 'write'
   const showPreview = wide || pane === 'preview'
+  /** the open section of the wide window's right side */
+  const [section, setSection] = useState<WindowSection>('caption')
+  /** where the client's word stands, for the laptop window's "The client: …" menu */
+  const clientWord = useClientWord(saved && !unsaved ? saved : null)
   const [chosenSlide, setChosenSlide] = useState(0)
 
   // measure a slide nobody measured, so the checks below can judge its shape
@@ -742,6 +745,22 @@ export default function PostWindow({
   const whenWords = (iso: string | null) => (iso ? formatInZone(iso, tz, 'full') ?? clockPillLabel(iso, tz) : 'No time yet')
   const locked = !editable
 
+  const portalLine = saved && !unsaved ? (
+    <OnePortalPostLine
+      post={saved} editable={!!saved}
+      // the person's own choice moves the rev: not "someone else" — and what they are typing stays
+      onOwnChange={(phase, after) => {
+        savingRef.current = phase === 'start'
+        if (phase === 'end' && after) {
+          // the same post, one rev on: keep the screen, hold the new rev so the next Save is accepted
+          loadedKey.current = `${after.id}:${after.rev}`
+          setAnswered(after)
+          setMovedUnder(false)
+        }
+      }}
+    />
+  ) : null
+
   return (
     <div
       role="dialog"
@@ -789,7 +808,6 @@ export default function PostWindow({
               </div>
             )}
 
-          <div className="flex flex-col gap-1.5 lg:grid lg:grid-cols-2 lg:items-start lg:gap-5">
           {header && (
             <div className="flex flex-col gap-0.5 text-[13px] lg:flex-row lg:flex-wrap lg:items-baseline lg:gap-x-3 lg:gap-y-0">
               <p className="font-medium" data-waiting-line>{header.line}</p>
@@ -804,23 +822,9 @@ export default function PostWindow({
               {header.versionLine && <p className="text-[12px] text-muted-foreground" data-version-line>{header.versionLine}</p>}
             </div>
           )}
-          {/* the one portal: the client's word and "if the client hasn't approved" (docs/ONE_PORTAL_SPEC.md §5) */}
-          {saved && !unsaved && (
-            <OnePortalPostLine
-              post={saved} editable={!!saved}
-              // the person's own choice moves the rev: not "someone else" — and what they are typing stays
-              onOwnChange={(phase, after) => {
-                savingRef.current = phase === 'start'
-                if (phase === 'end' && after) {
-                  // the same post, one rev on: keep the screen, hold the new rev so the next Save is accepted
-                  loadedKey.current = `${after.id}:${after.rev}`
-                  setAnswered(after)
-                  setMovedUnder(false)
-                }
-              }}
-            />
-          )}
-          </div>
+          {/* the one portal: the client's word and "if the client hasn't approved" (docs/ONE_PORTAL_SPEC.md §5) — on a
+              laptop it is the "The client: …" menu on the channel bar instead */}
+          {!wide && portalLine}
           {gone && <p role="alert" className="text-[13px] font-medium">This post no longer exists.</p>}
           {notMigrated && <p role="alert" className="text-[13px] font-medium">This post has not been moved onto the new stages yet. It opens here once that is done.</p>}
           {movedUnder && (
@@ -925,6 +929,15 @@ export default function PostWindow({
               </span>
             )}
           </span>
+
+          {wide && portalLine && clientWord && (
+            <div className="ml-auto" data-client-word>
+              <Dropdown align="right" width={520} closeOnPick={false}
+                label={<span className="flex items-center gap-1.5"><span className="text-muted-foreground">The client:</span>{clientWord}</span>}>
+                <div className="p-1">{portalLine}</div>
+              </Dropdown>
+            </div>
+          )}
         </div>
 
         {editable && personHasNoAccounts && (
@@ -966,9 +979,10 @@ export default function PostWindow({
           </div>
         )}
 
-        <div data-window-body className="flex flex-col gap-5 p-3.5 sm:flex-row lg:grid lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(260px,340px)_minmax(0,1fr)_minmax(320px,400px)] lg:gap-4 lg:overflow-hidden lg:px-4 lg:py-3">
-          <div data-window-media data-window-scroll className="flex w-full shrink-0 flex-col gap-2.5 sm:w-[240px] lg:w-auto lg:min-h-0 lg:overflow-y-auto lg:pr-1">
-            <div className="relative aspect-square w-full overflow-hidden rounded-inner border border-border bg-foreground/[0.06] lg:aspect-[4/5]">
+        {(() => {
+          /* ── THE PIECES, each drawn once and placed by the layout below ── */
+          const mainMedia = (sizing: string) => (
+            <div className={cn('relative w-full overflow-hidden rounded-inner border border-border bg-foreground/[0.06]', sizing)}>
               {videoView(shownSlide, title, 'h-full w-full') ?? <Thumb slide={shownSlide} label={title} className="h-full w-full" />}
               {shown.slides.length > 0 && (
                 <span className="absolute right-2 top-2 rounded-full bg-ink/60 px-2 py-0.5 text-[11px] font-bold text-cream">{picked + 1}/{shown.slides.length}</span>
@@ -979,289 +993,357 @@ export default function PostWindow({
                 </span>
               )}
             </div>
-
-            {shown.slides.length > 1 && (
-              <div className="flex flex-wrap gap-1.5">
-                {shown.slides.map((s, i) => (
-                  <button
-                    type="button"
-                    key={`${s.url}-${i}`}
-                    onClick={() => setChosenSlide(i)}
-                    aria-label={`Show file ${i + 1}`}
-                    aria-pressed={i === picked}
-                    className={cn('h-[56px] w-[44px] shrink-0 overflow-hidden rounded-tile bg-foreground/[0.06]', i === picked && 'outline outline-2 outline-offset-2 outline-accent-blue')}
-                  >
-                    {videoView(s, s.name, 'h-full w-full', true) ?? <Thumb slide={s} label={s.name} className="h-full w-full" />}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {igCounter && (
-              <p data-instagram-counter className={cn('text-[12px] font-semibold', igCounter.over ? 'text-accent-red-deep' : 'text-muted-foreground')}>
-                {igCounter.line}
-              </p>
-            )}
-            {igChoices && (
-              <div role="group" aria-label="Instagram takes ten" className="flex flex-col gap-1.5 rounded-inner border border-accent-amber/50 bg-tint-amber p-2.5">
-                <p className="text-[12px] font-semibold">
-                  Instagram takes {igChoices.max} files in one post. This one has {igChoices.count}. Choose one:
-                </p>
-                {igChoices.choices.map(c => (
-                  <button
-                    key={c.key}
-                    type="button"
-                    disabled={busy}
-                    onClick={() => void chooseInstagram(c.key)}
-                    className="min-h-11 rounded-full border border-border bg-surface px-3 text-left text-[12px] font-semibold hover:bg-muted disabled:opacity-60"
-                  >
-                    {c.label}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {editable && (
-              <button type="button" onClick={openPicker} className="flex min-h-11 items-center justify-center gap-2 rounded-full border border-border text-[13px] font-semibold hover:bg-muted">
-                <Plus className="h-3.5 w-3.5" strokeWidth={2.2} aria-hidden />
-                Change media
-              </button>
-            )}
-            {editable && onEditMedia && (
-              <button type="button" disabled={!shownSlide} onClick={() => editSlide(picked)} className="flex min-h-11 items-center justify-center gap-2 rounded-full border border-border text-[13px] font-semibold hover:bg-muted disabled:opacity-50">
-                <Wand2 className="h-3.5 w-3.5" strokeWidth={2.2} aria-hidden />
-                {shownSlide?.type === 'video' ? 'Edit video' : 'Edit image'}
-              </button>
-            )}
-
-            {shown.slides.length === 1 && shown.slides[0].type === 'video' && chosen.length > 0 && (
-              <div data-tour="post-cover">
-                <CoverPicker
-                  videoUrl={shown.slides[0].url}
-                  playable={playable}
-                  platforms={chosen.map(a => String(a.platform))}
-                  current={currentCover(shown.perChannel, chosen.map(a => ({ id: a.id, platform: String(a.platform) })), seed?.coverUrl ?? null)}
-                  locked={locked}
-                  onPick={url => {
-                    for (const a of chosen) {
-                      const patch = coverPatchFor(String(a.platform), url)
-                      if (Object.keys(patch).length) dispatch({ type: 'extra', channel: a.id, patch })
-                    }
-                  }}
-                />
-              </div>
-            )}
-            {editable && shown.slides.length > 1 && chosen.some(a => String(a.platform) === 'tiktok') && shownSlide && (
-              <button
-                type="button"
-                onClick={() => { for (const a of chosen.filter(x => String(x.platform) === 'tiktok')) dispatch({ type: 'extra', channel: a.id, patch: { photoCoverIndex: picked } }) }}
-                className="flex min-h-9 items-center justify-center rounded-full border border-border px-3 text-[12px] font-semibold hover:bg-muted"
-              >
-                {(shown.perChannel[chosen.find(x => String(x.platform) === 'tiktok')?.id ?? '']?.photoCoverIndex ?? 0) === picked
-                  ? `Picture ${picked + 1} is the TikTok cover`
-                  : `Use picture ${picked + 1} as the TikTok cover`}
-              </button>
-            )}
-
-            {trial && (
-              <p className="rounded-inner border border-accent-blue/40 bg-accent-blue/10 px-3 py-2 text-[12px] leading-snug">
-                <strong>Trial Reel.</strong>{' '}
-                {`${TRIAL_SENTENCE} ${trial === 'MANUAL' ? 'Somebody graduates it by hand in the Instagram app.' : 'Instagram graduates it on its own if it performs well.'}`}
-              </p>
-            )}
-            {editable && (copiesLine
-              ? <p className={cn('text-[12px]', beforeCopies ? 'font-semibold text-foreground' : 'text-muted-foreground')}>{copiesLine}</p>
-              : preparingCopy && <p className="text-[12px] text-muted-foreground">{preparingCopy}</p>)}
-            {caps.lines.length > 0 && (
-              <div className="flex flex-col gap-0.5">{caps.lines.map(l => <p key={l.id} className="text-[12px] text-muted-foreground">{l.line}</p>)}</div>
-            )}
-            {!wide && beforeBooking && shown.slides.length > 0 && checkPlatforms.length > 0 && (
-              <div data-tour="post-check">
-                <AssetCheck
-                  probes={probes} platforms={checkPlatforms} kinds={checkKinds} copies={copyPlatforms} playable={playable} compact
-                  linkedinPersonal={chosen.some(a => String(a.platform) === 'linkedin' && !shown.perChannel[a.id]?.organizationUrn)}
-                />
-              </div>
-            )}
-          </div>
-
-          <div data-window-write data-window-scroll className="flex min-w-0 flex-1 flex-col gap-3.5 lg:min-h-0 lg:overflow-y-auto lg:pr-1">
-            {!wide && <div className="flex gap-1.5 rounded-full border border-border p-1" role="tablist" aria-label="Write or preview">
-              {([['write', editable ? 'Write it' : 'The post', Pencil], ['preview', 'Preview', Eye]] as const).map(([key, label, Icon]) => (
+          )
+          const thumbs = shown.slides.length > 1 && (
+            <div className="flex flex-wrap gap-1.5">
+              {shown.slides.map((s, i) => (
                 <button
-                  key={key}
                   type="button"
-                  role="tab"
-                  aria-selected={pane === key}
-                  onClick={() => setPane(key)}
-                  className={cn('flex min-h-11 flex-1 items-center justify-center gap-2 rounded-full text-[13px] font-semibold', pane === key ? 'bg-foreground text-background' : 'hover:bg-muted')}
+                  key={`${s.url}-${i}`}
+                  onClick={() => setChosenSlide(i)}
+                  aria-label={`Show file ${i + 1}`}
+                  aria-pressed={i === picked}
+                  className={cn('h-[56px] w-[44px] shrink-0 overflow-hidden rounded-tile bg-foreground/[0.06]', i === picked && 'outline outline-2 outline-offset-2 outline-accent-blue')}
                 >
-                  <Icon className="h-3.5 w-3.5" strokeWidth={2.2} aria-hidden />
-                  {label}
+                  {videoView(s, s.name, 'h-full w-full', true) ?? <Thumb slide={s} label={s.name} className="h-full w-full" />}
                 </button>
               ))}
-            </div>}
-
-            {!wide && pane === 'preview' && (
-              <PostPreviewPane playable={playable} videoFor={(url, label) => videoView({ url, type: 'video' }, label, 'h-full w-full')} previews={preview.networks} intro={PREVIEW_INTRO}
-                empty="Pick a channel and the post appears here as that network will show it." />
-            )}
-            {!wide && pane === 'preview' && grid && grid.length > 0 && (
-              <div className="mt-3 flex flex-col gap-2" data-instagram-grid>
-                <p className="text-[13px] font-semibold">How it sits on the client&rsquo;s Instagram</p>
-                <ul className="grid max-w-[300px] grid-cols-3 gap-0.5">
-                  {grid.slice(0, 9).map((g, i) => (
-                    <li key={`${g.url}-${i}`} className={cn('relative aspect-[4/5] overflow-hidden bg-foreground/[0.06]', i === 0 && 'ring-2 ring-foreground ring-offset-1 ring-offset-background')}>
-                      {g.type === 'video'
-                        ? (videoView(g, i === 0 ? 'This post' : '', 'h-full w-full', true)
-                          ?? <video src={playable(g.url)} muted playsInline preload="metadata" className="h-full w-full object-cover" />)
-                        // eslint-disable-next-line @next/next/no-img-element
-                        : <img src={g.url} alt={i === 0 ? 'This post' : ''} loading="lazy" className="h-full w-full object-cover" />}
-                    </li>
-                  ))}
-                </ul>
-                <p className="text-[12px] text-muted-foreground">This post is outlined, before the newest posts already live.</p>
-              </div>
-            )}
-
-            {showWrite && (
-              <>
-                {allStory ? (
-                  <p className="rounded-inner border border-border p-3 text-[13px] text-muted-foreground" data-story-no-caption>
-                    A Story has no caption — put any words into the picture or video itself.
+            </div>
+          )
+          const mediaTools = (
+            <>
+              {igCounter && (
+                <p data-instagram-counter className={cn('text-[12px] font-semibold', igCounter.over ? 'text-accent-red-deep' : 'text-muted-foreground')}>
+                  {igCounter.line}
+                </p>
+              )}
+              {igChoices && (
+                <div role="group" aria-label="Instagram takes ten" className="flex flex-col gap-1.5 rounded-inner border border-accent-amber/50 bg-tint-amber p-2.5">
+                  <p className="text-[12px] font-semibold">
+                    Instagram takes {igChoices.max} files in one post. This one has {igChoices.count}. Choose one:
                   </p>
-                ) : (
-                  <label className="flex flex-col gap-1.5 rounded-inner border border-border p-3">
-                    <span className="text-[12px] font-semibold text-muted-foreground">Caption</span>
-                    <textarea
-                      value={editable ? state.caption : shown.caption}
-                      onChange={e => dispatch({ type: 'caption', caption: e.target.value })}
-                      readOnly={!editable}
-                      rows={wide ? 9 : 5}
-                      placeholder={editable ? 'What goes with the picture?' : ''}
-                      data-caption
-                      className="w-full resize-y bg-transparent text-[14px] leading-[1.45] text-foreground outline-none placeholder:text-muted-foreground"
-                    />
-                  </label>
-                )}
+                  {igChoices.choices.map(c => (
+                    <button
+                      key={c.key}
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void chooseInstagram(c.key)}
+                      className="min-h-11 rounded-full border border-border bg-surface px-3 text-left text-[12px] font-semibold hover:bg-muted disabled:opacity-60"
+                    >
+                      {c.label}
+                    </button>
+                  ))}
+                </div>
+              )}
 
-                {!allStory && (
-                  <ChannelCaptions
-                    channels={chosen}
-                    perChannel={shown.perChannel}
-                    caption={editable ? state.caption : shown.caption}
-                    editable={editable}
-                    onChange={(channel, words) => dispatch({ type: 'extra', channel, patch: { caption: words } })}
-                    noCaption={a => {
-                      const p = String(a.platform)
-                      return (shown.perChannel[a.id]?.kind ?? (isPlatform(p) ? autoKindFor(p, media) : null)) === 'story'
+              {editable && (
+                <div className="flex flex-wrap gap-2">
+                  {editable && (
+                    <button type="button" onClick={openPicker} className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-full border border-border px-3 text-[13px] font-semibold hover:bg-muted">
+                      <Plus className="h-3.5 w-3.5" strokeWidth={2.2} aria-hidden />
+                      Change media
+                    </button>
+                  )}
+                  {editable && onEditMedia && (
+                    <button type="button" disabled={!shownSlide} onClick={() => editSlide(picked)} className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-full border border-border px-3 text-[13px] font-semibold hover:bg-muted disabled:opacity-50">
+                      <Wand2 className="h-3.5 w-3.5" strokeWidth={2.2} aria-hidden />
+                      {shownSlide?.type === 'video' ? 'Edit video' : 'Edit image'}
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {shown.slides.length === 1 && shown.slides[0].type === 'video' && chosen.length > 0 && (
+                <div data-tour="post-cover">
+                  <CoverPicker
+                    videoUrl={shown.slides[0].url}
+                    playable={playable}
+                    platforms={chosen.map(a => String(a.platform))}
+                    current={currentCover(shown.perChannel, chosen.map(a => ({ id: a.id, platform: String(a.platform) })), seed?.coverUrl ?? null)}
+                    locked={locked}
+                    onPick={url => {
+                      for (const a of chosen) {
+                        const patch = coverPatchFor(String(a.platform), url)
+                        if (Object.keys(patch).length) dispatch({ type: 'extra', channel: a.id, patch })
+                      }
                     }}
                   />
-                )}
+                </div>
+              )}
+              {editable && shown.slides.length > 1 && chosen.some(a => String(a.platform) === 'tiktok') && shownSlide && (
+                <button
+                  type="button"
+                  onClick={() => { for (const a of chosen.filter(x => String(x.platform) === 'tiktok')) dispatch({ type: 'extra', channel: a.id, patch: { photoCoverIndex: picked } }) }}
+                  className="flex min-h-9 items-center justify-center rounded-full border border-border px-3 text-[12px] font-semibold hover:bg-muted"
+                >
+                  {(shown.perChannel[chosen.find(x => String(x.platform) === 'tiktok')?.id ?? '']?.photoCoverIndex ?? 0) === picked
+                    ? `Picture ${picked + 1} is the TikTok cover`
+                    : `Use picture ${picked + 1} as the TikTok cover`}
+                </button>
+              )}
 
-                {chosen.some(a => ['instagram', 'facebook'].includes(String(a.platform))) && (
-                  <AutomationSection
-                    automation={editable ? state.automation : shown.automation}
-                    editable={editable}
-                    onChange={next => dispatch({ type: 'automation', automation: next })}
-                    clientSlug={context.client?.slug ?? null}
-                    postId={saved?.id ?? null}
-                    stage={saved?.stage ?? null}
-                  />
-                )}
+              {trial && (
+                <p className="rounded-inner border border-accent-blue/40 bg-accent-blue/10 px-3 py-2 text-[12px] leading-snug">
+                  <strong>Trial Reel.</strong>{' '}
+                  {`${TRIAL_SENTENCE} ${trial === 'MANUAL' ? 'Somebody graduates it by hand in the Instagram app.' : 'Instagram graduates it on its own if it performs well.'}`}
+                </p>
+              )}
+              {editable && (copiesLine
+                ? <p className={cn('text-[12px]', beforeCopies ? 'font-semibold text-foreground' : 'text-muted-foreground')}>{copiesLine}</p>
+                : preparingCopy && <p className="text-[12px] text-muted-foreground">{preparingCopy}</p>)}
+              {caps.lines.length > 0 && (
+                <div className="flex flex-col gap-0.5">{caps.lines.map(l => <p key={l.id} className="text-[12px] text-muted-foreground">{l.line}</p>)}</div>
+              )}
+            </>
+          )
+          const fileCheck = beforeBooking && shown.slides.length > 0 && checkPlatforms.length > 0 && (
+            <div data-tour="post-check">
+              <AssetCheck
+                probes={probes} platforms={checkPlatforms} kinds={checkKinds} copies={copyPlatforms} playable={playable} compact
+                linkedinPersonal={chosen.some(a => String(a.platform) === 'linkedin' && !shown.perChannel[a.id]?.organizationUrn)}
+              />
+            </div>
+          )
+          const captionBox = (rows: number, grow: boolean) => allStory ? (
+            <p className="rounded-inner border border-border p-3 text-[13px] text-muted-foreground" data-story-no-caption>
+              A Story has no caption — put any words into the picture or video itself.
+            </p>
+          ) : (
+            <label className={cn('flex flex-col gap-1.5 rounded-inner border border-border p-3 focus-within:border-foreground/40', grow && 'min-h-[180px] flex-1')}>
+              <span className="flex items-center justify-between text-[12px] font-semibold text-muted-foreground">
+                <span>Caption{chosen.length > 1 ? ' — every channel, unless one has its own' : ''}</span>
+                <span className="tabular-nums font-medium">{(editable ? state.caption : shown.caption).length} characters</span>
+              </span>
+              <textarea
+                value={editable ? state.caption : shown.caption}
+                onChange={e => dispatch({ type: 'caption', caption: e.target.value })}
+                readOnly={!editable}
+                rows={rows}
+                placeholder={editable ? 'What goes with the picture?' : ''}
+                data-caption
+                className={cn('w-full bg-transparent text-[14px] leading-[1.5] text-foreground outline-none placeholder:text-muted-foreground', grow ? 'min-h-0 flex-1 resize-none' : 'resize-y')}
+              />
+            </label>
+          )
+          const channelCaptions = !allStory && (
+            <ChannelCaptions
+              channels={chosen}
+              perChannel={shown.perChannel}
+              caption={editable ? state.caption : shown.caption}
+              editable={editable}
+              onChange={(channel, words) => dispatch({ type: 'extra', channel, patch: { caption: words } })}
+              noCaption={a => {
+                const p = String(a.platform)
+                return (shown.perChannel[a.id]?.kind ?? (isPlatform(p) ? autoKindFor(p, media) : null)) === 'story'
+              }}
+            />
+          )
+          const automation = chosen.some(a => ['instagram', 'facebook'].includes(String(a.platform))) && (
+            <AutomationSection
+              automation={editable ? state.automation : shown.automation}
+              editable={editable}
+              onChange={next => dispatch({ type: 'automation', automation: next })}
+              clientSlug={context.client?.slug ?? null}
+              postId={saved?.id ?? null}
+              stage={saved?.stage ?? null}
+            />
+          )
+          const options = editable && groups.length > 0 && (
+            <div data-tour="post-options" className="flex flex-col gap-2.5">
+              <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">More options</span>
+              {groups.map(group => (
+                <div key={group.platform ?? 'shared'} className="flex flex-col gap-2.5">
+                  <span className="flex items-center gap-1.5 text-[12px] font-semibold text-muted-foreground">
+                    {group.platform && <PlatformIcon platform={group.platform} size={14} className="rounded-full" />}
+                    {group.label}
+                  </span>
+                  {group.platform === 'tiktok' && tiktokLimit && <p className="text-[12px] text-muted-foreground">{tiktokLimit}</p>}
+                  {group.options.filter(o => o.key !== 'trialReel').map(o => (
+                    <ExtraRow key={o.key} option={o} channels={chosen.filter(a => o.platforms.includes(String(a.platform)))}
+                      state={state} dispatch={dispatch} locations={locations} lists={lists} />
+                  ))}
+                </div>
+              ))}
+            </div>
+          )
+          const alsoPost = editable && accounts.some(a => !state.channels.includes(a.id)) && (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[12px] text-muted-foreground">Also post to</span>
+              {accounts.filter(a => !state.channels.includes(a.id)).map(a => (
+                <button key={a.id} type="button" onClick={() => dispatch({ type: 'channel', id: a.id, on: true })}
+                  title={ownerLabel(a, context.client?.name || 'The business', contacts)}
+                  className="flex min-h-11 items-center gap-1.5 rounded-full border border-border px-3 text-[12px] font-semibold hover:bg-muted">
+                  <PlatformIcon platform={String(a.platform)} size={16} className="rounded-full" />
+                  {a.username || a.name}
+                </button>
+              ))}
+            </div>
+          )
+          const outcomes = saved && saved.stage === 'posted' && Object.keys(saved.outcomes).length > 0 && (
+            <ul className="flex flex-col gap-1 rounded-inner border border-border p-3 text-[13px]" aria-label="Where it went out">
+              {Object.entries(saved.outcomes).map(([platform, o]) => (
+                <li key={platform} className="flex items-center gap-2">
+                  <PlatformIcon platform={platform} size={16} className="rounded-full" />
+                  <span className="font-semibold">{networkName(platform)}</span>
+                  <span className="text-muted-foreground">
+                    {o.status === 'published' || o.status === 'duplicate' ? 'live' : o.status === 'failed' ? `did not go out${o.error ? ` — ${o.error}` : ''}` : 'waiting for the network'}
+                  </span>
+                  {o.url && <a href={o.url} target="_blank" rel="noreferrer" className="ml-auto underline">Open ↗</a>}
+                </li>
+              ))}
+            </ul>
+          )
+          const notesBox = id && post && (
+            <PostNotes slides={shown.slides} notes={notes} version={noteVersionOf(post)} onAdd={addNote} />
+          )
+          const previewPane = (frame?: string, intro?: string) => (
+            <PostPreviewPane playable={playable} videoFor={(url, label) => videoView({ url, type: 'video' }, label, 'h-full w-full')} previews={preview.networks} intro={intro}
+              frameClassName={frame}
+              empty="Pick a channel and the post appears here as that network will show it." />
+          )
+          const igGrid = grid && grid.length > 0 && (
+            <div className="flex flex-col gap-2" data-instagram-grid>
+              <p className="text-[13px] font-semibold">How it sits on the client&rsquo;s Instagram</p>
+              <ul className="grid max-w-[300px] grid-cols-3 gap-0.5">
+                {grid.slice(0, 9).map((g, i) => (
+                  <li key={`${g.url}-${i}`} className={cn('relative aspect-[4/5] overflow-hidden bg-foreground/[0.06]', i === 0 && 'ring-2 ring-foreground ring-offset-1 ring-offset-background')}>
+                    {g.type === 'video'
+                      ? (videoView(g, i === 0 ? 'This post' : '', 'h-full w-full', true)
+                        ?? <video src={playable(g.url)} muted playsInline preload="metadata" className="h-full w-full object-cover" />)
+                      // eslint-disable-next-line @next/next/no-img-element
+                      : <img src={g.url} alt={i === 0 ? 'This post' : ''} loading="lazy" className="h-full w-full object-cover" />}
+                  </li>
+                ))}
+              </ul>
+              <p className="text-[12px] text-muted-foreground">This post is outlined, before the newest posts already live.</p>
+            </div>
+          )
 
-                {editable && groups.length > 0 && (
-                  <div data-tour="post-options" className="flex flex-col gap-2.5">
-                    <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">More options</span>
-                    {groups.map(group => (
-                      <div key={group.platform ?? 'shared'} className="flex flex-col gap-2.5">
-                        <span className="flex items-center gap-1.5 text-[12px] font-semibold text-muted-foreground">
-                          {group.platform && <PlatformIcon platform={group.platform} size={14} className="rounded-full" />}
-                          {group.label}
-                        </span>
-                        {group.platform === 'tiktok' && tiktokLimit && <p className="text-[12px] text-muted-foreground">{tiktokLimit}</p>}
-                        {group.options.filter(o => o.key !== 'trialReel').map(o => (
-                          <ExtraRow key={o.key} option={o} channels={chosen.filter(a => o.platforms.includes(String(a.platform)))}
-                            state={state} dispatch={dispatch} locations={locations} lists={lists} />
-                        ))}
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {editable && accounts.some(a => !state.channels.includes(a.id)) && (
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-[12px] text-muted-foreground">Also post to</span>
-                    {accounts.filter(a => !state.channels.includes(a.id)).map(a => (
-                      <button key={a.id} type="button" onClick={() => dispatch({ type: 'channel', id: a.id, on: true })}
-                        title={ownerLabel(a, context.client?.name || 'The business', contacts)}
-                        className="flex min-h-11 items-center gap-1.5 rounded-full border border-border px-3 text-[12px] font-semibold hover:bg-muted">
-                        <PlatformIcon platform={String(a.platform)} size={16} className="rounded-full" />
-                        {a.username || a.name}
+          /* ── A PHONE: one column, Write and Preview as tabs (as before) ── */
+          if (!wide) {
+            return (
+              <div data-window-body className="flex flex-col gap-5 p-3.5 sm:flex-row">
+                <div data-window-media className="flex w-full shrink-0 flex-col gap-2.5 sm:w-[240px]">
+                  {mainMedia('aspect-square')}
+                  {thumbs}
+                  {mediaTools}
+                  {fileCheck}
+                </div>
+                <div data-window-write className="flex min-w-0 flex-1 flex-col gap-3.5">
+                  <div className="flex gap-1.5 rounded-full border border-border p-1" role="tablist" aria-label="Write or preview">
+                    {([['write', editable ? 'Write it' : 'The post', Pencil], ['preview', 'Preview', Eye]] as const).map(([key, label, Icon]) => (
+                      <button
+                        key={key}
+                        type="button"
+                        role="tab"
+                        aria-selected={pane === key}
+                        onClick={() => setPane(key)}
+                        className={cn('flex min-h-11 flex-1 items-center justify-center gap-2 rounded-full text-[13px] font-semibold', pane === key ? 'bg-foreground text-background' : 'hover:bg-muted')}
+                      >
+                        <Icon className="h-3.5 w-3.5" strokeWidth={2.2} aria-hidden />
+                        {label}
                       </button>
                     ))}
                   </div>
-                )}
-
-                {saved && saved.stage === 'posted' && Object.keys(saved.outcomes).length > 0 && (
-                  <ul className="flex flex-col gap-1 rounded-inner border border-border p-3 text-[13px]" aria-label="Where it went out">
-                    {Object.entries(saved.outcomes).map(([platform, o]) => (
-                      <li key={platform} className="flex items-center gap-2">
-                        <PlatformIcon platform={platform} size={16} className="rounded-full" />
-                        <span className="font-semibold">{networkName(platform)}</span>
-                        <span className="text-muted-foreground">
-                          {o.status === 'published' || o.status === 'duplicate' ? 'live' : o.status === 'failed' ? `did not go out${o.error ? ` — ${o.error}` : ''}` : 'waiting for the network'}
-                        </span>
-                        {o.url && <a href={o.url} target="_blank" rel="noreferrer" className="ml-auto underline">Open ↗</a>}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-
-                {wide && beforeBooking && shown.slides.length > 0 && checkPlatforms.length > 0 && (
-                  <div data-tour="post-check">
-                    <AssetCheck
-                      probes={probes} platforms={checkPlatforms} kinds={checkKinds} copies={copyPlatforms} playable={playable} compact
-                      linkedinPersonal={chosen.some(a => String(a.platform) === 'linkedin' && !shown.perChannel[a.id]?.organizationUrn)}
-                    />
-                  </div>
-                )}
-
-                {id && post && (
-                  <PostNotes slides={shown.slides} notes={notes} version={noteVersionOf(post)} onAdd={addNote} />
-                )}
-              </>
-            )}
-          </div>
-
-          {/* the third column, on a wide screen: the post as each network will show it, always in view, sized to the
-              screen (the notes and the file checks sit under the writing, where there is room) */}
-          {wide && (
-            <div data-window-side data-window-scroll className="flex min-w-0 flex-col gap-4 lg:min-h-0 lg:overflow-y-auto lg:pr-1">
-              <p className="text-[12px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">Preview</p>
-              <PostPreviewPane playable={playable} videoFor={(url, label) => videoView({ url, type: 'video' }, label, 'h-full w-full')} previews={preview.networks} intro={PREVIEW_INTRO}
-                frameClassName="mx-auto max-w-[max(220px,min(100%,calc((100dvh-42rem)*0.5625)))]"
-                empty="Pick a channel and the post appears here as that network will show it." />
-              {grid && grid.length > 0 && (
-                <div className="flex flex-col gap-2" data-instagram-grid>
-                  <p className="text-[13px] font-semibold">How it sits on the client&rsquo;s Instagram</p>
-                  <ul className="grid max-w-[300px] grid-cols-3 gap-0.5">
-                    {grid.slice(0, 9).map((g, i) => (
-                      <li key={`${g.url}-${i}`} className={cn('relative aspect-[4/5] overflow-hidden bg-foreground/[0.06]', i === 0 && 'ring-2 ring-foreground ring-offset-1 ring-offset-background')}>
-                        {g.type === 'video'
-                          ? (videoView(g, i === 0 ? 'This post' : '', 'h-full w-full', true)
-                            ?? <video src={playable(g.url)} muted playsInline preload="metadata" className="h-full w-full object-cover" />)
-                          // eslint-disable-next-line @next/next/no-img-element
-                          : <img src={g.url} alt={i === 0 ? 'This post' : ''} loading="lazy" className="h-full w-full object-cover" />}
-                      </li>
-                    ))}
-                  </ul>
-                  <p className="text-[12px] text-muted-foreground">This post is outlined, before the newest posts already live.</p>
+                  {pane === 'preview' && previewPane(undefined, PREVIEW_INTRO)}
+                  {pane === 'preview' && igGrid}
+                  {pane === 'write' && (
+                    <>
+                      {captionBox(5, false)}
+                      {channelCaptions}
+                      {automation}
+                      {options}
+                      {alsoPost}
+                      {outcomes}
+                      {notesBox}
+                    </>
+                  )}
                 </div>
-              )}
+              </div>
+            )
+          }
+
+          /* ── A LAPTOP OR WIDER: the post as it will look on the left, always in view; what to change on the right,
+                one section at a time, each with the whole height (the owner, 27 Oct 2026: "make the ui better … we
+                have multi caption features etc — how is that gonna look") ── */
+          const noteCount = id && post ? notes.length : 0
+          const tabs: { key: WindowSection; label: string; count?: number; show: boolean }[] = [
+            { key: 'caption', label: 'Caption', show: true },
+            { key: 'channels', label: 'Per channel', count: chosen.length, show: !allStory && chosen.length > 0 },
+            { key: 'media', label: 'Media', count: shown.slides.length, show: true },
+            { key: 'options', label: 'Options', show: !!options || !!automation || !!alsoPost },
+            { key: 'notes', label: 'Notes', count: noteCount, show: !!notesBox },
+          ]
+          const visible = tabs.filter(t => t.show)
+          const open = visible.some(t => t.key === section) ? section : 'caption'
+          return (
+            <div data-window-body className="grid min-h-0 flex-1 grid-cols-[minmax(300px,0.85fr)_minmax(0,1.5fr)] overflow-hidden">
+              <div data-window-side data-window-scroll className="flex min-h-0 flex-col gap-3 overflow-y-auto border-r border-border bg-paper/50 px-4 py-3">
+                {previewPane('mx-auto max-w-[max(200px,min(100%,calc((100dvh-27rem)*0.5625)))]')}
+                {thumbs}
+                {igGrid}
+              </div>
+              <div className="flex min-h-0 min-w-0 flex-col">
+                <div role="tablist" aria-label="What to change" className="flex shrink-0 flex-wrap gap-1 border-b border-border px-4 pt-2">
+                  {visible.map(t => (
+                    <button
+                      key={t.key}
+                      type="button"
+                      role="tab"
+                      aria-selected={open === t.key}
+                      data-window-tab={t.key}
+                      onClick={() => setSection(t.key)}
+                      className={cn('-mb-px flex min-h-10 items-center gap-1.5 border-b-2 px-3 text-[13px] font-semibold',
+                        open === t.key ? 'border-foreground text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground')}
+                    >
+                      {t.label}
+                      {t.count != null && t.count > 0 && <span className="rounded-full bg-foreground/[0.08] px-1.5 text-[11px] tabular-nums">{t.count}</span>}
+                    </button>
+                  ))}
+                </div>
+                <div data-window-write data-window-scroll className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto px-4 py-3">
+                  {open === 'caption' && (
+                    <>
+                      {captionBox(10, true)}
+                      {chosen.length > 1 && !allStory && (
+                        <button type="button" onClick={() => setSection('channels')} className="self-start text-[12px] font-semibold text-muted-foreground underline underline-offset-4 hover:text-foreground">
+                          Give one channel its own caption
+                        </button>
+                      )}
+                      {outcomes}
+                    </>
+                  )}
+                  {open === 'channels' && (
+                    <>
+                      <p className="text-[13px] text-muted-foreground">Each channel posts the caption from the Caption tab, unless it has its own here.</p>
+                      {channelCaptions}
+                    </>
+                  )}
+                  {open === 'media' && (
+                    <div className="grid gap-4 xl:grid-cols-[minmax(0,280px)_minmax(0,1fr)]">
+                      <div className="flex flex-col gap-2.5">
+                        {mainMedia('aspect-[4/5]')}
+                        {thumbs}
+                      </div>
+                      <div className="flex min-w-0 flex-col gap-2.5">
+                        {mediaTools}
+                        {fileCheck}
+                      </div>
+                    </div>
+                  )}
+                  {open === 'options' && (
+                    <>
+                      {alsoPost}
+                      {options}
+                      {automation}
+                    </>
+                  )}
+                  {open === 'notes' && notesBox}
+                </div>
+              </div>
             </div>
-          )}
-        </div>
+          )
+        })()}
 
         {tourOpen && <Tour tour={POST_WINDOW_TOUR} onClose={closeTour} />}
 
@@ -1571,3 +1653,6 @@ function useWideWindow(): boolean {
   }, [])
   return wide
 }
+
+/** the sections of the wide post window's right side, one open at a time */
+type WindowSection = 'caption' | 'channels' | 'media' | 'options' | 'notes'

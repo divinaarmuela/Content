@@ -31,9 +31,11 @@ import { Thumb } from './tiles'
  * ref pointing at the dialog card, so clicking the caption box left the
  * channel list hanging open over the words being typed.
  */
-export function Dropdown({ label, width, closeOnPick = true, disabled = false, tour, children }: {
+export function Dropdown({ label, width, closeOnPick = true, disabled = false, tour, align = 'left', children }: {
   label: React.ReactNode
   width: number
+  /** which edge the panel lines up with — 'right' for a menu at the window's right edge, so it is not cut off */
+  align?: 'left' | 'right'
   /** the `data-tour` key the walkthrough points at, when it points here */
   tour?: string
   /** a booked or posted post keeps its type — the menu shows it, and opens nothing */
@@ -83,7 +85,7 @@ export function Dropdown({ label, width, closeOnPick = true, disabled = false, t
         <div
           style={{ width }}
           onClick={closeOnPick ? () => setOpen(false) : undefined}
-          className="absolute left-0 top-[calc(100%+6px)] z-50 rounded-inner border border-border bg-popover p-1.5 shadow-lg"
+          className={`absolute ${align === 'right' ? 'right-0' : 'left-0'} top-[calc(100%+6px)] z-50 rounded-inner border border-border bg-popover p-1.5 shadow-lg`}
         >
           {children}
         </div>
