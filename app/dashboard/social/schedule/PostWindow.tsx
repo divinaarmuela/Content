@@ -303,6 +303,12 @@ export default function PostWindow({
   const lost = useMemo(() => (post ? lostChannels({ channels: shown.channels }, accountRefs) : []), [post, shown.channels, accountRefs])
   const [picking, setPicking] = useState(false)
   const [pane, setPane] = useState<'write' | 'preview'>('write')
+  // THE WIDE WINDOW (the owner, 27 Oct 2026: "they need to scroll and it's hard to see everything — make it bigger,
+  // no more scrolling in the popup"): from 1024px the window is three columns — the media, the writing, and the
+  // preview with the notes — so nothing is behind a tab or below the fold. A phone keeps the one column and the tabs.
+  const wide = useWideWindow()
+  const showWrite = wide || pane === 'write'
+  const showPreview = wide || pane === 'preview'
   const [chosenSlide, setChosenSlide] = useState(0)
 
   // measure a slide nobody measured, so the checks below can judge its shape
@@ -496,7 +502,7 @@ export default function PostWindow({
    *  grid the client's review page shows — this post first, then the newest
    *  posts already live there. Only when Instagram is one of its channels. */
   const clientPostsKey = useMemo(() => ({ client_id: context.clientId }), [context.clientId])
-  const clientPosts = useTable<SocialPost>('social_posts', { by: clientPostsKey, enabled: pane === 'preview' || picking })
+  const clientPosts = useTable<SocialPost>('social_posts', { by: clientPostsKey, enabled: showPreview || picking })
   // the picker's "Used before" tab — every file on this client's other posts (26 Oct 2026)
   const usedBefore = useMemo(
     () => mediaUsedBefore(clientPosts.rows as unknown as Parameters<typeof mediaUsedBefore>[0], context.clientId, id),
@@ -742,13 +748,13 @@ export default function PostWindow({
       aria-modal="true"
       aria-label={header ? `Post — ${header.label}` : 'Post'}
       onMouseDown={e => { if (e.target === e.currentTarget) requestClose() }}
-      className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-ink/55 p-3 sm:items-center sm:p-6"
+      className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-ink/55 p-3 sm:items-center sm:p-6 lg:p-5"
     >
       <div
         ref={card}
         tabIndex={-1}
         data-post-window
-        data-window-scroll className="flex max-h-[calc(100dvh-1.5rem)] w-full max-w-[760px] flex-col overflow-y-auto overscroll-contain rounded-card bg-popover text-popover-foreground shadow-xl outline-none sm:max-h-[calc(100dvh-3rem)]"
+        data-window-scroll className="flex max-h-[calc(100dvh-1.5rem)] w-full max-w-[760px] flex-col overflow-y-auto overscroll-contain rounded-card bg-popover text-popover-foreground shadow-xl outline-none sm:max-h-[calc(100dvh-3rem)] lg:h-[calc(100dvh-2.5rem)] lg:max-h-none lg:max-w-[1440px] lg:overflow-hidden"
       >
         {/* ── TOP: the stage, and what happens next ── */}
         <div className="sticky top-0 z-20 flex flex-col gap-1.5 border-b border-border bg-popover p-3.5">
@@ -958,9 +964,9 @@ export default function PostWindow({
           </div>
         )}
 
-        <div className="flex flex-col gap-5 p-3.5 sm:flex-row">
-          <div className="flex w-full shrink-0 flex-col gap-2.5 sm:w-[240px]">
-            <div className="relative aspect-square w-full overflow-hidden rounded-inner border border-border bg-foreground/[0.06]">
+        <div data-window-body className="flex flex-col gap-5 p-3.5 sm:flex-row lg:grid lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(260px,340px)_minmax(0,1fr)_minmax(320px,400px)] lg:gap-5 lg:overflow-hidden lg:px-5 lg:py-4">
+          <div data-window-media data-window-scroll className="flex w-full shrink-0 flex-col gap-2.5 sm:w-[240px] lg:w-auto lg:min-h-0 lg:overflow-y-auto lg:pr-1">
+            <div className="relative aspect-square w-full overflow-hidden rounded-inner border border-border bg-foreground/[0.06] lg:aspect-[4/5]">
               {videoView(shownSlide, title, 'h-full w-full') ?? <Thumb slide={shownSlide} label={title} className="h-full w-full" />}
               {shown.slides.length > 0 && (
                 <span className="absolute right-2 top-2 rounded-full bg-ink/60 px-2 py-0.5 text-[11px] font-bold text-cream">{picked + 1}/{shown.slides.length}</span>
@@ -1077,8 +1083,8 @@ export default function PostWindow({
             )}
           </div>
 
-          <div className="flex min-w-0 flex-1 flex-col gap-3.5">
-            <div className="flex gap-1.5 rounded-full border border-border p-1" role="tablist" aria-label="Write or preview">
+          <div data-window-write data-window-scroll className="flex min-w-0 flex-1 flex-col gap-3.5 lg:min-h-0 lg:overflow-y-auto lg:pr-1">
+            {!wide && <div className="flex gap-1.5 rounded-full border border-border p-1" role="tablist" aria-label="Write or preview">
               {([['write', editable ? 'Write it' : 'The post', Pencil], ['preview', 'Preview', Eye]] as const).map(([key, label, Icon]) => (
                 <button
                   key={key}
@@ -1092,13 +1098,13 @@ export default function PostWindow({
                   {label}
                 </button>
               ))}
-            </div>
+            </div>}
 
-            {pane === 'preview' && (
+            {!wide && pane === 'preview' && (
               <PostPreviewPane playable={playable} videoFor={(url, label) => videoView({ url, type: 'video' }, label, 'h-full w-full')} previews={preview.networks} intro={PREVIEW_INTRO}
                 empty="Pick a channel and the post appears here as that network will show it." />
             )}
-            {pane === 'preview' && grid && grid.length > 0 && (
+            {!wide && pane === 'preview' && grid && grid.length > 0 && (
               <div className="mt-3 flex flex-col gap-2" data-instagram-grid>
                 <p className="text-[13px] font-semibold">How it sits on the client&rsquo;s Instagram</p>
                 <ul className="grid max-w-[300px] grid-cols-3 gap-0.5">
@@ -1116,7 +1122,7 @@ export default function PostWindow({
               </div>
             )}
 
-            {pane === 'write' && (
+            {showWrite && (
               <>
                 {allStory ? (
                   <p className="rounded-inner border border-border p-3 text-[13px] text-muted-foreground" data-story-no-caption>
@@ -1129,7 +1135,7 @@ export default function PostWindow({
                       value={editable ? state.caption : shown.caption}
                       onChange={e => dispatch({ type: 'caption', caption: e.target.value })}
                       readOnly={!editable}
-                      rows={5}
+                      rows={wide ? 9 : 5}
                       placeholder={editable ? 'What goes with the picture?' : ''}
                       data-caption
                       className="w-full resize-y bg-transparent text-[14px] leading-[1.45] text-foreground outline-none placeholder:text-muted-foreground"
@@ -1210,12 +1216,42 @@ export default function PostWindow({
                   </ul>
                 )}
 
-                {id && post && (
+                {!wide && id && post && (
                   <PostNotes slides={shown.slides} notes={notes} version={noteVersionOf(post)} onAdd={addNote} />
                 )}
               </>
             )}
           </div>
+
+          {/* the third column, on a wide screen: the post as each network will show it, always in view, then the
+              notes — the two things people kept scrolling down to find */}
+          {wide && (
+            <div data-window-side data-window-scroll className="flex min-w-0 flex-col gap-4 lg:min-h-0 lg:overflow-y-auto lg:pr-1">
+              <p className="text-[12px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">Preview</p>
+              <PostPreviewPane playable={playable} videoFor={(url, label) => videoView({ url, type: 'video' }, label, 'h-full w-full')} previews={preview.networks} intro={PREVIEW_INTRO}
+                empty="Pick a channel and the post appears here as that network will show it." />
+              {grid && grid.length > 0 && (
+                <div className="flex flex-col gap-2" data-instagram-grid>
+                  <p className="text-[13px] font-semibold">How it sits on the client&rsquo;s Instagram</p>
+                  <ul className="grid max-w-[300px] grid-cols-3 gap-0.5">
+                    {grid.slice(0, 9).map((g, i) => (
+                      <li key={`${g.url}-${i}`} className={cn('relative aspect-[4/5] overflow-hidden bg-foreground/[0.06]', i === 0 && 'ring-2 ring-foreground ring-offset-1 ring-offset-background')}>
+                        {g.type === 'video'
+                          ? (videoView(g, i === 0 ? 'This post' : '', 'h-full w-full', true)
+                            ?? <video src={playable(g.url)} muted playsInline preload="metadata" className="h-full w-full object-cover" />)
+                          // eslint-disable-next-line @next/next/no-img-element
+                          : <img src={g.url} alt={i === 0 ? 'This post' : ''} loading="lazy" className="h-full w-full object-cover" />}
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="text-[12px] text-muted-foreground">This post is outlined, before the newest posts already live.</p>
+                </div>
+              )}
+              {id && post && (
+                <PostNotes slides={shown.slides} notes={notes} version={noteVersionOf(post)} onAdd={addNote} />
+              )}
+            </div>
+          )}
         </div>
 
         {tourOpen && <Tour tour={POST_WINDOW_TOUR} onClose={closeTour} />}
@@ -1511,4 +1547,18 @@ export function OpenPostWindow({ postId, onClose, onDone, onEditMedia }: {
   }, [item, itemId, itemVersions.rows])
   if (!context) return null
   return <PostWindow postId={postId} seed={seed} context={context} onClose={onClose} onDone={onDone} onEditMedia={onEditMedia} />
+}
+
+/** a screen wide enough for the three-column window (Tailwind's lg, 1024px) — read after mount, so the server
+ *  render and the first paint agree (one column), then the wide layout takes over */
+function useWideWindow(): boolean {
+  const [wide, setWide] = useState(false)
+  useEffect(() => {
+    const q = window.matchMedia('(min-width: 1024px)')
+    const on = () => setWide(q.matches)
+    on()
+    q.addEventListener('change', on)
+    return () => q.removeEventListener('change', on)
+  }, [])
+  return wide
 }
