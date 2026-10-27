@@ -65,3 +65,18 @@ export function replyToFor(actorEmail?: string | null, fromAddress?: string): st
   if (email.endsWith('.invalid')) return undefined
   return email
 }
+
+/**
+ * ARCHIVED THINGS ARE NEVER EMAILED ABOUT (28 Oct 2026). Karly archived six cards between 20 and 27 Oct and was
+ * still told every morning they were "Overdue", because the due-reminder job never read `archived_at` — and nine
+ * other senders did not either. So the one door every email goes through asks instead: the row the email is about,
+ * the card it belongs to, and its client. Any of them archived, and nothing is sent. Pure: the rows are handed in.
+ */
+export function archivedReason(rows: readonly (Record<string, unknown> | null | undefined)[], client?: { status?: unknown } | null): string | null {
+  for (const r of rows) {
+    if (r && r.archived_at) return 'archived'
+    if (r && r.status === 'archived') return 'archived'
+  }
+  if (client?.status === 'archived') return 'client archived'
+  return null
+}

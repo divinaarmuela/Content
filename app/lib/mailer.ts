@@ -3,7 +3,7 @@ import { DbError, table } from '@/lib/db'
 import type { NotificationLog, TeamUser } from '@/lib/db-types'
 import { buildDedupeKey } from './identity-core'
 export { buildDedupeKey } from './identity-core'
-import { actorAlias, replyToFor } from './mailer-core'
+import { actorAlias, archivedReason, replyToFor } from './mailer-core'
 import { EMAIL_FOOTER, OPEN_ITEM_CTA } from './email-voice-core'
 import { isTestClient, mayEmailAboutClient, rowsOfEmail } from './test-clients-core'
 
@@ -239,6 +239,23 @@ async function clientOfEmail(input: Pick<NotifyInput, 'entityType' | 'entityId'>
   return null
 }
 
+/** the row an email is about, the card it sits on, and the client — for archivedReason */
+async function archivedSubject(input: Pick<NotifyInput, 'entityType' | 'entityId'>, clientId: string | null): Promise<string | null> {
+  const rows: Record<string, unknown>[] = []
+  for (const at of rowsOfEmail(input.entityType, input.entityId)) {
+    const row = await table<{ id: string } & Record<string, unknown>>(at.table as never).get(at.id).catch(() => null)
+    if (!row) continue
+    rows.push(row)
+    const itemId = at.table === 'content_items' ? null : (row.content_item_id ?? row.item_id ?? row.source_item_id)
+    if (typeof itemId === 'string' && itemId) {
+      const item = await table<{ id: string } & Record<string, unknown>>('content_items' as never).get(itemId).catch(() => null)
+      if (item) rows.push(item)
+    }
+  }
+  const client = clientId ? await table<{ id: string; status?: unknown }>('clients' as never).get(clientId).catch(() => null) : null
+  return archivedReason(rows, client)
+}
+
 /**
  * The owner's switch for a rebuild in progress: while the dashboard and the
  * portal are being rewritten, NOTHING reaches a client — not an email, not a
@@ -280,6 +297,14 @@ export async function notify(input: NotifyInput): Promise<NotifyResult> {
       console.log('[notify] test client — not sent to a real person:', input.eventType, input.recipientEmail)
       return 'muted'
     }
+  }
+
+  // ARCHIVED IS DONE WITH (28 Oct 2026): an email about an archived card, anything on one, or an archived client's
+  // work is dropped here — before the log claim, so it leaves no row and no bell either (mailer-core.archivedReason)
+  const archived = await archivedSubject(input, aboutClient).catch(() => null)
+  if (archived) {
+    console.log('[notify] about something archived — not sent:', input.eventType, input.entityType, archived)
+    return 'muted'
   }
 
   // The kill-switch covers the BELL too. A bell-only notification never

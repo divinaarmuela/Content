@@ -73,7 +73,8 @@ export async function runDueReminders(): Promise<{ items: number; emails: number
     .toLocaleDateString('en-CA', { timeZone: 'Australia/Melbourne' })
 
   const dueRows = await table<ContentItem>('content_items').list({
-    where: r => r.due_date != null && r.due_date <= tomorrow
+    // an archived card is done with — never "Overdue" again (Karly, 28 Oct 2026); mailer.notify refuses it too
+    where: r => r.due_date != null && r.due_date <= tomorrow && !r.archived_at
       && !['scheduled', 'published'].includes(r.status),
     limit: 500,
   })
@@ -113,7 +114,7 @@ export async function runDueReminders(): Promise<{ items: number; emails: number
   const stuckIds = [...reasonByItem.keys()].filter(id => !seen.has(id))
   const stuckRows = stuckIds.length
     ? await table<ContentItem>('content_items').list({
-        where: r => stuckIds.includes(r.id), limit: 200,
+        where: r => stuckIds.includes(r.id) && !r.archived_at, limit: 200,
       })
     : []
   const stuck = (await attachOne(
