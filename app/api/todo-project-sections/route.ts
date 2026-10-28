@@ -17,7 +17,8 @@ export async function POST(req: Request) {
       const name = typeof body.name === 'string' ? body.name.trim().slice(0, 80) : ''
       const clientId = typeof body.client_id === 'string' ? body.client_id : ''
       if (!name) return NextResponse.json({ error: 'Name the section' }, { status: 400 })
-      if (!clientId || !(await table<Client>('clients').get(clientId))) return NextResponse.json({ error: 'Which client\'s project?' }, { status: 400 })
+      // a client's project, or one of the agency's own (todo_projects, 29 Oct 2026)
+      if (!clientId || !((await table<Client>('clients').get(clientId)) || (await table<{ id: string }>('todo_projects' as never).get(clientId).catch(() => null)))) return NextResponse.json({ error: 'Which client\'s project?' }, { status: 400 })
       const now = new Date().toISOString()
       const position = Number.isFinite(Number(body.position)) ? Number(body.position) : Date.now()
       const row = await table<TodoProjectSection>('todo_project_sections').insert({ client_id: clientId, name, position, created_at: now, updated_at: now } as never)

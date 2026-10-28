@@ -11,7 +11,7 @@ import { agoWords, inboxDay, inboxFor, type InboxItem, type InboxTab } from '../
  * logo or colour — and the Inbox itself. Where a press goes is the page's (`place`).
  */
 
-export type Project = { id: string; name: string; logo: string | null; colour: string; open: number; mine: boolean }
+export type Project = { id: string; name: string; logo: string | null; colour: string; open: number; mine: boolean; internal?: boolean }
 /** where the page is: the inbox, my tasks, everyone's (a super admin), one client's project, or one person's tasks */
 export type Place = 'inbox' | 'mine' | 'all' | `project:${string}` | `person:${string}`
 

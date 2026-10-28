@@ -489,6 +489,18 @@ const GHOST_TABLES = {
     ['created_at', col('string', false)],
     ['updated_at', col('string', false)],
   ],
+  // todo_projects — THE AGENCY'S OWN PROJECTS (29 Oct 2026: Asana's "- Team Operations", "- Tech Team" … had nowhere
+  //   to go — To-dos' projects were clients only). A to-do on one carries the project's id in client_id, so its
+  //   sections, its board and its filter are a client project's; member_ids is who sees it (with every super admin).
+  todo_projects: [
+    ['id', col('string', false)],
+    ['name', col('string', false)],
+    ['colour', col('string', true)],
+    ['member_ids', col('unknown', true, true)],
+    ['asana_gid', col('string', true)],
+    ['created_at', col('string', false)],
+    ['updated_at', col('string', false)],
+  ],
   // todo_sections - a person's own sections on My to-dos (Asana's "Add section",
   //   18 Oct 2026). One row per section; owner_id is whose list it is.
   todo_sections: [

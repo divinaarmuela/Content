@@ -69,8 +69,10 @@ const when = (iso: string) => {
 }
 
 export default function TodoPanel({
-  t, all, today, viewer, people, clients, names, clientNames, onClose, onOpen, onDeleted, onTick, fieldDefs = [], projectSections = [],
+  t, all, today, viewer, people, clients, names, clientNames, onClose, onOpen, onDeleted, onTick, fieldDefs = [], projectSections = [], internalProjects = [],
 }: {
+  /** the agency's own projects (todo_projects): a to-do on one shows its project, not a client picker */
+  internalProjects?: { id: string; name: string }[]
   /** Asana's custom fields (todo-fields-core), in their order */
   fieldDefs?: TodoFieldDef[]
   /** every client project's sections; the task's own client's are offered */
@@ -313,8 +315,13 @@ export default function TodoPanel({
                   onChange={p => patch(p as never)} />
               </dd>
             </div>
-            {/* CLIENT — Asana's "Projects" row: the client this is for */}
-            <div className="flex min-h-9 items-center gap-3">
+            {/* CLIENT — Asana's "Projects" row: the client this is for; on one of the agency's own projects, that project */}
+            {internalProjects.some(p => p.id === t.client_id) ? (
+              <div className="flex min-h-9 items-center gap-3">
+                <dt className={label}>Project</dt>
+                <dd className="text-[14px]">{internalProjects.find(p => p.id === t.client_id)?.name}</dd>
+              </div>
+            ) : <div className="flex min-h-9 items-center gap-3">
               <dt className={label}>Client</dt>
               <dd className="flex min-w-0 flex-wrap items-center gap-2">
                 {/* A SEARCH ON THE CLIENT LIST (the owner, 26 Oct 2026) — typing filters the list; the chosen client always stays in it */}
@@ -338,7 +345,7 @@ export default function TodoPanel({
                   </SelectContent>
                 </Select>
               </dd>
-            </div>
+            </div>}
             {/* THE PROJECT'S SECTION AND THE CUSTOM FIELDS — Asana's rows under Projects (20 Oct 2026) */}
             {(() => {
               const secs = orderedSections(projectSections.filter(x => x.client_id === t.client_id))

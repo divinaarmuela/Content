@@ -12,17 +12,19 @@ import { projectColour } from '../../../lib/todo-inbox-core'
  */
 type Social = { id: string; client_id?: string | null; avatar_url?: string | null; active?: boolean | null }
 type Link = { id: string; team_user_id: string; client_id: string }
+type InternalProject = { id: string; name: string; colour?: string | null; member_ids?: unknown }
 type TodoLite = { id: string; client_id?: string | null; status?: string | null; parent_id?: string | null }
 
 export async function GET() {
   return withRequestCache(async () => {
     try {
       const user = await requireRole('scheduler')
-      const [clients, socials, links, todos] = await Promise.all([
+      const [clients, socials, links, todos, internal] = await Promise.all([
         table<Client>('clients').list(),
         table<Social>('social_accounts').list().catch(() => [] as Social[]),
         table<Link>('team_user_clients').list({ by: { team_user_id: user.id } }).catch(() => [] as Link[]),
         table<TodoLite>('todos').list().catch(() => [] as TodoLite[]),
+        table<InternalProject>('todo_projects' as never).list().catch(() => [] as InternalProject[]),
       ])
       const open = new Map<string, number>()
       for (const t of todos) if (t.client_id && !t.parent_id && t.status !== 'done') open.set(t.client_id, (open.get(t.client_id) ?? 0) + 1)
@@ -39,7 +41,13 @@ export async function GET() {
           return { id: c.id, name: c.name, logo: logo.get(c.id) ?? null, colour: projectColour(c.id, primary), open: open.get(c.id) ?? 0, mine: mine.has(c.id) }
         })
         .sort((a, b) => Number(b.mine) - Number(a.mine) || a.name.localeCompare(b.name))
-      return NextResponse.json({ projects })
+      // THE AGENCY'S OWN PROJECTS (29 Oct 2026, Asana's "- Team Operations"): first, for their members and every super admin
+      const ours = internal
+        .filter(p => user.role === 'super_admin' || (Array.isArray(p.member_ids) && p.member_ids.includes(user.id)))
+        .map(p => ({ id: p.id, name: p.name, logo: null, colour: p.colour || projectColour(p.id, null), open: open.get(p.id) ?? 0,
+          mine: Array.isArray(p.member_ids) && p.member_ids.includes(user.id), internal: true }))
+        .sort((a, b) => a.name.localeCompare(b.name))
+      return NextResponse.json({ projects: [...ours, ...projects] })
     } catch (e) {
       const { error, status } = authzErrorResponse(e)
       return NextResponse.json({ error }, { status })

@@ -70,7 +70,10 @@ export default function TodosPage() {
   const { me, loading: meLoading } = useRole()
   // the clients I am on — a client's project shows everyone's to-dos for it (20 Oct 2026, todo-core)
   const { rows: links } = useTable<{ id: string; team_user_id: string; client_id: string }>('team_user_clients')
-  const myClientIds = useMemo(() => (me ? links.filter(l => l.team_user_id === me.id).map(l => l.client_id) : []), [links, me])
+  const [projects, setProjects] = useState<Project[]>([])
+  // the agency's own projects this person is on count as theirs, like a client they are on (29 Oct 2026)
+  const myClientIds = useMemo(() => (me ? [...links.filter(l => l.team_user_id === me.id).map(l => l.client_id), ...projects.filter(p => p.internal && p.mine).map(p => p.id)] : []), [links, me, projects])
+  const internalProjects = useMemo(() => projects.filter(p => p.internal).map(p => ({ id: p.id, name: p.name })), [projects])
   const viewer = useMemo(() => (me && me.role !== 'client' ? { id: me.id, role: me.role, clientIds: myClientIds } : null), [me, myClientIds])
   const { rows: raw, loading } = useTable<TodoRow>('todos')
   const { rows: team } = useTable<TeamUser>('team_users')
@@ -87,7 +90,7 @@ export default function TodosPage() {
 
   const names = useMemo(() => new Map(team.map(u => [u.id, personLabel(u.name, u.email)])), [team])
   const people = useMemo(() => team.filter(u => u.role !== 'client' && u.active_status !== false).map(u => ({ id: u.id, name: personLabel(u.name, u.email), email: u.email ?? undefined })), [team])
-  const clientNames = useMemo(() => new Map(clients.map(c => [c.id, c.name])), [clients])
+  const clientNames = useMemo(() => new Map([...clients.map(c => [c.id, c.name] as [string, string]), ...internalProjects.map(p => [p.id, p.name] as [string, string])]), [clients, internalProjects])
   const activeClients = useMemo(() => clients.filter(c => ((c as { status?: string | null }).status ?? 'active') === 'active').map(c => ({ id: c.id, name: c.name })), [clients])
   const sections = useMemo(() => allSections.filter(s => s.owner_id === me?.id).sort((a, b) => (Number(a.position ?? 0) - Number(b.position ?? 0)) || String(a.created_at).localeCompare(String(b.created_at))).map(s => ({ id: s.id, name: s.name })), [allSections, me?.id])
 
@@ -98,7 +101,6 @@ export default function TodosPage() {
   // WHERE ON THE PAGE (the owner, 20 Oct 2026, Manal's video of Asana): Inbox, My tasks (everyone's own, first), a
   // super admin's Everyone's tasks, or a client's project
   const [place, setPlace] = useState<Place>('mine')
-  const [projects, setProjects] = useState<Project[]>([])
   useEffect(() => {
     const saved = store.get('mdm.todos.place')
     if (saved === 'inbox' || saved === 'mine' || saved === 'all' || saved?.startsWith('project:') || saved?.startsWith('person:')) setPlace(saved as Place)
@@ -636,7 +638,7 @@ export default function TodosPage() {
 
       {open && viewer && today && (
         <TodoPanel key={open.id} t={open} all={visibleAll} today={today} viewer={viewer} people={people} clients={activeClients}
-          names={names} clientNames={clientNames} onTick={d => void tick(open, d)} fieldDefs={fieldDefs} projectSections={projectSectionRows}
+          names={names} clientNames={clientNames} internalProjects={internalProjects} onTick={d => void tick(open, d)} fieldDefs={fieldDefs} projectSections={projectSectionRows}
           onClose={() => openTask(null)} onOpen={id => openTask(id)} onDeleted={() => openTask(open.parent_id ?? null)} />
       )}
     </div>
