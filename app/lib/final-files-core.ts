@@ -49,6 +49,8 @@ export type FinalFile = {
   /** WHERE IN THE LINK IT WAS — "V1/Reels/Pasta.mp4" (the owner, 21 Oct 2026: "sub folder need to stay … so we can
    *  see"): the name is the file's own, the folders above it are kept here */
   drive_path?: string | null
+  /** A PERSON'S TAGS ON THE VIDEO (28 Oct 2026, file-tags-core.ts) — on every version of the asset alike */
+  tags?: string[]
 }
 
 export function finalFilesOf(item: { final_files?: unknown } | null | undefined): FinalFile[] {
@@ -136,6 +138,8 @@ export function sanitiseFinalFiles(raw: unknown, item: { edit_round?: unknown; s
       ...(typeof x.drive_md5 === 'string' && /^[a-f0-9]{32}$/i.test(x.drive_md5) ? { drive_md5: x.drive_md5 } : {}),
       ...(typeof x.drive_revision === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(x.drive_revision) ? { drive_revision: x.drive_revision } : {}),
       ...(typeof x.drive_path === 'string' && x.drive_path.length <= 500 ? { drive_path: x.drive_path } : {}),
+      // a video's tags survive every later save of the list, as its Drive record does
+      ...(Array.isArray(x.tags) && x.tags.length ? { tags: x.tags.map(t => String(t ?? '').replace(/\s+/g, ' ').trim().slice(0, 30)).filter(Boolean).slice(0, 12) } : {}),
     })
   }
   return { ok: true, files: out }

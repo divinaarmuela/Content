@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, Check, ChevronDown, ExternalLink, Film, FolderOpen, Hourglass, Link2, Lock, Search, Sparkles } from 'lucide-react'
+import { ArrowLeft, Check, ChevronDown, ExternalLink, Film, FolderOpen, Hourglass, Link2, Lock, Plus, Search, Send, Sparkles, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -29,6 +29,7 @@ import { shootCardId } from '../../../lib/deliverable-group-core'
 import { cardUsesPlan, workFrom } from '../../../lib/editor-sop-core'
 import { reviewPath } from '../../../lib/video-review-core'
 import { deleteRefusal } from '../../../lib/card-upload-core'
+import { POSTED_TAG, chipsOf, postedFiles, tagsOnCard, type PostLike } from '../../../lib/file-tags-core'
 import { useRole } from '../../useRole'
 import EditorCardClassicPage from './classic/page'
 import EditorCardDrawer from '../../board/EditorCardDrawer'
@@ -56,6 +57,8 @@ export default function EditorCard() {
   const team = useTable<TeamUser>('team_users', { enabled: allowed })
   const seen = useTable<DriveSeen>('drive_seen', { enabled: allowed, by: { item_id: id } as Partial<DriveSeen> })
   const sources = useTable<DriveSource>('drive_sources', { enabled: allowed, by: { item_id: id } as Partial<DriveSource> })
+  // the client's posts, for the "Posted" tag a video gets once a post through the app went out with it
+  const posts = useTable<PostLike & { client_id?: string }>('social_posts' as never, { enabled: allowed && !!item?.client_id, by: { client_id: item?.client_id ? String(item.client_id) : '' } as never })
   // when the card went to Colour grade: after that, a new file in its links is a grade; before, it never is
   // WHAT THIS CARD NEEDS BESIDE ITS ROW, in one small answer (api/editor-preview/[id]/media): the frames and
   // storyboards of its videos, when it went to colour grade, and files in other cards' Drive matched to its videos —
@@ -142,6 +145,7 @@ export default function EditorCard() {
       <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(420px,520px)]">
         <div className="flex min-w-0 flex-col gap-6">
           <Workspace item={item} rows={allRows} needsGrade={needsColourGrade(kindSlug)} framesOf={framesOf} holder={holder ? (holder.name || holder.email) : null}
+            posts={posts.rows}
             gradeSince={extra?.gradeSince ?? null}
             sourceCreated={new Map(sources.rows.map(s => [s.id, s.created_at]))} />
         </div>
@@ -259,7 +263,7 @@ const TONES: Record<NextTone, string> = {
  * make sure its at the top"). One row per video: its picture, its name, V1 · V2 · V3 (the current one dark), Graded,
  * and its next step. A new cut in Drive is one line on the row: Confirm or Not this.
  */
-function Workspace({ item, rows, needsGrade, gradeSince, sourceCreated, framesOf, holder = null }: { item: ContentItem; rows: DriveSeen[]; needsGrade: boolean; gradeSince: string | null; sourceCreated: Map<string, string>; framesOf: FramesMap; holder?: string | null }) {
+function Workspace({ item, rows, needsGrade, gradeSince, sourceCreated, framesOf, holder = null, posts = [] }: { item: ContentItem; rows: DriveSeen[]; needsGrade: boolean; gradeSince: string | null; sourceCreated: Map<string, string>; framesOf: FramesMap; holder?: string | null; posts?: PostLike[] }) {
   const all = useMemo(() => stackVersions(stackFilesOf(item, rows, framesOf)), [item, rows, framesOf])
   const rowById = useMemo(() => new Map(rows.map(r => [r.id, r])), [rows])
   const { me } = useRole()
@@ -287,6 +291,7 @@ function Workspace({ item, rows, needsGrade, gradeSince, sourceCreated, framesOf
   const gradedThisRound = gradedRoundOf(item) === round
   const approvedFiles = new Set(clipApprovalsOf(item).map(a => a.file_id))
   const current = currentFiles(item)
+  const posted = useMemo(() => postedFiles(item, posts), [item, posts])
   // READY FOR SCHEDULING ONCE APPROVED (the owner, 26 Oct 2026: "once a tag is approved can we please add a feature to
   // move it ready for scheduling") — a manager's press, logging the client's approval, once videos are approved
   const manager = me?.role === 'super_admin' || me?.role === 'account_manager'
@@ -487,6 +492,7 @@ function Workspace({ item, rows, needsGrade, gradeSince, sourceCreated, framesOf
                           {/* no tag under a video at all (the owner, 23 Oct 2026: "each video tags shouldnt be there") — its name only */}
                         </span>
                       </button>
+                      {!selecting && info(s).file && <FileTags item={item} fileId={info(s).file!.id} assetId={assetIdOf(info(s).file!)} posted={posted} />}
                       {/* REPLACE BY THE PICTURE (the owner, 22 Oct 2026: "why cant it be easier to select video that needs to be
                           replaced … reading a file name doesnt help a lot"): on the video itself, it goes to the card's uploader */}
                       {!selecting && versionPicks(s).length > 1 && (
@@ -535,6 +541,59 @@ function Workspace({ item, rows, needsGrade, gradeSince, sourceCreated, framesOf
           }} />
       </div>
     </section>
+  )
+}
+
+/**
+ * A VIDEO'S TAGS (the owner, 28 Oct 2026: "allow to add a tag in the editor files anytime … if the file has been posted
+ * through our app it marks as posted automatically"): "Posted" on its own when a post through the app went out with it,
+ * then anyone's tags — added with + Tag, taken off with their ×. A tag is on the video, so its next version keeps it.
+ */
+function FileTags({ item, fileId, assetId, posted }: { item: ContentItem; fileId: string; assetId: string; posted: Map<string, unknown> }) {
+  const chips = chipsOf(item, assetId, fileId, posted)
+  const [adding, setAdding] = useState(false)
+  const [text, setText] = useState('')
+  const [busy, setBusy] = useState(false)
+  const save = async (tag: string, on: boolean) => {
+    if (!tag.trim()) return
+    setBusy(true)
+    try {
+      const res = await fetch(`/api/production/items/${item.id}/file-tags`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ file_id: fileId, tag, on }) })
+      const j = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(j.error ?? 'Could not save the tag')
+      if (on) { setText(''); setAdding(false) }
+    } catch (e) { toast.error(e instanceof Error ? e.message : 'Could not save the tag') } finally { setBusy(false) }
+  }
+  const offered = [POSTED_TAG, ...tagsOnCard(item)].filter((t, i, a) => a.findIndex(x => x.toLowerCase() === t.toLowerCase()) === i && !chips.some(c => c.tag.toLowerCase() === t.toLowerCase()))
+  return (
+    <div className="mt-1.5 flex flex-wrap items-center gap-1">
+      {chips.map(c => c.auto ? (
+        <span key={c.tag} title={c.older ? 'An earlier version went out through the app' : 'Went out in a post through the app'}
+          className="inline-flex items-center gap-1 rounded-full bg-accent-blue px-2 py-0.5 text-[11px] font-semibold text-white">
+          <Send className="h-2.5 w-2.5" aria-hidden />{c.older ? 'Earlier cut posted' : c.tag}
+        </span>
+      ) : (
+        <span key={c.tag} className="inline-flex items-center gap-0.5 rounded-full bg-muted py-0.5 pl-2 pr-1 text-[11px] font-semibold">
+          {c.tag}
+          <button type="button" disabled={busy} onClick={() => void save(c.tag, false)} aria-label={`Take off ${c.tag}`} className="rounded-full p-0.5 text-muted-foreground hover:bg-background hover:text-foreground">
+            <X className="h-2.5 w-2.5" aria-hidden />
+          </button>
+        </span>
+      ))}
+      {adding ? (
+        <form onSubmit={e => { e.preventDefault(); void save(text, true) }} className="flex items-center gap-1">
+          <input autoFocus value={text} onChange={e => setText(e.target.value)} maxLength={30} list={`tags-${item.id}`} placeholder="Tag"
+            onKeyDown={e => { if (e.key === 'Escape') { setAdding(false); setText('') } }} onBlur={() => { if (!text.trim()) setAdding(false) }}
+            aria-label="New tag" className="h-6 w-24 rounded-full border border-border bg-background px-2 text-[11px] outline-none focus:border-foreground" />
+          <datalist id={`tags-${item.id}`}>{offered.map(t => <option key={t} value={t} />)}</datalist>
+          <button type="submit" disabled={busy || !text.trim()} className="h-6 rounded-full bg-foreground px-2 text-[11px] font-semibold text-background disabled:opacity-50">{busy ? '…' : 'Add'}</button>
+        </form>
+      ) : (
+        <button type="button" onClick={() => setAdding(true)} className="inline-flex items-center gap-0.5 rounded-full border border-dashed border-border px-2 py-0.5 text-[11px] font-semibold text-muted-foreground hover:border-foreground hover:text-foreground">
+          <Plus className="h-2.5 w-2.5" aria-hidden />Tag
+        </button>
+      )}
+    </div>
   )
 }
 
