@@ -462,3 +462,54 @@ export function linkParts(text: string): LinkPart[] {
   if (last < text.length) out.push({ text: text.slice(last) })
   return out
 }
+
+/**
+ * EVERY TASK THAT MAY BE ADDED AS A DEPENDENCY, in one pass (28 Oct 2026: "when we type in description it lags"). The
+ * panel asked mayDependOn of each of ~490 tasks on every key pressed, and each ask built a map of all of them — about a
+ * quarter of a million steps a keystroke. The tasks that may NOT be one are this task and everything already waiting on
+ * it, however far down; one walk backwards from it finds them all.
+ */
+export function dependableIds(todoId: string, all: readonly { id?: string; blocked_by?: unknown }[]): Set<string> {
+  const waitingOn = new Map<string, string[]>()
+  for (const t of all) for (const b of idsOf(t.blocked_by)) waitingOn.set(b, [...(waitingOn.get(b) ?? []), String(t.id)])
+  const barred = new Set<string>([todoId])
+  const stack = [todoId]
+  while (stack.length) for (const w of waitingOn.get(stack.pop() as string) ?? []) if (!barred.has(w)) { barred.add(w); stack.push(w) }
+  return new Set(all.map(t => String(t.id)).filter(id => id && !barred.has(id)))
+}
+
+/**
+ * THE DESCRIPTION'S BUTTONS, as a toggle (28 Oct 2026): Bold on bold words takes the bold off, a list button on lines
+ * already in that list takes the list off — they only ever added marks before. Returns the new text and selection.
+ */
+export function formatNote(v: string, a: number, b: number, k: 'bold' | 'italic' | 'ul' | 'ol'): { value: string; a: number; b: number } {
+  if (k === 'bold' || k === 'italic') {
+    const mark = k === 'bold' ? '**' : '*'
+    const before = v.slice(Math.max(0, a - mark.length), a), after = v.slice(b, b + mark.length)
+    // italic must not mistake the inner star of bold for its own
+    const wrapped = before === mark && after === mark && (k === 'bold' || (v[a - 2] !== '*' && v[b + 1] !== '*'))
+    if (wrapped) return { value: v.slice(0, a - mark.length) + v.slice(a, b) + v.slice(b + mark.length), a: a - mark.length, b: b - mark.length }
+    return { value: v.slice(0, a) + mark + v.slice(a, b) + mark + v.slice(b), a: a + mark.length, b: b + mark.length }
+  }
+  const start = v.lastIndexOf('\n', a - 1) + 1
+  const endAt = v.indexOf('\n', b)
+  const end = endAt < 0 ? v.length : endAt
+  const lines = v.slice(start, end).split('\n')
+  const marker = k === 'ul' ? /^\s*[-*•]\s+/ : /^\s*\d+[.)]\s+/
+  const off = lines.every(l => marker.test(l))
+  const made = lines.map((l, i) => (off ? l.replace(marker, '') : `${k === 'ul' ? '- ' : `${i + 1}. `}${l.replace(/^\s*([-*•]|\d+[.)])\s+/, '')}`)).join('\n')
+  return { value: v.slice(0, start) + made + v.slice(end), a: start + made.length, b: start + made.length }
+}
+
+/** Enter inside a list starts the next item ("- " or the next number); Enter on an empty item ends the list. null = an ordinary Enter */
+export function continueList(v: string, caret: number): { value: string; caret: number } | null {
+  const start = v.lastIndexOf('\n', caret - 1) + 1
+  const line = v.slice(start, caret)
+  const m = /^(\s*)([-*•]|(\d+)[.)])(\s+)(.*)$/.exec(line)
+  if (!m) return null
+  if (!m[5].trim() && v.slice(caret, v.indexOf('\n', caret) < 0 ? v.length : v.indexOf('\n', caret)).trim() === '') {
+    return { value: v.slice(0, start) + v.slice(caret), caret: start }
+  }
+  const next = `\n${m[1]}${m[3] !== undefined ? `${Number(m[3]) + 1}${m[2].slice(-1)}` : m[2]}${m[4]}`
+  return { value: v.slice(0, caret) + next + v.slice(caret), caret: caret + next.length }
+}

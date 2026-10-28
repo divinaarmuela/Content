@@ -2,7 +2,7 @@
 
 import { FieldControl } from './TodoFields'
 import { orderedFields, orderedSections, type TodoFieldDef } from '../../lib/todo-fields-core'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowRightToLine, Bold, Check, ChevronLeft, Hourglass, Italic, List, ListOrdered, Download, ExternalLink, Link2, Maximize2, Minimize2, Paperclip, Plus, ThumbsUp, Trash2, X,
 } from 'lucide-react'
@@ -16,7 +16,7 @@ import { downloadHref } from '../../lib/download-core'
 import { extractMentions } from '../../lib/mention-core'
 import { uploadFiles } from '../uploadQueue'
 import { UploadRows, useUploadGroup } from '../UploadRows'
-import { activityWords, idsOf, mayCommentOnTodo, mayDependOn, mayEditTodo, openBlockers, parseNote, todoFilesOf, type NoteSpan, type TodoFile, linkParts } from '../../lib/todo-core'
+import { activityWords, continueList, dependableIds, formatNote, idsOf, mayCommentOnTodo, mayEditTodo, openBlockers, parseNote, todoFilesOf, type NoteSpan, type TodoFile, linkParts } from '../../lib/todo-core'
 import { dueTone, shortDue } from './todo-words'
 import DuePicker from './DuePicker'
 import { normaliseRepeat } from '../../lib/todo-repeat-core'
@@ -98,36 +98,11 @@ export default function TodoPanel({
   const nameOf = useCallback((id: string | null) => (id ? (id === viewer.id ? 'You' : names.get(id) ?? 'Someone') : 'Someone'), [names, viewer.id])
 
   const [title, setTitle] = useState(t.title)
-  const [note, setNote] = useState(t.note ?? '')
   const typingTitle = useRef(false)
-  const typingNote = useRef(false)
   useEffect(() => { if (!typingTitle.current) setTitle(t.title) }, [t.title])
-  useEffect(() => { if (!typingNote.current) setNote(t.note ?? '') }, [t.note])
   const [sure, setSure] = useState(false)
   const [clientQuery, setClientQuery] = useState('')
   const clientSearch = useRef<HTMLInputElement | null>(null)
-  const [editingNote, setEditingNote] = useState(false)
-  const noteRef = useRef<HTMLTextAreaElement | null>(null)
-  /** **bold**, *italic*, "- " and "1. " — wraps the selection or starts the lines */
-  const format = (k: 'bold' | 'italic' | 'ul' | 'ol') => {
-    const el = noteRef.current
-    if (!el) return
-    const { selectionStart: a, selectionEnd: b, value: v } = el
-    let next = v, caretA = a, caretB = b
-    if (k === 'bold' || k === 'italic') {
-      const mark = k === 'bold' ? '**' : '*'
-      next = v.slice(0, a) + mark + v.slice(a, b) + mark + v.slice(b)
-      caretA = a + mark.length; caretB = b + mark.length
-    } else {
-      const start = v.lastIndexOf('\n', a - 1) + 1
-      const lines = v.slice(start, b).split('\n')
-      const made = lines.map((l, i) => (k === 'ul' ? `- ${l}` : `${i + 1}. ${l}`)).join('\n')
-      next = v.slice(0, start) + made + v.slice(b)
-      caretA = caretB = start + made.length
-    }
-    setNote(next)
-    requestAnimationFrame(() => { el.focus(); el.setSelectionRange(caretA, caretB) })
-  }
   const files = todoFilesOf(t.files)
   const fileInput = useRef<HTMLInputElement | null>(null)
   const [group, setGroup] = useState<string | null>(null)
@@ -153,11 +128,12 @@ export default function TodoPanel({
    * unsaved is saved when the panel closes or moves to another task.
    */
   const AUTOSAVE_MS = 700
-  const unsaved = useRef<{ id: string; title?: string; note?: string }>({ id: t.id })
-  const saveNow = useCallback((id: string, body: { title?: string; note?: string }) => {
-    if (body.title === undefined && body.note === undefined) return
-    void send(`/api/todos/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
-  }, [send])
+  const unsaved = useRef<{ id: string; title?: string }>({ id: t.id })
+  const saveNow = useCallback((id: string, body: { title?: string }) => {
+    if (body.title === undefined) return
+    // keepalive: a save started as the tab closes or reloads still reaches the server
+    void fetch(`/api/todos/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), keepalive: true }).catch(() => undefined)
+  }, [])
   useEffect(() => {
     if (!editable) return
     const v = title.trim()
@@ -167,14 +143,6 @@ export default function TodoPanel({
     return () => window.clearTimeout(h)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [title])
-  useEffect(() => {
-    if (!editable) return
-    if (note.trim() === (t.note ?? '').trim()) { delete unsaved.current.note; return }
-    unsaved.current = { ...unsaved.current, id: t.id, note }
-    const h = window.setTimeout(() => { delete unsaved.current.note; void patch({ note }) }, AUTOSAVE_MS)
-    return () => window.clearTimeout(h)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [note])
   // the panel closing, or opening another task: what was typed and not yet saved goes now
   useEffect(() => () => {
     const { id, ...body } = unsaved.current
@@ -202,6 +170,12 @@ export default function TodoPanel({
   // SUBTASKS — rows of the same table under this one
   const blockers = useMemo(() => { const ids = idsOf(t.blocked_by); return all.filter(x => ids.includes(x.id)) }, [all, t.blocked_by])
   const waiting = openBlockers(t, all)
+  // worked out once per change of the list, not on every key pressed anywhere in the panel (the lag, 28 Oct 2026)
+  const dependable = useMemo(() => {
+    const ok = dependableIds(t.id, all as never)
+    const mine = idsOf(t.blocked_by)
+    return all.filter(x => !x.parent_id && x.status !== 'done' && !mine.includes(x.id) && ok.has(x.id)).slice(0, 60)
+  }, [all, t.id, t.blocked_by])
   const subtasks = useMemo(() => all.filter(x => x.parent_id === t.id).sort((a, b) => String(a.created_at).localeCompare(String(b.created_at))), [all, t.id])
   const [subDraft, setSubDraft] = useState<string | null>(null)
   const addSub = async (name: string) => {
@@ -420,7 +394,7 @@ export default function TodoPanel({
                   <Select value="" onValueChange={v => void patch({ blocked_by: [...idsOf(t.blocked_by), v] }, 'Dependency added')}>
                     <SelectTrigger className="h-8 w-48 rounded-md border-transparent px-2 text-[13px] text-muted-foreground hover:border-border" aria-label="Add a dependency"><SelectValue placeholder="Add dependencies" /></SelectTrigger>
                     <SelectContent>
-                      {all.filter(x => !x.parent_id && x.status !== 'done' && !idsOf(t.blocked_by).includes(x.id) && mayDependOn(t.id, x.id, all as never)).slice(0, 60).map(x => <SelectItem key={x.id} value={x.id}>{x.title}</SelectItem>)}
+                      {dependable.map(x => <SelectItem key={x.id} value={x.id}>{x.title}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 )}
@@ -435,30 +409,7 @@ export default function TodoPanel({
             )}
           </dl>
 
-          <div className="flex flex-col gap-1.5">
-            <h3 className="text-[14px] font-medium">Description</h3>
-            {editingNote ? (
-              <>
-                <div className="flex items-center gap-0.5" role="toolbar" aria-label="Formatting">
-                  {([['bold', Bold, 'Bold'], ['italic', Italic, 'Italic'], ['ul', List, 'Bulleted list'], ['ol', ListOrdered, 'Numbered list']] as const).map(([k, Icon, name]) => (
-                    <button key={k} type="button" aria-label={name} title={name} onMouseDown={e => { e.preventDefault(); format(k) }} className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted"><Icon className="h-4 w-4" aria-hidden /></button>
-                  ))}
-                </div>
-                <textarea ref={noteRef} autoFocus value={note} rows={4} placeholder="What is this to-do about?" aria-label="Description"
-                  onChange={e => setNote(e.target.value)}
-                  onKeyDown={e => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') { e.preventDefault(); format('bold') } if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'i') { e.preventDefault(); format('italic') } }}
-                  onFocus={() => { typingNote.current = true }}
-                  onBlur={() => { typingNote.current = false; setEditingNote(false); if (note.trim() !== (t.note ?? '').trim()) { delete unsaved.current.note; void patch({ note }) } }}
-                  className="-mx-2 min-h-24 resize-none rounded-md border border-foreground/30 bg-transparent px-2 py-1.5 text-[14px] outline-none [field-sizing:content]" />
-              </>
-            ) : (
-              <div role={editable ? 'button' : undefined} tabIndex={editable ? 0 : undefined} aria-label={editable ? 'Edit the description' : undefined}
-                onClick={() => editable && setEditingNote(true)} onKeyDown={e => { if (editable && e.key === 'Enter') setEditingNote(true) }}
-                className={`-mx-2 min-h-12 rounded-md border border-transparent px-2 py-1.5 text-[14px] ${editable ? 'cursor-text hover:border-border' : ''}`}>
-                {note.trim() ? <NoteView text={note} /> : <span className="text-muted-foreground">{editable ? 'What is this to-do about?' : 'No description'}</span>}
-              </div>
-            )}
-          </div>
+          <NoteEditor key={t.id} todoId={t.id} saved={t.note ?? ''} editable={editable} onSaved={loadActivity} />
 
           {/* SUBTASKS — not on a subtask (one level, as Asana shows by default) */}
           {!t.parent_id && (
@@ -594,6 +545,111 @@ export default function TodoPanel({
     </aside>
   )
 }
+
+/**
+ * THE DESCRIPTION, ON ITS OWN (28 Oct 2026: "when we type in description it lags", "they dont autosave"). Its words live
+ * here, so a key pressed redraws this box and nothing else in the panel. It saves itself a moment after the typing
+ * stops, when it is left, when the panel closes, and as the tab closes or reloads (keepalive) — and says so: Saving… /
+ * Saved / Not saved. Bold and Italic take their mark off as well as on; a list button on a list takes the list off;
+ * Enter in a list starts the next item, and Enter on an empty item ends the list.
+ */
+const NOTE_SAVE_MS = 600
+const NoteEditor = memo(function NoteEditor({ todoId, saved, editable, onSaved }: { todoId: string; saved: string; editable: boolean; onSaved: () => void }) {
+  const [note, setNote] = useState(saved)
+  const [editing, setEditing] = useState(false)
+  const [state, setState] = useState<'idle' | 'saving' | 'saved' | 'failed'>('idle')
+  const box = useRef<HTMLTextAreaElement | null>(null)
+  const typing = useRef(false)
+  // what the server has, as far as this box knows; and what was typed and not saved yet
+  const last = useRef(saved)
+  const pending = useRef<string | null>(null)
+  // another person's change arrives live: shown, unless this person is typing or has words still to save
+  useEffect(() => { last.current = saved; if (!typing.current && pending.current === null) setNote(saved) }, [saved])
+
+  const save = useCallback(async (text: string, keepalive = false) => {
+    if (text.trim() === last.current.trim()) { if (pending.current === text) pending.current = null; return }
+    setState('saving')
+    try {
+      const res = await fetch(`/api/todos/${todoId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ note: text }), keepalive })
+      if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.error ?? 'Could not save the description')
+      last.current = text
+      if (pending.current === text) pending.current = null
+      setState('saved')
+      onSaved()
+    } catch (e) {
+      setState('failed')
+      toast.error(e instanceof Error ? e.message : 'Could not save the description')
+    }
+  }, [todoId, onSaved])
+
+  // a moment after the typing stops
+  useEffect(() => {
+    if (!editable || pending.current === null) return
+    const h = window.setTimeout(() => { if (pending.current !== null) void save(pending.current) }, NOTE_SAVE_MS)
+    return () => window.clearTimeout(h)
+  }, [note, editable, save])
+  // the panel closing, or the tab closing or reloading: whatever is still unsaved goes now, and outlives the page
+  const saveRef = useRef(save)
+  saveRef.current = save
+  useEffect(() => {
+    const flush = () => { if (pending.current !== null) void saveRef.current(pending.current, true) }
+    window.addEventListener('pagehide', flush)
+    return () => { window.removeEventListener('pagehide', flush); flush() }
+  }, [])
+
+  const change = (text: string) => { pending.current = text; setNote(text); setState(s => (s === 'saving' ? s : 'idle')) }
+  const apply = (k: 'bold' | 'italic' | 'ul' | 'ol') => {
+    const el = box.current
+    if (!el) return
+    const r = formatNote(el.value, el.selectionStart, el.selectionEnd, k)
+    change(r.value)
+    requestAnimationFrame(() => { el.focus(); el.setSelectionRange(r.a, r.b) })
+  }
+  const word = state === 'saving' ? 'Saving…' : state === 'saved' ? 'Saved' : state === 'failed' ? 'Not saved — keep typing to try again' : ''
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex items-center gap-2">
+        <h3 className="text-[14px] font-medium">Description</h3>
+        {word && <span role="status" className={`text-[12px] ${state === 'failed' ? 'text-accent-red-deep' : 'text-muted-foreground'}`}>{word}</span>}
+      </div>
+      {editing ? (
+        <>
+          <div className="flex items-center gap-0.5" role="toolbar" aria-label="Formatting">
+            {([['bold', Bold, 'Bold (Ctrl+B)'], ['italic', Italic, 'Italic (Ctrl+I)'], ['ul', List, 'Bulleted list'], ['ol', ListOrdered, 'Numbered list']] as const).map(([k, Icon, name]) => (
+              <button key={k} type="button" aria-label={name} title={name} onMouseDown={e => { e.preventDefault(); apply(k) }} className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted"><Icon className="h-4 w-4" aria-hidden /></button>
+            ))}
+          </div>
+          <textarea ref={box} autoFocus value={note} rows={4} placeholder="What is this to-do about?" aria-label="Description"
+            onChange={e => change(e.target.value)}
+            onKeyDown={e => {
+              const mod = e.ctrlKey || e.metaKey
+              if (mod && e.key.toLowerCase() === 'b') { e.preventDefault(); apply('bold'); return }
+              if (mod && e.key.toLowerCase() === 'i') { e.preventDefault(); apply('italic'); return }
+              if (e.key === 'Enter' && !e.shiftKey && !mod) {
+                const el = e.currentTarget
+                if (el.selectionStart !== el.selectionEnd) return
+                const r = continueList(el.value, el.selectionStart)
+                if (!r) return
+                e.preventDefault()
+                change(r.value)
+                requestAnimationFrame(() => el.setSelectionRange(r.caret, r.caret))
+              }
+            }}
+            onFocus={() => { typing.current = true }}
+            onBlur={() => { typing.current = false; setEditing(false); if (pending.current !== null) void save(pending.current) }}
+            className="-mx-2 min-h-24 resize-none rounded-md border border-foreground/30 bg-transparent px-2 py-1.5 text-[14px] outline-none [field-sizing:content]" />
+        </>
+      ) : (
+        <div role={editable ? 'button' : undefined} tabIndex={editable ? 0 : undefined} aria-label={editable ? 'Edit the description' : undefined}
+          onClick={() => editable && setEditing(true)} onKeyDown={e => { if (editable && e.key === 'Enter') setEditing(true) }}
+          className={`-mx-2 min-h-12 rounded-md border border-transparent px-2 py-1.5 text-[14px] ${editable ? 'cursor-text hover:border-border' : ''}`}>
+          {note.trim() ? <NoteView text={note} /> : <span className="text-muted-foreground">{editable ? 'What is this to-do about?' : 'No description'}</span>}
+        </div>
+      )}
+    </div>
+  )
+})
 
 function CommentItem({ c, viewer, names, nameOf, when, send }: {
   c: TodoComment; viewer: Viewer; names: Map<string, string>; nameOf: (id: string | null) => string; when: (iso: string) => string
