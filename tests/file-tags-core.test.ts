@@ -85,3 +85,14 @@ describe('Scheduled, by itself', () => {
     expect(chipsOf(item, 'g1', 'g1', postedFiles(item, gone), scheduledFiles(item, gone))).toEqual([{ tag: 'Posted', auto: true }])
   })
 })
+
+describe('the same video downloaded again', () => {
+  it('"Video 03 (1).mp4" of the same size is the card’s "Video 03.mp4"; another size is not', async () => {
+    const { slideIsFile, plainName } = await import('../app/lib/file-tags-core')
+    const f = { url: 'https://r2.dev/Video_03.mp4', name: 'Video 03.mp4', size: 143092889 }
+    expect(plainName('Video 06 (4).mp4')).toBe('video 06.mp4')
+    expect(slideIsFile({ name: 'Video 03 (1).mp4', bytes: 143092889, url: 'https://x/y.mp4' }, f)).toBe(true)
+    expect(slideIsFile({ name: 'Video 03 (1).mp4', bytes: 1, url: 'https://x/y.mp4' }, f)).toBe(false)
+    expect(slideIsFile({ name: 'Video 3.mp4', bytes: 143092889, url: 'https://x/y.mp4' }, f)).toBe(false)
+  })
+})

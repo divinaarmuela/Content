@@ -84,7 +84,13 @@ export function bookedNotGone(p: PostLike): boolean {
 export function slideIsFile(s: Slide, f: Pick<FinalFile, 'url' | 'name' | 'size' | 'drive_file_id'>): boolean {
   if (typeof s.url === 'string' && s.url === f.url) return true
   if (typeof s.drive_file_id === 'string' && s.drive_file_id && s.drive_file_id === f.drive_file_id) return true
-  return typeof s.bytes === 'number' && s.bytes > 0 && s.bytes === f.size && typeof s.name === 'string' && s.name === f.name
+  return typeof s.bytes === 'number' && s.bytes > 0 && s.bytes === f.size && typeof s.name === 'string' && plainName(s.name) === plainName(f.name)
+}
+
+/** a file's name without the " (3)" a browser adds to a second download of it — Justin's October videos went into their
+ *  posts as "Video 03 (1).mp4" and "Video 06 (4).mp4", the same bytes as the card's "Video 03.mp4" (28 Oct 2026) */
+export function plainName(name: string): string {
+  return name.replace(/\s*\(\d+\)(?=\.[^.]+$)/, '').trim().toLowerCase()
 }
 
 /** which of the card's files went out in a post through the app, and when */
