@@ -201,17 +201,7 @@ export default function TodoPanel({
   }, [comments, activity, feedTab])
   const created = activity.find(a => a.action === 'todo_made')
 
-  const [draft, setDraft] = useState('')
-  const [posting, setPosting] = useState(false)
   const members = useMemo(() => people.filter(p => p.id !== viewer.id), [people, viewer.id])
-  const post = async () => {
-    if (!draft.trim() || posting) return
-    setPosting(true)
-    const mention_ids = extractMentions(draft, members).map(m => m.id)
-    const ok = await send(`/api/todos/${t.id}/comments`, { method: 'POST', body: JSON.stringify({ body: draft, mention_ids }) })
-    if (ok) setDraft('')
-    setPosting(false)
-  }
   const feedEnd = useRef<HTMLDivElement | null>(null)
 
   const [adding, setAdding] = useState(false)
@@ -511,12 +501,7 @@ export default function TodoPanel({
           <div className="flex gap-2">
             <span className="pt-1"><Avatar name={names.get(viewer.id) ?? 'Me'} size="md" /></span>
             <div className="flex min-w-0 flex-1 flex-col gap-2">
-              <MentionBox value={draft} onChange={setDraft} members={members} rows={2} placeholder="Add a comment — type @ to tag someone" onSubmit={() => void post()} id={`todo-comment-${t.id}`} openUp />
-              {draft.trim() && (
-                <button type="button" disabled={posting} onClick={() => void post()} className="h-8 self-end rounded-md bg-foreground px-3 text-[13px] font-semibold text-background disabled:opacity-60">
-                  {posting ? 'Sending…' : 'Comment'}
-                </button>
-              )}
+              <CommentComposer todoId={t.id} members={members} send={send} />
             </div>
           </div>
           <div className="mt-3 flex flex-wrap items-center gap-2 text-[12px] text-muted-foreground">
@@ -648,6 +633,31 @@ const NoteEditor = memo(function NoteEditor({ todoId, saved, editable, onSaved }
         </div>
       )}
     </div>
+  )
+})
+
+/** THE COMMENT BOX, ON ITS OWN (28 Oct 2026: "it lags keystroke") — what is typed lives here, so a key pressed redraws
+ *  this box and not the whole panel */
+const CommentComposer = memo(function CommentComposer({ todoId, members, send }: { todoId: string; members: Person[]; send: (path: string, init: RequestInit, said?: string) => Promise<boolean> }) {
+  const [draft, setDraft] = useState('')
+  const [posting, setPosting] = useState(false)
+  const post = async () => {
+    if (!draft.trim() || posting) return
+    setPosting(true)
+    const mention_ids = extractMentions(draft, members).map(m => m.id)
+    const ok = await send(`/api/todos/${todoId}/comments`, { method: 'POST', body: JSON.stringify({ body: draft, mention_ids }) })
+    if (ok) setDraft('')
+    setPosting(false)
+  }
+  return (
+    <>
+      <MentionBox value={draft} onChange={setDraft} members={members} rows={2} placeholder="Add a comment — type @ to tag someone" onSubmit={() => void post()} id={`todo-comment-${todoId}`} openUp />
+      {draft.trim() && (
+        <button type="button" disabled={posting} onClick={() => void post()} className="h-8 self-end rounded-md bg-foreground px-3 text-[13px] font-semibold text-background disabled:opacity-60">
+          {posting ? 'Sending…' : 'Comment'}
+        </button>
+      )}
+    </>
   )
 })
 

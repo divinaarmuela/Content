@@ -54,6 +54,9 @@ describe('the panel', () => {
     expect(s).toContain("<NoteEditor key={t.id} todoId={t.id} saved={t.note ?? ''} editable={editable} onSaved={loadActivity} />")
     expect(s).not.toContain('mayDependOn(')
     expect(s).toContain('dependableIds(t.id, all as never)')
+    // the comment box keeps its own words too
+    expect(s).toContain('const CommentComposer = memo(function CommentComposer(')
+    expect(s).toContain('<CommentComposer todoId={t.id} members={members} send={send} />')
   })
   it('saves after a pause, on leaving, and as the tab goes — and says so', () => {
     expect(s).toContain("window.addEventListener('pagehide', flush)")
