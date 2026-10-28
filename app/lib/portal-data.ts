@@ -453,6 +453,9 @@ export async function getPortalData(clientId: string, scope: PortalScope = { kin
     analyticsForItems(ids),
     backIds.length
       ? table<WorkflowActivity>('workflow_activity').list({
+          // ONE CLIENT'S ROWS, ASKED FOR BY ITS INDEX (29 Oct 2026: "client portal slow as well") — every status
+          // change carries its client, so the whole 1.25 MB history is no longer read on every portal visit
+          by: { client_id: clientId } as never,
           where: r => r.entity_type === 'content_item' && r.action === 'status_change'
             && backIds.includes(r.entity_id),
           orderBy: [['created_at', 'desc']],
@@ -470,7 +473,8 @@ export async function getPortalData(clientId: string, scope: PortalScope = { kin
     // the per-channel record behind each piece's posts
     ids.length
       ? table<PublishJob>('publish_jobs')
-          .list({ where: r => ids.includes(String(r.content_item_id ?? '')) })
+          // every job carries its client: that client's jobs only, not the whole table
+          .list({ by: { client_id: clientId } as never, where: r => ids.includes(String(r.content_item_id ?? '')) })
           .catch(() => [] as PublishJob[])
       : Promise.resolve([] as PublishJob[]),
   ])

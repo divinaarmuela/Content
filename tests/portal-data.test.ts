@@ -28,7 +28,7 @@ const u = (n: string) => `https://media.mdmmarketing.com.au/${n}`
 /** one status_change in the trail — created_at sorts as text */
 const moved = (id: string, from: string, to: string, at: string) => ({
   id: `a-${id}-${at}`,
-  entity_type: 'content_item', entity_id: id, action: 'status_change',
+  entity_type: 'content_item', entity_id: id, action: 'status_change', client_id: CLIENT,
   old_value: from, new_value: to, created_at: at,
 })
 
