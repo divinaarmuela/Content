@@ -84,3 +84,19 @@ export function roundNote(open: readonly SplitVideo[], notes: readonly ClipNote[
     'Upload a new Google Drive link with the new versions of these videos, then submit.',
   ].join('\n')
 }
+
+/**
+ * MAY THIS CARD SPLIT NOW (29 Oct 2026, the ZZ E2E walk: a card split on 2 Oct came back to the client and its
+ * "Send my answers" could never go — "This card changed while you were looking"). A split guards its own round only:
+ * a card split in this client round is refused; one split in an earlier round, or split before the card was last sent
+ * to the client (older cards carry no round), may split again. Pure.
+ */
+export function splitAlreadyDone(item: { split_at?: unknown; split_for_round?: unknown }, round: number, lastSentToClientAt: string | null): boolean {
+  const at = typeof item.split_at === 'string' ? item.split_at : null
+  if (!at) return false
+  const forRound = Number(item.split_for_round)
+  if (Number.isInteger(forRound) && forRound > 0) return forRound === round
+  return !(lastSentToClientAt && lastSentToClientAt > at)
+}
+
+export const ALREADY_SPLIT = 'Your answers for this version are already in — the approved videos went ahead and the rest went back to the editor.'

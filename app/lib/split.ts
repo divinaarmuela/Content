@@ -4,7 +4,7 @@ import { table } from '@/lib/db'
 import type { ContentItem, TeamUser as TeamUserRow } from '@/lib/db-types'
 import { AuthzError, type TeamUser } from './authz'
 import { withRetired, finalFilesOf } from './final-files-core'
-import { carriedNotes, footageOnly, nextSplitRound, notApprovedFiles, roundNote, roundTitle, splitPlan, type ClipNote, type SplitVideo } from './split-core'
+import { ALREADY_SPLIT, carriedNotes, footageOnly, nextSplitRound, notApprovedFiles, roundNote, roundTitle, splitAlreadyDone, splitPlan, type ClipNote, type SplitVideo } from './split-core'
 import { logActivity, performTransition } from './workflow'
 import { announceItemChange } from './production-live'
 import { notify, renderEmail, escapeHtml } from './mailer'
@@ -36,16 +36,27 @@ export async function splitCard(actor: TeamUser, itemId: string, opts: { by: 'cl
   const n = nextSplitRound((item as { split_round?: number | null }).split_round)
   const title = roundTitle(item.title, (item as { split_round?: number | null }).split_round)
 
-  // 1. THE CLAIM: still with the client, not already split, the same videos approved — the not-approved leave this version
+  // when the card last went to the client — an older split (no round on it) before that is a past round's, not this one's
+  const lastSent = (item as { split_at?: unknown }).split_at && !(item as { split_for_round?: unknown }).split_for_round
+    ? (await table<{ id: string; entity_id?: string; action?: string; new_value?: string; created_at?: string }>('workflow_activity' as never)
+        .list({ by: { client_id: item.client_id } as never, where: r => r.entity_id === item.id && r.action === 'status_change' && r.new_value === 'client_review' })
+        .catch(() => [])).map(r => String(r.created_at ?? '')).sort().pop() ?? null
+    : null
+  if (splitAlreadyDone(item as never, plan.round, lastSent)) throw new AuthzError(ALREADY_SPLIT, 409)
+
+  // 1. THE CLAIM: still with the client, not split this round, the same videos approved — the not-approved leave this version
+  let splitThisRound = false
   const claimed = await items.claim(item.id, cur => {
-    if (!cur || cur.status !== 'client_review' || (cur as { split_at?: unknown }).split_at) return null
+    splitThisRound = false
+    if (cur && splitAlreadyDone(cur as never, plan.round, lastSent)) { splitThisRound = true; return null }
+    if (!cur || cur.status !== 'client_review') return null
     const again = splitPlan(cur as never)
     if (again.kind !== 'split' || again.open.map(v => v.id).join() !== plan.open.map(v => v.id).join()) return null
     let files = finalFilesOf(cur as never)
     for (const v of again.open) files = withRetired(files, v.asset_id, again.round)
-    return { ...cur, final_files: files, split_at: now, updated_at: now } as ContentItem
+    return { ...cur, final_files: files, split_at: now, split_for_round: plan.round, updated_at: now } as ContentItem
   })
-  if (!claimed.claimed) throw new AuthzError('This card changed while you were looking — reload it and try again', 409)
+  if (!claimed.claimed) throw new AuthzError(splitThisRound ? ALREADY_SPLIT : 'This card changed while you were looking — reload it and try again', 409)
 
   // 2. THE ROUND N CARD — a fresh card for the same editor; on failure, the original is put back
   const notes = (await table<{ id: string; item_id: string } & ClipNote>('item_comments' as never).list({ by: { item_id: item.id } as never }).catch(() => [])) as ClipNote[]
@@ -90,7 +101,7 @@ export async function splitCard(actor: TeamUser, itemId: string, opts: { by: 'cl
       if (!cur || (cur as { split_at?: unknown }).split_at !== now) return null
       let files = finalFilesOf(cur as never)
       for (const v of plan.open) files = withRetired(files, v.asset_id, null)
-      return { ...cur, final_files: files, split_at: null, updated_at: new Date().toISOString() } as ContentItem
+      return { ...cur, final_files: files, split_at: null, split_for_round: null, updated_at: new Date().toISOString() } as ContentItem
     }).catch(() => undefined)
     throw new AuthzError(`The Round ${n} card could not be made — nothing was split. ${e instanceof Error ? e.message : ''}`.trim(), 500)
   }

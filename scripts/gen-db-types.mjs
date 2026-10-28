@@ -1145,6 +1145,9 @@ const GHOST_COLUMNS = {
     //   content_items.split_at — when this card's approved videos went to handover and the rest to a Round N card (C7),
     //     so a second press of Send my answers / Split does nothing twice.
     ['split_at', col('string', true)],
+    //   content_items.split_for_round — the client round that split was for (29 Oct 2026): a card sent back to the client
+    //     in a later round may split again; the same round never splits twice.
+    ['split_for_round', col('number', true)],
     //   content_items.adhoc_post — media uploaded straight onto the Schedule
     //     page to be posted. It still needs a card to hold the file, the
     //     versions and the numbers afterwards, but it is NOT production work,

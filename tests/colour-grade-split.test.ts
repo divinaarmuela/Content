@@ -84,9 +84,11 @@ describe('C6–C9 — the split', () => {
     expect(note).not.toContain('team only')
     expect(note).toContain('Upload a new Google Drive link')
   })
-  it('the original is claimed first (with the client, not already split) and put back if the new card fails', () => {
+  it('the original is claimed first (with the client, not already split this round) and put back if the new card fails', () => {
     const src = readFileSync('app/lib/split.ts', 'utf8')
-    expect(src).toContain("if (!cur || cur.status !== 'client_review' || (cur as { split_at?: unknown }).split_at) return null")
+    // a split guards its own round only (29 Oct 2026, tests/split-again.test.ts)
+    expect(src).toContain('if (cur && splitAlreadyDone(cur as never, plan.round, lastSent)) { splitThisRound = true; return null }')
+    expect(src).toContain("if (!cur || cur.status !== 'client_review') return null")
     expect(src).toContain('for (const v of plan.open) files = withRetired(files, v.asset_id, null)')
     expect(src).toContain("await performTransition(actor, original as never, 'approved_for_scheduling', {")
   })
