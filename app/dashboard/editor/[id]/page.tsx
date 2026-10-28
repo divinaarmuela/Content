@@ -483,10 +483,13 @@ function Workspace({ item, rows, needsGrade, gradeSince, sourceCreated, framesOf
                             driveId={info(s).file?.drive_file_id ?? s.entries.map(e => (e.source === 'drive' ? rowById.get(e.key.slice(2))?.drive_file_id : undefined)).find(Boolean) ?? null} />
                           <span className="absolute left-1.5 top-1.5 flex gap-1">
                             {s.versions.map(v => <span key={v} className={`rounded-full px-1.5 text-[10px] font-bold ${v === s.latest.label ? 'bg-foreground text-background' : 'bg-background/80 text-foreground'}`}>{v}</span>)}
-                            {s.latest.graded && <span className="rounded-full bg-tint-green px-1.5 text-[10px] font-bold">Graded</span>}
-                            {/* APPROVED ON ITS PICTURE (the owner, 26 Oct 2026: "when videos are approved it doesn't have an approved tag in the card") */}
-                            {info(s).file && (approvedFiles.has(info(s).file!.id) || ['approved_for_scheduling', 'scheduled', 'published'].includes(String(item.status))) && <span className="inline-flex items-center gap-0.5 rounded-full bg-accent-green px-1.5 text-[10px] font-bold text-white"><Check className="h-2.5 w-2.5" aria-hidden />Approved</span>}
                           </span>
+                          {/* WHERE THE VIDEO STANDS, ON ITS PICTURE (the owner, 28 Oct 2026: "tag posted need to be in the thumbnail
+                              so its a lot easier" — and "badges are being overlapped"): the badges that come by themselves sit at
+                              the picture's foot, clear of the buttons at its top; the tags people add are under the name */}
+                          <StatusBadges graded={!!s.latest.graded}
+                            approved={!!info(s).file && (approvedFiles.has(info(s).file!.id) || ['approved_for_scheduling', 'scheduled', 'published'].includes(String(item.status)))}
+                            auto={info(s).file ? chipsOf(item, assetIdOf(info(s).file!), info(s).file!.id, posted, scheduled).filter(c => c.auto) : []} />
                         </span>
                         <span className="flex flex-col gap-1 p-2">
                           <span className="truncate text-[13px] font-semibold">{s.title}</span>
@@ -545,6 +548,28 @@ function Workspace({ item, rows, needsGrade, gradeSince, sourceCreated, framesOf
   )
 }
 
+/** the badges that come by themselves, at the foot of a video's picture — one size, one row, nothing over them */
+function StatusBadges({ graded, approved, auto }: { graded: boolean; approved: boolean; auto: { tag: string; older?: boolean; at?: string | null }[] }) {
+  if (!graded && !approved && auto.length === 0) return null
+  const pill = 'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold shadow-sm'
+  return (
+    <span className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-wrap items-end gap-1 bg-gradient-to-t from-black/50 to-transparent p-1.5 pt-6">
+      {auto.filter(c => c.tag === POSTED_TAG).map(c => (
+        <span key={c.tag} title={c.older ? 'An earlier version went out through the app' : 'Went out in a post through the app'} className={`${pill} bg-accent-blue text-white`}>
+          <Send className="h-3 w-3" aria-hidden />{c.older ? 'Earlier cut posted' : 'Posted'}
+        </span>
+      ))}
+      {auto.filter(c => c.tag === SCHEDULED_TAG).map(c => (
+        <span key={c.tag} title="Booked in a post through the app — it turns to Posted when it goes out" className={`${pill} bg-accent-amber text-foreground`}>
+          <Hourglass className="h-3 w-3" aria-hidden />{c.at ? `Scheduled · ${new Date(c.at).toLocaleString('en-AU', { timeZone: 'Australia/Melbourne', weekday: 'short', day: 'numeric', month: 'short' })}` : 'Scheduled'}
+        </span>
+      ))}
+      {approved && <span className={`${pill} bg-accent-green text-white`}><Check className="h-3 w-3" aria-hidden />Approved</span>}
+      {graded && <span className={`${pill} bg-tint-green text-foreground`}>Graded</span>}
+    </span>
+  )
+}
+
 /**
  * A VIDEO'S TAGS (the owner, 28 Oct 2026: "allow to add a tag in the editor files anytime … if the file has been posted
  * through our app it marks as posted automatically"): "Posted" on its own when a post through the app went out with it,
@@ -568,17 +593,7 @@ function FileTags({ item, fileId, assetId, posted, scheduled }: { item: ContentI
   const offered = [POSTED_TAG, ...tagsOnCard(item)].filter(t => t.toLowerCase() !== SCHEDULED_TAG.toLowerCase()).filter((t, i, a) => a.findIndex(x => x.toLowerCase() === t.toLowerCase()) === i && !chips.some(c => c.tag.toLowerCase() === t.toLowerCase()))
   return (
     <div className="mt-1.5 flex flex-wrap items-center gap-1">
-      {chips.map(c => c.auto && c.tag === SCHEDULED_TAG ? (
-        <span key={c.tag} title="Booked in a post through the app — it turns to Posted when it goes out"
-          className="inline-flex items-center gap-1 rounded-full bg-accent-amber px-2 py-0.5 text-[11px] font-semibold text-foreground">
-          <Hourglass className="h-2.5 w-2.5" aria-hidden />{c.at ? `Scheduled · ${new Date(c.at).toLocaleString('en-AU', { timeZone: 'Australia/Melbourne', weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}` : c.tag}
-        </span>
-      ) : c.auto ? (
-        <span key={c.tag} title={c.older ? 'An earlier version went out through the app' : 'Went out in a post through the app'}
-          className="inline-flex items-center gap-1 rounded-full bg-accent-blue px-2 py-0.5 text-[11px] font-semibold text-white">
-          <Send className="h-2.5 w-2.5" aria-hidden />{c.older ? 'Earlier cut posted' : c.tag}
-        </span>
-      ) : (
+      {chips.filter(c => !c.auto).map(c => (
         <span key={c.tag} className="inline-flex items-center gap-0.5 rounded-full bg-muted py-0.5 pl-2 pr-1 text-[11px] font-semibold">
           {c.tag}
           <button type="button" disabled={busy} onClick={() => void save(c.tag, false)} aria-label={`Take off ${c.tag}`} className="rounded-full p-0.5 text-muted-foreground hover:bg-background hover:text-foreground">

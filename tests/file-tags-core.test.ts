@@ -62,6 +62,9 @@ describe('the card page and the route', () => {
   it('every video tile carries its tags, and the route claims the card', () => {
     const page = readFileSync('app/dashboard/editor/[id]/page.tsx', 'utf8')
     expect(page).toContain('<FileTags item={item} fileId={info(s).file!.id}')
+    // the badges that come by themselves are on the picture; the tags under the name are a person's only
+    expect(page).toContain('<StatusBadges graded={!!s.latest.graded}')
+    expect(page).toContain('chips.filter(c => !c.auto).map(c => (')
     expect(page).toContain("useTable<PostLike & { client_id?: string }>('social_posts'")
     const route = readFileSync('app/api/production/items/[id]/file-tags/route.ts', 'utf8')
     expect(route).toContain(".claim(id, cur =>")
