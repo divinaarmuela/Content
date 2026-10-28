@@ -42,6 +42,28 @@ export function snapshotToRows<T>(name: TableName, val: Record<string, any> | nu
 
 export type ClientQuery<T> = { where?: (r: T) => boolean; orderBy?: [keyof T & string, 'asc' | 'desc'][]; limit?: number }
 
+/**
+ * A ROW THAT DID NOT CHANGE STAYS THE SAME OBJECT (28 Oct 2026: "its still slow for my colleague's iMac … her Asana is
+ * so quick"). The live database hands back the whole table as new objects on every change anywhere in it — one task's
+ * description autosaving rebuilt all ~490 to-dos, and every row the list keeps from redrawing (memo, by identity) drew
+ * again, several times a second while someone typed. Here a row whose contents are the same as last time is handed back
+ * as last time's object, so only the row that changed draws. `cache` is the hook's own, carried between updates.
+ */
+export function keepUnchanged<T extends { id?: unknown }>(rows: T[], cache: Map<string, { key: string; row: T }>): T[] {
+  const seen = new Set<string>()
+  const out = rows.map(r => {
+    const id = String(r.id)
+    seen.add(id)
+    const key = JSON.stringify(r)
+    const had = cache.get(id)
+    if (had && had.key === key) return had.row
+    cache.set(id, { key, row: r })
+    return r
+  })
+  for (const id of cache.keys()) if (!seen.has(id)) cache.delete(id)
+  return out
+}
+
 export function applyQuery<T>(rows: T[], q: ClientQuery<T>): T[] {
   let out = q.where ? rows.filter(q.where) : rows.slice()
   if (q.orderBy?.length) {
@@ -77,6 +99,7 @@ export function useTable<T extends Row>(
   const [error, setError] = useState<string | null>(null)
   const byKey = opts.by ? JSON.stringify(opts.by) : ''
   const enabled = opts.enabled ?? true
+  const same = useRef(new Map<string, { key: string; row: T }>())
 
   useEffect(() => {
     if (!enabled) { setLoading(false); return }
@@ -93,7 +116,7 @@ export function useTable<T extends Row>(
   }, [name, byKey, enabled])
 
   const rows = useMemo(() => {
-    let r = snapshotToRows<T>(name, raw)
+    let r = keepUnchanged(snapshotToRows<T>(name, raw), same.current)
     const by = byKey ? (JSON.parse(byKey) as Record<string, unknown>) : null
     if (by) {
       // Filter in memory every `by` key EXCEPT the one actually pushed down
