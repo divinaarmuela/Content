@@ -64,3 +64,11 @@ describe('the panel', () => {
     expect(s).toContain("'Saving…'")
   })
 })
+
+describe('the list draws only what is on screen', () => {
+  it('rows go in blocks the browser skips while off screen', () => {
+    const page = readFileSync('app/dashboard/todos/page.tsx', 'utf8')
+    expect(page).toContain("{rowBlocks(g.rows).map(block => (")
+    expect(page).toContain("style={{ contentVisibility: 'auto', containIntrinsicSize: `auto ${block.length * ROW_PX}px` }}")
+  })
+})

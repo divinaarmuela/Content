@@ -38,6 +38,14 @@ import { normaliseRepeat, repeatWords, upcomingDues } from '../../lib/todo-repea
  */
 type View = 'list' | 'board' | 'calendar'
 const VIEWS: { key: View; label: string }[] = [{ key: 'list', label: 'List' }, { key: 'board', label: 'Board' }, { key: 'calendar', label: 'Calendar' }]
+/** a list row's height, and how many rows go in one block the browser may skip while it is off screen */
+const ROW_PX = 37
+const BLOCK_ROWS = 30
+function rowBlocks<T>(rows: readonly T[]): T[][] {
+  const out: T[][] = []
+  for (let i = 0; i < rows.length; i += BLOCK_ROWS) out.push(rows.slice(i, i + BLOCK_ROWS))
+  return out
+}
 const GRID = 'grid grid-cols-[minmax(0,1fr)_96px] md:[grid-template-columns:var(--todo-cols)]'
 const CELL = 'flex h-[37px] min-w-0 items-center border-l border-border px-2 text-[12px] max-md:[&:nth-child(n+3)]:hidden'
 
@@ -510,12 +518,20 @@ export default function TodosPage() {
                   onAdd={() => setAdding(g.key)} />
                 {!shut && (
                   <div role="rowgroup">
-                    {g.rows.map(t => (
-                      <TaskRow key={t.id} t={t} today={today!} open={openId === t.id} picked={selected.has(t.id)} editable={mayEditTodo(viewer, t as never)}
-                        owner={t.owner_id ? (t.owner_id === me?.id ? 'Me' : names.get(t.owner_id) ?? 'Someone') : null}
-                        ownerName={t.owner_id ? names.get(t.owner_id) ?? '?' : null}
-                        linkLabel={linkOf(t)?.label ?? null} meta={meta(t)} dropBefore={dropAt === `row:${t.id}`}
-                        acts={rowActs} gridStyle={gridCols} fieldDefs={fieldDefs} />
+                    {/* ONLY WHAT IS ON SCREEN IS DRAWN (28 Oct 2026: "still slow for my colleague's iMac … her Asana is so
+                        quick"): the rows go in blocks of 30, and a block off screen is skipped by the browser — not laid
+                        out, not painted — until it is scrolled to. Each block reaches 32px to the left so the tick boxes
+                        in the rows' gutter are not cut off. */}
+                    {rowBlocks(g.rows).map(block => (
+                      <div key={block[0].id} role="none" className="-ml-8 pl-8" style={{ contentVisibility: 'auto', containIntrinsicSize: `auto ${block.length * ROW_PX}px` }}>
+                        {block.map(t => (
+                          <TaskRow key={t.id} t={t} today={today!} open={openId === t.id} picked={selected.has(t.id)} editable={mayEditTodo(viewer, t as never)}
+                            owner={t.owner_id ? (t.owner_id === me?.id ? 'Me' : names.get(t.owner_id) ?? 'Someone') : null}
+                            ownerName={t.owner_id ? names.get(t.owner_id) ?? '?' : null}
+                            linkLabel={linkOf(t)?.label ?? null} meta={meta(t)} dropBefore={dropAt === `row:${t.id}`}
+                            acts={rowActs} gridStyle={gridCols} fieldDefs={fieldDefs} />
+                        ))}
+                      </div>
                     ))}
                     {viewer && g.key !== 'done' && (adding === g.key ? (
                       <NewRow onCancel={() => setAdding(null)} onAdd={title => create(title, g)} />
