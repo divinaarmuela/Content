@@ -944,3 +944,30 @@ export function providerTiming(
   if (job.waiting_on_copy) return now.getTime() - t <= LATE_COPY_LIMIT_MS ? { send: 'now' } : { send: 'refuse', reason: LATE_COPY_UNSENT }
   return { send: 'refuse', reason: TIME_PASSED_UNSENT }
 }
+
+
+/**
+ * KEEP TRYING WHILE THERE IS TIME (29 Oct 2026). Justin's 14 and 17 Nov posts were re-booked at 7:16 and 7:28 pm on
+ * 28 Oct; Zernio could not be reached ("fetch failed"), the five tries ran out within the hour, and both posts were put
+ * back as "Did not go out" — two weeks before either was due. A job that has run out of its usual tries gives up only
+ * when its time is close (within `GIVE_UP_LEAD_MS`), has no time (Post now), or has been tried `HARD_CAP` times; until
+ * then it stays queued and the dispatcher tries it again. Pure.
+ */
+export const GIVE_UP_LEAD_MS = 2 * 60 * 60 * 1000
+export const HARD_CAP_ATTEMPTS = 200
+export function giveUpPublishing(attemptsAfterThis: number, maxAttempts: number, scheduledFor: string | null | undefined, nowMs: number): boolean {
+  if (attemptsAfterThis < maxAttempts) return false
+  if (attemptsAfterThis >= HARD_CAP_ATTEMPTS) return true
+  const at = Date.parse(String(scheduledFor ?? ''))
+  if (!Number.isFinite(at)) return true
+  return at - nowMs <= GIVE_UP_LEAD_MS
+}
+
+/** past its usual tries, a still-queued job is handed over again a quarter hour after its last go — never sooner */
+export const LATE_RETRY_GAP_MS = 15 * 60 * 1000
+export function mayTryAgainLater(job: { attempts?: unknown; scheduled_for?: string | null; updated_at?: string | null }, maxAttempts: number, nowMs: number): boolean {
+  const attempts = Number(job.attempts ?? 0)
+  if (giveUpPublishing(attempts, maxAttempts, job.scheduled_for, nowMs)) return false
+  const last = Date.parse(String(job.updated_at ?? ''))
+  return !Number.isFinite(last) || nowMs - last >= LATE_RETRY_GAP_MS
+}

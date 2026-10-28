@@ -14,7 +14,7 @@ import { durationForCopy, smallerCopyOf } from './stream'
 import { headStoredObject, publicBase } from './storage'
 import { channelsNeedingCopy, cleanCopyWords } from './shrink-core'
 import { PLATFORM_MEDIA, copyTooBigReason, type AssetProbe } from './media-fit-core'
-import { keepLive, providerTiming, readPlatformResults, resultsForAll, resultsFromRemote, type OutcomeJob } from './post-outcome-core'
+import { giveUpPublishing, keepLive, mayTryAgainLater, providerTiming, readPlatformResults, resultsForAll, resultsFromRemote, type OutcomeJob } from './post-outcome-core'
 import {
   validatePost, isPlatform, describeRemoteOutcome, isStillProcessing, LIVE_JOB_STATUSES,
   resendPlanFor, childJobFor, resendWords, publishDoorRefusal, lateSplitPlan, lateChildJobFor, lateSplitWords,
@@ -407,8 +407,10 @@ async function attemptPublishJob(jobId: string): Promise<string | null> {
    *  not posted, so the post comes back to Ready to post with the reason
    *  instead of sitting booked for a job nobody will send. */
   const tryAgain = async (message: string) => {
-    if (job.attempts + 1 >= MAX_PUBLISH_ATTEMPTS) {
-      const reason = `Could not reach the publishing service after ${MAX_PUBLISH_ATTEMPTS} tries (${message}). Check the network before booking it again.`
+    // a job whose time is still far off keeps trying (giveUpPublishing) — a bad hour at the provider never
+    // throws away a booking that is weeks away (Justin's 14 and 17 Nov posts, 28 Oct 2026)
+    if (giveUpPublishing(job.attempts + 1, MAX_PUBLISH_ATTEMPTS, (claimed as { scheduled_for?: string | null }).scheduled_for, Date.now())) {
+      const reason = `Could not reach the publishing service after ${job.attempts + 1} tries (${message}). Check the network before booking it again.`
       await settle({ status: 'failed', attempts: job.attempts + 1, error: reason, platform_results: perChannel('failed', { reason }) })
       return 'failed'
     }
@@ -1180,8 +1182,9 @@ export async function reconcilePublishedJobs(): Promise<number> {
 export async function dueJobIds(): Promise<string[]> {
   const rows = await table<PublishJobRow>('publish_jobs').list({
     by: { status: 'queued' },
-    // stop hammering a job that keeps failing (the last try settles it as not posted)
-    where: j => j.attempts < MAX_PUBLISH_ATTEMPTS
+    // stop hammering a job that keeps failing (the last try settles it as not posted) — but one whose time is
+    // still far off is tried again every quarter hour until it goes or its time comes close (mayTryAgainLater)
+    where: j => (j.attempts < MAX_PUBLISH_ATTEMPTS || mayTryAgainLater(j as never, MAX_PUBLISH_ATTEMPTS, Date.now()))
       // a Meta job far from its time is not handed over yet: nothing could take it (meta-route-core)
       && dueForDispatch(j, Date.now()),
     orderBy: [['created_at', 'asc']],
