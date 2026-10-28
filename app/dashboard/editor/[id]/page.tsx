@@ -29,7 +29,7 @@ import { shootCardId } from '../../../lib/deliverable-group-core'
 import { cardUsesPlan, workFrom } from '../../../lib/editor-sop-core'
 import { reviewPath } from '../../../lib/video-review-core'
 import { deleteRefusal } from '../../../lib/card-upload-core'
-import { POSTED_TAG, chipsOf, postedFiles, tagsOnCard, type PostLike } from '../../../lib/file-tags-core'
+import { POSTED_TAG, SCHEDULED_TAG, chipsOf, postedFiles, scheduledFiles, tagsOnCard, type PostLike } from '../../../lib/file-tags-core'
 import { useRole } from '../../useRole'
 import EditorCardClassicPage from './classic/page'
 import EditorCardDrawer from '../../board/EditorCardDrawer'
@@ -292,6 +292,7 @@ function Workspace({ item, rows, needsGrade, gradeSince, sourceCreated, framesOf
   const approvedFiles = new Set(clipApprovalsOf(item).map(a => a.file_id))
   const current = currentFiles(item)
   const posted = useMemo(() => postedFiles(item, posts), [item, posts])
+  const scheduled = useMemo(() => scheduledFiles(item, posts), [item, posts])
   // READY FOR SCHEDULING ONCE APPROVED (the owner, 26 Oct 2026: "once a tag is approved can we please add a feature to
   // move it ready for scheduling") — a manager's press, logging the client's approval, once videos are approved
   const manager = me?.role === 'super_admin' || me?.role === 'account_manager'
@@ -492,7 +493,7 @@ function Workspace({ item, rows, needsGrade, gradeSince, sourceCreated, framesOf
                           {/* no tag under a video at all (the owner, 23 Oct 2026: "each video tags shouldnt be there") — its name only */}
                         </span>
                       </button>
-                      {!selecting && info(s).file && <FileTags item={item} fileId={info(s).file!.id} assetId={assetIdOf(info(s).file!)} posted={posted} />}
+                      {!selecting && info(s).file && <FileTags item={item} fileId={info(s).file!.id} assetId={assetIdOf(info(s).file!)} posted={posted} scheduled={scheduled} />}
                       {/* REPLACE BY THE PICTURE (the owner, 22 Oct 2026: "why cant it be easier to select video that needs to be
                           replaced … reading a file name doesnt help a lot"): on the video itself, it goes to the card's uploader */}
                       {!selecting && versionPicks(s).length > 1 && (
@@ -549,8 +550,8 @@ function Workspace({ item, rows, needsGrade, gradeSince, sourceCreated, framesOf
  * through our app it marks as posted automatically"): "Posted" on its own when a post through the app went out with it,
  * then anyone's tags — added with + Tag, taken off with their ×. A tag is on the video, so its next version keeps it.
  */
-function FileTags({ item, fileId, assetId, posted }: { item: ContentItem; fileId: string; assetId: string; posted: Map<string, unknown> }) {
-  const chips = chipsOf(item, assetId, fileId, posted)
+function FileTags({ item, fileId, assetId, posted, scheduled }: { item: ContentItem; fileId: string; assetId: string; posted: Map<string, unknown>; scheduled: Map<string, { at: string | null }> }) {
+  const chips = chipsOf(item, assetId, fileId, posted, scheduled)
   const [adding, setAdding] = useState(false)
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
@@ -564,10 +565,15 @@ function FileTags({ item, fileId, assetId, posted }: { item: ContentItem; fileId
       if (on) { setText(''); setAdding(false) }
     } catch (e) { toast.error(e instanceof Error ? e.message : 'Could not save the tag') } finally { setBusy(false) }
   }
-  const offered = [POSTED_TAG, ...tagsOnCard(item)].filter((t, i, a) => a.findIndex(x => x.toLowerCase() === t.toLowerCase()) === i && !chips.some(c => c.tag.toLowerCase() === t.toLowerCase()))
+  const offered = [POSTED_TAG, ...tagsOnCard(item)].filter(t => t.toLowerCase() !== SCHEDULED_TAG.toLowerCase()).filter((t, i, a) => a.findIndex(x => x.toLowerCase() === t.toLowerCase()) === i && !chips.some(c => c.tag.toLowerCase() === t.toLowerCase()))
   return (
     <div className="mt-1.5 flex flex-wrap items-center gap-1">
-      {chips.map(c => c.auto ? (
+      {chips.map(c => c.auto && c.tag === SCHEDULED_TAG ? (
+        <span key={c.tag} title="Booked in a post through the app — it turns to Posted when it goes out"
+          className="inline-flex items-center gap-1 rounded-full bg-accent-amber px-2 py-0.5 text-[11px] font-semibold text-foreground">
+          <Hourglass className="h-2.5 w-2.5" aria-hidden />{c.at ? `Scheduled · ${new Date(c.at).toLocaleString('en-AU', { timeZone: 'Australia/Melbourne', weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}` : c.tag}
+        </span>
+      ) : c.auto ? (
         <span key={c.tag} title={c.older ? 'An earlier version went out through the app' : 'Went out in a post through the app'}
           className="inline-flex items-center gap-1 rounded-full bg-accent-blue px-2 py-0.5 text-[11px] font-semibold text-white">
           <Send className="h-2.5 w-2.5" aria-hidden />{c.older ? 'Earlier cut posted' : c.tag}

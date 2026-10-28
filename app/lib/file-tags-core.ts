@@ -13,6 +13,7 @@
 import { assetIdOf, finalFilesOf, type FinalFile } from './final-files-core'
 
 export const POSTED_TAG = 'Posted'
+export const SCHEDULED_TAG = 'Scheduled'
 export const MAX_TAGS = 12
 export const MAX_TAG_LENGTH = 30
 
@@ -73,6 +74,12 @@ export function wentOut(p: PostLike): boolean {
   return p.stage === 'posted' || p.status === 'published' || !!p.published_at
 }
 
+/** a post booked to go out through the app and not gone yet */
+export function bookedNotGone(p: PostLike): boolean {
+  if (p.cancelled || p.stage === 'cancelled' || wentOut(p)) return false
+  return p.stage === 'booked'
+}
+
 /** is this slide that file? */
 export function slideIsFile(s: Slide, f: Pick<FinalFile, 'url' | 'name' | 'size' | 'drive_file_id'>): boolean {
   if (typeof s.url === 'string' && s.url === f.url) return true
@@ -82,8 +89,16 @@ export function slideIsFile(s: Slide, f: Pick<FinalFile, 'url' | 'name' | 'size'
 
 /** which of the card's files went out in a post through the app, and when */
 export function postedFiles(item: { final_files?: unknown }, posts: readonly PostLike[]): Map<string, { post_id: string; at: string | null }> {
+  return filesIn(item, posts.filter(wentOut))
+}
+
+/** which of the card's files are booked in a post through the app that has not gone yet — the soonest one each */
+export function scheduledFiles(item: { final_files?: unknown }, posts: readonly PostLike[]): Map<string, { post_id: string; at: string | null }> {
+  return filesIn(item, posts.filter(bookedNotGone))
+}
+
+function filesIn(item: { final_files?: unknown }, gone: readonly PostLike[]): Map<string, { post_id: string; at: string | null }> {
   const out = new Map<string, { post_id: string; at: string | null }>()
-  const gone = posts.filter(wentOut)
   for (const f of finalFilesOf(item)) {
     for (const p of gone) {
       const slides = Array.isArray(p.slides) ? (p.slides as Slide[]) : []
@@ -100,13 +115,18 @@ export function postedFiles(item: { final_files?: unknown }, posts: readonly Pos
  * The chips on one video: "Posted" first when the app posted it (or someone said so), then the person's tags.
  * `auto` says the Posted chip was worked out — it cannot be taken off by hand.
  */
-export function chipsOf(item: { final_files?: unknown }, assetId: string, currentFileId: string | null, posted: Map<string, unknown>): { tag: string; auto: boolean; older?: boolean }[] {
+export function chipsOf(item: { final_files?: unknown }, assetId: string, currentFileId: string | null, posted: Map<string, unknown>, scheduled: Map<string, { at: string | null }> = new Map()): { tag: string; auto: boolean; older?: boolean; at?: string | null }[] {
   const mine = tagsOfAsset(item, assetId)
   const versions = finalFilesOf(item).filter(f => assetIdOf(f) === assetId)
   const thisCut = !!currentFileId && posted.has(currentFileId)
   const anEarlierCut = !thisCut && versions.some(f => posted.has(f.id))
-  const chips: { tag: string; auto: boolean; older?: boolean }[] = []
+  const chips: { tag: string; auto: boolean; older?: boolean; at?: string | null }[] = []
   if (thisCut || anEarlierCut) chips.push({ tag: POSTED_TAG, auto: true, ...(anEarlierCut ? { older: true } : {}) })
-  for (const t of mine) if (!((thisCut || anEarlierCut) && same(t, POSTED_TAG))) chips.push({ tag: t, auto: false })
+  // SCHEDULED, BY ITSELF (the owner, 28 Oct 2026: "are there any current that will marked as scheduled?") — this cut is
+  // booked in a post through the app that has not gone yet; it becomes Posted when the post goes out
+  const booked = currentFileId ? scheduled.get(currentFileId) : undefined
+  if (booked) chips.push({ tag: SCHEDULED_TAG, auto: true, at: booked.at })
+  const autoTags = chips.map(c => c.tag.toLowerCase())
+  for (const t of mine) if (!autoTags.includes(t.toLowerCase())) chips.push({ tag: t, auto: false })
   return chips
 }

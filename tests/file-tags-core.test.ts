@@ -68,3 +68,17 @@ describe('the card page and the route', () => {
     expect(route).toContain("requireRole('scheduler')")
   })
 })
+
+describe('Scheduled, by itself', () => {
+  it('a cut booked in a post that has not gone shows Scheduled with its time, and turns to Posted when it goes', async () => {
+    const { scheduledFiles, chipsOf, postedFiles } = await import('../app/lib/file-tags-core')
+    const item = { final_files: [other] }
+    const booked = { id: 'b1', stage: 'booked', scheduled_for: '2026-11-07T03:30:00.000Z', slides: [{ url: other.url }] }
+    const s = scheduledFiles(item, [booked, { ...booked, id: 'c1', cancelled: true }])
+    expect([...s.keys()]).toEqual(['g1'])
+    expect(chipsOf(item, 'g1', 'g1', new Map(), s)).toEqual([{ tag: 'Scheduled', auto: true, at: '2026-11-07T03:30:00.000Z' }])
+    const gone = [{ ...booked, stage: 'posted' }]
+    expect(scheduledFiles(item, gone).size).toBe(0)
+    expect(chipsOf(item, 'g1', 'g1', postedFiles(item, gone), scheduledFiles(item, gone))).toEqual([{ tag: 'Posted', auto: true }])
+  })
+})
