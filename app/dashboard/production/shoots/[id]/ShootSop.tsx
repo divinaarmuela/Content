@@ -18,7 +18,7 @@ import {
 import { groupPeople, personWords } from '../../../../lib/people-groups-core'
 import {
   BRIEF_ITEMS, FOOTAGE_ONLY_WORDS, STAGE_LABEL, STAGE_STRIP, ackState, briefChecklist, briefIsLate, maySkipBriefItem, skippedBriefKeys, briefItemFilled, briefItemSource,
-  REVIEW_DEFAULT_QUALITY, clientPlanWords, clientShareReady, clockWords, goReady, isFootageOnly, nextStepWords, overrideWords, planReviewPassed, reviewWords, shootStage, stageHappened, stageIndex, stageMove,
+  REVIEW_DEFAULT_QUALITY, maySkipPlanReview, clientPlanWords, clientShareReady, clockWords, goReady, isFootageOnly, nextStepWords, overrideWords, planReviewPassed, reviewWords, shootStage, stageHappened, stageIndex, stageMove,
   rowsFor, shootManagerChoices, stampLines, stampWords,
   type BriefItemKey, type MoveRole, type NameOf, type ShootStage, type SopShoot,
 } from '../../../../lib/shoot-sop-core'
@@ -529,6 +529,26 @@ export function WherePanel({ batch, role, viewerId, today, itemCount, busy, name
                 </div>
               )
             })()}
+            {/* NO QUALITY CHECK NEEDED (29 Oct 2026, Manal for StretchWorks: "I send to the client I don't send to anyone
+                else to approve"; the owner: "allow shoot briefs to skip quality check"). Offered where the gate applies,
+                to a manager, until Go; once said, who said it stays on the list */}
+            {(gate || batch.plan_review_skipped === true) && !batch.go_at && !planReviewPassed(batch) && (
+              maySkipPlanReview(role)
+                ? (
+                  <label className="flex min-h-11 cursor-pointer items-start gap-3 text-[14px]" data-skip-review>
+                    <TickBox className="mt-0.5" checked={batch.plan_review_skipped === true} disabled={busy} onChange={on => void onPatch('plan_review_skipped', on)} />
+                    <span>
+                      <span className="font-semibold">No quality check needed</span> — this plan goes to the client without a quality review
+                      {batch.plan_review_skipped === true && batch.plan_review_skipped_at && (
+                        <span className="text-[12px] text-muted-foreground"> · {nameOf(batch.plan_review_skipped_by) ?? 'the team'}, {stampWords(batch.plan_review_skipped_at)}</span>
+                      )}
+                    </span>
+                  </label>
+                )
+                : batch.plan_review_skipped === true
+                  ? <p className="flex min-h-11 items-center gap-3 text-[14px]" data-skip-review>No quality check needed{batch.plan_review_skipped_at && <span className="text-[12px] text-muted-foreground"> · {nameOf(batch.plan_review_skipped_by) ?? 'the team'}, {stampWords(batch.plan_review_skipped_at)}</span>}</p>
+                  : null
+            )}
             <label className="flex min-h-11 cursor-pointer items-center gap-3 text-[14px]">
               <TickBox checked={!!batch.client_confirmed_at} disabled={busy} onChange={on => void onPatch('client_confirmed', on)} />
               <span>Location confirmed{batch.client_confirmed_at && <span className="text-[12px] text-muted-foreground"> · {nameOf(batch.client_confirmed_by) ?? 'the team'}, {stampWords(batch.client_confirmed_at)}</span>}</span>

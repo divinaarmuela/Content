@@ -17,7 +17,7 @@ import {
   applyCanvasOp, sanitisePlannedDeliverables, sanitiseReferenceMedia, sanitiseShotList,
   shootDeletion,
 } from '../../../../lib/batch-brief-core'
-import { NOT_YOUR_PAGE, acksOf, canManageShoot, footageReadyToHand, peopleOnShoot, planReviewRequired, sanitiseBriefSkipped } from '../../../../lib/shoot-sop-core'
+import { NOT_YOUR_PAGE, SKIP_REVIEW_REFUSED, acksOf, canManageShoot, footageReadyToHand, maySkipPlanReview, peopleOnShoot, planReviewRequired, sanitiseBriefSkipped } from '../../../../lib/shoot-sop-core'
 import { portalToggles } from '../../../../lib/portal-owner-core'
 import { cancelReplacedPullSoon, startPullSoon } from '../../../../lib/drive-pull'
 
@@ -233,6 +233,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     // DELIVERY ONLY, SAID ON THE SHOOT (the owner, 14 Sep 2026): the word goes
     // on the shoot here, and onto every card on it once the write is in
     if ('deliver_only' in body) patch.deliver_only = body.deliver_only === true ? true : body.deliver_only === false ? false : null
+    // NO QUALITY CHECK NEEDED (29 Oct 2026): a manager's word, with who and when kept
+    if ('plan_review_skipped' in body) {
+      if (!maySkipPlanReview(user.role)) return NextResponse.json({ error: SKIP_REVIEW_REFUSED }, { status: 403 })
+      const on = body.plan_review_skipped === true
+      patch.plan_review_skipped = on
+      patch.plan_review_skipped_by = on ? user.id : null
+      patch.plan_review_skipped_at = on ? new Date().toISOString() : null
+    }
     if ('edit_deadline' in body) {
       const d = body.edit_deadline ? String(body.edit_deadline).slice(0, 10) : ''
       if (d && Number.isNaN(new Date(`${d}T00:00:00`).getTime())) {
@@ -306,6 +314,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     try {
       await table('batches').update(id, { last_edited_by: user.id, last_edited_at: now })
     } catch { /* the edit itself already landed */ }
+    if ('plan_review_skipped' in patch) {
+      await logActivity({
+        actor: user, clientId: batch.client_id, entityType: 'batch', entityId: id,
+        action: patch.plan_review_skipped ? 'plan_review_skipped' : 'plan_review_skip_undone',
+      })
+    }
     for (const [flag, col] of [['aligned', 'aligned_at'], ['client_confirmed', 'client_confirmed_at']] as const) {
       if (flag in body) {
         await logActivity({

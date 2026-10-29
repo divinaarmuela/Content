@@ -49,6 +49,10 @@ export type SopShoot = {
   aligned_at?: string | null
   review_asked_at?: string | null
   plan_reviewed_at?: string | null
+  /** NO QUALITY CHECK NEEDED (29 Oct 2026) — an account manager or super admin took the gate off this plan */
+  plan_review_skipped?: boolean | null
+  plan_review_skipped_by?: string | null
+  plan_review_skipped_at?: string | null
   /** the script blocks (app/lib/script-core.ts), beside the plain `script` */
   scripts?: unknown
   /** the parts of the plan this shoot does not need (21 Sep 2026) */
@@ -1275,7 +1279,11 @@ export type PlanReviewRoles = { createdByRole?: string | null; ownerRole?: strin
 /** Does the gate apply? Not when everyone who wrote or holds the plan is a
  *  super admin. A role the caller does not know counts as a super admin's
  *  (an old shoot with no creator on record is not held up). */
-export function planReviewRequired(b: Pick<SopShoot, 'created_by' | 'owner_id'>, roles: PlanReviewRoles): boolean {
+export function planReviewRequired(b: Pick<SopShoot, 'created_by' | 'owner_id'> & { plan_review_skipped?: boolean | null }, roles: PlanReviewRoles): boolean {
+  // NO QUALITY CHECK NEEDED (29 Oct 2026, Manal for StretchWorks: "I send to the client I don't send to anyone else to
+  // approve"): a manager took the gate off this plan — every door that asks (the stage route, the review route, the
+  // shoot page, the Shoots board) reads it here
+  if (b.plan_review_skipped === true) return false
   const present: string[] = []
   if (b.created_by && roles.createdByRole) present.push(roles.createdByRole)
   if (b.owner_id && roles.ownerRole) present.push(roles.ownerRole)
@@ -1283,6 +1291,12 @@ export function planReviewRequired(b: Pick<SopShoot, 'created_by' | 'owner_id'>,
 }
 
 export const PLAN_REVIEW_WORDS = 'The quality checker has not passed the plan yet — ask for a review'
+
+/** who may say a plan needs no quality check: an account manager or a super admin */
+export function maySkipPlanReview(role: string | null | undefined): boolean {
+  return role === 'account_manager' || role === 'super_admin'
+}
+export const SKIP_REVIEW_REFUSED = 'Only an account manager or a super admin can say a plan needs no quality check'
 
 export const NOBODY_ON_SHOOT_WORDS = 'Pick the editor and the crew first — the plan is shared with them'
 

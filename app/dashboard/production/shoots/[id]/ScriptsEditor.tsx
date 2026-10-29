@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { newScriptId, sanitiseScripts, type ScriptBlock } from '../../../../lib/script-core'
 import { growTextarea } from '../../../../lib/grow-textarea'
+import { LinksIn } from '../../../../components/LinkedText'
 
 /**
  * THE SCRIPTS, ONE PER VIDEO (the owner, 15 Sep 2026: "there will be
@@ -83,6 +84,8 @@ export default function ScriptsEditor({ scripts, onSave, disabled = false }: {
             onInput={e => grow(e.currentTarget)}
             onChange={e => setBlocks(cur => cur.map(x => x.id === b.id ? { ...x, body: e.target.value } : x))}
             onBlur={() => commit(blocks)} />
+          {/* a link in the script opens (29 Oct 2026) — shown under the box being typed in */}
+          <LinksIn text={[b.body, ...(Array.isArray((b as { links?: unknown }).links) ? ((b as { links?: unknown[] }).links ?? []).map(String) : [])].join(' ')} />
         </div>
       ))}
       {!disabled && (
