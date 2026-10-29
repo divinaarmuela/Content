@@ -22,6 +22,7 @@ import {
 } from '../../lib/portal-words'
 import { PostMetricsRow } from './PortalSections'
 import PortalPostCard from './PortalPostCard'
+import { LinkedText } from '../LinkedText'
 
 /**
  * ONE CARD ON THE CLIENT'S PORTAL — a piece of work or a shoot.
@@ -505,11 +506,12 @@ function WorkOrShootCard({ card, amName, accent, surface, className }: CardProps
             </button>
             {planOpen && (
               <div className={cn('flex flex-col gap-2.5 rounded-tile p-3 text-[14px]', ink ? 'bg-foreground/[0.06]' : 'bg-foreground/[0.04]')}>
-                {card.shoot.concept && <p className="whitespace-pre-wrap leading-relaxed">{card.shoot.concept}</p>}
+                {/* links in the plan open (29 Oct 2026) — the same words, each address pressable */}
+                {card.shoot.concept && <p className="whitespace-pre-wrap leading-relaxed"><LinkedText text={card.shoot.concept} /></p>}
                 {card.shoot.planned_deliverables.length > 0 && (
                   <div className="flex flex-wrap gap-1.5">
                     {card.shoot.planned_deliverables.map(d => (
-                      <Chip key={d.id} tone="surface">{d.title}</Chip>
+                      <Chip key={d.id} tone="surface"><LinkedText text={d.title} /></Chip>
                     ))}
                   </div>
                 )}
@@ -520,7 +522,7 @@ function WorkOrShootCard({ card, amName, accent, surface, className }: CardProps
                         <span className={cn('mt-[3px] flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[4px] border', 'border-foreground/40')}>
                           {r.done && <Check className="h-3 w-3" />}
                         </span>
-                        <span className={r.done ? 'opacity-60' : ''}>{r.text}{r.qty ? <span className="opacity-50"> ×{r.qty}</span> : null}</span>
+                        <span className={r.done ? 'opacity-60' : ''}><LinkedText text={r.text} />{r.qty ? <span className="opacity-50"> ×{r.qty}</span> : null}</span>
                       </li>
                     ))}
                   </ul>
@@ -529,7 +531,7 @@ function WorkOrShootCard({ card, amName, accent, surface, className }: CardProps
                 {scriptWords(card.shoot.scripts).map(w => (
                   <div key={w.n} className="flex flex-col gap-1 border-t border-foreground/10 pt-2">
                     <p className="font-semibold">{w.heading}</p>
-                    <p className="whitespace-pre-wrap leading-relaxed">{w.lines.join('\n')}</p>
+                    <p className="whitespace-pre-wrap leading-relaxed"><LinkedText text={w.lines.join('\n')} /></p>
                   </div>
                 ))}
               </div>

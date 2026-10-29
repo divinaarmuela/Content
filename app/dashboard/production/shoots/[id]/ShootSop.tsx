@@ -29,6 +29,7 @@ import LocationSearch from './LocationSearch'
 import DrivePullBar from '../../../board/DrivePullBar'
 import { copyText } from '../../../../lib/copy-text-client'
 import { NotifyClientButton } from '../../../board/NotifyClientDialog'
+import { LinksIn } from '../../../../components/LinkedText'
 
 /**
  * THE SHOOT PAGE, AS THE SHOOT BRIEF SOP §3 READS (rebuilt 13 Sep 2026 —
@@ -170,13 +171,21 @@ export function PlanParts({ batch, itemCount, booked, onPatch, onShots, team }: 
       </div>
     )
   }
+  // A LINK TYPED IN A FIELD OPENS (29 Oct 2026: "when we input it in the shoots will it come out as hyperlink? like the
+  // input fields") — a box being typed in cannot hold a pressable link, so each address in it is shown under it
   const area = (field: keyof ShootSopBatch, placeholder: string, rows = 2) => (
-    <Textarea key={String(batch[field] ?? '')} defaultValue={String(batch[field] ?? '')} rows={rowsFor(String(batch[field] ?? ''), rows, 14, 55)}
-      placeholder={placeholder} aria-label={placeholder} className="min-h-11 text-[15px]" onBlur={save(field)} />
+    <>
+      <Textarea key={String(batch[field] ?? '')} defaultValue={String(batch[field] ?? '')} rows={rowsFor(String(batch[field] ?? ''), rows, 14, 55)}
+        placeholder={placeholder} aria-label={placeholder} className="min-h-11 text-[15px]" onBlur={save(field)} />
+      <LinksIn text={String(batch[field] ?? '')} className="mt-1.5" />
+    </>
   )
   const line = (field: keyof ShootSopBatch, placeholder: string) => (
-    <Input key={String(batch[field] ?? '')} defaultValue={String(batch[field] ?? '')}
-      placeholder={placeholder} aria-label={placeholder} className="h-11 text-[15px]" onBlur={save(field)} />
+    <>
+      <Input key={String(batch[field] ?? '')} defaultValue={String(batch[field] ?? '')}
+        placeholder={placeholder} aria-label={placeholder} className="h-11 text-[15px]" onBlur={save(field)} />
+      <LinksIn text={String(batch[field] ?? '')} className="mt-1.5" />
+    </>
   )
   const addLine = async () => {
     const title = newLine.trim()
@@ -205,7 +214,8 @@ export function PlanParts({ batch, itemCount, booked, onPatch, onShots, team }: 
               <p className="text-[13px] text-muted-foreground">Nothing listed yet. One line for each thing coming out — 5 reels, 1 long-form, 1 photo set. The editor gets one card for the whole shoot.</p>
             )}
             {planned.map((l, i) => (
-              <div key={l.id} className="flex items-center gap-1.5">
+              <div key={l.id} className="flex flex-col gap-1">
+              <div className="flex items-center gap-1.5">
                 <span className="w-5 shrink-0 text-right font-mono text-[12px] text-muted-foreground">{i + 1}</span>
                 <Input key={`${l.id}:${l.title}`} defaultValue={l.title} aria-label={`Line ${i + 1} of what is coming out`}
                   className="h-11 min-w-0 flex-1 text-[15px]"
@@ -218,6 +228,8 @@ export function PlanParts({ batch, itemCount, booked, onPatch, onShots, team }: 
                   onClick={() => void onPatch('planned_deliverables', planned.filter((_, j) => j !== i))}>
                   <X className="h-4 w-4" />
                 </button>
+              </div>
+              <LinksIn text={l.title} className="pl-7" />
               </div>
             ))}
             <div className="flex items-center gap-1.5">
@@ -242,7 +254,8 @@ export function PlanParts({ batch, itemCount, booked, onPatch, onShots, team }: 
           <div className="flex flex-col gap-1.5">
             {shots.length === 0 && <p className="text-[13px] text-muted-foreground">No shots yet. Scene by scene, what needs to be captured on the day.</p>}
             {shots.map((shot, i) => (
-              <div key={shot.id} className="flex items-center gap-2">
+              <div key={shot.id} className="flex flex-col gap-1">
+              <div className="flex items-center gap-2">
                 <TickBox checked={shot.done} label={`Shot ${i + 1} captured`}
                   onChange={on => onShots(shots.map((s, j) => j === i ? { ...s, done: on } : s))} />
                 {/* keyed by the shot's id ONLY — keying on the text remounted
@@ -258,6 +271,8 @@ export function PlanParts({ batch, itemCount, booked, onPatch, onShots, team }: 
                   onClick={() => onShots(shots.filter((_, j) => j !== i))}>
                   <X className="h-4 w-4" />
                 </button>
+              </div>
+              <LinksIn text={shot.text} className="pl-9" />
               </div>
             ))}
             <Button variant="outline" className={`${outlineBtn} w-fit`}
