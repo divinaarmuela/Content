@@ -26,7 +26,7 @@ export type CardComment = {
 export type CardCommentWhere = { quote?: string; parent_id?: string }
 
 const when = (iso: string) =>
-  new Date(iso).toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })
+  new Date(iso).toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'Australia/Melbourne' })
 
 /**
  * The comments on ONE card of the planning board — what the card is, who

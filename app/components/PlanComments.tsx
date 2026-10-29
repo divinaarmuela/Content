@@ -166,7 +166,7 @@ function Thread({ t }: { t: PlanThread<PlanCommentRow> }) {
       {[t.root, ...t.replies].map(c => (
         <div key={c.id} className="flex flex-col">
           <span className="text-[12px] font-semibold">{c.author_name ?? (c.from_team ? 'MD Media' : 'Client')}
-            <span className="ml-1.5 font-normal text-muted-foreground">{new Date(c.created_at).toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}</span>
+            <span className="ml-1.5 font-normal text-muted-foreground">{new Date(c.created_at).toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'Australia/Melbourne' })}</span>
           </span>
           <span className="whitespace-pre-wrap"><LinkedText text={c.body} /></span>
         </div>

@@ -72,3 +72,11 @@ describe('the doors', () => {
     }
   })
 })
+
+describe('the times read the same on both sides', () => {
+  it('in Melbourne time — the panel is first drawn on the server, which keeps UTC (9:34 am on the portal, 8:34 pm on the team’s)', () => {
+    for (const f of ['app/components/canvas/CardCommentPanel.tsx', 'app/components/PlanComments.tsx']) {
+      expect(readFileSync(f, 'utf8')).toContain("minute: '2-digit', timeZone: 'Australia/Melbourne' }")
+    }
+  })
+})
