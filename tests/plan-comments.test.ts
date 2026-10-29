@@ -87,3 +87,10 @@ describe('the doors', () => {
     expect(readFileSync('app/dashboard/production/shoots/[id]/page.tsx', 'utf8')).toContain('<TeamPlanComments batchId={batch.id}>')
   })
 })
+
+describe('a client’s comment emails only who it may', () => {
+  it('says which client it is about, so a test client’s shoot comment never reaches a real person', () => {
+    const s = readFileSync('app/lib/portal-actor.ts', 'utf8')
+    expect(s).toContain('clientId: opts.clientId,')
+  })
+})

@@ -74,6 +74,9 @@ export async function notifyManagersOfComment(opts: {
       entityId: `${opts.dashboardPath}#${Date.now()}`,
       recipientId: m.id,
       recipientEmail: m.email,
+      // the client, said outright: a shoot's comment carries the SHOOT's id, which the mailer's card lookup cannot
+      // place — a test client's shoot comment emailed a real manager (29 Oct 2026)
+      clientId: opts.clientId,
       subject: `Client comment on ${opts.subjectTitle}`,
       bodyHtml: renderEmail(
         `Client comment on ${opts.subjectTitle}`,
