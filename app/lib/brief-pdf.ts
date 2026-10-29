@@ -2,6 +2,7 @@ import 'server-only'
 import PDFDocument from 'pdfkit'
 import { scriptWords, type ScriptBlock } from './script-core'
 import { bulletText } from './bullet-core'
+import { linkParts } from './todo-core'
 import type { PlannedDeliverable, ShotRow } from './batch-brief-core'
 
 /**
@@ -73,6 +74,18 @@ export function briefPdfSections(d: BriefPdfData): { title: string; text: string
   return out
 }
 
+/**
+ * A LINE CUT INTO WORDS AND LINKS (29 Oct 2026: "shoot brief pdfs when generated links are not working in there"). The
+ * plan was printed as plain text, so an address in it could not be pressed and a long one broke over two lines. Each
+ * address is now its own run, with a link the PDF reader opens. Pure, so a test reads what will print.
+ */
+export function pdfRuns(text: string): { text: string; href?: string }[][] {
+  return String(text ?? '').split(/\r?\n/).map(line => {
+    const parts = linkParts(line).filter(p => p.text)
+    return parts.length ? parts : [{ text: ' ' }]
+  })
+}
+
 export function renderBriefPdf(data: BriefPdfData): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ size: 'A4', margin: PAGE.margin, bufferPages: true })
@@ -132,10 +145,23 @@ export function renderBriefPdf(data: BriefPdfData): Promise<Buffer> {
       doc.y += 16
     }
 
+    /** words with their links pressable: each address blue and underlined, the rest as before */
+    const linked = (text: string, x: number, width: number, colour: string) => {
+      const lines = pdfRuns(text)
+      lines.forEach((runs, li) => {
+        runs.forEach((r, ri) => {
+          const last = ri === runs.length - 1
+          const opts = { width, lineGap: 3, continued: !last, ...(r.href ? { link: r.href, underline: true } : { link: null, underline: false }) }
+          doc.fillColor(r.href ? BLUE : colour).font('Helvetica').fontSize(10)
+          if (li === 0 && ri === 0) doc.text(r.text, x, doc.y, opts as never)
+          else if (ri === 0) doc.text(r.text, x, doc.y, opts as never)
+          else doc.text(r.text, opts as never)
+        })
+      })
+    }
     const prose = (title: string, text: string) => {
       section(title)
-      doc.fillColor(INK).font('Helvetica').fontSize(10)
-        .text(text, PAGE.margin, doc.y, { width: contentW, lineGap: 3 })
+      linked(text, PAGE.margin, contentW, INK)
       doc.y += 18
     }
     const sections = briefPdfSections(data)
@@ -149,8 +175,10 @@ export function renderBriefPdf(data: BriefPdfData): Promise<Buffer> {
         ensureRoom(18)
         doc.fillColor(BLUE).font('Helvetica-Bold').fontSize(10)
           .text(String(i + 1), PAGE.margin, doc.y, { continued: true, width: contentW })
-        doc.fillColor(INK).font('Helvetica').fontSize(10)
-          .text(`  ${d.title}`)
+        doc.fillColor(INK).font('Helvetica').fontSize(10).text('  ', { continued: true })
+        pdfRuns(d.title)[0].forEach((r, ri, all) => {
+          doc.fillColor(r.href ? BLUE : INK).text(r.text, { continued: ri < all.length - 1, ...(r.href ? { link: r.href, underline: true } : { link: null, underline: false }) } as never)
+        })
         doc.y += 4
       })
       doc.y += 12
@@ -168,11 +196,8 @@ export function renderBriefPdf(data: BriefPdfData): Promise<Buffer> {
           doc.moveTo(PAGE.margin + 2, y + 5.5).lineTo(PAGE.margin + 4, y + 8)
             .lineTo(PAGE.margin + 7.5, y + 3).lineWidth(1.1).stroke(BLUE)
         }
-        doc.fillColor(r.done ? DIM : INK).font('Helvetica').fontSize(10)
-          .text(
-            `${r.text}${r.qty ? `  ×${r.qty}` : ''}${r.type ? `  (${r.type})` : ''}`,
-            PAGE.margin + 18, y, { width: contentW - 18 },
-          )
+        doc.y = y
+        linked(`${r.text}${r.qty ? `  ×${r.qty}` : ''}${r.type ? `  (${r.type})` : ''}`, PAGE.margin + 18, contentW - 18, r.done ? DIM : INK)
         doc.y = Math.max(doc.y, y + 14)
       }
       doc.y += 12
