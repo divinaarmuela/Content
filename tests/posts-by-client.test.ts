@@ -3,7 +3,7 @@ import { postsByClient, type MonthRow } from '../app/lib/overview-posts-core'
 
 // 29 Oct 2026, the owner: "why does it show two social platforms from same client it should be one … like justin
 // engelke and then underneath its the booked / posted for those platforms"
-const m = { interactions: null, likes: null, comments: null, views: null }
+const m: MonthRow['metrics'] = { interactions: null, likes: null, comments: null, views: null }
 const row = (key: string, platform: string, went: number, log: MonthRow['log'], metrics = m): MonthRow => ({
   key, account_id: key, client_id: 'justin', client_name: 'Justin Engelke', platform, username: key,
   went_out: went, booked: 0, did_not: 0, by_hand: 0, metrics, waiting: [], log,
