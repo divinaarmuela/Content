@@ -617,7 +617,7 @@ class ZernioPublisher implements Publisher {
     const out: unknown[] = []
     let cursor: string | null = null
     for (let page = 0; page < 50; page++) {
-      const qs = new URLSearchParams({ fromDate, toDate, limit: '100', fields: 'status,scheduledFor,platforms' })
+      const qs = new URLSearchParams({ fromDate, toDate, limit: '100', fields: 'status,scheduledFor,content,platforms' })
       if (cursor) qs.set('cursor', cursor)
       const j = await this.getJson(`/posts?${qs}`) as { posts?: unknown[]; pagination?: { nextCursor?: string | null } } | null
       if (!j || !Array.isArray(j.posts)) return page === 0 ? null : out

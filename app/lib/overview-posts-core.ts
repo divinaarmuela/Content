@@ -350,8 +350,13 @@ export const NO_POSTS_THIS_MONTH = 'Nothing posted or booked this month yet.'
  * added from the job, the same way. "Waiting on the client" (the owner: "if scheduled but waiting client approval")
  * is our posts': booked and still waiting on the client's word, or with the client before booking. Pure. */
 
-export type ZernioPlatformLite = { platform?: string | null; status?: string | null; publishedAt?: string | null; scheduledFor?: string | null; accountId?: { _id?: string | null } | string | null }
-export type ZernioPostLite = { _id?: string; status?: string | null; scheduledFor?: string | null; platforms?: ZernioPlatformLite[] | null }
+export type ZernioPlatformLite = { platform?: string | null; status?: string | null; publishedAt?: string | null; scheduledFor?: string | null; accountId?: { _id?: string | null } | string | null; customContent?: string | null; platformPostUrl?: string | null; errorMessage?: string | null }
+export type ZernioPostLite = { _id?: string; status?: string | null; scheduledFor?: string | null; content?: string | null; platforms?: ZernioPlatformLite[] | null }
+/** ONE LINE OF AN ACCOUNT'S MONTH (the owner, 29 Oct 2026: "its unclear what went out 3 can we make a proper log maybe
+ *  caption like how zernio dashboard is"): when, what happened, its words, where it is, and why it did not go */
+export type PostLogEntry = { id: string; status: 'went_out' | 'booked' | 'did_not'; at: string | null; caption: string; url: string | null; error: string | null
+  /** every network this same post was on, with how each went (the owner: "it should show … which social platforms it published") */
+  networks?: { platform: string; status: 'went_out' | 'booked' | 'did_not' | 'other'; url: string | null }[] }
 export type LiveCounts = { went_out: number; booked: number; did_not: number }
 export type WaitingPost = { post_id: string; at: string | null; booked: boolean }
 
@@ -363,9 +368,13 @@ export function zernioMonthCounts(
   posts: readonly ZernioPostLite[],
   accountByProvider: ReadonlyMap<string, { id: string; client_id: string | null }>,
   inMonth: (iso: string | null | undefined, clientId: string) => boolean,
+  log?: Map<string, PostLogEntry[]>,
 ): Map<string, LiveCounts> {
   const out = new Map<string, LiveCounts>()
-  const bump = (id: string, k: keyof LiveCounts) => { const c = out.get(id) ?? { went_out: 0, booked: 0, did_not: 0 }; c[k]++; out.set(id, c) }
+  const bump = (id: string, k: keyof LiveCounts, entry: Omit<PostLogEntry, 'status'>) => {
+    const c = out.get(id) ?? { went_out: 0, booked: 0, did_not: 0 }; c[k]++; out.set(id, c)
+    if (log) log.set(id, [...(log.get(id) ?? []), { ...entry, status: k }])
+  }
   for (const p of posts) {
     for (const e of p.platforms ?? []) {
       const pid = providerIdOf(e.accountId)
@@ -373,9 +382,17 @@ export function zernioMonthCounts(
       if (!acct || !acct.client_id) continue
       const st = String(e.status ?? p.status ?? '').toLowerCase()
       const when = e.scheduledFor ?? p.scheduledFor ?? null
-      if (st === 'published') { if (inMonth(e.publishedAt ?? when, acct.client_id)) bump(acct.id, 'went_out') }
-      else if (BOOKED_STATES.includes(st)) { if (inMonth(when, acct.client_id)) bump(acct.id, 'booked') }
-      else if (st === 'failed') { if (inMonth(when, acct.client_id)) bump(acct.id, 'did_not') }
+      const entry = (at: string | null) => ({
+        id: `${p._id ?? ''}:${e.platform ?? ''}`, at, caption: String(e.customContent || p.content || '').trim(),
+        url: e.platformPostUrl ?? null, error: e.errorMessage ?? null,
+        networks: (p.platforms ?? []).map(x => {
+          const s = String(x.status ?? '').toLowerCase()
+          return { platform: String(x.platform ?? ''), status: (s === 'published' ? 'went_out' : BOOKED_STATES.includes(s) ? 'booked' : s === 'failed' ? 'did_not' : 'other') as 'went_out' | 'booked' | 'did_not' | 'other', url: x.platformPostUrl ?? null }
+        }),
+      })
+      if (st === 'published') { const at = e.publishedAt ?? when; if (inMonth(at, acct.client_id)) bump(acct.id, 'went_out', entry(at)) }
+      else if (BOOKED_STATES.includes(st)) { if (inMonth(when, acct.client_id)) bump(acct.id, 'booked', entry(when)) }
+      else if (st === 'failed') { if (inMonth(when, acct.client_id)) bump(acct.id, 'did_not', entry(when)) }
     }
   }
   return out
@@ -387,6 +404,7 @@ export function metaQueueCounts(
   accountsOfJob: (job: MonthJob) => { id: string; client_id: string | null }[],
   inMonth: (iso: string | null | undefined, clientId: string) => boolean,
   into: Map<string, LiveCounts>,
+  log?: Map<string, PostLogEntry[]>,
 ): Map<string, LiveCounts> {
   for (const j of jobs) {
     if (String(j.provider ?? '') !== 'meta_ig') continue
@@ -399,6 +417,10 @@ export function metaQueueCounts(
       const c = into.get(a.id) ?? { went_out: 0, booked: 0, did_not: 0 }
       c[k]++
       into.set(a.id, c)
+      if (log) log.set(a.id, [...(log.get(a.id) ?? []), {
+        id: `job:${j.id}`, status: k, at: when ?? null, caption: String((j as { caption?: unknown }).caption ?? '').trim(),
+        url: (j as { permalink?: string | null }).permalink ?? null, error: k === 'did_not' ? String((j as { error?: unknown }).error ?? '') || null : null,
+      }])
     }
   }
   return into
@@ -408,12 +430,16 @@ export function metaQueueCounts(
  *  number is the ones NOT waiting on the client */
 export function liveCountsLine(row: AccountPostsRow & { waiting?: readonly WaitingPost[] }): string {
   const waitingBooked = (row.waiting ?? []).filter(w => w.booked).length
+  // in words, never a bare number after a word — a card can be NAMED "3" (the owner: "sometimes they name the card 3")
+  const posts = (n: number) => `${n} post${n === 1 ? '' : 's'}`
+  const booked = row.booked - waitingBooked
+  const waiting = (row.waiting ?? []).length
   const parts = [
-    row.went_out > 0 ? `Went out ${row.went_out}` : null,
-    row.booked - waitingBooked > 0 ? `Booked ${row.booked - waitingBooked}` : null,
-    (row.waiting ?? []).length > 0 ? `Waiting on the client ${(row.waiting ?? []).length}` : null,
-    row.did_not > 0 ? `Did not go out ${row.did_not}` : null,
-    row.by_hand > 0 ? `${row.by_hand} by hand` : null,
+    row.went_out > 0 ? `${posts(row.went_out)} went out` : null,
+    booked > 0 ? `${posts(booked)} booked` : null,
+    waiting > 0 ? `${posts(waiting)} waiting on the client` : null,
+    row.did_not > 0 ? `${posts(row.did_not)} did not go out` : null,
+    row.by_hand > 0 ? `${posts(row.by_hand)} posted by hand` : null,
   ].filter(Boolean)
   return parts.length ? parts.join(' · ') : 'Nothing this month'
 }

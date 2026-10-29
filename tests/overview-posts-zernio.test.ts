@@ -31,7 +31,7 @@ describe('the month, from Zernio', () => {
   })
   it('the line says what is waiting on the client apart from what is simply booked', () => {
     const row = { key: 'ig', account_id: 'ig', client_id: 'c1', client_name: 'Justin', platform: 'instagram', username: 'j', went_out: 8, booked: 3, did_not: 0, by_hand: 0, metrics: { interactions: null, likes: null, comments: null, views: null } }
-    expect(liveCountsLine({ ...row, waiting: [{ post_id: 'a', at: null, booked: true }] })).toBe('Went out 8 · Booked 2 · Waiting on the client 1')
+    expect(liveCountsLine({ ...row, waiting: [{ post_id: 'a', at: null, booked: true }] })).toBe('8 posts went out · 2 posts booked · 1 post waiting on the client')
     expect(liveCountsLine({ ...row, booked: 0, went_out: 0 })).toBe('Nothing this month')
   })
   it('the Overview asks the server, and no longer listens to every job and analytics row', () => {
@@ -42,6 +42,27 @@ describe('the month, from Zernio', () => {
     expect(page).toContain('<NotifyClientButton clientId={r.client_id!} tab="scheduling" id={w.post_id}')
     const route = readFileSync('app/api/overview/posts-month/route.ts', 'utf8')
     expect(route).toContain("if (user.role !== 'super_admin' && user.role !== 'account_manager') throw new AuthzError('Managers only', 403)")
-    expect(route).toContain('zernioMonthCounts(zernio as ZernioPostLite[], byProvider, inMonth)')
+    expect(route).toContain('zernioMonthCounts(zernio as ZernioPostLite[], byProvider, inMonth, log)')
+  })
+})
+
+describe('the log, post by post', () => {
+  it('each post: when, what happened, its words, every network it was on, and why it failed', async () => {
+    const { zernioMonthCounts } = await import('../app/lib/overview-posts-core')
+    const log = new Map()
+    zernioMonthCounts([
+      { _id: 'p1', content: 'Base words', platforms: [
+        { platform: 'instagram', status: 'published', publishedAt: '2026-10-28T07:32:30Z', accountId: { _id: 'zIG' }, customContent: 'IG words', platformPostUrl: 'https://instagram.com/reel/x' },
+        { platform: 'tiktok', status: 'failed', scheduledFor: '2026-10-28T07:30:00Z', accountId: { _id: 'zTT' }, errorMessage: 'Publishing timed out' },
+      ] },
+    ], acct, inOct, log)
+    expect(log.get('ig')).toEqual([{ id: 'p1:instagram', status: 'went_out', at: '2026-10-28T07:32:30Z', caption: 'IG words', url: 'https://instagram.com/reel/x', error: null,
+      networks: [{ platform: 'instagram', status: 'went_out', url: 'https://instagram.com/reel/x' }, { platform: 'tiktok', status: 'did_not', url: null }] }])
+    expect(log.get('tt')[0]).toMatchObject({ status: 'did_not', caption: 'Base words', error: 'Publishing timed out' })
+  })
+  it('each account opens to its posts', () => {
+    const page = readFileSync('app/dashboard/page.tsx', 'utf8')
+    expect(page).toContain('{openKey === r.key && <PostLog entries={r.log ?? []} />}')
+    expect(page).toContain("{openKey === r.key ? 'Hide the posts' : 'See the posts'}")
   })
 })

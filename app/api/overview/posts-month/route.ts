@@ -9,7 +9,7 @@ import { waitingForClient } from '../../../lib/post-stage-core'
 import { DEFAULT_TZ, monthInZone } from '../../../lib/timezone-core'
 import {
   jobTargets, metaQueueCounts, monthPostsByAccount, zernioMonthCounts,
-  type AccountPostsRow, type LiveCounts, type MonthJob, type WaitingPost, type ZernioPostLite,
+  type AccountPostsRow, type LiveCounts, type MonthJob, type PostLogEntry, type WaitingPost, type ZernioPostLite,
 } from '../../../lib/overview-posts-core'
 
 /**
@@ -22,7 +22,7 @@ import {
  */
 export const dynamic = 'force-dynamic'
 
-type Row = AccountPostsRow & { waiting: WaitingPost[] }
+type Row = AccountPostsRow & { waiting: WaitingPost[]; log: PostLogEntry[] }
 const cache = new Map<string, { at: number; body: { rows: Row[]; source: 'zernio' | 'jobs'; at: string } }>()
 const KEEP_MS = 2 * 60 * 1000
 
@@ -66,8 +66,9 @@ export async function GET() {
       const to = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1) + 86_400_000).toISOString().slice(0, 10)
       const zernio = await getPublisher().postsBetween?.(from, to).catch(() => null) ?? null
       let counts: Map<string, LiveCounts> | null = null
+      const log = new Map<string, PostLogEntry[]>()
       if (zernio) {
-        counts = zernioMonthCounts(zernio as ZernioPostLite[], byProvider, inMonth)
+        counts = zernioMonthCounts(zernio as ZernioPostLite[], byProvider, inMonth, log)
         const accountsOfJob = (job: MonthJob) => {
           const out: { id: string; client_id: string | null }[] = []
           for (const t of jobTargets(job)) {
@@ -77,7 +78,7 @@ export async function GET() {
           }
           return out
         }
-        metaQueueCounts(jobs as never, accountsOfJob, inMonth, counts)
+        metaQueueCounts(jobs as never, accountsOfJob, inMonth, counts, log)
       }
 
       // waiting on the client: booked and still waiting on their word, or with them before booking
@@ -93,12 +94,12 @@ export async function GET() {
       }
 
       // one row per account with anything this month; Zernio's three numbers replace the jobs' when Zernio answered
-      const rows = new Map<string, Row>(base.map(r => [r.key, { ...r, waiting: [] }]))
+      const rows = new Map<string, Row>(base.map(r => [r.key, { ...r, waiting: [], log: [] }]))
       const blank = (a: SocialAccount): Row => ({
         key: a.id, account_id: a.id, client_id: a.client_id ? String(a.client_id) : null,
         client_name: clientById.get(String(a.client_id))?.name ?? 'No client', platform: String(a.platform),
         username: (a as { username?: string | null }).username ?? (a as { name?: string | null }).name ?? null,
-        went_out: 0, booked: 0, did_not: 0, by_hand: 0, metrics: { interactions: null, likes: null, comments: null, views: null }, waiting: [],
+        went_out: 0, booked: 0, did_not: 0, by_hand: 0, metrics: { interactions: null, likes: null, comments: null, views: null }, waiting: [], log: [],
       })
       for (const a of mine) {
         const c = counts?.get(a.id)
@@ -107,6 +108,8 @@ export async function GET() {
         const r = rows.get(a.id) ?? blank(a)
         if (counts) { r.went_out = c?.went_out ?? 0; r.booked = c?.booked ?? 0; r.did_not = c?.did_not ?? 0 }
         r.waiting = w.sort((x, y) => String(x.at ?? '').localeCompare(String(y.at ?? '')))
+        // newest first, as Zernio's own list
+        r.log = (log.get(a.id) ?? []).sort((x, y) => String(y.at ?? '').localeCompare(String(x.at ?? '')))
         rows.set(a.id, r)
       }
       const list = [...rows.values()]

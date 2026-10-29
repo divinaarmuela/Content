@@ -52,7 +52,7 @@ import { itemStatusLabel } from '../lib/brief-task-core'
 import { compactCount } from '../lib/post-analytics-core'
 import {
   accountHandle, liveCountsLine, postMetricsLine,
-  NO_POSTS_THIS_MONTH, type AccountPostsRow, type WaitingPost,
+  NO_POSTS_THIS_MONTH, type AccountPostsRow, type PostLogEntry, type WaitingPost,
 } from '../lib/overview-posts-core'
 import { NotifyClientButton } from './board/NotifyClientDialog'
 import {
@@ -347,7 +347,42 @@ function StagesThisMonth({ rows, clients }: { rows: ClientStagesRow[] | null; cl
   )
 }
 
-function PostsThisMonth({ rows }: { rows: (AccountPostsRow & { waiting?: WaitingPost[] })[] | null }) {
+const LOG_WORDS: Record<PostLogEntry['status'], { words: string; tone: string }> = {
+  went_out: { words: 'Went out', tone: 'bg-tint-green' },
+  booked: { words: 'Booked', tone: 'bg-tint-blue' },
+  did_not: { words: 'Did not go out', tone: 'bg-tint-red' },
+}
+/** an account's month, post by post, as Zernio's own list (the owner, 29 Oct 2026: "can we make a proper log maybe caption
+ *  like how zernio dashboard is … it should show … which social platforms it published") */
+function PostLog({ entries }: { entries: PostLogEntry[] }) {
+  if (entries.length === 0) return <p className="mt-2 text-[12px] text-muted-foreground">No posts through Zernio this month on this account.</p>
+  return (
+    <ul className="mt-2 flex flex-col divide-y divide-border rounded-inner border border-border bg-background">
+      {entries.map(e => (
+        <li key={e.id} className="flex flex-col gap-1 px-3 py-2">
+          <span className="flex flex-wrap items-center gap-2 text-[12px]">
+            <span className={`rounded-full px-2 py-0.5 font-semibold ${LOG_WORDS[e.status].tone}`}>{LOG_WORDS[e.status].words}</span>
+            {e.at && <span className="tabular-nums text-muted-foreground">{new Date(e.at).toLocaleString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}</span>}
+            <span className="ml-auto flex items-center gap-1.5">
+              {(e.networks?.length ? e.networks : []).map(n => {
+                const icon = <PlatformIcon platform={n.platform} size={16} />
+                const label = `${n.platform}: ${n.status === 'went_out' ? 'went out' : n.status === 'booked' ? 'booked' : n.status === 'did_not' ? 'did not go out' : 'not sent'}`
+                return n.url
+                  ? <a key={n.platform} href={n.url} target="_blank" rel="noreferrer" title={`${label} — open it`} aria-label={`${label} — open it`} className={`rounded p-0.5 hover:bg-muted ${n.status === 'did_not' ? 'opacity-40' : ''}`}>{icon}</a>
+                  : <span key={n.platform} title={label} aria-label={label} className={`p-0.5 ${n.status === 'went_out' ? '' : 'opacity-40'}`}>{icon}</span>
+              })}
+            </span>
+          </span>
+          <span className="line-clamp-2 text-[13px]">{e.caption || <span className="text-muted-foreground">No caption</span>}</span>
+          {e.status === 'did_not' && e.error && <span className="text-[12px] text-accent-red-deep">{e.error}</span>}
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+function PostsThisMonth({ rows }: { rows: (AccountPostsRow & { waiting?: WaitingPost[]; log?: PostLogEntry[] })[] | null }) {
+  const [openKey, setOpenKey] = useState<string | null>(null)
   return (
     <Panel title="Posts this month"
       right={<span className="shrink-0 text-[13px] text-muted-foreground">Every account, in its client&rsquo;s month</span>}>
@@ -373,11 +408,20 @@ function PostsThisMonth({ rows }: { rows: (AccountPostsRow & { waiting?: Waiting
                     <span className="truncate text-[15px] font-semibold">{accountHandle(r)}</span>
                     <span className="truncate text-[13px] text-muted-foreground">{r.client_name}</span>
                   </span>
-                  <span className="text-[13px] tabular-nums text-muted-foreground">{liveCountsLine(r)}</span>
+                  <span className="flex flex-wrap items-center gap-2 text-[13px] tabular-nums text-muted-foreground">
+                    {liveCountsLine(r)}
+                    {r.log !== undefined && (
+                      <button type="button" onClick={() => setOpenKey(k => (k === r.key ? null : r.key))} aria-expanded={openKey === r.key}
+                        className="rounded-full border border-border px-2 py-0.5 text-[12px] font-semibold text-foreground hover:bg-muted">
+                        {openKey === r.key ? 'Hide the posts' : 'See the posts'}
+                      </button>
+                    )}
+                  </span>
                   {metrics && <span className="text-[12px] tabular-nums text-muted-foreground">{metrics}</span>}
                   {/* WAITING ON THE CLIENT (the owner, 29 Oct 2026: "whats scheduled but needs client approval and there should
                       be notify or copy portal link"): each such post, with the one Notify — it emails the client the post's
                       own page, or hands the link to copy */}
+                  {openKey === r.key && <PostLog entries={r.log ?? []} />}
                   {r.client_id && (r.waiting ?? []).map(w => (
                     <span key={w.post_id} className="mt-1 flex flex-wrap items-center gap-2 rounded-inner bg-tint-amber px-2.5 py-1.5 text-[12px]">
                       <span className="font-semibold">{w.booked ? 'Booked — waiting on the client' : 'With the client — not booked yet'}</span>
@@ -624,7 +668,7 @@ export default function OverviewPage() {
    */
   // FROM ZERNIO, ON THE SERVER (29 Oct 2026, the owner: "thats wrong data … make sure we get that from zernio"): the
   // page no longer listens to every publishing job and analytics row; it asks once, and again every five minutes
-  const [accountPosts, setAccountPosts] = useState<(AccountPostsRow & { waiting: WaitingPost[] })[] | null>(null)
+  const [accountPosts, setAccountPosts] = useState<(AccountPostsRow & { waiting: WaitingPost[]; log?: PostLogEntry[] })[] | null>(null)
   useEffect(() => {
     if (!viewer || !isManager) return
     let gone = false
