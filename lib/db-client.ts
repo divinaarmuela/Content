@@ -64,6 +64,12 @@ export function keepUnchanged<T extends { id?: unknown }>(rows: T[], cache: Map<
   return out
 }
 
+/** keepUnchanged for rows a page builds itself (its own `...row` copies): the same object while the contents are the same */
+export function useSteadyRows<T extends { id?: unknown }>(rows: T[]): T[] {
+  const cache = useRef(new Map<string, { key: string; row: T }>())
+  return useMemo(() => keepUnchanged(rows, cache.current), [rows])
+}
+
 export function applyQuery<T>(rows: T[], q: ClientQuery<T>): T[] {
   let out = q.where ? rows.filter(q.where) : rows.slice()
   if (q.orderBy?.length) {

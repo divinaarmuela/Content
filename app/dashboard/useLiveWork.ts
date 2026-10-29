@@ -24,7 +24,7 @@
 
 import { byArchive, isArchived } from '../lib/archive-core'
 import { useEffect, useMemo, useState } from 'react'
-import { useRow, useTable } from '@/lib/db-client'
+import { useRow, useSteadyRows, useTable } from '@/lib/db-client'
 import type {
   AssetVersion, Batch, Client, ContentItem, DeliverableGroup, ItemComment,
   TeamUser, TeamUserClient, WorkKind, WorkflowActivity, BatchComment,
@@ -310,10 +310,13 @@ export function useWorkRows(
 
   // ARCHIVE (the owner, 20 Oct 2026, archive-core): every page that reads these rows — Shoots, Editor, Designer,
   // the Overview, Post approval — sees only what is not archived; the pages' "Archived" view reads the other half
-  const items = useMemo(() => byArchive(allItems), [allItems])
-  const archivedItems = useMemo(() => byArchive(allItems, true), [allItems])
-  const batches = useMemo(() => byArchive(allBatches), [allBatches])
-  const archivedBatches = useMemo(() => byArchive(allBatches, true), [allBatches])
+  // a card or shoot that did not change stays the same object on every page that reads these (29 Oct 2026)
+  const steadyItems = useSteadyRows(allItems)
+  const steadyBatches = useSteadyRows(allBatches)
+  const items = useMemo(() => byArchive(steadyItems), [steadyItems])
+  const archivedItems = useMemo(() => byArchive(steadyItems, true), [steadyItems])
+  const batches = useMemo(() => byArchive(steadyBatches), [steadyBatches])
+  const archivedBatches = useMemo(() => byArchive(steadyBatches, true), [steadyBatches])
 
   // The first paint waits only on what the cards are made of. Credits and
   // slide counts arrive a beat later and only add a line to a card.

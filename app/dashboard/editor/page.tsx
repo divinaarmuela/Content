@@ -9,6 +9,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Plus } from 'lucide-react'
 import { pageCards, type BoardViewer } from '../../lib/board-view-core'
 import { useWorkRows } from '../useLiveWork'
+import { useSteadyRows } from '@/lib/db-client'
 import { useRole } from '../useRole'
 import PageTitle from '../ui/PageTitle'
 import { todayKey } from '../ui/tone'
@@ -146,7 +147,9 @@ export default function EditorPage() {
     person: chosen.person ? (who.get(chosen.person)?.name ?? null) : null,
     client: chosen.client ? (clientNames.get(chosen.client) ?? null) : null,
   }
-  const cards = useMemo(() => applyFilters(allCards, chosen), [allCards, chosen])
+  // a card that did not change stays the same object, so the board leaves it as it is (29 Oct 2026, the boards' speed)
+  const steadyCards = useSteadyRows(allCards)
+  const cards = useMemo(() => applyFilters(steadyCards, chosen), [steadyCards, chosen])
 
   /** "Acknowledge" — one press, one activity row, and the prompt goes */
   const acknowledge = async (card: BoardCardRow) => {

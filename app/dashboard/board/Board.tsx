@@ -2,7 +2,7 @@
 
 import { setArchived } from '../ui/Archived'
 import { mayArchiveCard } from '../../lib/archive-core'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Compass, LayoutGrid, List as ListIcon, X } from 'lucide-react'
@@ -25,6 +25,17 @@ import { postPageHref } from '../../lib/post-page-core'
 import { LaneBoard, type Lane } from '../production/LaneBoard'
 import { BoardCard, CompactCard } from './BoardCard'
 import { EditorBoardCard } from '../editor/EditorBoardCard'
+
+/**
+ * A CARD REDRAWS ONLY WHEN ITS OWN INPUTS CHANGE (29 Oct 2026, the boards' speed — the same as To-dos' rows): the live
+ * tables hand every card back on any change anywhere, so every card on the board drew again, many times a minute with
+ * the team at work. Each card's inputs are kept steady below (the open handler, the managers' names, the archive and
+ * acknowledge handlers), so a card whose own row did not change is left as it is.
+ */
+const BoardCardM = memo(BoardCard)
+const EditorBoardCardM = memo(EditorBoardCard)
+const CompactCardM = memo(CompactCard)
+const NO_MANAGERS: readonly string[] = []
 
 /** COLUMNS OR A LIST (the owner, 16 Sep 2026: "is there a way to make a list
  *  format?") — remembered per page, `?view=list` in the address */
@@ -151,11 +162,29 @@ export function Board({
    *  drag that ends where it began can — so a card that was just dragged
    *  stays shut until the next tick */
   const justDragged = useRef(false)
+  // read through refs, so the handler every card holds stays the same object while the cards and the page move on
+  const cardsRef = useRef(cards)
+  cardsRef.current = cards
+  const onOpenRef = useRef(onOpen)
+  onOpenRef.current = onOpen
   const open = useCallback((card: BoardViewCard) => {
     if (justDragged.current) return
-    const row = cards.find(c => c.id === card.id)
-    onOpen(row ?? (card as BoardCardRow))
-  }, [cards, onOpen])
+    const row = cardsRef.current.find(c => c.id === card.id)
+    onOpenRef.current(row ?? (card as BoardCardRow))
+  }, [])
+  /** a client's managers, the same list object while the names are the same */
+  const managersCache = useRef(new Map<string, readonly string[]>())
+  const managersFor = (clientId: string): readonly string[] => {
+    const next = managersOf?.(clientId) ?? NO_MANAGERS
+    const had = managersCache.current.get(clientId)
+    if (had && had.length === next.length && had.every((x, i) => x === next[i])) return had
+    managersCache.current.set(clientId, next)
+    return next
+  }
+  const archiveCard = useCallback((card: BoardViewCard) => { void setArchived('card', card.id, true) }, [])
+  const onAckRef = useRef(onAcknowledge)
+  onAckRef.current = onAcknowledge
+  const acknowledgeCard = useCallback((card: BoardViewCard) => { onAckRef.current?.(card as BoardCardRow) }, [])
 
   /** the folded lane, shut to a rail or open — remembered per page */
   const isManager = viewer.role === 'account_manager' || viewer.role === 'super_admin'
@@ -307,14 +336,14 @@ export function Board({
           >
             {lane.folded ? (
               // compact: title, client, stage — open the card to act on it
-              <CompactCard card={c} today={today} onOpen={open} names={names} />
+              <CompactCardM card={c} today={today} onOpen={open} names={names} />
             ) : dense ? (
               // THE EDITOR'S SMALL CARD (the owner, 22 Oct 2026: "cards here are too big")
-              <EditorBoardCard
+              <EditorBoardCardM
                 card={c}
                 viewer={viewer}
                 names={names}
-                managers={managersOf?.(c.client_id) ?? []}
+                managers={managersFor(c.client_id)}
                 today={today}
                 busy={busyId === c.id}
                 canEdit={canEdit(c)}
@@ -325,15 +354,15 @@ export function Board({
                 onHandTo={canEdit(c) && (isManager || viewer.role === 'general') ? setHandToFor : undefined}
                 canDelete={mayDeleteCard(viewer, c as never)}
                 onDelete={setDeleteFor}
-                onArchive={mayArchiveCard(viewer, c as never) ? card => { void setArchived('card', card.id, true) } : undefined}
-                onAcknowledge={onAcknowledge ? card => onAcknowledge(card as BoardCardRow) : undefined}
+                onArchive={mayArchiveCard(viewer, c as never) ? archiveCard : undefined}
+                onAcknowledge={onAcknowledge ? acknowledgeCard : undefined}
               />
             ) : (
-              <BoardCard
+              <BoardCardM
                 card={c}
                 viewer={viewer}
                 names={names}
-                managers={managersOf?.(c.client_id) ?? []}
+                managers={managersFor(c.client_id)}
                 today={today}
                 busy={busyId === c.id}
                 canEdit={canEdit(c)}
@@ -356,11 +385,11 @@ export function Board({
                 onDelete={setDeleteFor}
                 // ARCHIVE (20 Oct 2026): off the page and the client's portal, nothing deleted — the managers', or the
                 // card's own editor's or designer's; the page's "Archived" view brings it back
-                onArchive={mayArchiveCard(viewer, c as never) ? card => { void setArchived('card', card.id, true) } : undefined}
+                onArchive={mayArchiveCard(viewer, c as never) ? archiveCard : undefined}
                 stats={statsByItem.get(c.id) ?? null}
                 statsHref={postByItem.has(c.id) ? postPageHref(postByItem.get(c.id)!) : null}
                 booking={bookingByItem.get(c.id) ?? null}
-                onAcknowledge={onAcknowledge ? card => onAcknowledge(card as BoardCardRow) : undefined}
+                onAcknowledge={onAcknowledge ? acknowledgeCard : undefined}
                 page={page}
               />
             )}
