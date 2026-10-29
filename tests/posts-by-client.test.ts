@@ -44,14 +44,27 @@ describe('another month, one press', () => {
 })
 
 describe('scheduled but awaiting the client', () => {
-  it('the scheduled post the client has not approved carries the tag in the log, by the Zernio post it was booked as', () => {
+  it('a scheduled post the client has not approved is held back from Zernio — so it is its own line in the log, tagged', () => {
     const route = readFileSync('app/api/overview/posts-month/route.ts', 'utf8')
-    expect(route).toContain("e.status === 'booked' && (awaitingPost.has(e.id) || awaitingPost.has(e.id.split(':')[0])) ? { ...e, awaiting_client: true } : e")
+    expect(route).toContain("if (!waitingForClient(p as never) || !p.client_id || !inMonth(p.scheduled_for ?? null, String(p.client_id))) continue")
+    expect(route).toContain("networks: chans.map(ch => ({ platform: platformOf.get(ch)!, status: 'booked' as const, url: null })), awaiting_client: true,")
     expect(readFileSync('app/dashboard/page.tsx', 'utf8')).toContain('{e.awaiting_client && <span className="rounded-full bg-tint-amber px-2 py-0.5 font-semibold">Awaiting client approval</span>}')
   })
   it('the panel steps to any month', () => {
     const page = readFileSync('app/dashboard/page.tsx', 'utf8')
     expect(page).toContain("const qs = shownMonth === thisMonth ? '' : `?month=${shownMonth}`")
     expect(readFileSync('app/api/overview/posts-month/route.ts', 'utf8')).toContain("const asked = middleOfMonth(new URL(req.url).searchParams.get('month'))")
+  })
+})
+
+describe('held for the client, counted once', () => {
+  it('a post awaiting the client is one line on the client, under waiting — not also under scheduled', () => {
+    const held = { id: 'post:x', status: 'booked' as const, at: '2026-11-04', caption: 'held', url: null, error: null, awaiting_client: true }
+    const r = { ...row('ig', 'instagram', 0, [held, { ...e('z1', 'instagram', 'booked', '2026-11-05') }]), booked: 1, waiting: [{ post_id: 'x', at: '2026-11-04', booked: true }] }
+    const r2 = { ...row('li', 'linkedin', 0, [held]), waiting: [{ post_id: 'x', at: '2026-11-04', booked: true }] }
+    const [c] = postsByClient([r, r2])
+    expect(c.booked).toBe(1)
+    expect(c.waiting.length).toBe(1)
+    expect(c.log!.map(x => x.id)).toEqual(['z1', 'post:x'])
   })
 })

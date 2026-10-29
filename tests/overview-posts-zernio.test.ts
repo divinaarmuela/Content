@@ -29,9 +29,9 @@ describe('the month, from Zernio', () => {
     metaQueueCounts(jobs as never, () => [{ id: 'ig', client_id: 'c1' }], inOct, c)
     expect(c.get('ig')).toEqual({ went_out: 0, booked: 1, did_not: 0 })
   })
-  it('the line says what is waiting on the client apart from what is simply booked', () => {
+  it('the line says what is waiting on the client beside what is scheduled — held back, so never taken off it', () => {
     const row = { key: 'ig', account_id: 'ig', client_id: 'c1', client_name: 'Justin', platform: 'instagram', username: 'j', went_out: 8, booked: 3, did_not: 0, by_hand: 0, metrics: { interactions: null, likes: null, comments: null, views: null } }
-    expect(liveCountsLine({ ...row, waiting: [{ post_id: 'a', at: null, booked: true }] })).toBe('8 posts went out · 2 posts scheduled · 1 post waiting on the client')
+    expect(liveCountsLine({ ...row, waiting: [{ post_id: 'a', at: null, booked: true }] })).toBe('8 posts went out · 3 posts scheduled · 1 post waiting on the client')
     expect(liveCountsLine({ ...row, booked: 0, went_out: 0 })).toBe('Nothing this month')
   })
   it('the Overview asks the server, and no longer listens to every job and analytics row', () => {

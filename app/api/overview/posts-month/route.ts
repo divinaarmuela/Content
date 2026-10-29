@@ -95,20 +95,19 @@ export async function GET(req: Request) {
         }
       }
 
-      // THE SCHEDULED POSTS STILL WAITING ON THE CLIENT'S YES, by the Zernio post (or our own job) each was booked as —
-      // so the post's own line in the log carries the tag
-      const jobById = new Map(jobs.map(j => [j.id, j]))
-      const awaitingPost = new Set<string>()
-      for (const p of posts as unknown as (SocialPost & { stage?: string; publish_job_ids?: unknown })[]) {
-        if (!waitingForClient(p as never)) continue
-        for (const jid of Array.isArray(p.publish_job_ids) ? p.publish_job_ids.map(String) : []) {
-          awaitingPost.add(`job:${jid}`)
-          const zid = (jobById.get(jid) as { provider_post_id?: string | null } | undefined)?.provider_post_id
-          if (zid) awaitingPost.add(String(zid))
+      // SCHEDULED, AWAITING THE CLIENT'S APPROVAL (the owner, 29 Oct 2026: "add a tag booked in but awaiting client
+      // approval"). Such a post is held back by us until they say yes, so Zernio has no post for it — it goes in the log
+      // as its own line, on every account it is booked for, with the tag
+      const platformOf = new Map(mine.map(a => [a.id, String(a.platform)]))
+      for (const p of posts as unknown as (SocialPost & { stage?: string; channels?: unknown; caption?: unknown })[]) {
+        if (!waitingForClient(p as never) || !p.client_id || !inMonth(p.scheduled_for ?? null, String(p.client_id))) continue
+        const chans = (Array.isArray(p.channels) ? p.channels.map(String) : []).filter(ch => platformOf.has(ch))
+        const entry: PostLogEntry = {
+          id: `post:${p.id}`, status: 'booked', at: p.scheduled_for ?? null, caption: String(p.caption ?? '').trim(), url: null, error: null,
+          networks: chans.map(ch => ({ platform: platformOf.get(ch)!, status: 'booked' as const, url: null })), awaiting_client: true,
         }
+        for (const ch of chans) log.set(ch, [...(log.get(ch) ?? []), entry])
       }
-      const tagged = (e: PostLogEntry): PostLogEntry =>
-        e.status === 'booked' && (awaitingPost.has(e.id) || awaitingPost.has(e.id.split(':')[0])) ? { ...e, awaiting_client: true } : e
 
       // one row per account with anything this month; Zernio's three numbers replace the jobs' when Zernio answered
       const rows = new Map<string, Row>(base.map(r => [r.key, { ...r, waiting: [], log: [] }]))
@@ -127,7 +126,7 @@ export async function GET(req: Request) {
         r.waiting = w.sort((x, y) => String(x.at ?? '').localeCompare(String(y.at ?? '')))
         // newest first, as Zernio's own list
         // what went out and what is booked only (the owner, 29 Oct 2026: "remove the did not go out ones")
-        r.log = (log.get(a.id) ?? []).filter(e => e.status !== 'did_not').map(tagged).sort((x, y) => String(y.at ?? '').localeCompare(String(x.at ?? '')))
+        r.log = (log.get(a.id) ?? []).filter(e => e.status !== 'did_not').sort((x, y) => String(y.at ?? '').localeCompare(String(x.at ?? '')))
         rows.set(a.id, r)
       }
       const list = [...rows.values()]

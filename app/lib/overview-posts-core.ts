@@ -429,13 +429,13 @@ export function metaQueueCounts(
   return into
 }
 
-/** "Went out 8 · Booked 2 · Waiting on the client 1 · Did not go out 1 · 2 by hand" — zeros left out; the booked
- *  number is the ones NOT waiting on the client */
+/** "8 posts went out · 2 posts scheduled · 1 post waiting on the client · 2 posts posted by hand" — zeros left out.
+ *  A post waiting on the client is held back until they say yes (post-stage-core.waitingForClient), so it is not among
+ *  Zernio's scheduled ones and nothing is taken off that number (29 Oct 2026: it was, and November read 8 short) */
 export function liveCountsLine(row: AccountPostsRow & { waiting?: readonly WaitingPost[] }): string {
-  const waitingBooked = (row.waiting ?? []).filter(w => w.booked).length
   // in words, never a bare number after a word — a card can be NAMED "3" (the owner: "sometimes they name the card 3")
   const posts = (n: number) => `${n} post${n === 1 ? '' : 's'}`
-  const booked = row.booked - waitingBooked
+  const booked = row.booked
   const waiting = (row.waiting ?? []).length
   const parts = [
     row.went_out > 0 ? `${posts(row.went_out)} went out` : null,
@@ -471,7 +471,7 @@ export type ClientMonth = {
 }
 
 /** the post a log line is about — `<zernio post>:<network>` is one post on one network; `job:<id>` is one job */
-const postKeyOf = (e: PostLogEntry) => (e.id.startsWith('job:') ? e.id : e.id.split(':')[0] || e.id)
+const postKeyOf = (e: PostLogEntry) => (e.id.startsWith('job:') || e.id.startsWith('post:') ? e.id : e.id.split(':')[0] || e.id)
 const RANK: Record<PostLogEntry['status'], number> = { went_out: 2, booked: 1, did_not: 0 }
 const sumOrNull = (xs: (number | null)[]) => xs.reduce<number | null>((a, b) => (b === null ? a : (a ?? 0) + b), null)
 
@@ -500,7 +500,8 @@ export function postsByClient(rows: readonly MonthRow[]): ClientMonth[] {
       // counted from the posts themselves when Zernio answered; our own jobs have no post to count by, so each
       // channel's number is the client's (the largest — a post on three channels is one post)
       went_out: hasLog ? log.filter(e => e.status === 'went_out').length : Math.max(0, ...channels.map(r => r.went_out)),
-      booked: hasLog ? log.filter(e => e.status === 'booked').length : Math.max(0, ...channels.map(r => r.booked)),
+      // a post awaiting the client is counted once, as waiting on them, not also as scheduled
+      booked: hasLog ? log.filter(e => e.status === 'booked' && !e.awaiting_client).length : Math.max(0, ...channels.map(r => r.booked)),
       did_not: Math.max(0, ...channels.map(r => r.did_not)),
       by_hand: list.reduce((n, r) => n + r.by_hand, 0),
       metrics: {
