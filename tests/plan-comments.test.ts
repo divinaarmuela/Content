@@ -94,3 +94,11 @@ describe('a client’s comment emails only who it may', () => {
     expect(s).toContain('clientId: opts.clientId,')
   })
 })
+
+describe('a sent comment shows at once', () => {
+  it('is drawn the moment it is sent, until the real row arrives — and cannot be replied to or resolved before', () => {
+    const s = readFileSync('app/components/PlanComments.tsx', 'utf8')
+    expect(s).toContain('const waiting = useMemo(() => sent.filter(x => !comments.some(c => arrived(c, x))), [sent, comments])')
+    expect(s).toContain("const sending = t.root.id.startsWith('sending-')")
+  })
+})

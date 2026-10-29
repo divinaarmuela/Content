@@ -35,7 +35,25 @@ export function PlanCommentsProvider({ comments, canComment, post, resolve, need
   needsName?: boolean
   children: React.ReactNode
 }) {
-  const threads = useMemo(() => planThreads(comments), [comments])
+  // SHOWN THE MOMENT IT IS SENT (29 Oct 2026): the page's own refresh takes seconds, and "Comment added" over a page
+  // without it reads as lost — a sent comment is drawn at once, and dropped when the real row arrives
+  const [sent, setSent] = useState<PlanCommentRow[]>([])
+  // the real row: the same words in the same place, written since (the portal adds "— Name" under the words)
+  const arrived = (c: PlanCommentRow, x: PlanCommentRow) => c.body.trim().startsWith(x.body.trim())
+    && (c.parent_id ?? null) === (x.parent_id ?? null) && (c.anchor_part ?? null) === (x.anchor_part ?? null)
+    && Date.parse(c.created_at) >= Date.parse(x.created_at) - 60_000
+  const waiting = useMemo(() => sent.filter(x => !comments.some(c => arrived(c, x))), [sent, comments])
+  const all = useMemo(() => [...comments, ...waiting], [comments, waiting])
+  const threads = useMemo(() => planThreads(all), [all])
+  const postAndShow = useCallback<Ctx['post']>(async input => {
+    const ok = await post(input)
+    if (ok) setSent(cur => [...cur, {
+      id: `sending-${Date.now()}`, created_at: new Date().toISOString(), body: input.body,
+      anchor_part: input.part ?? null, anchor_quote: input.quote ?? null, parent_id: input.parent_id ?? null,
+      author_name: input.name || 'You', resolved: false,
+    }])
+    return ok
+  }, [post])
   const [picked, setPicked] = useState<{ part: string; quote: string } | null>(null)
   // WORDS SELECTED IN A PART: read on every change of the selection, so a mouse, a finger and a keyboard all work
   useEffect(() => {
@@ -55,7 +73,7 @@ export function PlanCommentsProvider({ comments, canComment, post, resolve, need
     document.addEventListener('selectionchange', read)
     return () => document.removeEventListener('selectionchange', read)
   }, [canComment])
-  const value = useMemo(() => ({ threads, canComment, picked, setPicked, post, resolve, needsName }), [threads, canComment, picked, post, resolve, needsName])
+  const value = useMemo(() => ({ threads, canComment, picked, setPicked, post: postAndShow, resolve, needsName }), [threads, canComment, picked, postAndShow, resolve, needsName])
   return (
     <PlanCtx.Provider value={value}>
       {children}
@@ -132,6 +150,8 @@ function Thread({ t }: { t: PlanThread<PlanCommentRow> }) {
   const [busy, setBusy] = useState(false)
   const [name, setName] = useName()
   const resolved = !!t.root.resolved
+  // a comment still on its way has no row to reply to or resolve yet
+  const sending = t.root.id.startsWith('sending-')
   const send = async () => {
     if (!reply.trim()) return
     if (ctx.needsName && !name.trim()) { toast.error('Add your name so the team knows who replied.'); return }
@@ -152,7 +172,7 @@ function Thread({ t }: { t: PlanThread<PlanCommentRow> }) {
         </div>
       ))}
       <div className="flex flex-wrap items-center gap-2 pt-1">
-        {ctx.canComment && !resolved && (
+        {ctx.canComment && !resolved && !sending && (
           <>
             {ctx.needsName && <input value={name} onChange={e => setName(e.target.value)} placeholder="Your name" aria-label="Your name"
               className="h-9 w-32 rounded-full border border-border bg-background px-3 text-[12px]" />}
@@ -163,7 +183,7 @@ function Thread({ t }: { t: PlanThread<PlanCommentRow> }) {
               className="h-9 rounded-full bg-foreground px-3 text-[12px] font-semibold text-background disabled:opacity-50">Reply</button>
           </>
         )}
-        {ctx.canComment && (
+        {ctx.canComment && !sending && (
           <button type="button" disabled={busy} onClick={async () => { setBusy(true); await ctx.resolve(t.root.id, !resolved); setBusy(false) }}
             className="ml-auto inline-flex h-9 items-center gap-1 rounded-full border border-border px-3 text-[12px] font-semibold hover:bg-muted">
             <Check className="h-3.5 w-3.5" aria-hidden /> {resolved ? 'Open again' : 'Resolve'}
