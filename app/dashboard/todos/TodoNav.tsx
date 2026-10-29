@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Bell, CheckCircle2, FolderKanban, Search, Users } from 'lucide-react'
+import { Bell, CheckCircle2, FolderKanban, Search, Star, Users } from 'lucide-react'
 import { agoWords, inboxDay, inboxFor, type InboxItem, type InboxTab } from '../../lib/todo-inbox-core'
 
 /**
@@ -86,7 +86,10 @@ export function ProjectIcon({ p, size = 20 }: { p: Pick<Project, 'name' | 'logo'
   )
 }
 
-export function TodoSidebar({ place, onPlace, projects, unread, everyone, people = [] }: {
+export function TodoSidebar({ place, onPlace, projects, unread, everyone, people = [], starred, onStar }: {
+  /** this person's starred projects (Abby, 29 Oct 2026) — shown first, under Starred */
+  starred?: ReadonlySet<string>
+  onStar?: (projectId: string, on: boolean) => void
   place: Place
   onPlace: (p: Place) => void
   projects: Project[]
@@ -97,17 +100,26 @@ export function TodoSidebar({ place, onPlace, projects, unread, everyone, people
   everyone: boolean
 }) {
   const item = (on: boolean) => `flex min-h-9 w-full items-center gap-2.5 rounded-md px-2.5 text-left text-[14px] ${on ? 'bg-foreground/[0.08] font-semibold text-foreground' : 'text-foreground/80 hover:bg-muted'}`
-  const mine = projects.filter(p => p.mine)
-  const others = projects.filter(p => !p.mine)
+  const isStar = (p: Project) => !!starred?.has(p.id)
+  const stars = projects.filter(isStar)
+  const mine = projects.filter(p => p.mine && !isStar(p))
+  const others = projects.filter(p => !p.mine && !isStar(p))
   const list = (ps: Project[]) => ps.map(p => {
     const key = `project:${p.id}` as Place
+    const on = isStar(p)
     return (
-      <li key={p.id}>
-        <button type="button" onClick={() => onPlace(key)} aria-current={place === key ? 'page' : undefined} className={item(place === key)} title={p.name}>
+      <li key={p.id} className="group/proj relative">
+        <button type="button" onClick={() => onPlace(key)} aria-current={place === key ? 'page' : undefined} className={`${item(place === key)} pr-8`} title={p.name}>
           <ProjectIcon p={p} />
           {/* the name alone, as Asana's sidebar has it — no count (21 Oct 2026) */}
           <span className="min-w-0 flex-1 truncate">{p.name}</span>
         </button>
+        {onStar && (
+          <button type="button" onClick={() => onStar(p.id, !on)} aria-pressed={on} aria-label={on ? `Take the star off ${p.name}` : `Star ${p.name}`} title={on ? 'Remove from Starred' : 'Add to Starred'}
+            className={`absolute right-1 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md hover:bg-muted ${on ? 'text-accent-amber' : 'text-muted-foreground opacity-0 focus:opacity-100 group-hover/proj:opacity-100'}`}>
+            <Star className="h-3.5 w-3.5" fill={on ? 'currentColor' : 'none'} aria-hidden />
+          </button>
+        )}
       </li>
     )
   })
@@ -137,6 +149,12 @@ export function TodoSidebar({ place, onPlace, projects, unread, everyone, people
       {people.length > 0 && <PeopleSearch people={people} place={place} onPlace={onPlace} item={item} />}
       {projects.length > 0 && (
         <div className="mt-3 hidden min-h-0 flex-1 flex-col gap-1 overflow-y-auto [overflow-anchor:none] md:flex">
+          {stars.length > 0 && (
+            <>
+              <p className="flex items-center gap-1.5 px-2.5 text-[12px] font-semibold text-muted-foreground"><Star className="h-3.5 w-3.5" aria-hidden /> Starred</p>
+              <ul className="mb-2 flex flex-col gap-0.5">{list(stars)}</ul>
+            </>
+          )}
           <p className="flex items-center gap-1.5 px-2.5 text-[12px] font-semibold text-muted-foreground"><FolderKanban className="h-3.5 w-3.5" aria-hidden /> Projects</p>
           {/* "Other clients" only when some are yours: with none of your own it was a heading over every project (21 Oct 2026) */}
           {mine.length > 0 && others.length > 0 ? (
@@ -145,7 +163,7 @@ export function TodoSidebar({ place, onPlace, projects, unread, everyone, people
               <p className="mt-2 px-2.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Other clients</p>
               <ul className="flex flex-col gap-0.5">{list(others)}</ul>
             </>
-          ) : <ul className="flex flex-col gap-0.5">{list(projects)}</ul>}
+          ) : <ul className="flex flex-col gap-0.5">{list(projects.filter(p => !isStar(p)))}</ul>}
         </div>
       )}
       {/* on a phone, the projects as one picker under the tabs */}

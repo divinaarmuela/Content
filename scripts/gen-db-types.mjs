@@ -492,6 +492,15 @@ const GHOST_TABLES = {
   // todo_projects — THE AGENCY'S OWN PROJECTS (29 Oct 2026: Asana's "- Team Operations", "- Tech Team" … had nowhere
   //   to go — To-dos' projects were clients only). A to-do on one carries the project's id in client_id, so its
   //   sections, its board and its filter are a client project's; member_ids is who sees it (with every super admin).
+  // todo_project_stars — A PERSON'S STARRED PROJECTS (Abby, 29 Oct 2026: "can we add a Star? … favorite the project board so
+  //   it comes up on top"). One row per person and project, id `<team_user_id>__<project_id>`; a project id is a client's
+  //   or one of the agency's own (todo_projects).
+  todo_project_stars: [
+    ['id', col('string', false)],
+    ['team_user_id', col('string', false)],
+    ['project_id', col('string', false)],
+    ['created_at', col('string', false)],
+  ],
   todo_projects: [
     ['id', col('string', false)],
     ['name', col('string', false)],

@@ -99,6 +99,7 @@ export type TableName =
   | 'todo_comments'
   | 'todo_fields'
   | 'todo_project_sections'
+  | 'todo_project_stars'
   | 'todo_projects'
   | 'todo_sections'
   | 'todos'
@@ -1745,6 +1746,13 @@ export interface TodoProjectSection {
   updated_at: string
 }
 
+export interface TodoProjectStar {
+  id: string
+  team_user_id: string
+  project_id: string
+  created_at: string
+}
+
 export interface TodoProject {
   id: string
   name: string
@@ -1961,6 +1969,7 @@ export const TABLE_COLUMNS = {
   todo_comments: ['id', 'todo_id', 'author_id', 'body', 'mentions', 'likes', 'edited_at', 'asana_gid', 'created_at', 'updated_at'],
   todo_fields: ['id', 'name', 'type', 'options', 'position', 'asana_gid', 'created_at', 'updated_at'],
   todo_project_sections: ['id', 'client_id', 'name', 'position', 'asana_gid', 'created_at', 'updated_at'],
+  todo_project_stars: ['id', 'team_user_id', 'project_id', 'created_at'],
   todo_projects: ['id', 'name', 'colour', 'member_ids', 'asana_gid', 'created_at', 'updated_at'],
   todo_sections: ['id', 'owner_id', 'name', 'position', 'created_at', 'updated_at'],
   todos: ['id', 'prospect_id', 'title', 'note', 'status', 'due_date', 'owner_id', 'created_by', 'client_id', 'files', 'created_at', 'updated_at', 'done_at', 'done_by', 'parent_id', 'followers', 'likes', 'section_id', 'position', 'blocked_by', 'asana_gid', 'repeat', 'repeat_of', 'fields', 'project_section_id'],
@@ -2070,6 +2079,7 @@ export const NULLABLE_COLUMNS = {
   todo_comments: ['author_id', 'mentions', 'likes', 'edited_at', 'asana_gid'],
   todo_fields: ['options', 'position', 'asana_gid'],
   todo_project_sections: ['position', 'asana_gid'],
+  todo_project_stars: [],
   todo_projects: ['colour', 'member_ids', 'asana_gid'],
   todo_sections: ['position'],
   todos: ['prospect_id', 'note', 'due_date', 'owner_id', 'created_by', 'client_id', 'files', 'done_at', 'done_by', 'parent_id', 'followers', 'likes', 'section_id', 'position', 'blocked_by', 'asana_gid', 'repeat', 'repeat_of', 'fields', 'project_section_id'],
@@ -2186,6 +2196,7 @@ export const JSON_COLUMNS = {
   todo_comments: ['mentions', 'likes'],
   todo_fields: ['options'],
   todo_project_sections: [],
+  todo_project_stars: [],
   todo_projects: ['member_ids'],
   todo_sections: [],
   todos: ['files', 'followers', 'likes', 'blocked_by', 'repeat', 'fields'],
@@ -2301,6 +2312,7 @@ export const JSON_ARRAY_COLUMNS = {
   todo_comments: [],
   todo_fields: [],
   todo_project_sections: [],
+  todo_project_stars: [],
   todo_projects: [],
   todo_sections: [],
   todos: [],

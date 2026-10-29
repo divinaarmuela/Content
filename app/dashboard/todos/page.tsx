@@ -3,7 +3,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowUpDown, Calendar, ChevronDown, ChevronLeft, ChevronRight, Filter, GitBranch, GripVertical, Hourglass, Keyboard, Layers, MessageSquare,
-  MoreHorizontal, Paperclip, Plus, Sparkles, ThumbsUp, X, Repeat } from 'lucide-react'
+  MoreHorizontal, Paperclip, Plus, Sparkles, Star, ThumbsUp, X, Repeat } from 'lucide-react'
 import { toast } from 'sonner'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -71,6 +71,14 @@ export default function TodosPage() {
   // the clients I am on — a client's project shows everyone's to-dos for it (20 Oct 2026, todo-core)
   const { rows: links } = useTable<{ id: string; team_user_id: string; client_id: string }>('team_user_clients')
   const [projects, setProjects] = useState<Project[]>([])
+  // THIS PERSON'S STARRED PROJECTS (Abby, 29 Oct 2026: "can we add a Star? … so it comes up on top") — live, by their id
+  const starBy = useMemo(() => ({ team_user_id: me?.id ?? '' }), [me?.id])
+  const { rows: starRows } = useTable<{ id: string; team_user_id: string; project_id: string }>('todo_project_stars' as never, { by: starBy as never, enabled: !!me?.id })
+  const starred = useMemo(() => new Set(starRows.map(r => r.project_id)), [starRows])
+  const star = useCallback((projectId: string, on: boolean) => {
+    void fetch('/api/todos/projects/star', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ project_id: projectId, on }) })
+      .then(r => { if (!r.ok) toast.error('Could not save the star') }).catch(() => toast.error('Could not save the star'))
+  }, [])
   // the agency's own projects this person is on count as theirs, like a client they are on (29 Oct 2026)
   const myClientIds = useMemo(() => (me ? [...links.filter(l => l.team_user_id === me.id).map(l => l.client_id), ...projects.filter(p => p.internal && p.mine).map(p => p.id)] : []), [links, me, projects])
   const internalProjects = useMemo(() => projects.filter(p => p.internal).map(p => ({ id: p.id, name: p.name })), [projects])
@@ -393,7 +401,7 @@ export default function TodosPage() {
     // the sidebar in its own column; everything else in the second (Asana's layout)
     <div className="grid min-h-0 grid-cols-1 md:grid-cols-[220px_minmax(0,1fr)] md:gap-x-6 md:[&>*:not([data-todo-nav])]:col-start-2" data-todos-page>
       <div data-todo-nav className="md:col-start-1 md:row-start-1 md:[grid-row:1/span_999]">
-        <TodoSidebar place={place} onPlace={goPlace} projects={projects} unread={inbox.unread} everyone={viewer?.role === 'super_admin'}
+        <TodoSidebar place={place} onPlace={goPlace} projects={projects} unread={inbox.unread} everyone={viewer?.role === 'super_admin'} starred={starred} onStar={star}
           people={people.filter(p => p.id !== me?.id).sort((a, b) => a.name.localeCompare(b.name))} />
       </div>
       <header className="flex flex-col border-b border-border">
@@ -402,7 +410,14 @@ export default function TodosPage() {
           <h1 className="text-[20px] font-semibold tracking-tight">
             {place === 'inbox' ? 'Inbox' : place === 'all' ? 'Everyone’s tasks' : personId ? `${(names.get(personId) ?? 'Someone').split(/[\s@]/)[0]}’s tasks` : project ? project.name : projectId ? 'Project' : 'My tasks'}
           </h1>
-          {project && <span className="text-[13px] text-muted-foreground">everyone&rsquo;s tasks for this client, by who is doing them</span>}
+          {project && (
+            <button type="button" onClick={() => star(project.id, !starred.has(project.id))} aria-pressed={starred.has(project.id)}
+              aria-label={starred.has(project.id) ? `Take the star off ${project.name}` : `Star ${project.name}`} title={starred.has(project.id) ? 'Remove from Starred' : 'Add to Starred'}
+              className={`flex h-8 w-8 items-center justify-center rounded-md hover:bg-muted ${starred.has(project.id) ? 'text-accent-amber' : 'text-muted-foreground'}`}>
+              <Star className="h-4 w-4" fill={starred.has(project.id) ? 'currentColor' : 'none'} aria-hidden />
+            </button>
+          )}
+          {project && <span className="text-[13px] text-muted-foreground">everyone&rsquo;s tasks {project.internal ? 'on this project' : 'for this client'}, by who is doing them</span>}
 
           <button type="button" onClick={() => setHelpOpen(true)} aria-label="Keyboard shortcuts" title="Keyboard shortcuts (?)" className="ml-auto flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted"><Keyboard className="h-4 w-4" aria-hidden /></button>
         </div>
