@@ -223,6 +223,14 @@ export default function BriefCanvas({
     const shift = width > v.width - 2 * pad || left < v.left + pad ? v.left + pad - left
       : left + width > v.right - pad ? v.right - pad - (left + width) : 0
     bar.style.left = `${base + shift / s}px`
+    // ABOVE THE CARD ONLY WHERE IT FITS UNDER THE BOARD'S OWN ADD BAR — a wrapped toolbar is taller, and on a card
+    // near the top it slid under that bar (30 Oct 2026); below the card otherwise
+    const add = vp.querySelector<HTMLElement>('[data-canvas-add]')
+    const ceiling = (add ? add.getBoundingClientRect().bottom : v.top) + pad
+    const above = wrap.getBoundingClientRect().top - 12 - bar.offsetHeight >= ceiling
+    bar.style.bottom = above ? 'calc(100% + 12px)' : ''
+    bar.style.top = above ? '' : 'calc(100% + 12px)'
+    bar.style.transformOrigin = above ? 'bottom center' : 'top center'
   }, [])
 
   const paint = useCallback(() => {
@@ -2036,9 +2044,9 @@ export default function BriefCanvas({
           </div>
         )}
 
-        {/* toolbar */}
+        {/* toolbar — wraps inside a narrow board rather than running off its right edge (30 Oct 2026) */}
         {!viewOnly && (
-          <div className="absolute left-3 top-3 flex items-center gap-1 rounded-inner border border-border bg-surface/90 p-1 shadow-sm backdrop-blur">
+          <div data-canvas-add className="absolute left-3 top-3 flex max-w-[calc(100%-1.5rem)] flex-wrap items-center gap-1 rounded-inner border border-border bg-surface/90 p-1 shadow-sm backdrop-blur">
             <Button size="sm" variant="ghost" className="h-7 gap-1.5 px-2 text-secondary-13"
               onClick={() => addCard({ kind: 'note', text: '', color: 'yellow' })}>
               <StickyNote className="h-3.5 w-3.5" /> Note
