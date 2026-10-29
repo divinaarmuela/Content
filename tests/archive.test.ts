@@ -76,7 +76,9 @@ describe('archive — who, and every place it hides from', () => {
       expect(src(p)).toContain('<ArchivedList')
     }
     const hook = src('app/dashboard/useLiveWork.ts')
-    expect(hook).toContain('const items = useMemo(() => byArchive(allItems), [allItems])')
-    expect(hook).toContain('const batches = useMemo(() => byArchive(allBatches), [allBatches])')
+    // the steady copies of the same rows (29 Oct 2026, the boards' speed)
+    expect(hook).toContain('const steadyItems = useSteadyRows(allItems)')
+    expect(hook).toContain('const items = useMemo(() => byArchive(steadyItems), [steadyItems])')
+    expect(hook).toContain('const batches = useMemo(() => byArchive(steadyBatches), [steadyBatches])')
   })
 })
