@@ -210,8 +210,11 @@ function Sheet({ title, onClose, children }: { title: string; onClose: () => voi
     // ABOVE THE LIGHT/DARK PILL (z-50), WITH THE CLOSE ALWAYS IN SIGHT (the owner, 2 Oct 2026: "the close button top
     // right is hard to see because of the top bar"; "no scroll indicator?"): the title bar and Close stay pinned while
     // the post scrolls under them, and a fade at the foot says there is more below
-    <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/60 sm:items-center" role="dialog" aria-modal="true" aria-label={title} onClick={onClose}>
-      <div className="relative flex max-h-[92vh] w-full max-w-[560px] flex-col overflow-hidden rounded-t-2xl border border-border bg-popover sm:rounded-2xl" onClick={e => e.stopPropagation()}>
+    // ON A PHONE, THE SCREEN YOU CAN SEE (29 Oct 2026: "mobile portal schedule approve popup is too large can't exit from
+    // top"): vh counts the space behind the browser's own bars, so a 92vh sheet ran up under them and took Close out of
+    // reach. It is sized on the visible height (dvh) and kept clear of the notch, so Close is always on screen.
+    <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/60 pt-[max(env(safe-area-inset-top),12px)] sm:items-center sm:pt-0" role="dialog" aria-modal="true" aria-label={title} onClick={onClose}>
+      <div className="relative flex max-h-[85vh] w-full max-w-[560px] flex-col overflow-hidden rounded-t-2xl border border-border bg-popover supports-[height:100dvh]:max-h-[85dvh] sm:rounded-2xl sm:supports-[height:100dvh]:max-h-[92dvh]" onClick={e => e.stopPropagation()}>
         <div className="flex shrink-0 items-center gap-3 border-b border-border bg-popover px-5 py-3">
           <p className="min-w-0 flex-1 text-[17px] font-semibold leading-snug">{title}</p>
           <button type="button" onClick={onClose} aria-label="Close"
@@ -264,7 +267,8 @@ function BookedSheet({ token, tile, network, onClose }: { token: string; tile: S
       <p className="mb-3 text-[13px] text-muted-foreground">
         {tile.when ? `Goes out ${tile.when}` : 'Booked'} · <span className="font-semibold text-foreground">{REVIEW_WORDS[tile.state]}</span>
       </p>
-      <div className="mx-auto w-full max-w-[420px]">
+      {/* smaller on a phone, so a tall reel leaves the answer close by */}
+      <div className="mx-auto w-full max-w-[min(420px,30dvh)] sm:max-w-[420px]">
         {frame ? <PostPreviewFrame preview={frame as never} /> : <Cover tile={tile} className="aspect-square w-full rounded" />}
         <OwnCaptions captions={tile.own_captions} except={frame?.platform ?? null} />
       </div>
