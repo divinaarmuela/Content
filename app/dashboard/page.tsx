@@ -349,7 +349,7 @@ function StagesThisMonth({ rows, clients }: { rows: ClientStagesRow[] | null; cl
 
 const LOG_WORDS: Record<PostLogEntry['status'], { words: string; tone: string }> = {
   went_out: { words: 'Went out', tone: 'bg-tint-green' },
-  booked: { words: 'Booked', tone: 'bg-tint-blue' },
+  booked: { words: 'Scheduled', tone: 'bg-tint-blue' },
   did_not: { words: 'Did not go out', tone: 'bg-tint-red' },
 }
 /** an account's month, post by post, as Zernio's own list (the owner, 29 Oct 2026: "can we make a proper log maybe caption
@@ -362,11 +362,12 @@ function PostLog({ entries }: { entries: PostLogEntry[] }) {
         <li key={e.id} className="flex flex-col gap-1 px-3 py-2">
           <span className="flex flex-wrap items-center gap-2 text-[12px]">
             <span className={`rounded-full px-2 py-0.5 font-semibold ${LOG_WORDS[e.status].tone}`}>{LOG_WORDS[e.status].words}</span>
+            {e.awaiting_client && <span className="rounded-full bg-tint-amber px-2 py-0.5 font-semibold">Awaiting client approval</span>}
             {e.at && <span className="tabular-nums text-muted-foreground">{new Date(e.at).toLocaleString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}</span>}
             <span className="ml-auto flex items-center gap-1.5">
               {(e.networks?.length ? e.networks : []).map(n => {
                 const icon = <PlatformIcon platform={n.platform} size={16} />
-                const label = `${n.platform}: ${n.status === 'went_out' ? 'went out' : n.status === 'booked' ? 'booked' : n.status === 'did_not' ? 'did not go out' : 'not sent'}`
+                const label = `${n.platform}: ${n.status === 'went_out' ? 'went out' : n.status === 'booked' ? 'scheduled' : n.status === 'did_not' ? 'did not go out' : 'not sent'}`
                 return n.url
                   ? <a key={n.platform} href={n.url} target="_blank" rel="noreferrer" title={`${label} — open it`} aria-label={`${label} — open it`} className={`rounded p-0.5 hover:bg-muted ${n.status === 'did_not' ? 'opacity-40' : ''}`}>{icon}</a>
                   : <span key={n.platform} title={label} aria-label={label} className={`p-0.5 ${n.status === 'went_out' ? '' : 'opacity-40'}`}>{icon}</span>
@@ -381,15 +382,37 @@ function PostLog({ entries }: { entries: PostLogEntry[] }) {
   )
 }
 
-function PostsThisMonth({ rows }: { rows: MonthRow[] | null }) {
+/** "2026-10" for a moment, in Melbourne — the agency's month */
+const monthKeyOf = (d: Date) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Melbourne', year: 'numeric', month: '2-digit' }).format(d).slice(0, 7)
+const shiftMonth = (key: string, by: number) => {
+  const [y, m] = key.split('-').map(Number)
+  const d = new Date(Date.UTC(y, m - 1 + by, 1))
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`
+}
+const monthWords = (key: string) => new Date(`${key}-15T00:00:00Z`).toLocaleDateString('en-AU', { month: 'long', year: 'numeric', timeZone: 'UTC' })
+
+function PostsThisMonth({ rows, month, thisMonth, onMonth }: { rows: MonthRow[] | null; month: string; thisMonth: string; onMonth: (m: string) => void }) {
   const [openKey, setOpenKey] = useState<string | null>(null)
   // ONE LINE PER CLIENT (the owner, 29 Oct 2026: "why does it show two social platforms from same client it should be
   // one … like justin engelke and then underneath its the booked / posted for those platforms"): the client, its posts
   // counted once each, then every account under it with that account's own numbers
   const clients = useMemo(() => (rows ? postsByClient(rows) : null), [rows])
   return (
-    <Panel title="Posts this month"
-      right={<span className="shrink-0 text-[13px] text-muted-foreground">Every client, in its own month</span>}>
+    <Panel title={month === thisMonth ? 'Posts this month' : `Posts in ${monthWords(month)}`}
+      right={
+        // ANOTHER MONTH, ONE PRESS (the owner, 29 Oct 2026: "make a quick button for other months too nicely")
+        <span className="flex shrink-0 items-center gap-1" role="group" aria-label="Which month">
+          <button type="button" onClick={() => onMonth(shiftMonth(month, -1))} aria-label={`Back to ${monthWords(shiftMonth(month, -1))}`}
+            className="flex h-9 w-9 items-center justify-center rounded-full border border-border hover:bg-muted"><ChevronLeft className="h-4 w-4" aria-hidden /></button>
+          <span className="min-w-[8.5rem] text-center text-[13px] font-semibold tabular-nums" aria-live="polite">{monthWords(month)}</span>
+          <button type="button" onClick={() => onMonth(shiftMonth(month, 1))} aria-label={`On to ${monthWords(shiftMonth(month, 1))}`}
+            className="flex h-9 w-9 items-center justify-center rounded-full border border-border hover:bg-muted"><ChevronRight className="h-4 w-4" aria-hidden /></button>
+          {month !== thisMonth && (
+            <button type="button" onClick={() => onMonth(thisMonth)}
+              className="ml-1 h-9 rounded-full border border-border px-3 text-[12px] font-semibold hover:bg-muted">This month</button>
+          )}
+        </span>
+      }>
       {clients === null && <Skeleton className="h-32 w-full rounded-inner" />}
       {clients !== null && clients.length === 0 && (
         <p className="py-6 text-center text-[13px] text-muted-foreground">{NO_POSTS_THIS_MONTH}</p>
@@ -434,7 +457,7 @@ function PostsThisMonth({ rows }: { rows: MonthRow[] | null }) {
                 {/* WAITING ON THE CLIENT (the owner, 29 Oct 2026): each such post once, with the one Notify */}
                 {c.client_id && c.waiting.map(w => (
                   <span key={w.post_id} className="mt-1 flex flex-wrap items-center gap-2 rounded-inner bg-tint-amber px-2.5 py-1.5 text-[12px]">
-                    <span className="font-semibold">{w.booked ? 'Booked — waiting on the client' : 'With the client — not booked yet'}</span>
+                    <span className="font-semibold">{w.booked ? 'Scheduled — waiting on the client' : 'With the client — not scheduled yet'}</span>
                     {w.at && <span className="text-muted-foreground">{new Date(w.at).toLocaleString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}</span>}
                     {w.booked && <NotifyClientButton clientId={c.client_id!} tab="scheduling" id={w.post_id} className="ml-auto h-8 rounded-full px-3 text-[12px] font-semibold" />}
                   </span>
@@ -678,15 +701,21 @@ export default function OverviewPage() {
   // FROM ZERNIO, ON THE SERVER (29 Oct 2026, the owner: "thats wrong data … make sure we get that from zernio"): the
   // page no longer listens to every publishing job and analytics row; it asks once, and again every five minutes
   const [accountPosts, setAccountPosts] = useState<(AccountPostsRow & { waiting: WaitingPost[]; log?: PostLogEntry[] })[] | null>(null)
+  // which month the panel shows — this one unless a person stepped to another
+  const thisMonth = useMemo(() => monthKeyOf(new Date()), [todayKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  const [postsMonth, setPostsMonth] = useState<string | null>(null)
+  const shownMonth = postsMonth ?? thisMonth
   useEffect(() => {
     if (!viewer || !isManager) return
     let gone = false
-    const load = () => fetch('/api/overview/posts-month', { cache: 'no-store' }).then(r => (r.ok ? r.json() : null))
+    setAccountPosts(null)
+    const qs = shownMonth === thisMonth ? '' : `?month=${shownMonth}`
+    const load = () => fetch(`/api/overview/posts-month${qs}`, { cache: 'no-store' }).then(r => (r.ok ? r.json() : null))
       .then(j => { if (!gone && j?.rows) setAccountPosts(j.rows) }).catch(() => undefined)
     void load()
     const t = window.setInterval(load, 5 * 60_000)
     return () => { gone = true; window.clearInterval(t) }
-  }, [viewer, isManager, todayKey])
+  }, [viewer, isManager, todayKey, shownMonth, thisMonth])
 
 
   /** which clients have a channel connected — only a scheduler's tiles ask */
@@ -1163,7 +1192,7 @@ export default function OverviewPage() {
       {data?.manager && isManager && (
         <>
           {/* the ledger first, then what each account actually posted */}
-          <PostsThisMonth rows={accountPosts} />
+          <PostsThisMonth rows={accountPosts} month={shownMonth} thisMonth={thisMonth} onMonth={m => setPostsMonth(m === thisMonth ? null : m)} />
           <StagesThisMonth rows={stageRows} clients={live.tables.clients.rows} />
           <div className="grid gap-6 lg:grid-cols-2">
             {/* what is waiting on YOU, beside who else is behind */}

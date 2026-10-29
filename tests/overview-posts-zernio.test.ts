@@ -31,12 +31,12 @@ describe('the month, from Zernio', () => {
   })
   it('the line says what is waiting on the client apart from what is simply booked', () => {
     const row = { key: 'ig', account_id: 'ig', client_id: 'c1', client_name: 'Justin', platform: 'instagram', username: 'j', went_out: 8, booked: 3, did_not: 0, by_hand: 0, metrics: { interactions: null, likes: null, comments: null, views: null } }
-    expect(liveCountsLine({ ...row, waiting: [{ post_id: 'a', at: null, booked: true }] })).toBe('8 posts went out · 2 posts booked · 1 post waiting on the client')
+    expect(liveCountsLine({ ...row, waiting: [{ post_id: 'a', at: null, booked: true }] })).toBe('8 posts went out · 2 posts scheduled · 1 post waiting on the client')
     expect(liveCountsLine({ ...row, booked: 0, went_out: 0 })).toBe('Nothing this month')
   })
   it('the Overview asks the server, and no longer listens to every job and analytics row', () => {
     const page = readFileSync('app/dashboard/page.tsx', 'utf8')
-    expect(page).toContain("fetch('/api/overview/posts-month', { cache: 'no-store' })")
+    expect(page).toContain("const load = () => fetch(`/api/overview/posts-month${qs}`, { cache: 'no-store' })")
     expect(page).not.toContain("useTable<PublishJob>('publish_jobs'")
     expect(page).not.toContain("useTable<PostAnalytic>('post_analytics'")
     expect(page).toContain('<NotifyClientButton clientId={c.client_id!} tab="scheduling" id={w.post_id}')

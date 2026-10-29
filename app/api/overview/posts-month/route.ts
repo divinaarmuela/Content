@@ -8,7 +8,7 @@ import { byHandRows } from '../../../lib/post-outcome-core'
 import { waitingForClient } from '../../../lib/post-stage-core'
 import { DEFAULT_TZ, monthInZone } from '../../../lib/timezone-core'
 import {
-  jobTargets, metaQueueCounts, monthPostsByAccount, zernioMonthCounts,
+  jobTargets, metaQueueCounts, middleOfMonth, monthPostsByAccount, zernioMonthCounts,
   type AccountPostsRow, type LiveCounts, type MonthJob, type PostLogEntry, type WaitingPost, type ZernioPostLite,
 } from '../../../lib/overview-posts-core'
 
@@ -26,18 +26,20 @@ type Row = AccountPostsRow & { waiting: WaitingPost[]; log: PostLogEntry[] }
 const cache = new Map<string, { at: number; body: { rows: Row[]; source: 'zernio' | 'jobs'; at: string } }>()
 const KEEP_MS = 2 * 60 * 1000
 
-export async function GET() {
+export async function GET(req: Request) {
   return withRequestCache(async () => {
     try {
       const user = await requireRole('scheduler')
       if (user.role !== 'super_admin' && user.role !== 'account_manager') throw new AuthzError('Managers only', 403)
       const links = await table<TeamUserClient>('team_user_clients').list({ by: { team_user_id: user.id } }).catch(() => [] as TeamUserClient[])
       const scoped = accessibleClientIdsOf({ id: user.id, role: user.role } as never, links as never)
-      const key = scoped === null ? 'all' : [...scoped].sort().join(',')
+      // ANY MONTH (the owner, 29 Oct 2026: "make a quick button for other months too"): ?month=2026-11; this month without it
+      const asked = middleOfMonth(new URL(req.url).searchParams.get('month'))
+      const key = `${scoped === null ? 'all' : [...scoped].sort().join(',')}|${asked ? asked.toISOString().slice(0, 7) : 'now'}`
       const hit = cache.get(key)
       if (hit && Date.now() - hit.at < KEEP_MS) return NextResponse.json(hit.body)
 
-      const now = new Date()
+      const now = asked ?? new Date()
       const [accounts, clients, jobs, analytics, items, posts] = await Promise.all([
         table<SocialAccount>('social_accounts').list(),
         table<Client>('clients').list(),
@@ -93,6 +95,21 @@ export async function GET() {
         }
       }
 
+      // THE SCHEDULED POSTS STILL WAITING ON THE CLIENT'S YES, by the Zernio post (or our own job) each was booked as —
+      // so the post's own line in the log carries the tag
+      const jobById = new Map(jobs.map(j => [j.id, j]))
+      const awaitingPost = new Set<string>()
+      for (const p of posts as unknown as (SocialPost & { stage?: string; publish_job_ids?: unknown })[]) {
+        if (!waitingForClient(p as never)) continue
+        for (const jid of Array.isArray(p.publish_job_ids) ? p.publish_job_ids.map(String) : []) {
+          awaitingPost.add(`job:${jid}`)
+          const zid = (jobById.get(jid) as { provider_post_id?: string | null } | undefined)?.provider_post_id
+          if (zid) awaitingPost.add(String(zid))
+        }
+      }
+      const tagged = (e: PostLogEntry): PostLogEntry =>
+        e.status === 'booked' && (awaitingPost.has(e.id) || awaitingPost.has(e.id.split(':')[0])) ? { ...e, awaiting_client: true } : e
+
       // one row per account with anything this month; Zernio's three numbers replace the jobs' when Zernio answered
       const rows = new Map<string, Row>(base.map(r => [r.key, { ...r, waiting: [], log: [] }]))
       const blank = (a: SocialAccount): Row => ({
@@ -110,14 +127,14 @@ export async function GET() {
         r.waiting = w.sort((x, y) => String(x.at ?? '').localeCompare(String(y.at ?? '')))
         // newest first, as Zernio's own list
         // what went out and what is booked only (the owner, 29 Oct 2026: "remove the did not go out ones")
-        r.log = (log.get(a.id) ?? []).filter(e => e.status !== 'did_not').sort((x, y) => String(y.at ?? '').localeCompare(String(x.at ?? '')))
+        r.log = (log.get(a.id) ?? []).filter(e => e.status !== 'did_not').map(tagged).sort((x, y) => String(y.at ?? '').localeCompare(String(x.at ?? '')))
         rows.set(a.id, r)
       }
       const list = [...rows.values()]
         .filter(r => r.went_out + r.booked + r.by_hand + r.waiting.length > 0)
         .sort((a, b) => (b.went_out + b.booked + b.by_hand) - (a.went_out + a.booked + a.by_hand)
           || a.client_name.localeCompare(b.client_name) || String(a.platform ?? '').localeCompare(String(b.platform ?? '')))
-      const body = { rows: list, source: (counts ? 'zernio' : 'jobs') as 'zernio' | 'jobs', at: now.toISOString() }
+      const body = { rows: list, source: (counts ? 'zernio' : 'jobs') as 'zernio' | 'jobs', at: new Date().toISOString() }
       cache.set(key, { at: Date.now(), body })
       return NextResponse.json(body)
     } catch (e) {

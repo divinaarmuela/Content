@@ -356,7 +356,10 @@ export type ZernioPostLite = { _id?: string; status?: string | null; scheduledFo
  *  caption like how zernio dashboard is"): when, what happened, its words, where it is, and why it did not go */
 export type PostLogEntry = { id: string; status: 'went_out' | 'booked' | 'did_not'; at: string | null; caption: string; url: string | null; error: string | null
   /** every network this same post was on, with how each went (the owner: "it should show … which social platforms it published") */
-  networks?: { platform: string; status: 'went_out' | 'booked' | 'did_not' | 'other'; url: string | null }[] }
+  networks?: { platform: string; status: 'went_out' | 'booked' | 'did_not' | 'other'; url: string | null }[]
+  /** SCHEDULED, BUT THE CLIENT HAS NOT APPROVED IT YET (the owner, 29 Oct 2026: "add a tag booked in but awaiting client
+   *  approval") — it goes only once they do */
+  awaiting_client?: boolean }
 export type LiveCounts = { went_out: number; booked: number; did_not: number }
 export type WaitingPost = { post_id: string; at: string | null; booked: boolean }
 
@@ -436,7 +439,7 @@ export function liveCountsLine(row: AccountPostsRow & { waiting?: readonly Waiti
   const waiting = (row.waiting ?? []).length
   const parts = [
     row.went_out > 0 ? `${posts(row.went_out)} went out` : null,
-    booked > 0 ? `${posts(booked)} booked` : null,
+    booked > 0 ? `${posts(booked)} scheduled` : null,
     waiting > 0 ? `${posts(waiting)} waiting on the client` : null,
     // "did not go out" is not shown (the owner, 29 Oct 2026: "remove the did not go out ones")
     row.by_hand > 0 ? `${posts(row.by_hand)} posted by hand` : null,
@@ -512,4 +515,15 @@ export function postsByClient(rows: readonly MonthRow[]): ClientMonth[] {
     })
   }
   return out.sort((a, b) => (b.went_out + b.booked + b.by_hand) - (a.went_out + a.booked + a.by_hand) || a.client_name.localeCompare(b.client_name))
+}
+
+/** "2026-11" → a moment in the middle of that month, so every client's own zone reads it as that month; null for
+ *  anything else, or a month more than two years either side */
+export function middleOfMonth(month: string | null, now = new Date()): Date | null {
+  const m = /^(\d{4})-(\d{2})$/.exec(month ?? '')
+  if (!m) return null
+  const y = Number(m[1]), mo = Number(m[2])
+  if (mo < 1 || mo > 12) return null
+  const at = new Date(Date.UTC(y, mo - 1, 15, 12))
+  return Math.abs(at.getTime() - now.getTime()) > 2 * 366 * 86_400_000 ? null : at
 }

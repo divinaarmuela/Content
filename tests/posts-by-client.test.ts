@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import { readFileSync } from 'node:fs'
 import { postsByClient, type MonthRow } from '../app/lib/overview-posts-core'
 
 // 29 Oct 2026, the owner: "why does it show two social platforms from same client it should be one … like justin
@@ -28,5 +29,29 @@ describe('posts this month, one line per client', () => {
   it('two clients stay two lines, busiest first', () => {
     const other = { ...row('k', 'tiktok', 6, [1, 2, 3, 4, 5, 6].map(i => e(`k${i}`, 'tiktok', 'went_out', '2026-10-0' + i))), client_id: 'kode', client_name: 'Anthony Chimirri' }
     expect(postsByClient([row('ig', 'instagram', 1, [e('p1', 'instagram', 'went_out', '2026-10-02')]), other]).map(c => c.client_name)).toEqual(['Anthony Chimirri', 'Justin Engelke'])
+  })
+})
+
+describe('another month, one press', () => {
+  it('a month is read in its middle, so every client zone agrees; nonsense and far-off months are refused', async () => {
+    const { middleOfMonth } = await import('../app/lib/overview-posts-core')
+    const now = new Date('2026-10-29T10:00:00Z')
+    expect(middleOfMonth('2026-11', now)?.toISOString()).toBe('2026-11-15T12:00:00.000Z')
+    expect(middleOfMonth('2026-13', now)).toBeNull()
+    expect(middleOfMonth('nope', now)).toBeNull()
+    expect(middleOfMonth('2031-01', now)).toBeNull()
+  })
+})
+
+describe('scheduled but awaiting the client', () => {
+  it('the scheduled post the client has not approved carries the tag in the log, by the Zernio post it was booked as', () => {
+    const route = readFileSync('app/api/overview/posts-month/route.ts', 'utf8')
+    expect(route).toContain("e.status === 'booked' && (awaitingPost.has(e.id) || awaitingPost.has(e.id.split(':')[0])) ? { ...e, awaiting_client: true } : e")
+    expect(readFileSync('app/dashboard/page.tsx', 'utf8')).toContain('{e.awaiting_client && <span className="rounded-full bg-tint-amber px-2 py-0.5 font-semibold">Awaiting client approval</span>}')
+  })
+  it('the panel steps to any month', () => {
+    const page = readFileSync('app/dashboard/page.tsx', 'utf8')
+    expect(page).toContain("const qs = shownMonth === thisMonth ? '' : `?month=${shownMonth}`")
+    expect(readFileSync('app/api/overview/posts-month/route.ts', 'utf8')).toContain("const asked = middleOfMonth(new URL(req.url).searchParams.get('month'))")
   })
 })
