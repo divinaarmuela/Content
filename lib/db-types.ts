@@ -278,6 +278,9 @@ export interface BatchComment {
   batch_id: string
   author_id: string | null
   body: string
+  anchor_part: string | null
+  anchor_quote: string | null
+  parent_id: string | null
   card_id: string | null
   assigned_to: string | null
   resolved: boolean | null
@@ -1889,7 +1892,7 @@ export const TABLE_COLUMNS = {
   assistant_prefs: ['clerk_user_id', 'email', 'instructions', 'updated_at', 'updated_by', 'id'],
   audience_snapshots: ['id', 'account_id', 'client_id', 'month', 'audience', 'created_at', 'updated_at'],
   automation_sends: ['id', 'automation_id', 'client_id', 'account_id', 'platform_post_id', 'comment_id', 'commenter', 'commenter_name', 'comment_text', 'status', 'error', 'reply_status', 'reply_error', 'dm_text', 'created_at', 'updated_at'],
-  batch_comments: ['id', 'created_at', 'batch_id', 'author_id', 'body', 'card_id', 'assigned_to', 'resolved'],
+  batch_comments: ['id', 'created_at', 'batch_id', 'author_id', 'body', 'anchor_part', 'anchor_quote', 'parent_id', 'card_id', 'assigned_to', 'resolved'],
   batches: ['status', 'concept', 'location', 'shot_list', 'planned_deliverables', 'reference_media', 'locked_at', 'locked_by', 'shot_at', 'proposal_id', 'archived_at', 'archived_by', 'share_board', 'board_name', 'last_edited_by', 'last_edited_at', 'canvas_cards', 'drive_folder_id', 'drive_url', 'plan_reviewed_at', 'plan_reviewed_by', 'plan_sent_back_at', 'plan_sent_back_by', 'plan_sent_back_note', 'shared_with_client', 'id', 'created_at', 'updated_at', 'client_id', 'title', 'description', 'shoot_date', 'month', 'year', 'owner_id', 'brief_skipped', 'deliver_only', 'footage_due_nudged_at', 'footage_received_at', 'footage_received_by', 'footage_receipt_nudged_at', 'footage_url', 'for_contact_id', 'portal_show_business', 'portal_show_person', 'created_by', 'aligned_by', 'client_confirmed_by', 'reminder_sent_by', 'client_shared_at', 'client_shared_by', 'client_decision', 'client_decided_at', 'client_decision_note', 'plan_review_skipped', 'plan_review_skipped_by', 'plan_review_skipped_at', 'review_asked_at', 'review_asked_by', 'review_asked_to', 'scripts', 'objective', 'script', 'call_time', 'talent', 'props_wardrobe', 'client_availability', 'editor_priorities', 'edit_deadline', 'editor_id', 'crew_ids', 'acknowledgements', 'brief_shared_at', 'brief_shared_by', 'aligned_at', 'client_confirmed_at', 'go_at', 'go_by', 'reminder_sent_at', 'footage_handed_at', 'footage_handed_by', 'late_nudged_at', 'go_override_reason', 'go_override_by', 'late_share_nudged_at'],
   board_comments: ['id', 'board_id', 'item_id', 'author_id', 'author_name', 'author_role', 'body', 'created_at', 'resolved_at'],
   board_items: ['id', 'board_id', 'kind', 'x', 'y', 'w', 'h', 'z', 'colour', 'text', 'url', 'label', 'child_board_id', 'column_title', 'parent_item_id', 'created_by', 'created_at', 'updated_at'],
@@ -1999,7 +2002,7 @@ export const NULLABLE_COLUMNS = {
   assistant_prefs: [],
   audience_snapshots: ['client_id', 'audience'],
   automation_sends: ['commenter_name', 'comment_text', 'error', 'reply_status', 'reply_error', 'dm_text'],
-  batch_comments: ['author_id', 'card_id', 'assigned_to', 'resolved'],
+  batch_comments: ['author_id', 'anchor_part', 'anchor_quote', 'parent_id', 'card_id', 'assigned_to', 'resolved'],
   batches: ['status', 'concept', 'location', 'shot_list', 'planned_deliverables', 'reference_media', 'locked_at', 'locked_by', 'shot_at', 'proposal_id', 'archived_at', 'archived_by', 'share_board', 'board_name', 'last_edited_by', 'last_edited_at', 'canvas_cards', 'drive_folder_id', 'drive_url', 'plan_reviewed_at', 'plan_reviewed_by', 'plan_sent_back_at', 'plan_sent_back_by', 'plan_sent_back_note', 'shared_with_client', 'description', 'shoot_date', 'month', 'year', 'owner_id', 'brief_skipped', 'deliver_only', 'footage_due_nudged_at', 'footage_received_at', 'footage_received_by', 'footage_receipt_nudged_at', 'footage_url', 'for_contact_id', 'portal_show_business', 'portal_show_person', 'created_by', 'aligned_by', 'client_confirmed_by', 'reminder_sent_by', 'client_shared_at', 'client_shared_by', 'client_decision', 'client_decided_at', 'client_decision_note', 'plan_review_skipped', 'plan_review_skipped_by', 'plan_review_skipped_at', 'review_asked_at', 'review_asked_by', 'review_asked_to', 'scripts', 'objective', 'script', 'call_time', 'talent', 'props_wardrobe', 'client_availability', 'editor_priorities', 'edit_deadline', 'editor_id', 'crew_ids', 'acknowledgements', 'brief_shared_at', 'brief_shared_by', 'aligned_at', 'client_confirmed_at', 'go_at', 'go_by', 'reminder_sent_at', 'footage_handed_at', 'footage_handed_by', 'late_nudged_at', 'go_override_reason', 'go_override_by', 'late_share_nudged_at'],
   board_comments: ['author_id', 'resolved_at'],
   board_items: ['colour', 'text', 'url', 'label', 'child_board_id', 'column_title', 'parent_item_id', 'created_by'],

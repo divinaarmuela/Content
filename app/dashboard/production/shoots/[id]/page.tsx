@@ -20,6 +20,7 @@ import BriefCanvas, { type CanvasOp } from './BriefCanvas'
 import PlanReadOnly from './PlanReadOnly'
 import BriefBoardComments from './BriefBoardComments'
 import BriefComments from './BriefComments'
+import TeamPlanComments from './TeamPlanComments'
 import {
   EditorCardPanel, PeoplePanel, PlanParts, StageStrip, WherePanel,
   type CrewRow, type ShootSopBatch, type TeamRow,
@@ -433,7 +434,10 @@ export default function ShootPage({ params }: { params: Promise<{ id: string }> 
             </CardContent>
           </Card>}
 
-          <PlanParts batch={batch} itemCount={deliverableItems.length} booked={booked} onPatch={patchThenLoad} onShots={editShots} team={team} />
+          {/* comments on the plan's words: the boxes hand over what is picked in them (29 Oct 2026) */}
+          <TeamPlanComments batchId={batch.id}>
+            <PlanParts batch={batch} itemCount={deliverableItems.length} booked={booked} onPatch={patchThenLoad} onShots={editShots} team={team} />
+          </TeamPlanComments>
 
           <Card>
             <CardContent className="p-4">

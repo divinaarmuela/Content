@@ -13,6 +13,9 @@ import { clientByPortalToken } from '../../../lib/portal-owner'
 import { formatStamp, reviewPath } from '../../../lib/video-review-core'
 import { clipCommentWhere } from '../../../lib/editing-portal-core'
 import { clientMaySeeTeamBoard, teamBoardCommentPath, teamBoardCommentSubject } from '../../../lib/team-board-comments-core'
+import { checkAnchor } from '../../../lib/plan-comments-core'
+import { clientMaySee } from '../../../lib/comment-visibility-core'
+import type { BatchComment } from '@/lib/db-types'
 
 /**
  * A comment from the portal — on a piece, on a shoot, or pinned to ONE card
@@ -35,6 +38,21 @@ export async function POST(req: Request) {
 
     const kind = String(body.kind ?? '')
     const id = String(body.id ?? '')
+
+    // RESOLVE A THREAD ON THE PLAN'S WORDS (29 Oct 2026) — the client may mark one they can see dealt with, or open it
+    if (kind === 'shoot' && body.action === 'resolve') {
+      const foundBatch = await table<Batch>('batches').get(id)
+      if (!foundBatch || foundBatch.client_id !== client.id || !foundBatch.shared_with_client) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+      const c = await table<BatchComment>('batch_comments').get(String(body.comment_id ?? '')).catch(() => null)
+      const withRole = c ? (await attachRole(c)) : null
+      if (!c || c.batch_id !== foundBatch.id || !(c as { anchor_part?: string | null }).anchor_part || (c as { parent_id?: string | null }).parent_id || !withRole || !clientMaySee(withRole as never)) {
+        return NextResponse.json({ error: 'Not found' }, { status: 404 })
+      }
+      await table('batch_comments').update(c.id, { resolved: body.resolved !== false })
+      announceBatchChange({ batch_id: foundBatch.id, client_id: client.id, status: 'brief', kind: 'updated' })
+      return NextResponse.json({ ok: true })
+    }
+
     const text = String(body.body ?? '').trim().slice(0, 4000)
     const authorName = String(body.author_name ?? '').replace(/["<>\r\n]/g, '').trim().slice(0, 60)
     if (!text) return NextResponse.json({ error: 'Write a comment first' }, { status: 400 })
@@ -96,10 +114,25 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: 'That card is not on the board any more.' }, { status: 404 })
       }
       const cardLabel = card ? canvasCardLabel(card) : null
+      // ON THE PLAN'S OWN WORDS (29 Oct 2026): the part and the words must still be in the plan; a reply answers a
+      // first comment on this shoot that the client can see
+      const anchor = checkAnchor(batch as never, body.anchor_part ?? null, body.anchor_quote ?? null)
+      if (anchor && !anchor.ok) return NextResponse.json({ error: anchor.error }, { status: 409 })
+      let parentId: string | null = null
+      if (body.parent_id) {
+        const parent = await table<BatchComment>('batch_comments').get(String(body.parent_id)).catch(() => null)
+        const withRole = parent ? await attachRole(parent) : null
+        if (!parent || parent.batch_id !== batch.id || (parent as { parent_id?: string | null }).parent_id || !withRole || !clientMaySee(withRole as never)) {
+          return NextResponse.json({ error: 'That comment is not there any more.' }, { status: 404 })
+        }
+        parentId = parent.id
+      }
       try {
         await table('batch_comments').insert({
           batch_id: batch.id, author_id: actor.id, body: signed, resolved: false,
           card_id: card ? card.id : null,
+          ...(anchor?.ok && !parentId ? { anchor_part: anchor.part, anchor_quote: anchor.quote } : {}),
+          ...(parentId ? { parent_id: parentId } : {}),
         })
       } catch {
         // the thread could not be written — say so rather than pretending the
@@ -113,7 +146,8 @@ export async function POST(req: Request) {
       })
       // the manager, and whoever created the shoot — the board is theirs
       await notifyManagersOfComment({
-        clientId: client.id, speaker, subjectTitle: commentSubject(batch.title, cardLabel), body: text,
+        clientId: client.id, speaker, subjectTitle: commentSubject(batch.title, cardLabel),
+        body: anchor?.ok && !parentId ? `On “${anchor.quote}”: ${text}` : text,
         dashboardPath: shootCommentPath(batch.id, card?.id),
         alsoUserIds: [batch.owner_id],
       }).catch(e => console.error('portal comment notify error:', e))
@@ -152,4 +186,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Something went wrong — try again' }, { status: 500 })
   }
   })
+}
+
+/** a comment with its writer's role, as the visibility rule reads it */
+async function attachRole(c: BatchComment): Promise<BatchComment & { team_users: { role?: string | null } | null }> {
+  const who = c.author_id ? await table<{ id: string; role?: string | null }>('team_users').get(String(c.author_id)).catch(() => null) : null
+  return { ...c, team_users: who ? { role: who.role ?? null } : null }
 }

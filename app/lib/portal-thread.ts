@@ -229,9 +229,11 @@ export async function getPortalShootDetail(rawToken: string, batchId: string): P
       plan_state: planState(brief?.status, b.status as string, true),
       brief_item_id: brief?.id ?? null,
     },
+    // the comments on the plan's own words are drawn under those words, on the card (PlanComments) — not here as well
     comments: (comments as unknown as {
       id: string; created_at: string; body: string; card_id?: string | null; team_users: AuthorRow
-    }[]).map(r => {
+      anchor_part?: string | null; parent_id?: string | null
+    }[]).filter(r => !r.anchor_part && !r.parent_id).map(r => {
       const c = asComment(r)
       if (c.card_id) c.card_label = canvasCardLabel(findCanvasCard(canvasCards, c.card_id))
       return c

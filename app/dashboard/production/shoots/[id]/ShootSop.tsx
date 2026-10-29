@@ -30,6 +30,7 @@ import DrivePullBar from '../../../board/DrivePullBar'
 import { copyText } from '../../../../lib/copy-text-client'
 import { NotifyClientButton } from '../../../board/NotifyClientDialog'
 import { LinksIn } from '../../../../components/LinkedText'
+import { PlanPartThreads, usePickFromBox } from '../../../../components/PlanComments'
 
 /**
  * THE SHOOT PAGE, AS THE SHOOT BRIEF SOP §3 READS (rebuilt 13 Sep 2026 —
@@ -133,6 +134,9 @@ export function PlanParts({ batch, itemCount, booked, onPatch, onShots, team }: 
   team?: readonly { id: string; name: string; role: string }[]
 }) {
   const list = briefChecklist(batch, { itemCount })
+  // COMMENTS ON THE PLAN'S WORDS (29 Oct 2026): select words in a box → comment on them (TeamPlanComments, on the page)
+  const pick = usePickFromBox()
+  const COMMENTABLE = ['objective', 'talent', 'props_wardrobe', 'editor_priorities', 'location']
   const [newLine, setNewLine] = useState('')
   const planned = planLines(batch.planned_deliverables)
   const shots = batch.shot_list ?? []
@@ -176,15 +180,19 @@ export function PlanParts({ batch, itemCount, booked, onPatch, onShots, team }: 
   const area = (field: keyof ShootSopBatch, placeholder: string, rows = 2) => (
     <>
       <Textarea key={String(batch[field] ?? '')} defaultValue={String(batch[field] ?? '')} rows={rowsFor(String(batch[field] ?? ''), rows, 14, 55)}
-        placeholder={placeholder} aria-label={placeholder} className="min-h-11 text-[15px]" onBlur={save(field)} />
+        placeholder={placeholder} aria-label={placeholder} className="min-h-11 text-[15px]" onBlur={save(field)}
+        onSelect={COMMENTABLE.includes(String(field)) ? pick(String(field)) : undefined} />
       <LinksIn text={String(batch[field] ?? '')} className="mt-1.5" />
+      {COMMENTABLE.includes(String(field)) && <PlanPartThreads part={String(field)} />}
     </>
   )
   const line = (field: keyof ShootSopBatch, placeholder: string) => (
     <>
       <Input key={String(batch[field] ?? '')} defaultValue={String(batch[field] ?? '')}
-        placeholder={placeholder} aria-label={placeholder} className="h-11 text-[15px]" onBlur={save(field)} />
+        placeholder={placeholder} aria-label={placeholder} className="h-11 text-[15px]" onBlur={save(field)}
+        onSelect={COMMENTABLE.includes(String(field)) ? pick(String(field)) : undefined} />
       <LinksIn text={String(batch[field] ?? '')} className="mt-1.5" />
+      {COMMENTABLE.includes(String(field)) && <PlanPartThreads part={String(field)} />}
     </>
   )
   const addLine = async () => {
@@ -218,6 +226,7 @@ export function PlanParts({ batch, itemCount, booked, onPatch, onShots, team }: 
               <div className="flex items-center gap-1.5">
                 <span className="w-5 shrink-0 text-right font-mono text-[12px] text-muted-foreground">{i + 1}</span>
                 <Input key={`${l.id}:${l.title}`} defaultValue={l.title} aria-label={`Line ${i + 1} of what is coming out`}
+                  onSelect={pick(`deliverable:${l.id}`)}
                   className="h-11 min-w-0 flex-1 text-[15px]"
                   onBlur={e => {
                     const title = e.target.value.trim()
@@ -230,6 +239,7 @@ export function PlanParts({ batch, itemCount, booked, onPatch, onShots, team }: 
                 </button>
               </div>
               <LinksIn text={l.title} className="pl-7" />
+              <div className="pl-7"><PlanPartThreads part={`deliverable:${l.id}`} /></div>
               </div>
             ))}
             <div className="flex items-center gap-1.5">
@@ -261,6 +271,7 @@ export function PlanParts({ batch, itemCount, booked, onPatch, onShots, team }: 
                 {/* keyed by the shot's id ONLY — keying on the text remounted
                     the field on every echo and dropped focus mid-word */}
                 <Input key={shot.id} defaultValue={shot.text} aria-label={`Shot ${i + 1}`}
+                  onSelect={pick(`shot:${shot.id}`)}
                   className="h-11 min-w-0 flex-1 text-[15px]"
                   onBlur={e => {
                     const v = e.target.value.trim()
@@ -273,6 +284,7 @@ export function PlanParts({ batch, itemCount, booked, onPatch, onShots, team }: 
                 </button>
               </div>
               <LinksIn text={shot.text} className="pl-9" />
+              <div className="pl-9"><PlanPartThreads part={`shot:${shot.id}`} /></div>
               </div>
             ))}
             <Button variant="outline" className={`${outlineBtn} w-fit`}

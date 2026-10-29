@@ -23,6 +23,7 @@ import {
 import { PostMetricsRow } from './PortalSections'
 import PortalPostCard from './PortalPostCard'
 import { LinkedText } from '../LinkedText'
+import { PlanCommentsProvider, PlanPart, PlanPartThreads } from '../PlanComments'
 
 /**
  * ONE CARD ON THE CLIENT'S PORTAL — a piece of work or a shoot.
@@ -123,6 +124,30 @@ function WorkOrShootCard({ card, amName, accent, surface, className }: CardProps
   const refresh = () => {
     router.refresh()
     if ('loggedIn' in surface) surface.onChanged()
+  }
+
+  /** COMMENTS ON THE PLAN'S OWN WORDS (29 Oct 2026): the share link writes through the portal's door, a signed-in
+   *  client through the team's thread route — the same rows either way */
+  const planTarget = card.kind === 'shoot' && card.comment_target?.kind === 'shoot' ? card.comment_target.id : null
+  const planPost = async (input: { body: string; part?: string; quote?: string; parent_id?: string; name?: string }) => {
+    if (!planTarget) return false
+    const res = token
+      ? await fetch('/api/portal/comment', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token, kind: 'shoot', id: planTarget, body: input.body, author_name: input.name ?? '', anchor_part: input.part, anchor_quote: input.quote, parent_id: input.parent_id }) })
+      : await fetch(`/api/production/batches/${planTarget}/comments`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ body: input.body, anchor_part: input.part, anchor_quote: input.quote, parent_id: input.parent_id }) })
+    const j = await res.json().catch(() => ({}))
+    if (!res.ok) { toast.error(j.error ?? 'That comment did not go through — try again.'); return false }
+    refresh()
+    return true
+  }
+  const planResolve = async (commentId: string, on: boolean) => {
+    if (!planTarget) return false
+    const res = token
+      ? await fetch('/api/portal/comment', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token, kind: 'shoot', id: planTarget, action: 'resolve', comment_id: commentId, resolved: on }) })
+      : await fetch(`/api/production/batches/${planTarget}/comments`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ comment_id: commentId, resolved: on }) })
+    const j = await res.json().catch(() => ({}))
+    if (!res.ok) { toast.error(j.error ?? 'That did not go through — try again.'); return false }
+    refresh()
+    return true
   }
 
   /** Approve sends NO note — one tap is the whole decision. Asking for a
@@ -283,7 +308,9 @@ function WorkOrShootCard({ card, amName, accent, surface, className }: CardProps
       <p className="mt-1 whitespace-pre-wrap break-words leading-relaxed">{splitSlideTag(c.body).rest}</p>
     </div>
   )
-  const general = comments.filter(c => splitSlideTag(c.body).index === null)
+  // the comments on the plan's own words sit under those words (PlanComments), not in the card's thread as well
+  const threadComments = comments.filter(c => !c.anchor_part && !c.parent_id)
+  const general = threadComments.filter(c => splitSlideTag(c.body).index === null)
 
   // ── swipe from the right approves (phones) ──
   const start = useRef<{ x: number; y: number } | null>(null)
@@ -505,36 +532,49 @@ function WorkOrShootCard({ card, amName, accent, surface, className }: CardProps
               {planOpen ? 'Hide the plan' : 'See the plan'}
             </button>
             {planOpen && (
+              <PlanCommentsProvider comments={comments} canComment={!!planTarget} post={planPost} resolve={planResolve} needsName={!!token}>
               <div className={cn('flex flex-col gap-2.5 rounded-tile p-3 text-[14px]', ink ? 'bg-foreground/[0.06]' : 'bg-foreground/[0.04]')}>
+                {planTarget && <p className="text-[12px] text-muted-foreground">Select any words of the plan to comment on them.</p>}
                 {/* links in the plan open (29 Oct 2026) — the same words, each address pressable */}
                 {card.shoot.concept && <p className="whitespace-pre-wrap leading-relaxed"><LinkedText text={card.shoot.concept} /></p>}
                 {card.shoot.planned_deliverables.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5">
-                    {card.shoot.planned_deliverables.map(d => (
-                      <Chip key={d.id} tone="surface"><LinkedText text={d.title} /></Chip>
-                    ))}
+                  <div className="flex flex-col gap-1.5">
+                    <div className="flex flex-wrap gap-1.5">
+                      {card.shoot.planned_deliverables.map(d => (
+                        <Chip key={d.id} tone="surface"><PlanPart as="span" part={`deliverable:${d.id}`} text={d.title} /></Chip>
+                      ))}
+                    </div>
+                    {card.shoot.planned_deliverables.map(d => <PlanPartThreads key={d.id} part={`deliverable:${d.id}`} />)}
                   </div>
                 )}
                 {card.shoot.shot_list.length > 0 && (
                   <ul className="flex flex-col gap-1">
                     {card.shoot.shot_list.map(r => (
-                      <li key={r.id} className="flex items-start gap-2">
-                        <span className={cn('mt-[3px] flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[4px] border', 'border-foreground/40')}>
-                          {r.done && <Check className="h-3 w-3" />}
+                      <li key={r.id} className="flex flex-col">
+                        <span className="flex items-start gap-2">
+                          <span className={cn('mt-[3px] flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[4px] border', 'border-foreground/40')}>
+                            {r.done && <Check className="h-3 w-3" />}
+                          </span>
+                          <span className={r.done ? 'opacity-60' : ''}><PlanPart as="span" part={`shot:${r.id}`} text={r.text} />{r.qty ? <span className="opacity-50"> ×{r.qty}</span> : null}</span>
                         </span>
-                        <span className={r.done ? 'opacity-60' : ''}><LinkedText text={r.text} />{r.qty ? <span className="opacity-50"> ×{r.qty}</span> : null}</span>
+                        <span className="pl-5"><PlanPartThreads part={`shot:${r.id}`} /></span>
                       </li>
                     ))}
                   </ul>
                 )}
                 {/* the scripts, one block per video — the same words the team's PDF prints */}
-                {scriptWords(card.shoot.scripts).map(w => (
-                  <div key={w.n} className="flex flex-col gap-1 border-t border-foreground/10 pt-2">
-                    <p className="font-semibold">{w.heading}</p>
-                    <p className="whitespace-pre-wrap leading-relaxed"><LinkedText text={w.lines.join('\n')} /></p>
-                  </div>
-                ))}
+                {scriptWords(card.shoot.scripts).map((w, i) => {
+                  const part = `script:${card.shoot!.scripts[i]?.id ?? i}`
+                  return (
+                    <div key={w.n} className="flex flex-col gap-1 border-t border-foreground/10 pt-2">
+                      <p className="font-semibold">{w.heading}</p>
+                      <PlanPart part={part} text={w.lines.join('\n')} as="div" className="whitespace-pre-wrap leading-relaxed" />
+                      <PlanPartThreads part={part} />
+                    </div>
+                  )
+                })}
               </div>
+              </PlanCommentsProvider>
             )}
           </div>
         )}
@@ -612,12 +652,12 @@ function WorkOrShootCard({ card, amName, accent, surface, className }: CardProps
               <MessageCircle className="h-4 w-4" />
               {assets.length > 0
                 ? (general.length === 0 ? 'Comment on the whole post' : `${general.length} on the whole post`)
-                : (comments.length === 0 ? 'Leave a comment' : `${comments.length} ${comments.length === 1 ? 'comment' : 'comments'}`)}
+                : (threadComments.length === 0 ? 'Leave a comment' : `${threadComments.length} ${threadComments.length === 1 ? 'comment' : 'comments'}`)}
               <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', open && 'rotate-180')} />
             </button>
             {open && (
               <div className="flex flex-col gap-2.5">
-                {(assets.length > 0 ? general : comments).map(commentLine)}
+                {(assets.length > 0 ? general : threadComments).map(commentLine)}
                 {onSlide === null && composer(null)}
                 {onSlide !== null && (
                   <p className={cn('text-[13px]', muted)}>Your comment box is under {assets[onSlide]?.type === 'video' ? 'video' : 'photo'} {onSlide + 1}.</p>

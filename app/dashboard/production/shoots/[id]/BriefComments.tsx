@@ -51,7 +51,8 @@ export default function BriefComments({ batchId, cards = [] }: {
     const res = await fetch(`/api/production/batches/${batchId}/comments`)
     if (res.ok) {
       const json = await res.json()
-      setRows(json.comments ?? [])
+      // the comments on the plan's own words sit under those words (TeamPlanComments), not here as well
+      setRows((json.comments ?? []).filter((c: { anchor_part?: string | null; parent_id?: string | null }) => !c.anchor_part && !c.parent_id))
       setViewerId(json.viewer_id ?? null)
     } else setRows([])
   }, [batchId])

@@ -10,6 +10,9 @@
  * replies on the same card), and their own words wherever they left them.
  */
 type Row = {
+  id?: string
+  /** a reply's first comment (plan-comments-core, 29 Oct 2026) */
+  parent_id?: string | null
   card_id?: string | null
   assigned_to?: string | null
   body?: string | null
@@ -22,14 +25,23 @@ export function isTeamOnlyComment(c: Pick<Row, 'assigned_to' | 'body'>): boolean
   return /^\s*@\S/.test(String(c.body ?? ''))
 }
 
-/** may the client's page draw this row? */
-export function clientMaySee(c: Row): boolean {
+/**
+ * may the client's page draw this row? A REPLY (29 Oct 2026, comments on the plan's words) is seen where its first
+ * comment is: the team answering what the client said on the plan reaches them; a team note started on the team's own
+ * page does not, and a reply that tags a colleague is still the team talking to itself.
+ */
+export function clientMaySee(c: Row, byId?: ReadonlyMap<string, Row>): boolean {
   if (c.team_users?.role === 'client') return true
+  if (c.parent_id) {
+    const root = byId?.get(c.parent_id)
+    return !!root && !root.parent_id && clientMaySee(root, byId) && !isTeamOnlyComment(c)
+  }
   if (!c.card_id) return false
   return !isTeamOnlyComment(c)
 }
 
 /** the rows the client's page draws */
 export function forTheClient<T extends Row>(rows: readonly T[]): T[] {
-  return rows.filter(clientMaySee)
+  const byId = new Map(rows.filter(r => r.id).map(r => [String(r.id), r as Row]))
+  return rows.filter(r => clientMaySee(r, byId))
 }

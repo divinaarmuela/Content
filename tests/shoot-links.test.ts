@@ -7,9 +7,11 @@ describe('links in a shoot plan open', () => {
   it('on the client’s portal "See the plan": the notes, what is being made, the shot list and the scripts', () => {
     const s = readFileSync('app/components/portal/PortalBoard.tsx', 'utf8')
     expect(s).toContain('<LinkedText text={card.shoot.concept} />')
-    expect(s).toContain('<Chip key={d.id} tone="surface"><LinkedText text={d.title} /></Chip>')
-    expect(s).toContain('<LinkedText text={r.text} />')
-    expect(s).toContain(String.raw`<LinkedText text={w.lines.join('\n')} />`)
+    // what is being made, the shots and the scripts are drawn by PlanPart (comments on the words), which draws LinkedText
+    expect(s).toContain('<PlanPart as="span" part={`deliverable:${d.id}`} text={d.title} />')
+    expect(s).toContain('<PlanPart as="span" part={`shot:${r.id}`} text={r.text} />')
+    expect(s).toContain(String.raw`<PlanPart part={part} text={w.lines.join('\n')}`)
+    expect(readFileSync('app/components/PlanComments.tsx', 'utf8')).toContain('<LinkedText key={i} text={p.text} />')
   })
   it('under every field of the shoot page that holds one', () => {
     const s = readFileSync('app/dashboard/production/shoots/[id]/ShootSop.tsx', 'utf8')

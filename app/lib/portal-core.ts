@@ -224,6 +224,11 @@ export type PortalCardComment = {
   /** that card in a person's words ("Hero reel image"); set by the server
    *  from the board, so the client never has to work it out */
   card_label?: string | null
+  /** ON THE PLAN'S OWN WORDS (plan-comments-core, 29 Oct 2026): which part, which words, the first comment of its thread */
+  anchor_part?: string | null
+  anchor_quote?: string | null
+  parent_id?: string | null
+  resolved?: boolean | null
 }
 
 /**
@@ -234,6 +239,7 @@ export type PortalCardComment = {
 export function toPortalComment(clientName: string) {
   return (c: {
     id: string; created_at: string; body: string; card_id?: string | null
+    anchor_part?: string | null; anchor_quote?: string | null; parent_id?: string | null; resolved?: boolean | null
     team_users?: { name?: string | null; role?: string | null } | null
   }): PortalCardComment => {
     const role = c.team_users?.role ?? 'client'
@@ -245,6 +251,10 @@ export function toPortalComment(clientName: string) {
       author_name: fromTeam ? (c.team_users?.name ?? 'MD Media') : clientName,
       from_team: fromTeam,
       card_id: c.card_id ?? null,
+      anchor_part: c.anchor_part ?? null,
+      anchor_quote: c.anchor_quote ?? null,
+      parent_id: c.parent_id ?? null,
+      resolved: c.resolved ?? null,
     }
   }
 }

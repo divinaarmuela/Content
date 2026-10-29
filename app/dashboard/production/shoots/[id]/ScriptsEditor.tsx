@@ -8,6 +8,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { newScriptId, sanitiseScripts, type ScriptBlock } from '../../../../lib/script-core'
 import { growTextarea } from '../../../../lib/grow-textarea'
 import { LinksIn } from '../../../../components/LinkedText'
+import { PlanPartThreads, usePickFromBox } from '../../../../components/PlanComments'
 
 /**
  * THE SCRIPTS, ONE PER VIDEO (the owner, 15 Sep 2026: "there will be
@@ -59,6 +60,8 @@ export default function ScriptsEditor({ scripts, onSave, disabled = false }: {
     id: newScriptId(), title: '', presenter: '', voiceover: false, hook: '', prompts: [], visual: '', purpose: '', links: [], body: '',
   })
 
+  // comments on the script's words (29 Oct 2026) — picked in the box, threads under it
+  const pick = usePickFromBox()
   return (
     <div ref={box} className="flex flex-col gap-3" data-scripts-editor>
       {blocks.map((b, i) => (
@@ -83,9 +86,11 @@ export default function ScriptsEditor({ scripts, onSave, disabled = false }: {
             ref={el => { if (el) grow(el) }}
             onInput={e => grow(e.currentTarget)}
             onChange={e => setBlocks(cur => cur.map(x => x.id === b.id ? { ...x, body: e.target.value } : x))}
+            onSelect={pick(`script:${b.id}`)}
             onBlur={() => commit(blocks)} />
           {/* a link in the script opens (29 Oct 2026) — shown under the box being typed in */}
           <LinksIn text={[b.body, ...(Array.isArray((b as { links?: unknown }).links) ? ((b as { links?: unknown[] }).links ?? []).map(String) : [])].join(' ')} />
+          <PlanPartThreads part={`script:${b.id}`} />
         </div>
       ))}
       {!disabled && (

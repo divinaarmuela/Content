@@ -12,6 +12,7 @@ import { sanitiseCanvasCards } from '../../../../../lib/batch-brief-core'
 import { canvasCardLabel, commentSubject, findCanvasCard, shootCommentPath } from '../../../../../lib/canvas-comments-core'
 import { notifyManagersOfComment } from '../../../../../lib/portal-actor'
 import { forTheClient } from '../../../../../lib/comment-visibility-core'
+import { checkAnchor } from '../../../../../lib/plan-comments-core'
 
 /**
  * The shoot's comment thread, team side — the same rows the client reads
@@ -107,6 +108,19 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       return NextResponse.json({ error: 'That card is not on the board any more.' }, { status: 404 })
     }
 
+    // ON THE PLAN'S OWN WORDS (29 Oct 2026): the part and the words still in the plan; a reply answers a first comment
+    // on this shoot
+    const anchor = checkAnchor(g.batch as never, json.anchor_part ?? null, json.anchor_quote ?? null)
+    if (anchor && !anchor.ok) return NextResponse.json({ error: anchor.error }, { status: 409 })
+    let parentId: string | null = null
+    if (json.parent_id) {
+      const parent = await table<BatchComment>('batch_comments').get(String(json.parent_id)).catch(() => null)
+      if (!parent || parent.batch_id !== id || (parent as { parent_id?: string | null }).parent_id) {
+        return NextResponse.json({ error: 'That comment is not there any more.' }, { status: 404 })
+      }
+      parentId = parent.id
+    }
+
     const isClient = user.role === 'client'
     // a client tags nobody — the words are the whole message
     const explicit = isClient ? [] : [
@@ -124,6 +138,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         // test `resolved === false`
         resolved: false,
         card_id: card ? card.id : null,
+        ...(anchor?.ok && !parentId ? { anchor_part: anchor.part, anchor_quote: anchor.quote } : {}),
+        ...(parentId ? { parent_id: parentId } : {}),
       })
       data = (await withAuthors([row as unknown as BatchComment]))[0]
     } catch (e) {
