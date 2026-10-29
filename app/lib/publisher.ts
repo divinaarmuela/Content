@@ -38,6 +38,8 @@ export interface Publisher {
   followerStats(): Promise<unknown>
   /** Published and scheduled posts. */
   listPosts(params?: { limit?: number }): Promise<unknown>
+  /** every post Zernio holds whose time falls between two dates, page by page — null when it cannot be read */
+  postsBetween?(fromDate: string, toDate: string): Promise<unknown[] | null>
   /**
    * THE ACCOUNT'S OWN FEED — the 25 most recent posts that exist on the
    * platform, including every one published outside this dashboard. What the
@@ -608,6 +610,22 @@ class ZernioPublisher implements Publisher {
 
   listPosts(params: { limit?: number } = {}) {
     return this.getJson(`/posts?limit=${params.limit ?? 20}`)
+  }
+
+  /** the Overview's month (29 Oct 2026): every post in the window, only the fields the counts read, cursor by cursor */
+  async postsBetween(fromDate: string, toDate: string): Promise<unknown[] | null> {
+    const out: unknown[] = []
+    let cursor: string | null = null
+    for (let page = 0; page < 50; page++) {
+      const qs = new URLSearchParams({ fromDate, toDate, limit: '100', fields: 'status,scheduledFor,platforms' })
+      if (cursor) qs.set('cursor', cursor)
+      const j = await this.getJson(`/posts?${qs}`) as { posts?: unknown[]; pagination?: { nextCursor?: string | null } } | null
+      if (!j || !Array.isArray(j.posts)) return page === 0 ? null : out
+      out.push(...j.posts)
+      cursor = j.pagination?.nextCursor ?? null
+      if (!cursor) break
+    }
+    return out
   }
 
   accountPosts(providerAccountId: string) {

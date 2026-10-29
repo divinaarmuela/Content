@@ -340,3 +340,80 @@ export function accountHandle(row: AccountPostsRow): string {
 
 /** what the card says when the month is empty */
 export const NO_POSTS_THIS_MONTH = 'Nothing posted or booked this month yet.'
+
+/* ── the counts from Zernio itself (29 Oct 2026) ─────────────────────────────
+ * The owner: "thats wrong data … make sure we get that from zernio". The panel counted our own publishing jobs, and
+ * every CANCELLED one — each edit, re-book or take-off of a booked post — as "Did not go out": Justin's Instagram read
+ * "Went out 7 · Did not go out 16" when Zernio held 8 published and none failed. The counts now come from the posts
+ * Zernio itself holds, one per network the post was on: published → went out, still to go → booked, failed → did not
+ * go out; cancelled is not a post at all. Instagram jobs held in our own queue (meta_ig, which Zernio never sees) are
+ * added from the job, the same way. "Waiting on the client" (the owner: "if scheduled but waiting client approval")
+ * is our posts': booked and still waiting on the client's word, or with the client before booking. Pure. */
+
+export type ZernioPlatformLite = { platform?: string | null; status?: string | null; publishedAt?: string | null; scheduledFor?: string | null; accountId?: { _id?: string | null } | string | null }
+export type ZernioPostLite = { _id?: string; status?: string | null; scheduledFor?: string | null; platforms?: ZernioPlatformLite[] | null }
+export type LiveCounts = { went_out: number; booked: number; did_not: number }
+export type WaitingPost = { post_id: string; at: string | null; booked: boolean }
+
+const BOOKED_STATES = ['pending', 'scheduled', 'publishing', 'processing', 'queued']
+const providerIdOf = (a: ZernioPlatformLite['accountId']): string | null => (typeof a === 'string' ? a : a?._id ? String(a._id) : null)
+
+/** went out / booked / did not go out per our account id, for the month, from Zernio's posts */
+export function zernioMonthCounts(
+  posts: readonly ZernioPostLite[],
+  accountByProvider: ReadonlyMap<string, { id: string; client_id: string | null }>,
+  inMonth: (iso: string | null | undefined, clientId: string) => boolean,
+): Map<string, LiveCounts> {
+  const out = new Map<string, LiveCounts>()
+  const bump = (id: string, k: keyof LiveCounts) => { const c = out.get(id) ?? { went_out: 0, booked: 0, did_not: 0 }; c[k]++; out.set(id, c) }
+  for (const p of posts) {
+    for (const e of p.platforms ?? []) {
+      const pid = providerIdOf(e.accountId)
+      const acct = pid ? accountByProvider.get(pid) : undefined
+      if (!acct || !acct.client_id) continue
+      const st = String(e.status ?? p.status ?? '').toLowerCase()
+      const when = e.scheduledFor ?? p.scheduledFor ?? null
+      if (st === 'published') { if (inMonth(e.publishedAt ?? when, acct.client_id)) bump(acct.id, 'went_out') }
+      else if (BOOKED_STATES.includes(st)) { if (inMonth(when, acct.client_id)) bump(acct.id, 'booked') }
+      else if (st === 'failed') { if (inMonth(when, acct.client_id)) bump(acct.id, 'did_not') }
+    }
+  }
+  return out
+}
+
+/** our own Instagram queue (provider meta_ig) — the posts Zernio never sees — added in the same three words */
+export function metaQueueCounts(
+  jobs: readonly (MonthJob & { provider?: string | null; status?: string | null; scheduled_for?: string | null; published_at?: string | null; updated_at?: string | null })[],
+  accountsOfJob: (job: MonthJob) => { id: string; client_id: string | null }[],
+  inMonth: (iso: string | null | undefined, clientId: string) => boolean,
+  into: Map<string, LiveCounts>,
+): Map<string, LiveCounts> {
+  for (const j of jobs) {
+    if (String(j.provider ?? '') !== 'meta_ig') continue
+    const st = String(j.status ?? '')
+    const k: keyof LiveCounts | null = st === 'published' ? 'went_out' : ['queued', 'publishing', 'scheduled'].includes(st) ? 'booked' : st === 'failed' ? 'did_not' : null
+    if (!k) continue
+    const when = k === 'went_out' ? (j.published_at ?? j.scheduled_for) : (j.scheduled_for ?? j.updated_at)
+    for (const a of accountsOfJob(j)) {
+      if (!a.client_id || !inMonth(when, a.client_id)) continue
+      const c = into.get(a.id) ?? { went_out: 0, booked: 0, did_not: 0 }
+      c[k]++
+      into.set(a.id, c)
+    }
+  }
+  return into
+}
+
+/** "Went out 8 · Booked 2 · Waiting on the client 1 · Did not go out 1 · 2 by hand" — zeros left out; the booked
+ *  number is the ones NOT waiting on the client */
+export function liveCountsLine(row: AccountPostsRow & { waiting?: readonly WaitingPost[] }): string {
+  const waitingBooked = (row.waiting ?? []).filter(w => w.booked).length
+  const parts = [
+    row.went_out > 0 ? `Went out ${row.went_out}` : null,
+    row.booked - waitingBooked > 0 ? `Booked ${row.booked - waitingBooked}` : null,
+    (row.waiting ?? []).length > 0 ? `Waiting on the client ${(row.waiting ?? []).length}` : null,
+    row.did_not > 0 ? `Did not go out ${row.did_not}` : null,
+    row.by_hand > 0 ? `${row.by_hand} by hand` : null,
+  ].filter(Boolean)
+  return parts.length ? parts.join(' · ') : 'Nothing this month'
+}

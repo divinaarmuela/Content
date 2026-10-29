@@ -50,11 +50,11 @@ import { BOARD_COLUMNS, boardColumn, columnOf, type BoardColumnKey } from '../li
 import { STATUS_LABELS, type ItemStatus } from '../lib/workflow-core'
 import { itemStatusLabel } from '../lib/brief-task-core'
 import { compactCount } from '../lib/post-analytics-core'
-import { byHandRows } from '../lib/post-outcome-core'
 import {
-  accountHandle, monthPostsByAccount, postCountsLine, postMetricsLine,
-  NO_POSTS_THIS_MONTH, type AccountPostsRow, type MonthJob,
+  accountHandle, liveCountsLine, postMetricsLine,
+  NO_POSTS_THIS_MONTH, type AccountPostsRow, type WaitingPost,
 } from '../lib/overview-posts-core'
+import { NotifyClientButton } from './board/NotifyClientDialog'
 import {
   monthStages, NO_STAGES_THIS_MONTH, stagesLine, stagesTone, type ClientStagesRow, type StageCommitment,
 } from '../lib/overview-stages-core'
@@ -347,7 +347,7 @@ function StagesThisMonth({ rows, clients }: { rows: ClientStagesRow[] | null; cl
   )
 }
 
-function PostsThisMonth({ rows }: { rows: AccountPostsRow[] | null }) {
+function PostsThisMonth({ rows }: { rows: (AccountPostsRow & { waiting?: WaitingPost[] })[] | null }) {
   return (
     <Panel title="Posts this month"
       right={<span className="shrink-0 text-[13px] text-muted-foreground">Every account, in its client&rsquo;s month</span>}>
@@ -373,8 +373,18 @@ function PostsThisMonth({ rows }: { rows: AccountPostsRow[] | null }) {
                     <span className="truncate text-[15px] font-semibold">{accountHandle(r)}</span>
                     <span className="truncate text-[13px] text-muted-foreground">{r.client_name}</span>
                   </span>
-                  <span className="text-[13px] tabular-nums text-muted-foreground">{postCountsLine(r)}</span>
+                  <span className="text-[13px] tabular-nums text-muted-foreground">{liveCountsLine(r)}</span>
                   {metrics && <span className="text-[12px] tabular-nums text-muted-foreground">{metrics}</span>}
+                  {/* WAITING ON THE CLIENT (the owner, 29 Oct 2026: "whats scheduled but needs client approval and there should
+                      be notify or copy portal link"): each such post, with the one Notify — it emails the client the post's
+                      own page, or hands the link to copy */}
+                  {r.client_id && (r.waiting ?? []).map(w => (
+                    <span key={w.post_id} className="mt-1 flex flex-wrap items-center gap-2 rounded-inner bg-tint-amber px-2.5 py-1.5 text-[12px]">
+                      <span className="font-semibold">{w.booked ? 'Booked — waiting on the client' : 'With the client — not booked yet'}</span>
+                      {w.at && <span className="text-muted-foreground">{new Date(w.at).toLocaleString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}</span>}
+                      {w.booked && <NotifyClientButton clientId={r.client_id!} tab="scheduling" id={w.post_id} className="ml-auto h-8 rounded-full px-3 text-[12px] font-semibold" />}
+                    </span>
+                  ))}
                 </span>
               </div>
             )
@@ -499,9 +509,7 @@ export default function OverviewPage() {
    * boards listen to theirs (`useWorkTables`); the month is cut on the page,
    * in each client's own zone, by `monthPostsByAccount`.
    */
-  const { rows: jobRows } = useTable<PublishJob>('publish_jobs', { enabled: enabled && isManager })
   const { rows: accountRows } = useTable<SocialAccount>('social_accounts', { enabled: enabled && isManager })
-  const { rows: analyticRows } = useTable<PostAnalytic>('post_analytics', { enabled: enabled && isManager })
 
   const data: Overview | null = useMemo(() => {
     if (!me || !viewer || live.loading) return null
@@ -614,22 +622,18 @@ export default function OverviewPage() {
    * changes once a day, and re-counting every minute would be work nobody
    * asked for.
    */
-  const accountPosts = useMemo(() => {
-    if (!viewer || !isManager || live.loading || !todayKey) return null
-    const scoped = accessibleClientIdsOf(viewer, live.tables.assignments.rows)
-    return monthPostsByAccount({
-      now: new Date().toISOString(),
-      accounts: accountRows,
-      clients: live.tables.clients.rows,
-      jobs: jobRows as unknown as MonthJob[],
-      byHand: byHandRows(live.tables.items.rows),
-      analytics: analyticRows,
-      clientIds: scoped,
-      defaultTz: DEFAULT_TZ,
-    })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [viewer, isManager, live.loading, live.tables.assignments.rows, live.tables.clients.rows,
-    live.tables.items.rows, jobRows, accountRows, analyticRows, todayKey])
+  // FROM ZERNIO, ON THE SERVER (29 Oct 2026, the owner: "thats wrong data … make sure we get that from zernio"): the
+  // page no longer listens to every publishing job and analytics row; it asks once, and again every five minutes
+  const [accountPosts, setAccountPosts] = useState<(AccountPostsRow & { waiting: WaitingPost[] })[] | null>(null)
+  useEffect(() => {
+    if (!viewer || !isManager) return
+    let gone = false
+    const load = () => fetch('/api/overview/posts-month', { cache: 'no-store' }).then(r => (r.ok ? r.json() : null))
+      .then(j => { if (!gone && j?.rows) setAccountPosts(j.rows) }).catch(() => undefined)
+    void load()
+    const t = window.setInterval(load, 5 * 60_000)
+    return () => { gone = true; window.clearInterval(t) }
+  }, [viewer, isManager, todayKey])
 
 
   /** which clients have a channel connected — only a scheduler's tiles ask */
