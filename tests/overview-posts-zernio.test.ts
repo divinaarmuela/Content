@@ -66,3 +66,14 @@ describe('the log, post by post', () => {
     expect(page).toContain("{openKey === r.key ? 'Hide the posts' : 'See the posts'}")
   })
 })
+
+describe('"did not go out" is not shown (29 Oct 2026)', () => {
+  it('not in the line, not in the log, and a row with only failures is gone', async () => {
+    const { liveCountsLine } = await import('../app/lib/overview-posts-core')
+    const row = { key: 'ig', account_id: 'ig', client_id: 'c1', client_name: 'J', platform: 'linkedin', username: 'j', went_out: 7, booked: 0, did_not: 2, by_hand: 0, metrics: { interactions: null, likes: null, comments: null, views: null } }
+    expect(liveCountsLine(row)).toBe('7 posts went out')
+    const route = readFileSync('app/api/overview/posts-month/route.ts', 'utf8')
+    expect(route).toContain(".filter(e => e.status !== 'did_not')")
+    expect(route).toContain('.filter(r => r.went_out + r.booked + r.by_hand + r.waiting.length > 0)')
+  })
+})

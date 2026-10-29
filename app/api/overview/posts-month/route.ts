@@ -109,12 +109,13 @@ export async function GET() {
         if (counts) { r.went_out = c?.went_out ?? 0; r.booked = c?.booked ?? 0; r.did_not = c?.did_not ?? 0 }
         r.waiting = w.sort((x, y) => String(x.at ?? '').localeCompare(String(y.at ?? '')))
         // newest first, as Zernio's own list
-        r.log = (log.get(a.id) ?? []).sort((x, y) => String(y.at ?? '').localeCompare(String(x.at ?? '')))
+        // what went out and what is booked only (the owner, 29 Oct 2026: "remove the did not go out ones")
+        r.log = (log.get(a.id) ?? []).filter(e => e.status !== 'did_not').sort((x, y) => String(y.at ?? '').localeCompare(String(x.at ?? '')))
         rows.set(a.id, r)
       }
       const list = [...rows.values()]
-        .filter(r => r.went_out + r.booked + r.did_not + r.by_hand + r.waiting.length > 0)
-        .sort((a, b) => (b.went_out + b.booked + b.did_not + b.by_hand) - (a.went_out + a.booked + a.did_not + a.by_hand)
+        .filter(r => r.went_out + r.booked + r.by_hand + r.waiting.length > 0)
+        .sort((a, b) => (b.went_out + b.booked + b.by_hand) - (a.went_out + a.booked + a.by_hand)
           || a.client_name.localeCompare(b.client_name) || String(a.platform ?? '').localeCompare(String(b.platform ?? '')))
       const body = { rows: list, source: (counts ? 'zernio' : 'jobs') as 'zernio' | 'jobs', at: now.toISOString() }
       cache.set(key, { at: Date.now(), body })

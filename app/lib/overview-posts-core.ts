@@ -438,7 +438,7 @@ export function liveCountsLine(row: AccountPostsRow & { waiting?: readonly Waiti
     row.went_out > 0 ? `${posts(row.went_out)} went out` : null,
     booked > 0 ? `${posts(booked)} booked` : null,
     waiting > 0 ? `${posts(waiting)} waiting on the client` : null,
-    row.did_not > 0 ? `${posts(row.did_not)} did not go out` : null,
+    // "did not go out" is not shown (the owner, 29 Oct 2026: "remove the did not go out ones")
     row.by_hand > 0 ? `${posts(row.by_hand)} posted by hand` : null,
   ].filter(Boolean)
   return parts.length ? parts.join(' · ') : 'Nothing this month'
