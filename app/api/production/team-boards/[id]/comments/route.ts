@@ -8,6 +8,7 @@ import { notifyTagged, resolveTags, settleTagNotifications, taggableTeam } from 
 import { sanitiseCanvasCards } from '../../../../../lib/batch-brief-core'
 import { findCanvasCard } from '../../../../../lib/canvas-comments-core'
 import { teamBoardCommentPath } from '../../../../../lib/team-board-comments-core'
+import { checkAnchor } from '../../../../../lib/plan-comments-core'
 import { announceTeamBoardChange } from '../../../../../lib/production-live'
 
 /**
@@ -63,7 +64,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       const { id } = await params
       const board = await boardFor(id)
       if (!board) return NextResponse.json({ error: 'Board not found' }, { status: 404 })
-      const json = await req.json().catch(() => ({})) as { body?: unknown; card_id?: unknown; mention_ids?: unknown }
+      const json = await req.json().catch(() => ({})) as { body?: unknown; card_id?: unknown; mention_ids?: unknown; anchor_part?: unknown; anchor_quote?: unknown; parent_id?: unknown }
       const body = String(json.body ?? '').trim().slice(0, 4000)
       if (!body) return NextResponse.json({ error: 'Write a comment first' }, { status: 400 })
 
@@ -71,6 +72,19 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       const cardId = json.card_id == null ? null : String(json.card_id).slice(0, 80)
       const card = cardId ? findCanvasCard(sanitiseCanvasCards((board as { canvas_cards?: unknown }).canvas_cards), cardId) : null
       if (!card) return NextResponse.json({ error: cardId ? 'That card is not on the board any more.' : 'A comment goes on a card — pick one' }, { status: cardId ? 404 : 400 })
+
+      // ON THE CARD'S OWN WORDS, AND REPLIES (29 Oct 2026, "same goes for boards") — as the shoot plan has them
+      const anchor = checkAnchor(board as never, json.anchor_part ?? null, json.anchor_quote ?? null)
+      if (anchor && !anchor.ok) return NextResponse.json({ error: anchor.error }, { status: 409 })
+      if (anchor?.ok && anchor.part !== `card:${card.id}`) return NextResponse.json({ error: 'Select the words on the card you are commenting on.' }, { status: 409 })
+      let parentId: string | null = null
+      if (json.parent_id) {
+        const parent = await table<TeamBoardComment>('team_board_comments').get(String(json.parent_id)).catch(() => null)
+        if (!parent || parent.board_id !== id || parent.card_id !== card.id || parent.parent_id) {
+          return NextResponse.json({ error: 'That comment is not there any more.' }, { status: 404 })
+        }
+        parentId = parent.id
+      }
 
       const explicit = Array.isArray(json.mention_ids) ? json.mention_ids.map(String) : []
       const tagged = resolveTags(body, explicit, await taggableTeam(), user.id)
@@ -81,6 +95,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           board_id: id, author_id: user.id, body, card_id: card.id,
           assigned_to: tagged[0]?.id ?? null,
           resolved: false,
+          ...(anchor?.ok && !parentId ? { anchor_part: anchor.part, anchor_quote: anchor.quote } : {}),
+          ...(parentId ? { parent_id: parentId } : {}),
         })
         data = (await withAuthors([row as unknown as TeamBoardComment]))[0]
       } catch (e) {

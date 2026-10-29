@@ -30,6 +30,7 @@ import { optionsFromExtras, readPerChannel } from './schedule-compose-core'
 import { canvasCardLabel, findCanvasCard } from './canvas-comments-core'
 import { portalOwnerByToken } from './portal-owner'
 import { forTheClient } from './comment-visibility-core'
+import { onPlanWords } from './plan-comments-core'
 
 /**
  * Child-page data for the portal: one item or one shoot, with its comment
@@ -229,11 +230,12 @@ export async function getPortalShootDetail(rawToken: string, batchId: string): P
       plan_state: planState(brief?.status, b.status as string, true),
       brief_item_id: brief?.id ?? null,
     },
-    // the comments on the plan's own words are drawn under those words, on the card (PlanComments) — not here as well
+    // the comments on the plan's own words are drawn under those words, on the card (PlanComments) — not here as well;
+    // a board card's threads stay, replies and all, for the board's own panel
     comments: (comments as unknown as {
       id: string; created_at: string; body: string; card_id?: string | null; team_users: AuthorRow
       anchor_part?: string | null; parent_id?: string | null
-    }[]).filter(r => !r.anchor_part && !r.parent_id).map(r => {
+    }[]).filter(r => !onPlanWords(r)).map(r => {
       const c = asComment(r)
       if (c.card_id) c.card_label = canvasCardLabel(findCanvasCard(canvasCards, c.card_id))
       return c

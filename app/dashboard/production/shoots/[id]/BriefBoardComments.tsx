@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { useProductionLive, type ProductionChange } from '../../useProductionLive'
 import { CanvasCommentsProvider } from '../../../../components/canvas/CanvasComments'
-import CardCommentPanel, { type CardComment } from '../../../../components/canvas/CardCommentPanel'
+import CardCommentPanel, { type CardComment, type CardCommentWhere } from '../../../../components/canvas/CardCommentPanel'
 import type { CanvasCard } from '../../../../lib/batch-brief-core'
 import { commentsOnCard, countByCard, findCanvasCard } from '../../../../lib/canvas-comments-core'
 import type { Mentionable } from '../../../../lib/mention-core'
@@ -15,6 +15,9 @@ type Row = {
   created_at: string
   body: string
   card_id?: string | null
+  anchor_quote?: string | null
+  parent_id?: string | null
+  resolved?: boolean | null
   team_users: { name: string | null; role: string | null } | null
 }
 
@@ -100,6 +103,9 @@ export default function BriefBoardComments({ batchId, cards, children, className
         : r.team_users?.name ?? 'Team',
       from_team: !fromClient,
       card_id: r.card_id ?? null,
+      anchor_quote: r.anchor_quote ?? null,
+      parent_id: r.parent_id ?? null,
+      resolved: r.resolved ?? null,
     }
   }), [rows])
   const counts = useMemo(() => countByCard(comments), [comments])
@@ -113,12 +119,17 @@ export default function BriefBoardComments({ batchId, cards, children, className
     }, 50)
   }, [])
 
-  const send = async (body: string, mentionIds?: string[]): Promise<boolean> => {
+  const send = async (body: string, mentionIds?: string[], where?: CardCommentWhere): Promise<boolean> => {
     if (!openCard) return false
     const res = await fetch(`/api/production/batches/${batchId}/comments`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ body, card_id: openCard.id, ...(mentionIds?.length ? { mention_ids: mentionIds } : {}) }),
+      body: JSON.stringify({
+        body, card_id: openCard.id, ...(mentionIds?.length ? { mention_ids: mentionIds } : {}),
+        // on the card's selected words, or a reply (29 Oct 2026, "same goes for boards")
+        ...(where?.quote ? { anchor_part: `card:${openCard.id}`, anchor_quote: where.quote } : {}),
+        ...(where?.parent_id ? { parent_id: where.parent_id } : {}),
+      }),
     })
     if (!res.ok) {
       toast.error((await res.json().catch(() => null))?.error ?? 'Could not send')
@@ -129,11 +140,21 @@ export default function BriefBoardComments({ batchId, cards, children, className
     return true
   }
 
+  const resolve = async (commentId: string, on: boolean): Promise<boolean> => {
+    const res = await fetch(`/api/production/batches/${batchId}/comments`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ comment_id: commentId, resolved: on }),
+    })
+    if (!res.ok) { toast.error((await res.json().catch(() => null))?.error ?? 'Could not do that'); return false }
+    void load()
+    return true
+  }
+
   const panel = openCard ? (
     <CardCommentPanel
       card={openCard}
       comments={commentsOnCard(openCard.id, comments)}
       onSend={send}
+      onResolve={resolve}
       onClose={() => setOpen(null)}
       viewer="team"
       members={members}

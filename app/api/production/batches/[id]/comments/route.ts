@@ -112,13 +112,19 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     // on this shoot
     const anchor = checkAnchor(g.batch as never, json.anchor_part ?? null, json.anchor_quote ?? null)
     if (anchor && !anchor.ok) return NextResponse.json({ error: anchor.error }, { status: 409 })
+    // words on a card are that card's own
+    if (anchor?.ok && anchor.part.startsWith('card:') && anchor.part !== `card:${card?.id}`) {
+      return NextResponse.json({ error: 'Select the words on the card you are commenting on.' }, { status: 409 })
+    }
     let parentId: string | null = null
+    let parentCard: string | null = null
     if (json.parent_id) {
       const parent = await table<BatchComment>('batch_comments').get(String(json.parent_id)).catch(() => null)
       if (!parent || parent.batch_id !== id || (parent as { parent_id?: string | null }).parent_id) {
         return NextResponse.json({ error: 'That comment is not there any more.' }, { status: 404 })
       }
       parentId = parent.id
+      parentCard = parent.card_id ?? null
     }
 
     const isClient = user.role === 'client'
@@ -137,7 +143,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         // an unstamped boolean reads back absent, and "still open" filters
         // test `resolved === false`
         resolved: false,
-        card_id: card ? card.id : null,
+        // a reply sits where its first comment does — on its card, or on none
+        card_id: parentId ? parentCard : (card ? card.id : null),
         ...(anchor?.ok && !parentId ? { anchor_part: anchor.part, anchor_quote: anchor.quote } : {}),
         ...(parentId ? { parent_id: parentId } : {}),
       })

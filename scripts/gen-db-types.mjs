@@ -348,6 +348,11 @@ const GHOST_TABLES = {
     ['author_id', col('string', true)],
     ['body', col('string', false)],
     ['card_id', col('string', true)],
+    // ON THE CARD'S OWN WORDS (29 Oct 2026, "same goes for boards"): `card:<id>` and the words selected, and a reply's
+    // first comment — the shape batch_comments has for the shoot plan (plan-comments-core.ts)
+    ['anchor_part', col('string', true)],
+    ['anchor_quote', col('string', true)],
+    ['parent_id', col('string', true)],
     ['assigned_to', col('string', true)],
     ['resolved', col('boolean', true)],
     ['created_at', col('string', false)],

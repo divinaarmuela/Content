@@ -11,6 +11,7 @@ import { extractMentions, type Mentionable } from '../../../../lib/mention-core'
 import type { CanvasCard } from '../../../../lib/batch-brief-core'
 import { canvasCardLabel, findCanvasCard, onCardLine } from '../../../../lib/canvas-comments-core'
 import { OPEN_CARD_EVENT } from './BriefBoardComments'
+import { inGeneralThread } from '../../../../lib/plan-comments-core'
 
 type Row = {
   id: string
@@ -52,7 +53,7 @@ export default function BriefComments({ batchId, cards = [] }: {
     if (res.ok) {
       const json = await res.json()
       // the comments on the plan's own words sit under those words (TeamPlanComments), not here as well
-      setRows((json.comments ?? []).filter((c: { anchor_part?: string | null; parent_id?: string | null }) => !c.anchor_part && !c.parent_id))
+      setRows((json.comments ?? []).filter(inGeneralThread))
       setViewerId(json.viewer_id ?? null)
     } else setRows([])
   }, [batchId])

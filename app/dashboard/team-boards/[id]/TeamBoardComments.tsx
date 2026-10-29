@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils'
 import { useTable } from '@/lib/db-client'
 import type { TeamBoardComment, TeamUser } from '@/lib/db-types'
 import { CanvasCommentsProvider } from '../../../components/canvas/CanvasComments'
-import CardCommentPanel, { type CardComment } from '../../../components/canvas/CardCommentPanel'
+import CardCommentPanel, { type CardComment, type CardCommentWhere } from '../../../components/canvas/CardCommentPanel'
 import type { CanvasCard } from '../../../lib/batch-brief-core'
 import { commentsOnCard, countByCard, findCanvasCard } from '../../../lib/canvas-comments-core'
 import { tagNameOf } from '../../../lib/mention-core'
@@ -56,6 +56,9 @@ export default function TeamBoardComments({ boardId, cards, team, children, clas
       author_name: fromClient ? String(author?.name ?? 'Client').replace(/ \(client portal\)$/, '') : (author ? tagNameOf(author) : 'Team'),
       from_team: !fromClient,
       card_id: r.card_id ?? null,
+      anchor_quote: r.anchor_quote ?? null,
+      parent_id: r.parent_id ?? null,
+      resolved: r.resolved ?? null,
     }
   }), [rows, byId])
   const members = useMemo(() => team
@@ -72,12 +75,17 @@ export default function TeamBoardComments({ boardId, cards, team, children, clas
     }, 50)
   }, [])
 
-  const send = async (body: string, mentionIds?: string[]): Promise<boolean> => {
+  const send = async (body: string, mentionIds?: string[], where?: CardCommentWhere): Promise<boolean> => {
     if (!openCard) return false
     const res = await fetch(`/api/production/team-boards/${boardId}/comments`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ body, card_id: openCard.id, ...(mentionIds?.length ? { mention_ids: mentionIds } : {}) }),
+      body: JSON.stringify({
+        body, card_id: openCard.id, ...(mentionIds?.length ? { mention_ids: mentionIds } : {}),
+        // on the card's selected words, or a reply (29 Oct 2026, "same goes for boards")
+        ...(where?.quote ? { anchor_part: `card:${openCard.id}`, anchor_quote: where.quote } : {}),
+        ...(where?.parent_id ? { parent_id: where.parent_id } : {}),
+      }),
     })
     if (!res.ok) {
       toast.error((await res.json().catch(() => null))?.error ?? 'Could not send')
@@ -87,11 +95,21 @@ export default function TeamBoardComments({ boardId, cards, team, children, clas
     return true
   }
 
+  // the rows are read live, so a resolve shows by itself
+  const resolve = async (commentId: string, on: boolean): Promise<boolean> => {
+    const res = await fetch(`/api/production/team-boards/${boardId}/comments`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ comment_id: commentId, resolved: on }),
+    })
+    if (!res.ok) { toast.error((await res.json().catch(() => null))?.error ?? 'Could not do that'); return false }
+    return true
+  }
+
   const panel = openCard ? (
     <CardCommentPanel
       card={openCard}
       comments={commentsOnCard(openCard.id, comments)}
       onSend={send}
+      onResolve={resolve}
       onClose={() => setOpen(null)}
       viewer="team"
       members={members}

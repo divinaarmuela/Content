@@ -24,6 +24,7 @@ import { PostMetricsRow } from './PortalSections'
 import PortalPostCard from './PortalPostCard'
 import { LinkedText } from '../LinkedText'
 import { PlanCommentsProvider, PlanPart, PlanPartThreads } from '../PlanComments'
+import { inGeneralThread } from '../../lib/plan-comments-core'
 
 /**
  * ONE CARD ON THE CLIENT'S PORTAL — a piece of work or a shoot.
@@ -309,7 +310,8 @@ function WorkOrShootCard({ card, amName, accent, surface, className }: CardProps
     </div>
   )
   // the comments on the plan's own words sit under those words (PlanComments), not in the card's thread as well
-  const threadComments = comments.filter(c => !c.anchor_part && !c.parent_id)
+  // the general thread: first comments only — a reply sits under its own, a plan-words one under those words
+  const threadComments = comments.filter(inGeneralThread)
   const general = threadComments.filter(c => splitSlideTag(c.body).index === null)
 
   // ── swipe from the right approves (phones) ──

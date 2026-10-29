@@ -70,13 +70,14 @@ describe('the doors', () => {
   it('the portal checks the words, answers only threads the client can see, and lets them resolve their own', () => {
     const s = readFileSync('app/api/portal/comment/route.ts', 'utf8')
     expect(s).toContain("const anchor = checkAnchor(batch as never, body.anchor_part ?? null, body.anchor_quote ?? null)")
-    expect(s).toContain("if (kind === 'shoot' && body.action === 'resolve') {")
+    expect(s).toContain("if ((kind === 'shoot' || kind === 'team_board') && body.action === 'resolve') {")
     expect(s).toContain('!clientMaySee(withRole as never)')
   })
   it('the team’s route checks the words too, and the general threads leave the plan’s comments out', () => {
     expect(readFileSync('app/api/production/batches/[id]/comments/route.ts', 'utf8')).toContain('const anchor = checkAnchor(g.batch as never, json.anchor_part ?? null, json.anchor_quote ?? null)')
-    expect(readFileSync('app/dashboard/production/shoots/[id]/BriefComments.tsx', 'utf8')).toContain('!c.anchor_part && !c.parent_id')
-    expect(readFileSync('app/lib/portal-thread.ts', 'utf8')).toContain('.filter(r => !r.anchor_part && !r.parent_id)')
+    expect(readFileSync('app/dashboard/production/shoots/[id]/BriefComments.tsx', 'utf8')).toContain('.filter(inGeneralThread)')
+    expect(readFileSync('app/lib/portal-thread.ts', 'utf8')).toContain('.filter(r => !onPlanWords(r))')
+    expect(readFileSync('app/components/portal/PortalBoard.tsx', 'utf8')).toContain('const threadComments = comments.filter(inGeneralThread)')
   })
   it('the portal’s plan and the team’s boxes draw the parts and their threads', () => {
     const pb = readFileSync('app/components/portal/PortalBoard.tsx', 'utf8')

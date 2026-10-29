@@ -10,7 +10,7 @@ import BriefCanvas from '../../dashboard/production/shoots/[id]/BriefCanvas'
 import { CanvasCommentsProvider } from '../canvas/CanvasComments'
 import { PortalTokenProvider } from '../../lib/instagram-video-client'
 import { PortalDriveScopeProvider } from '../canvas/PortalDriveScope'
-import CardCommentPanel from '../canvas/CardCommentPanel'
+import CardCommentPanel, { type CardCommentWhere } from '../canvas/CardCommentPanel'
 import type { CanvasCard } from '../../lib/batch-brief-core'
 import type { PortalCardComment } from '../../lib/portal-core'
 import { commentsOnCard, countByCard, findCanvasCard } from '../../lib/canvas-comments-core'
@@ -114,8 +114,13 @@ export default function ShootBoard({
     if ('loggedIn' in surface) surface.onChanged()
   }
 
-  const send = async (body: string): Promise<boolean> => {
+  const send = async (body: string, _mentions?: string[], where?: CardCommentWhere): Promise<boolean> => {
     if (!openCard) return false
+    // on the card's selected words, or a reply to a first comment (29 Oct 2026, "same goes for boards")
+    const on = {
+      ...(where?.quote ? { anchor_part: `card:${openCard.id}`, anchor_quote: where.quote } : {}),
+      ...(where?.parent_id ? { parent_id: where.parent_id } : {}),
+    }
     const who = name.trim().slice(0, 60)
     try { localStorage.setItem(NAME_KEY, who) } catch { /* fine */ }
     try {
@@ -123,12 +128,12 @@ export default function ShootBoard({
         ? await fetch('/api/portal/comment', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ token, kind: thread, id: shootId, card_id: openCard.id, body, author_name: who }),
+            body: JSON.stringify({ token, kind: thread, id: shootId, card_id: openCard.id, body, author_name: who, ...on }),
           })
         : await fetch(thread === 'team_board' ? `/api/production/team-boards/${shootId}/comments` : `/api/production/batches/${shootId}/comments`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ body, card_id: openCard.id }),
+            body: JSON.stringify({ body, card_id: openCard.id, ...on }),
           })
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? 'Could not send — try again')
       // shown at once, in the client's own words; the reload replaces it
@@ -137,6 +142,7 @@ export default function ShootBoard({
         id: `local-${Date.now()}`, created_at: new Date().toISOString(),
         body: who ? `${body}\n— ${who}` : body,
         author_name: clientName, from_team: false, card_id: openCard.id,
+        anchor_quote: where?.quote ?? null, anchor_part: where?.quote ? `card:${openCard.id}` : null, parent_id: where?.parent_id ?? null,
       }])
       toast.success(`Sent to ${amPhrase(amName)}.`)
       refresh()
@@ -145,6 +151,17 @@ export default function ShootBoard({
       toast.error(e instanceof Error ? e.message : 'Could not send — try again')
       return false
     }
+  }
+
+  /** Resolve a thread on a card, or open it again — the client's door on the share link, the team's when signed in */
+  const resolve = async (commentId: string, on: boolean): Promise<boolean> => {
+    const res = token
+      ? await fetch('/api/portal/comment', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token, kind: thread, id: shootId, action: 'resolve', comment_id: commentId, resolved: on }) })
+      : await fetch(thread === 'team_board' ? `/api/production/team-boards/${shootId}/comments` : `/api/production/batches/${shootId}/comments`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ comment_id: commentId, resolved: on }) })
+    if (!res.ok) { toast.error((await res.json().catch(() => ({}))).error ?? 'That did not go through — try again'); return false }
+    setRows(r => r.map(c => (c.id === commentId ? { ...c, resolved: on } : c)))
+    refresh()
+    return true
   }
 
   const ctx = useMemo(() => ({ counts, open: openThread, openCardId: open }), [counts, openThread, open])
@@ -178,6 +195,7 @@ export default function ShootBoard({
                 card={openCard}
                 comments={commentsOnCard(openCard.id, rows)}
                 onSend={send}
+                onResolve={resolve}
                 onClose={() => setOpen(null)}
                 name={token ? { value: name, onChange: setName } : undefined}
                 viewer="client"

@@ -1640,6 +1640,9 @@ export interface TeamBoardComment {
   author_id: string | null
   body: string
   card_id: string | null
+  anchor_part: string | null
+  anchor_quote: string | null
+  parent_id: string | null
   assigned_to: string | null
   resolved: boolean | null
   created_at: string
@@ -1967,7 +1970,7 @@ export const TABLE_COLUMNS = {
   social_accounts: ['id', 'client_id', 'platform', 'provider_account_id', 'name', 'username', 'avatar_url', 'active', 'connected_at', 'last_synced_at', 'health', 'contact_id'],
   social_accounts_retired: ['id', 'client_id', 'platform', 'provider_account_id', 'username', 'row', 'retired_at'],
   social_posts: ['id', 'client_id', 'item_id', 'version_id', 'version_number', 'slides', 'caption', 'per_channel', 'channels', 'scheduled_for', 'timezone', 'status', 'publish_job_ids', 'created_by', 'created_at', 'updated_at', 'sent_at', 'approved_at', 'approved_by', 'approval_mode', 'note', 'stage', 'rev', 'stage_at', 'draft_version', 'sent_version', 'approval_steps', 'approval', 'qc_pass', 'changes_asked', 'client_send', 'last_client_send', 'booking', 'outcomes', 'problem', 'cancelled', 'assigned_to', 'source_item_id', 'source_deleted', 'sending', 'automation', 'batch', 'if_no_answer', 'client_review', 'review_asked', 'client_reviews'],
-  team_board_comments: ['id', 'board_id', 'author_id', 'body', 'card_id', 'assigned_to', 'resolved', 'created_at'],
+  team_board_comments: ['id', 'board_id', 'author_id', 'body', 'card_id', 'anchor_part', 'anchor_quote', 'parent_id', 'assigned_to', 'resolved', 'created_at'],
   team_boards: ['id', 'name', 'client_id', 'status', 'submitted_by', 'submitted_at', 'reviewed_by', 'reviewed_at', 'review_note', 'canvas_cards', 'shared_with_client', 'client_shared_at', 'client_shared_by', 'created_by', 'updated_by', 'created_at', 'updated_at', 'board_type', 'milanote_id', 'archived_at', 'archived_by', 'icon_url', 'hex'],
   team_invites: ['id', 'created_at', 'email', 'role', 'employment_type', 'timezone', 'client_id', 'assigned_client_ids', 'invited_by', 'clerk_invitation_id', 'status'],
   team_user_clients: ['team_user_id', 'client_id', 'assigned_at', 'assigned_by', 'id'],
@@ -2077,7 +2080,7 @@ export const NULLABLE_COLUMNS = {
   social_accounts: ['client_id', 'name', 'username', 'avatar_url', 'health', 'contact_id'],
   social_accounts_retired: ['client_id', 'username'],
   social_posts: ['version_id', 'version_number', 'caption', 'scheduled_for', 'created_by', 'sent_at', 'approved_at', 'approved_by', 'approval_mode', 'note', 'stage', 'rev', 'stage_at', 'draft_version', 'sent_version', 'approval_steps', 'approval', 'qc_pass', 'changes_asked', 'client_send', 'last_client_send', 'booking', 'outcomes', 'problem', 'cancelled', 'assigned_to', 'source_item_id', 'source_deleted', 'sending', 'automation', 'batch', 'if_no_answer', 'client_review', 'review_asked', 'client_reviews'],
-  team_board_comments: ['author_id', 'card_id', 'assigned_to', 'resolved'],
+  team_board_comments: ['author_id', 'card_id', 'anchor_part', 'anchor_quote', 'parent_id', 'assigned_to', 'resolved'],
   team_boards: ['client_id', 'status', 'submitted_by', 'submitted_at', 'reviewed_by', 'reviewed_at', 'review_note', 'canvas_cards', 'shared_with_client', 'client_shared_at', 'client_shared_by', 'created_by', 'updated_by', 'board_type', 'milanote_id', 'archived_at', 'archived_by', 'icon_url', 'hex'],
   team_invites: ['client_id', 'invited_by', 'clerk_invitation_id'],
   team_user_clients: ['assigned_by'],

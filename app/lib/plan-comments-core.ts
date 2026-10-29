@@ -5,18 +5,42 @@
  * (`anchor_quote`), is drawn beside them with the words lit up, takes replies (`parent_id`) and is resolved when dealt
  * with. Pure: the batch and the comments are handed in.
  */
-import { sanitisePlannedDeliverables, sanitiseShotList } from './batch-brief-core'
+import { sanitiseCanvasCards, sanitisePlannedDeliverables, sanitiseShotList, type CanvasCard } from './batch-brief-core'
+import { findCanvasCard } from './canvas-comments-core'
 import { sanitiseScripts, scriptWords } from './script-core'
 
-/** the parts of a plan words can be picked from — the ones the client's portal shows, and the plan's own boxes */
-const PART = /^(objective|concept|talent|props_wardrobe|editor_priorities|location|deliverable:[A-Za-z0-9_-]{1,60}|shot:[A-Za-z0-9_-]{1,60}|script:[A-Za-z0-9_-]{1,60})$/
+/** the parts of a plan words can be picked from — the ones the client's portal shows, and the plan's own boxes; and
+ *  (29 Oct 2026, "same goes for boards") a card of a board, a shoot's or a team board's */
+const PART = /^(objective|concept|talent|props_wardrobe|editor_priorities|location|deliverable:[A-Za-z0-9_-]{1,60}|shot:[A-Za-z0-9_-]{1,60}|script:[A-Za-z0-9_-]{1,60}|card:[A-Za-z0-9_-]{1,40})$/
 export const MAX_QUOTE = 300
 export const ANCHOR_GONE = 'Those words have changed since — select them again and comment.'
 
 type PlanLike = {
   objective?: string | null; concept?: string | null; talent?: string | null; props_wardrobe?: string | null
   editor_priorities?: string | null; location?: string | null
-  planned_deliverables?: unknown; shot_list?: unknown; scripts?: unknown
+  planned_deliverables?: unknown; shot_list?: unknown; scripts?: unknown; canvas_cards?: unknown
+}
+
+const ENTITY: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', '#39': "'", nbsp: ' ' }
+const plain = (html: string) => html
+  .replace(/<(br|\/p|\/div|\/li|\/h[1-6])\b[^>]*>/gi, '\n').replace(/<[^>]+>/g, '')
+  .replace(/&(amp|lt|gt|quot|#39|nbsp);/g, (_, e: string) => ENTITY[e] ?? '')
+
+/**
+ * THE WORDS OF A BOARD CARD — what a person can select and comment on: its words (a note, a heading, a document), its
+ * name (a to-do list, a board), a link's title, the caption under a picture, a clip or a link, and a to-do's rows. The
+ * same words the card's comment panel draws, so what is selected is what the server finds.
+ */
+export function cardWords(card: Pick<CanvasCard, 'kind' | 'text' | 'name' | 'title' | 'caption' | 'items'> & { html?: string } | null | undefined): string {
+  if (!card) return ''
+  const words = card.text?.trim() ? card.text : (card.html ? plain(card.html) : '')
+  return [
+    card.kind === 'todo' || card.kind === 'board' || card.kind === 'column' ? card.name : '',
+    words,
+    card.kind === 'link' ? card.title : '',
+    card.caption,
+    ...(card.kind === 'todo' ? (card.items ?? []).map(i => i.text) : []),
+  ].map(x => String(x ?? '').trim()).filter(Boolean).join('\n')
 }
 
 /** the words of one part of the plan, as written now; null for a part that is not on it */
@@ -25,6 +49,10 @@ export function planPartText(b: PlanLike, part: string): string | null {
   const [kind, key] = part.split(':')
   if (kind === 'deliverable') return sanitisePlannedDeliverables(b.planned_deliverables).find(d => d.id === key)?.title ?? null
   if (kind === 'shot') return sanitiseShotList(b.shot_list).find(s => s.id === key)?.text ?? null
+  if (kind === 'card') {
+    const card = findCanvasCard(sanitiseCanvasCards(b.canvas_cards), key)
+    return card ? cardWords(card) : null
+  }
   if (kind === 'script') {
     // the words as the portal draws them (script-core.scriptWords) — what a person selects is what they read
     const s = sanitiseScripts(b.scripts).find(x => x.id === key)
@@ -92,4 +120,28 @@ export function planThreads<C extends PlanComment>(rows: readonly C[]): PlanThre
 /** the threads on one part of the plan */
 export function threadsOn<C extends PlanComment>(threads: readonly PlanThread<C>[], part: string): PlanThread<C>[] {
   return threads.filter(t => t.root.anchor_part === part)
+}
+
+/**
+ * WHAT THE GENERAL THREAD SHOWS: a first comment, never a reply (a reply sits under its own), and never one on the
+ * plan's words (drawn under those words). A comment on a board card's words stays — it is still that card's comment.
+ */
+export function inGeneralThread(c: { parent_id?: string | null; anchor_part?: string | null; card_id?: string | null }): boolean {
+  return !c.parent_id && (!c.anchor_part || !!c.card_id)
+}
+
+/** a plan's words thread or a reply in one — kept off the board's cards and the general thread */
+export function onPlanWords(c: { parent_id?: string | null; anchor_part?: string | null; card_id?: string | null }): boolean {
+  return !c.card_id && (!!c.anchor_part || !!c.parent_id)
+}
+
+/**
+ * THE THREADS ON ONE BOARD CARD (29 Oct 2026): every first comment on the card is a thread, with its replies under it
+ * and Resolve, as on the plan — on the selected words when it was made on them. Open ones in the order they were made.
+ */
+export function cardThreads<C extends PlanComment & { card_id?: string | null }>(rows: readonly C[], cardId: string): PlanThread<C>[] {
+  const on = rows.filter(r => r.card_id === cardId)
+  return on.filter(r => !r.parent_id)
+    .sort((a, b) => a.created_at.localeCompare(b.created_at))
+    .map(root => ({ root, replies: on.filter(r => r.parent_id === root.id).sort((a, b) => a.created_at.localeCompare(b.created_at)) }))
 }
