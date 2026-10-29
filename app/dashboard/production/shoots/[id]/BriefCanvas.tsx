@@ -207,16 +207,19 @@ export default function BriefCanvas({
     const bar = vp?.querySelector<HTMLElement>('[data-card-toolbar]')
     if (!vp || !bar) return
     const base = Number(bar.dataset.baseLeft ?? 0)
+    const v = vp.getBoundingClientRect()
+    const pad = 8
+    // NEVER WIDER THAN THE BOARD (30 Oct 2026: the shoot page's board is one column of two, and the toolbar ran off
+    // its right edge) — it wraps to more rows instead. Set before measuring, so the width read is the wrapped one
+    bar.style.maxWidth = `${Math.max(200, Math.min(680, v.width - 2 * pad))}px`
     // worked out from the card's place and the toolbar's own width — not the toolbar's drawn box, which mid-zoom
     // still wears the old zoom's size (it measured short and stayed half off the board)
     const width = bar.offsetWidth
     const wrap = bar.parentElement
     if (!width || !wrap) return
     const s = camRef.current.s
-    const v = vp.getBoundingClientRect()
     const centre = wrap.getBoundingClientRect().left + base * s
     const left = centre - width / 2
-    const pad = 8
     const shift = width > v.width - 2 * pad || left < v.left + pad ? v.left + pad - left
       : left + width > v.right - pad ? v.right - pad - (left + width) : 0
     bar.style.left = `${base + shift / s}px`
@@ -1165,6 +1168,30 @@ export default function BriefCanvas({
     if (!fitDoneRef.current && visible.length > 0) { fitDoneRef.current = true; fitToCards() }
     else paint()
   }, [visible.length, board, fitToCards, paint])
+
+  // THE CARD WHOSE COMMENTS ARE OPEN STAYS IN SIGHT (30 Oct 2026: the panel opening beside the board narrowed it, and
+  // the card at its right edge slid under the panel, its comment bubble cut off). Panned just enough, the zoom kept;
+  // read after the layout has settled
+  const openCardId = commentsCtx?.openCardId ?? null
+  useEffect(() => {
+    if (!openCardId) return
+    const t = window.setTimeout(() => {
+      const vp = viewportRef.current
+      const el = vp?.querySelector<HTMLElement>(`[data-cid="${CSS.escape(openCardId)}"]`)
+      if (!vp || !el) return
+      const v = vp.getBoundingClientRect()
+      const c = el.getBoundingClientRect()
+      const pad = 28 // the bubble rides over the card's top-right corner
+      const shift = (lo: number, hi: number, vlo: number, vhi: number) =>
+        hi - lo > vhi - vlo - 2 * pad || lo < vlo + pad ? vlo + pad - lo : hi > vhi - pad ? vhi - pad - hi : 0
+      const dx = shift(c.left, c.right, v.left, v.right)
+      const dy = shift(c.top, c.bottom, v.top, v.bottom)
+      if (!dx && !dy) return
+      camRef.current = { ...camRef.current, x: camRef.current.x + dx, y: camRef.current.y + dy }
+      paint(); commitCamera()
+    }, 120)
+    return () => window.clearTimeout(t)
+  }, [openCardId, paint, commitCamera])
 
   /* ── keyboard ── */
   const nudgeTimer = useRef<number | null>(null)

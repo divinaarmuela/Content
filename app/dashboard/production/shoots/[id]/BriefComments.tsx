@@ -47,13 +47,19 @@ export default function BriefComments({ batchId, cards = [] }: {
   const [draft, setDraft] = useState('')
   const [sending, setSending] = useState(false)
   const [team, setTeam] = useState<Mentionable[]>([])
+  /** replies per first comment — a card's thread here says how many wait on the card */
+  const [replies, setReplies] = useState<Map<string, number>>(new Map())
 
   const load = useCallback(async () => {
     const res = await fetch(`/api/production/batches/${batchId}/comments`)
     if (res.ok) {
       const json = await res.json()
       // the comments on the plan's own words sit under those words (TeamPlanComments), not here as well
-      setRows((json.comments ?? []).filter(inGeneralThread))
+      const all: { parent_id?: string | null }[] = json.comments ?? []
+      setRows(all.filter(inGeneralThread) as Row[])
+      const n = new Map<string, number>()
+      for (const c of all) if (c.parent_id) n.set(c.parent_id, (n.get(c.parent_id) ?? 0) + 1)
+      setReplies(n)
       setViewerId(json.viewer_id ?? null)
     } else setRows([])
   }, [batchId])
@@ -158,6 +164,7 @@ export default function BriefComments({ batchId, cards = [] }: {
                         onClick={() => window.dispatchEvent(new CustomEvent(OPEN_CARD_EVENT, { detail: r.card_id }))}
                         className="rounded bg-tint-amber px-1.5 py-px text-[11px] italic text-foreground underline-offset-2 hover:underline">
                         {onCardLine(canvasCardLabel(findCanvasCard(cards, r.card_id)))}
+                        {(replies.get(r.id) ?? 0) > 0 && ` · ${replies.get(r.id)} repl${replies.get(r.id) === 1 ? 'y' : 'ies'}`}
                       </button>
                     )}
                     {r.assigned_to && !r.resolved && (

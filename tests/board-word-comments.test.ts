@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
-import { cardThreads, cardWords, checkAnchor, inGeneralThread, onPlanWords } from '../app/lib/plan-comments-core'
+import { cardThreads, cardWords, checkAnchor, inGeneralThread, onPlanWords, snapToWords } from '../app/lib/plan-comments-core'
 
 // 29 Oct 2026, the owner: "same goes for boards for this comments part" — "shoots and boards almost the same just
 // without the scripts". Select words on a board card, comment on exactly those, with replies and Resolve.
@@ -45,6 +45,37 @@ describe('threads on a card', () => {
     expect(inGeneralThread({ anchor_part: 'objective' })).toBe(false)
     expect(onPlanWords({ anchor_part: 'objective' })).toBe(true)
     expect(onPlanWords({ parent_id: 'x', card_id: 'n1' })).toBe(false)
+  })
+  it('a card’s resolved thread is folded in the card’s panel, not struck through in the general thread; a done task stays', () => {
+    expect(inGeneralThread({ card_id: 'n1', resolved: true })).toBe(false)
+    expect(inGeneralThread({ card_id: 'n1', resolved: false })).toBe(true)
+    expect(inGeneralThread({ resolved: true })).toBe(true)
+  })
+})
+
+describe('whole words (30 Oct 2026: "hen the wide")', () => {
+  const text = 'TEST note: warm light at golden hour,\nthen the wide of the studio'
+  it('a selection begun or ended mid-word grows to the whole words', () => {
+    expect(snapToWords(text, 'hen the wid')).toBe('then the wide')
+    expect(snapToWords(text, 'olden hour,')).toBe('golden hour,')
+    expect(snapToWords(text, 'hour, then')).toBe('hour, then')
+  })
+  it('whole words and words not in the text are left as they are', () => {
+    expect(snapToWords(text, 'warm light')).toBe('warm light')
+    expect(snapToWords(text, 'not here')).toBe('not here')
+  })
+})
+
+describe('the panel fits the board it is beside (30 Oct 2026)', () => {
+  it('beside the board only where both fit — never by the screen alone', () => {
+    for (const p of ['app/components/portal/ShootBoard.tsx', 'app/dashboard/production/shoots/[id]/BriefBoardComments.tsx', 'app/dashboard/team-boards/[id]/TeamBoardComments.tsx']) {
+      const src = readFileSync(p, 'utf8')
+      expect(src).toContain('useSideBySide<HTMLDivElement>()')
+      expect(src).not.toContain('lg:grid-cols-[minmax(0,1fr)_340px]')
+    }
+  })
+  it('the open card is panned into sight', () => {
+    expect(readFileSync('app/dashboard/production/shoots/[id]/BriefCanvas.tsx', 'utf8')).toContain('const openCardId = commentsCtx?.openCardId ?? null')
   })
 })
 

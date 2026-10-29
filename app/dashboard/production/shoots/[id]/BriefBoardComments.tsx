@@ -9,6 +9,7 @@ import CardCommentPanel, { type CardComment, type CardCommentWhere } from '../..
 import type { CanvasCard } from '../../../../lib/batch-brief-core'
 import { commentsOnCard, countByCard, findCanvasCard } from '../../../../lib/canvas-comments-core'
 import type { Mentionable } from '../../../../lib/mention-core'
+import { useSideBySide } from '../../../../components/canvas/useSideBySide'
 
 type Row = {
   id: string
@@ -60,6 +61,10 @@ export default function BriefBoardComments({ batchId, cards, children, className
   // icon but it is not showing"); the board draws the panel itself then
   const [fullscreen, setFullscreen] = useState(false)
   const panelRef = useRef<HTMLDivElement>(null)
+  // beside the board only where both fit — on the shoot page the board is one column of two (30 Oct 2026)
+  const { ref: gridRef, wide } = useSideBySide<HTMLDivElement>()
+  const wideRef = useRef(wide)
+  wideRef.current = wide
 
   const load = useCallback(async () => {
     const res = await fetch(`/api/production/batches/${batchId}/comments`, { cache: 'no-store' })
@@ -114,7 +119,7 @@ export default function BriefBoardComments({ batchId, cards, children, className
   const openThread = useCallback((cardId: string) => {
     setOpen(cardId)
     window.setTimeout(() => {
-      if (window.matchMedia('(min-width: 1024px)').matches) return
+      if (wideRef.current) return
       panelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
     }, 50)
   }, [])
@@ -158,7 +163,7 @@ export default function BriefBoardComments({ batchId, cards, children, className
       onClose={() => setOpen(null)}
       viewer="team"
       members={members}
-      className={fullscreen ? '' : 'lg:sticky lg:top-4'}
+      className={!fullscreen && wide ? 'sticky top-4' : ''}
     />
   ) : null
   const ctx = useMemo(
@@ -169,7 +174,7 @@ export default function BriefBoardComments({ batchId, cards, children, className
 
   return (
     <CanvasCommentsProvider value={ctx}>
-      <div className={cn('grid gap-3', openCard && !fullscreen && 'lg:grid-cols-[minmax(0,1fr)_340px]', className)}>
+      <div ref={gridRef} className={cn('grid gap-3', openCard && !fullscreen && wide && 'grid-cols-[minmax(0,1fr)_340px]', className)}>
         <div className="min-w-0">{children}</div>
         {openCard && !fullscreen && (
           <div ref={panelRef} className="min-w-0">

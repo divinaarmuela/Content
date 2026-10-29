@@ -125,9 +125,28 @@ export function threadsOn<C extends PlanComment>(threads: readonly PlanThread<C>
 /**
  * WHAT THE GENERAL THREAD SHOWS: a first comment, never a reply (a reply sits under its own), and never one on the
  * plan's words (drawn under those words). A comment on a board card's words stays — it is still that card's comment.
+ * A card's RESOLVED thread does not: it is folded away in that card's own panel, and here it read struck through with
+ * its replies missing (30 Oct 2026)
  */
-export function inGeneralThread(c: { parent_id?: string | null; anchor_part?: string | null; card_id?: string | null }): boolean {
-  return !c.parent_id && (!c.anchor_part || !!c.card_id)
+export function inGeneralThread(c: { parent_id?: string | null; anchor_part?: string | null; card_id?: string | null; resolved?: boolean | null }): boolean {
+  return !c.parent_id && (!c.anchor_part || !!c.card_id) && !(c.card_id && c.resolved)
+}
+
+/**
+ * WHOLE WORDS (30 Oct 2026: a drag that began mid-word quoted "hen the wide"). The selected words, grown out to the
+ * whole words at either end, read in `text` — the words the selection was made in. Unchanged when not found there.
+ */
+export function snapToWords(text: string, quote: string): string {
+  const flat = text.replace(/\s+/g, ' ')
+  const q = quote.replace(/\s+/g, ' ').trim()
+  const at = q ? flat.indexOf(q) : -1
+  if (at < 0) return q
+  const inWord = (ch: string | undefined) => !!ch && /[\p{L}\p{N}'’_-]/u.test(ch)
+  let s = at
+  let e = at + q.length
+  while (s > 0 && inWord(flat[s - 1]) && inWord(flat[s])) s--
+  while (e < flat.length && inWord(flat[e]) && inWord(flat[e - 1])) e++
+  return flat.slice(s, e)
 }
 
 /** a plan's words thread or a reply in one — kept off the board's cards and the general thread */

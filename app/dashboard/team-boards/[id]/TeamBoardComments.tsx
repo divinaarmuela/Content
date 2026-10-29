@@ -10,6 +10,7 @@ import CardCommentPanel, { type CardComment, type CardCommentWhere } from '../..
 import type { CanvasCard } from '../../../lib/batch-brief-core'
 import { commentsOnCard, countByCard, findCanvasCard } from '../../../lib/canvas-comments-core'
 import { tagNameOf } from '../../../lib/mention-core'
+import { useSideBySide } from '../../../components/canvas/useSideBySide'
 
 /**
  * THE TEAM'S SIDE OF A BOARD CARD'S THREAD (the owner, 22 Sep 2026: "make
@@ -37,6 +38,10 @@ export default function TeamBoardComments({ boardId, cards, team, children, clas
   const [open, setOpen] = useState<string | null>(null)
   const [fullscreen, setFullscreen] = useState(false)
   const panelRef = useRef<HTMLDivElement>(null)
+  // beside the board only where both fit (30 Oct 2026)
+  const { ref: gridRef, wide } = useSideBySide<HTMLDivElement>()
+  const wideRef = useRef(wide)
+  wideRef.current = wide
 
   useEffect(() => {
     try {
@@ -70,7 +75,7 @@ export default function TeamBoardComments({ boardId, cards, team, children, clas
   const openThread = useCallback((cardId: string) => {
     setOpen(cardId)
     window.setTimeout(() => {
-      if (window.matchMedia('(min-width: 1024px)').matches) return
+      if (wideRef.current) return
       panelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
     }, 50)
   }, [])
@@ -113,7 +118,7 @@ export default function TeamBoardComments({ boardId, cards, team, children, clas
       onClose={() => setOpen(null)}
       viewer="team"
       members={members}
-      className={fullscreen ? '' : 'lg:sticky lg:top-4'}
+      className={!fullscreen && wide ? 'sticky top-4' : ''}
     />
   ) : null
   const ctx = useMemo(
@@ -124,7 +129,7 @@ export default function TeamBoardComments({ boardId, cards, team, children, clas
 
   return (
     <CanvasCommentsProvider value={ctx}>
-      <div className={cn('grid gap-3', openCard && !fullscreen && 'lg:grid-cols-[minmax(0,1fr)_340px]', className)}>
+      <div ref={gridRef} className={cn('grid gap-3', openCard && !fullscreen && wide && 'grid-cols-[minmax(0,1fr)_340px]', className)}>
         <div className="min-w-0">{children}</div>
         {openCard && !fullscreen && (
           <div ref={panelRef} className="min-w-0">

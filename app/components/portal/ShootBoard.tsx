@@ -11,6 +11,7 @@ import { CanvasCommentsProvider } from '../canvas/CanvasComments'
 import { PortalTokenProvider } from '../../lib/instagram-video-client'
 import { PortalDriveScopeProvider } from '../canvas/PortalDriveScope'
 import CardCommentPanel, { type CardCommentWhere } from '../canvas/CardCommentPanel'
+import { useSideBySide } from '../canvas/useSideBySide'
 import type { CanvasCard } from '../../lib/batch-brief-core'
 import type { PortalCardComment } from '../../lib/portal-core'
 import { commentsOnCard, countByCard, findCanvasCard } from '../../lib/canvas-comments-core'
@@ -74,12 +75,16 @@ export default function ShootBoard({
   const counts = useMemo(() => countByCard(rows), [rows])
   const openCard = useMemo(() => findCanvasCard(cards, open), [cards, open])
   const panelRef = useRef<HTMLDivElement>(null)
+  // the panel sits beside the board only where both fit; under it otherwise
+  const { ref: gridRef, wide } = useSideBySide<HTMLDivElement>()
+  const wideRef = useRef(wide)
+  wideRef.current = wide
 
   const openThread = useCallback((cardId: string) => {
     setOpen(cardId)
-    // on a phone the panel is below the board — bring it up to the thumb
+    // when the panel is below the board — bring it up to the thumb
     window.setTimeout(() => {
-      if (window.matchMedia('(min-width: 1024px)').matches) return
+      if (wideRef.current) return
       panelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
     }, 50)
   }, [])
@@ -178,7 +183,7 @@ export default function ShootBoard({
         )}
       </div>
       <CanvasCommentsProvider value={ctx}>
-        <div className={cn('grid gap-3', openCard && 'lg:grid-cols-[minmax(0,1fr)_340px]')}>
+        <div ref={gridRef} className={cn('grid gap-3', openCard && wide && 'grid-cols-[minmax(0,1fr)_340px]')}>
           {/* the canvas reads `.dark` from <html>, where PortalShell puts the
               choice, so it follows the page */}
           <div ref={wrapRef} className="min-w-0 overflow-hidden rounded-inner border border-border">
@@ -199,7 +204,7 @@ export default function ShootBoard({
                 onClose={() => setOpen(null)}
                 name={token ? { value: name, onChange: setName } : undefined}
                 viewer="client"
-                className="lg:sticky lg:top-16"
+                className={wide ? 'sticky top-16' : ''}
               />
             </div>
           )}

@@ -4,7 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import { Check, MessageSquarePlus, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { LinkedText } from './LinkedText'
-import { markQuotes, planThreads, threadsOn, type PlanComment, type PlanThread } from '../lib/plan-comments-core'
+import { markQuotes, planThreads, snapToWords, threadsOn, type PlanComment, type PlanThread } from '../lib/plan-comments-core'
 
 /**
  * COMMENTS ON THE PLAN'S OWN WORDS, AS GOOGLE DOCS DOES THEM (29 Oct 2026, the owner with a video: "idk how u will do this
@@ -68,7 +68,7 @@ export function PlanCommentsProvider({ comments, canComment, post, resolve, need
       const b = node(sel.focusNode)?.closest('[data-plan-part]')
       // within one part only — a comment is on one part's words
       if (!a || a !== b) return
-      setPicked({ part: String(a.getAttribute('data-plan-part')), quote: quote.slice(0, 300) })
+      setPicked({ part: String(a.getAttribute('data-plan-part')), quote: snapToWords(a.textContent ?? '', quote).slice(0, 300) })
     }
     document.addEventListener('selectionchange', read)
     return () => document.removeEventListener('selectionchange', read)

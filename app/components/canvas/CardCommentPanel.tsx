@@ -7,7 +7,7 @@ import type { CanvasCard } from '../../lib/batch-brief-core'
 import { canvasCardLabel } from '../../lib/canvas-comments-core'
 import MentionBox from '../../dashboard/MentionBox'
 import { extractMentions, type Mentionable } from '../../lib/mention-core'
-import { cardThreads, cardWords, markQuotes, MAX_QUOTE, type PlanThread } from '../../lib/plan-comments-core'
+import { cardThreads, cardWords, markQuotes, MAX_QUOTE, snapToWords, type PlanThread } from '../../lib/plan-comments-core'
 import { LinkedText } from '../LinkedText'
 
 export type CardComment = {
@@ -88,13 +88,14 @@ export default function CardCommentPanel({
       const box = wordsRef.current
       if (!sel || sel.isCollapsed || !box || !box.contains(sel.anchorNode) || !box.contains(sel.focusNode)) return
       const q = sel.toString().replace(/\s+/g, ' ').trim()
-      if (q.length >= 2) setQuote(q.slice(0, MAX_QUOTE))
+      if (q.length >= 2) setQuote(snapToWords(box.textContent ?? '', q).slice(0, MAX_QUOTE))
     }
     document.addEventListener('selectionchange', read)
     return () => document.removeEventListener('selectionchange', read)
   }, [])
 
   const label = canvasCardLabel(card)
+  const repeatsWords = !!words && words.replace(/\s+/g, ' ').startsWith(label.replace(/…$/, ''))
   const image = card.kind === 'image' || card.kind === 'mockup' ? card.url : card.thumb
 
   return (
@@ -105,9 +106,14 @@ export default function CardCommentPanel({
       className={cn('flex flex-col rounded-card border border-border bg-popover text-popover-foreground shadow-lg', members ? 'overflow-visible' : 'overflow-hidden', className)}
     >
       <div className="flex items-start gap-2 border-b border-border px-4 py-3">
-        <div className="min-w-0 flex-1">
-          <p className="text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">Comments on this card</p>
-          <p className="truncate text-[15px] font-semibold">{label}</p>
+        <div className="min-w-0 flex-1 self-center">
+          {/* a note's name is its first words, cut short — and its whole words are right below (30 Oct 2026) */}
+          {repeatsWords ? <p className="text-[15px] font-semibold">Comments on this card</p> : (
+            <>
+              <p className="text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">Comments on this card</p>
+              <p className="truncate text-[15px] font-semibold">{label}</p>
+            </>
+          )}
         </div>
         <button type="button" onClick={onClose} aria-label="Close comments"
           className="-mr-2 -mt-1 inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full hover:bg-foreground/[0.06]">
