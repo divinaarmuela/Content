@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
-import { postsByClient, type MonthRow } from '../app/lib/overview-posts-core'
+import { liveCountsLine, postsByClient, type MonthRow } from '../app/lib/overview-posts-core'
 
 // 29 Oct 2026, the owner: "why does it show two social platforms from same client it should be one … like justin
 // engelke and then underneath its the booked / posted for those platforms"
@@ -44,10 +44,11 @@ describe('another month, one press', () => {
 })
 
 describe('scheduled but awaiting the client', () => {
-  it('a scheduled post the client has not approved is held back from Zernio — so it is its own line in the log, tagged', () => {
+  it('a scheduled post the client has not approved is booked in Zernio — its Zernio line carries the tag and the Notify', () => {
     const route = readFileSync('app/api/overview/posts-month/route.ts', 'utf8')
-    expect(route).toContain("if (!waitingForClient(p as never) || !p.client_id || !inMonth(p.scheduled_for ?? null, String(p.client_id))) continue")
-    expect(route).toContain("networks: chans.map(ch => ({ platform: platformOf.get(ch)!, status: 'booked' as const, url: null })), awaiting_client: true,")
+    expect(route).toContain("const jobIds = [...(Array.isArray(p.booking?.job_ids) ? p.booking!.job_ids as unknown[] : []), ...(Array.isArray(p.publish_job_ids) ? p.publish_job_ids : [])].map(String)")
+    expect(route).toContain("return pid ? { ...e, awaiting_client: true, post_id: pid } : e")
+    expect(readFileSync('app/dashboard/page.tsx', 'utf8')).toContain('<NotifyClientButton clientId={clientId} tab="scheduling" id={e.post_id}')
     expect(readFileSync('app/dashboard/page.tsx', 'utf8')).toContain('{e.awaiting_client && <span className="rounded-full bg-tint-amber px-2 py-0.5 font-semibold">Awaiting client approval</span>}')
   })
   it('the panel steps to any month', () => {
@@ -57,14 +58,15 @@ describe('scheduled but awaiting the client', () => {
   })
 })
 
-describe('held for the client, counted once', () => {
-  it('a post awaiting the client is one line on the client, under waiting — not also under scheduled', () => {
+describe('awaiting the client, counted once', () => {
+  it('a post awaiting the client is one post in the log, and the line takes it off scheduled', () => {
     const held = { id: 'post:x', status: 'booked' as const, at: '2026-11-04', caption: 'held', url: null, error: null, awaiting_client: true }
     const r = { ...row('ig', 'instagram', 0, [held, { ...e('z1', 'instagram', 'booked', '2026-11-05') }]), booked: 1, waiting: [{ post_id: 'x', at: '2026-11-04', booked: true }] }
     const r2 = { ...row('li', 'linkedin', 0, [held]), waiting: [{ post_id: 'x', at: '2026-11-04', booked: true }] }
     const [c] = postsByClient([r, r2])
-    expect(c.booked).toBe(1)
+    expect(c.booked).toBe(2)
     expect(c.waiting.length).toBe(1)
+    expect(liveCountsLine(c as never)).toBe('1 post scheduled · 1 post waiting on the client')
     expect(c.log!.map(x => x.id)).toEqual(['z1', 'post:x'])
   })
 })

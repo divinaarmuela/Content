@@ -359,7 +359,9 @@ export type PostLogEntry = { id: string; status: 'went_out' | 'booked' | 'did_no
   networks?: { platform: string; status: 'went_out' | 'booked' | 'did_not' | 'other'; url: string | null }[]
   /** SCHEDULED, BUT THE CLIENT HAS NOT APPROVED IT YET (the owner, 29 Oct 2026: "add a tag booked in but awaiting client
    *  approval") — it goes only once they do */
-  awaiting_client?: boolean }
+  awaiting_client?: boolean
+  /** our post's id, for the Notify / copy-link on a post awaiting the client */
+  post_id?: string }
 export type LiveCounts = { went_out: number; booked: number; did_not: number }
 export type WaitingPost = { post_id: string; at: string | null; booked: boolean }
 
@@ -430,12 +432,13 @@ export function metaQueueCounts(
 }
 
 /** "8 posts went out · 2 posts scheduled · 1 post waiting on the client · 2 posts posted by hand" — zeros left out.
- *  A post waiting on the client is held back until they say yes (post-stage-core.waitingForClient), so it is not among
- *  Zernio's scheduled ones and nothing is taken off that number (29 Oct 2026: it was, and November read 8 short) */
+ *  A post waiting on the client IS booked in Zernio (its booking.job_ids, checked 29 Oct 2026 on MGMT's November), so
+ *  the scheduled number is the ones NOT waiting on them, and each post is counted once */
 export function liveCountsLine(row: AccountPostsRow & { waiting?: readonly WaitingPost[] }): string {
   // in words, never a bare number after a word — a card can be NAMED "3" (the owner: "sometimes they name the card 3")
   const posts = (n: number) => `${n} post${n === 1 ? '' : 's'}`
-  const booked = row.booked
+  const waitingBooked = (row.waiting ?? []).filter(w => w.booked).length
+  const booked = row.booked - waitingBooked
   const waiting = (row.waiting ?? []).length
   const parts = [
     row.went_out > 0 ? `${posts(row.went_out)} went out` : null,
@@ -500,8 +503,8 @@ export function postsByClient(rows: readonly MonthRow[]): ClientMonth[] {
       // counted from the posts themselves when Zernio answered; our own jobs have no post to count by, so each
       // channel's number is the client's (the largest — a post on three channels is one post)
       went_out: hasLog ? log.filter(e => e.status === 'went_out').length : Math.max(0, ...channels.map(r => r.went_out)),
-      // a post awaiting the client is counted once, as waiting on them, not also as scheduled
-      booked: hasLog ? log.filter(e => e.status === 'booked' && !e.awaiting_client).length : Math.max(0, ...channels.map(r => r.booked)),
+      // every scheduled post once — the line takes the ones waiting on the client off it (liveCountsLine)
+      booked: hasLog ? log.filter(e => e.status === 'booked').length : Math.max(0, ...channels.map(r => r.booked)),
       did_not: Math.max(0, ...channels.map(r => r.did_not)),
       by_hand: list.reduce((n, r) => n + r.by_hand, 0),
       metrics: {

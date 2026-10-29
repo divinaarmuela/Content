@@ -96,17 +96,30 @@ export async function GET(req: Request) {
       }
 
       // SCHEDULED, AWAITING THE CLIENT'S APPROVAL (the owner, 29 Oct 2026: "add a tag booked in but awaiting client
-      // approval"). Such a post is held back by us until they say yes, so Zernio has no post for it — it goes in the log
-      // as its own line, on every account it is booked for, with the tag
+      // approval … copy portal link"). Such a post IS booked in Zernio — its booking's jobs carry the Zernio post — so
+      // that post's own line in the log carries the tag and our post's id for Notify. One whose Zernio post is not
+      // found still gets a line of its own, so none goes missing
+      const jobById = new Map(jobs.map(j => [j.id, j]))
       const platformOf = new Map(mine.map(a => [a.id, String(a.platform)]))
-      for (const p of posts as unknown as (SocialPost & { stage?: string; channels?: unknown; caption?: unknown })[]) {
+      const awaitingByZernio = new Map<string, string>()
+      const zernioIds = new Set([...log.values()].flat().map(e => e.id.split(':')[0]))
+      for (const p of posts as unknown as (SocialPost & { stage?: string; channels?: unknown; caption?: unknown; booking?: { job_ids?: unknown } | null; publish_job_ids?: unknown })[]) {
         if (!waitingForClient(p as never) || !p.client_id || !inMonth(p.scheduled_for ?? null, String(p.client_id))) continue
+        const jobIds = [...(Array.isArray(p.booking?.job_ids) ? p.booking!.job_ids as unknown[] : []), ...(Array.isArray(p.publish_job_ids) ? p.publish_job_ids : [])].map(String)
+        const zids = jobIds.map(j => (jobById.get(j) as { provider_post_id?: string | null } | undefined)?.provider_post_id).filter((z): z is string => !!z)
+        const found = zids.filter(z => zernioIds.has(z))
+        for (const z of found) awaitingByZernio.set(z, p.id)
+        if (found.length > 0) continue
         const chans = (Array.isArray(p.channels) ? p.channels.map(String) : []).filter(ch => platformOf.has(ch))
         const entry: PostLogEntry = {
           id: `post:${p.id}`, status: 'booked', at: p.scheduled_for ?? null, caption: String(p.caption ?? '').trim(), url: null, error: null,
-          networks: chans.map(ch => ({ platform: platformOf.get(ch)!, status: 'booked' as const, url: null })), awaiting_client: true,
+          networks: chans.map(ch => ({ platform: platformOf.get(ch)!, status: 'booked' as const, url: null })), awaiting_client: true, post_id: p.id,
         }
         for (const ch of chans) log.set(ch, [...(log.get(ch) ?? []), entry])
+      }
+      const tagged = (e: PostLogEntry): PostLogEntry => {
+        const pid = e.status === 'booked' ? awaitingByZernio.get(e.id.split(':')[0]) : undefined
+        return pid ? { ...e, awaiting_client: true, post_id: pid } : e
       }
 
       // one row per account with anything this month; Zernio's three numbers replace the jobs' when Zernio answered
@@ -126,7 +139,7 @@ export async function GET(req: Request) {
         r.waiting = w.sort((x, y) => String(x.at ?? '').localeCompare(String(y.at ?? '')))
         // newest first, as Zernio's own list
         // what went out and what is booked only (the owner, 29 Oct 2026: "remove the did not go out ones")
-        r.log = (log.get(a.id) ?? []).filter(e => e.status !== 'did_not').sort((x, y) => String(y.at ?? '').localeCompare(String(x.at ?? '')))
+        r.log = (log.get(a.id) ?? []).filter(e => e.status !== 'did_not').map(tagged).sort((x, y) => String(y.at ?? '').localeCompare(String(x.at ?? '')))
         rows.set(a.id, r)
       }
       const list = [...rows.values()]

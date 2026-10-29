@@ -354,7 +354,7 @@ const LOG_WORDS: Record<PostLogEntry['status'], { words: string; tone: string }>
 }
 /** an account's month, post by post, as Zernio's own list (the owner, 29 Oct 2026: "can we make a proper log maybe caption
  *  like how zernio dashboard is … it should show … which social platforms it published") */
-function PostLog({ entries }: { entries: PostLogEntry[] }) {
+function PostLog({ entries, clientId }: { entries: PostLogEntry[]; clientId?: string | null }) {
   if (entries.length === 0) return <p className="mt-2 text-[12px] text-muted-foreground">No posts through Zernio this month.</p>
   return (
     <ul className="mt-2 flex flex-col divide-y divide-border rounded-inner border border-border bg-background">
@@ -375,6 +375,10 @@ function PostLog({ entries }: { entries: PostLogEntry[] }) {
             </span>
           </span>
           <span className="line-clamp-2 text-[13px]">{e.caption || <span className="text-muted-foreground">No caption</span>}</span>
+          {/* awaiting the client: the one Notify — it emails the client the post's own page, or hands the link to copy */}
+          {e.awaiting_client && e.post_id && clientId && (
+            <NotifyClientButton clientId={clientId} tab="scheduling" id={e.post_id} className="h-8 w-fit rounded-full px-3 text-[12px] font-semibold" />
+          )}
           {e.status === 'did_not' && e.error && <span className="text-[12px] text-accent-red-deep">{e.error}</span>}
         </li>
       ))}
@@ -453,9 +457,9 @@ function PostsThisMonth({ rows, month, thisMonth, onMonth }: { rows: MonthRow[] 
                   </span>
                 )}
                 {/* every post once, with the networks it went to */}
-                {openKey === c.key && <PostLog entries={c.log ?? []} />}
+                {openKey === c.key && <PostLog entries={c.log ?? []} clientId={c.client_id} />}
                 {/* WAITING ON THE CLIENT (the owner, 29 Oct 2026): each such post once, with the one Notify */}
-                {c.client_id && c.waiting.map(w => (
+                {c.client_id && c.waiting.filter(w => !w.booked || c.log === undefined || !c.log.some(e => e.post_id === w.post_id)).map(w => (
                   <span key={w.post_id} className="mt-1 flex flex-wrap items-center gap-2 rounded-inner bg-tint-amber px-2.5 py-1.5 text-[12px]">
                     <span className="font-semibold">{w.booked ? 'Scheduled — waiting on the client' : 'With the client — not scheduled yet'}</span>
                     {w.at && <span className="text-muted-foreground">{new Date(w.at).toLocaleString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}</span>}
