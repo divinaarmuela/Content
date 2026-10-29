@@ -60,6 +60,8 @@ function siteWords(url: string): string {
   return bare.split(/[?#]/)[0].replace(/\/+$/, '') || bare
 }
 
+const STATUS_ORDER: Record<string, number> = { active: 0, prospect: 1, paused: 2, archived: 3 }
+
 const EMPTY: Partial<Client> = { name: '', industry: '', contact_name: '', email: '', phone: '', website: '', status: 'active', notes: '' }
 
 const STATUS_STYLE: Record<string, string> = {
@@ -77,10 +79,13 @@ export default function ClientsPage() {
   const [search, setSearch] = useState('')
 
   const q = search.trim().toLowerCase()
+  // ACTIVE FIRST, ARCHIVED LAST (29 Oct 2026: "active clients on top in alphabetical order and archived clients below
+  // all of the active ones") — prospects and paused between, each group A to Z
   const visible = (clients ?? []).filter(c =>
     !q || [c.name, c.slug, c.industry, c.contact_name, c.email]
       .some(field => (field ?? '').toLowerCase().includes(q)),
-  )
+  ).sort((a, b) => (STATUS_ORDER[a.status] ?? 2) - (STATUS_ORDER[b.status] ?? 2)
+    || String(a.name ?? '').localeCompare(String(b.name ?? ''), 'en', { sensitivity: 'base' }))
 
   const load = useCallback(async () => {
     try {
@@ -214,13 +219,16 @@ export default function ClientsPage() {
           the name, the slug, the industry, or whoever they deal with. */}
       {clients !== null && clients.length > 0 && (
         <div className="flex items-center gap-3">
-          <div className="relative max-w-xs flex-1">
-            <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+          {/* a search bar you see (29 Oct 2026: "and a search bar too") — wide, with its icon, at the top of the list */}
+          <div className="relative w-full max-w-md flex-1">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
             <Input
+              type="search"
               value={search}
               onChange={e => setSearch(e.target.value)}
-              placeholder="Search clients…"
-              className="bg-surface pl-8"
+              placeholder="Search clients by name, industry, contact or email"
+              aria-label="Search clients"
+              className="h-10 rounded-full bg-surface pl-9 text-[14px]"
             />
           </div>
           {search && (
