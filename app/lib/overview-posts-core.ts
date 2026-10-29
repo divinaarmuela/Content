@@ -443,3 +443,73 @@ export function liveCountsLine(row: AccountPostsRow & { waiting?: readonly Waiti
   ].filter(Boolean)
   return parts.length ? parts.join(' · ') : 'Nothing this month'
 }
+
+/* ── one line per client (29 Oct 2026) ───────────────────────────────────────
+ * The owner: "why does it show two social platforms from same client it should be one … client name, show posts shows
+ * the post like it is … and I can still see all the socials underneath". One post sent to Instagram, LinkedIn and TikTok
+ * was three lines of "8 posts went out". Now: the client, its posts counted ONCE each, every post once in its log with
+ * the networks it went to, and the client's accounts listed under it.
+ */
+export type MonthRow = AccountPostsRow & { waiting?: WaitingPost[]; log?: PostLogEntry[] }
+export type ClientMonth = {
+  key: string
+  client_id: string | null
+  client_name: string
+  went_out: number
+  booked: number
+  did_not: number
+  by_hand: number
+  metrics: MonthMetrics
+  waiting: WaitingPost[]
+  /** undefined when the counts came from our own jobs, not Zernio — there is no post list then */
+  log?: PostLogEntry[]
+  /** the client's accounts with anything this month, each with its own numbers */
+  accounts: MonthRow[]
+}
+
+/** the post a log line is about — `<zernio post>:<network>` is one post on one network; `job:<id>` is one job */
+const postKeyOf = (e: PostLogEntry) => (e.id.startsWith('job:') ? e.id : e.id.split(':')[0] || e.id)
+const RANK: Record<PostLogEntry['status'], number> = { went_out: 2, booked: 1, did_not: 0 }
+const sumOrNull = (xs: (number | null)[]) => xs.reduce<number | null>((a, b) => (b === null ? a : (a ?? 0) + b), null)
+
+export function postsByClient(rows: readonly MonthRow[]): ClientMonth[] {
+  const groups = new Map<string, MonthRow[]>()
+  for (const r of rows) {
+    const k = r.client_id ?? `row:${r.key}`
+    groups.set(k, [...(groups.get(k) ?? []), r])
+  }
+  const out: ClientMonth[] = []
+  for (const [key, list] of groups) {
+    const channels = list.filter(r => r.platform)
+    const hasLog = channels.some(r => r.log !== undefined)
+    // every post once: the furthest it got on any network (went out beats booked), newest first
+    const posts = new Map<string, PostLogEntry>()
+    for (const r of channels) for (const e of r.log ?? []) {
+      const k = postKeyOf(e)
+      const had = posts.get(k)
+      if (!had || RANK[e.status] > RANK[had.status]) posts.set(k, { ...e, id: k })
+    }
+    const log = [...posts.values()].sort((x, y) => String(y.at ?? '').localeCompare(String(x.at ?? '')))
+    const waiting = [...new Map(list.flatMap(r => r.waiting ?? []).map(w => [w.post_id, w])).values()]
+      .sort((x, y) => String(x.at ?? '').localeCompare(String(y.at ?? '')))
+    out.push({
+      key, client_id: list[0].client_id, client_name: list[0].client_name,
+      // counted from the posts themselves when Zernio answered; our own jobs have no post to count by, so each
+      // channel's number is the client's (the largest — a post on three channels is one post)
+      went_out: hasLog ? log.filter(e => e.status === 'went_out').length : Math.max(0, ...channels.map(r => r.went_out)),
+      booked: hasLog ? log.filter(e => e.status === 'booked').length : Math.max(0, ...channels.map(r => r.booked)),
+      did_not: Math.max(0, ...channels.map(r => r.did_not)),
+      by_hand: list.reduce((n, r) => n + r.by_hand, 0),
+      metrics: {
+        interactions: sumOrNull(list.map(r => r.metrics.interactions)),
+        likes: sumOrNull(list.map(r => r.metrics.likes)),
+        comments: sumOrNull(list.map(r => r.metrics.comments)),
+        views: sumOrNull(list.map(r => r.metrics.views)),
+      },
+      waiting,
+      log: hasLog ? log : undefined,
+      accounts: channels,
+    })
+  }
+  return out.sort((a, b) => (b.went_out + b.booked + b.by_hand) - (a.went_out + a.booked + a.by_hand) || a.client_name.localeCompare(b.client_name))
+}

@@ -52,7 +52,7 @@ import { itemStatusLabel } from '../lib/brief-task-core'
 import { compactCount } from '../lib/post-analytics-core'
 import {
   accountHandle, liveCountsLine, postMetricsLine,
-  NO_POSTS_THIS_MONTH, type AccountPostsRow, type PostLogEntry, type WaitingPost,
+  NO_POSTS_THIS_MONTH, postsByClient, type AccountPostsRow, type MonthRow, type PostLogEntry, type WaitingPost,
 } from '../lib/overview-posts-core'
 import { NotifyClientButton } from './board/NotifyClientDialog'
 import {
@@ -355,7 +355,7 @@ const LOG_WORDS: Record<PostLogEntry['status'], { words: string; tone: string }>
 /** an account's month, post by post, as Zernio's own list (the owner, 29 Oct 2026: "can we make a proper log maybe caption
  *  like how zernio dashboard is … it should show … which social platforms it published") */
 function PostLog({ entries }: { entries: PostLogEntry[] }) {
-  if (entries.length === 0) return <p className="mt-2 text-[12px] text-muted-foreground">No posts through Zernio this month on this account.</p>
+  if (entries.length === 0) return <p className="mt-2 text-[12px] text-muted-foreground">No posts through Zernio this month.</p>
   return (
     <ul className="mt-2 flex flex-col divide-y divide-border rounded-inner border border-border bg-background">
       {entries.map(e => (
@@ -381,55 +381,64 @@ function PostLog({ entries }: { entries: PostLogEntry[] }) {
   )
 }
 
-function PostsThisMonth({ rows }: { rows: (AccountPostsRow & { waiting?: WaitingPost[]; log?: PostLogEntry[] })[] | null }) {
+function PostsThisMonth({ rows }: { rows: MonthRow[] | null }) {
   const [openKey, setOpenKey] = useState<string | null>(null)
+  // ONE LINE PER CLIENT (the owner, 29 Oct 2026: "why does it show two social platforms from same client it should be
+  // one … like justin engelke and then underneath its the booked / posted for those platforms"): the client, its posts
+  // counted once each, then every account under it with that account's own numbers
+  const clients = useMemo(() => (rows ? postsByClient(rows) : null), [rows])
   return (
     <Panel title="Posts this month"
-      right={<span className="shrink-0 text-[13px] text-muted-foreground">Every account, in its client&rsquo;s month</span>}>
-      {rows === null && <Skeleton className="h-32 w-full rounded-inner" />}
-      {rows !== null && rows.length === 0 && (
+      right={<span className="shrink-0 text-[13px] text-muted-foreground">Every client, in its own month</span>}>
+      {clients === null && <Skeleton className="h-32 w-full rounded-inner" />}
+      {clients !== null && clients.length === 0 && (
         <p className="py-6 text-center text-[13px] text-muted-foreground">{NO_POSTS_THIS_MONTH}</p>
       )}
-      {rows !== null && rows.length > 0 && (
+      {clients !== null && clients.length > 0 && (
         <div className="flex flex-col gap-1">
-          {rows.map(r => {
-            const metrics = postMetricsLine(r, compactCount)
+          {clients.map(c => {
+            const metrics = postMetricsLine(c as never, compactCount)
             return (
-              <div key={r.key} className="flex items-start gap-3 rounded-inner px-3 py-2.5 hover:bg-foreground/[0.04]">
-                <span className="mt-0.5 shrink-0">
-                  {r.platform
-                    ? <PlatformIcon platform={r.platform} size={20} />
-                    : <span className="flex h-5 w-5 items-center justify-center rounded-tile bg-tint-green">
-                        <Hand className="h-3 w-3" strokeWidth={1.8} />
-                      </span>}
+              <div key={c.key} className="flex flex-col gap-1 rounded-inner px-3 py-2.5 hover:bg-foreground/[0.04]">
+                <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <span className="truncate text-[15px] font-semibold">{c.client_name}</span>
+                  <span className="text-[13px] tabular-nums text-muted-foreground">{liveCountsLine(c as never)}</span>
+                  {c.log !== undefined && (
+                    <button type="button" onClick={() => setOpenKey(k => (k === c.key ? null : c.key))} aria-expanded={openKey === c.key}
+                      className="rounded-full border border-border px-2 py-0.5 text-[12px] font-semibold text-foreground hover:bg-muted">
+                      {openKey === c.key ? 'Hide the posts' : 'See the posts'}
+                    </button>
+                  )}
                 </span>
-                <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                  <span className="flex flex-wrap items-baseline gap-x-2">
-                    <span className="truncate text-[15px] font-semibold">{accountHandle(r)}</span>
-                    <span className="truncate text-[13px] text-muted-foreground">{r.client_name}</span>
+                {metrics && <span className="text-[12px] tabular-nums text-muted-foreground">{metrics}</span>}
+                {/* each account the client posts to, with its own numbers */}
+                {c.accounts.length > 0 && (
+                  <span className="flex flex-col gap-0.5 border-l-2 border-border pl-3">
+                    {c.accounts.map(r => (
+                      <span key={r.key} className="flex flex-wrap items-center gap-x-2 text-[13px]">
+                        {r.platform && <PlatformIcon platform={r.platform} size={16} />}
+                        <span className="truncate font-medium">{accountHandle(r)}</span>
+                        <span className="tabular-nums text-muted-foreground">{liveCountsLine({ ...r, by_hand: 0 })}</span>
+                      </span>
+                    ))}
                   </span>
-                  <span className="flex flex-wrap items-center gap-2 text-[13px] tabular-nums text-muted-foreground">
-                    {liveCountsLine(r)}
-                    {r.log !== undefined && (
-                      <button type="button" onClick={() => setOpenKey(k => (k === r.key ? null : r.key))} aria-expanded={openKey === r.key}
-                        className="rounded-full border border-border px-2 py-0.5 text-[12px] font-semibold text-foreground hover:bg-muted">
-                        {openKey === r.key ? 'Hide the posts' : 'See the posts'}
-                      </button>
-                    )}
+                )}
+                {c.by_hand > 0 && c.accounts.length === 0 && (
+                  <span className="flex items-center gap-2 text-[13px] text-muted-foreground">
+                    <span className="flex h-4 w-4 items-center justify-center rounded-tile bg-tint-green"><Hand className="h-2.5 w-2.5" strokeWidth={1.8} /></span>
+                    Posted by hand
                   </span>
-                  {metrics && <span className="text-[12px] tabular-nums text-muted-foreground">{metrics}</span>}
-                  {/* WAITING ON THE CLIENT (the owner, 29 Oct 2026: "whats scheduled but needs client approval and there should
-                      be notify or copy portal link"): each such post, with the one Notify — it emails the client the post's
-                      own page, or hands the link to copy */}
-                  {openKey === r.key && <PostLog entries={r.log ?? []} />}
-                  {r.client_id && (r.waiting ?? []).map(w => (
-                    <span key={w.post_id} className="mt-1 flex flex-wrap items-center gap-2 rounded-inner bg-tint-amber px-2.5 py-1.5 text-[12px]">
-                      <span className="font-semibold">{w.booked ? 'Booked — waiting on the client' : 'With the client — not booked yet'}</span>
-                      {w.at && <span className="text-muted-foreground">{new Date(w.at).toLocaleString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}</span>}
-                      {w.booked && <NotifyClientButton clientId={r.client_id!} tab="scheduling" id={w.post_id} className="ml-auto h-8 rounded-full px-3 text-[12px] font-semibold" />}
-                    </span>
-                  ))}
-                </span>
+                )}
+                {/* every post once, with the networks it went to */}
+                {openKey === c.key && <PostLog entries={c.log ?? []} />}
+                {/* WAITING ON THE CLIENT (the owner, 29 Oct 2026): each such post once, with the one Notify */}
+                {c.client_id && c.waiting.map(w => (
+                  <span key={w.post_id} className="mt-1 flex flex-wrap items-center gap-2 rounded-inner bg-tint-amber px-2.5 py-1.5 text-[12px]">
+                    <span className="font-semibold">{w.booked ? 'Booked — waiting on the client' : 'With the client — not booked yet'}</span>
+                    {w.at && <span className="text-muted-foreground">{new Date(w.at).toLocaleString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}</span>}
+                    {w.booked && <NotifyClientButton clientId={c.client_id!} tab="scheduling" id={w.post_id} className="ml-auto h-8 rounded-full px-3 text-[12px] font-semibold" />}
+                  </span>
+                ))}
               </div>
             )
           })}

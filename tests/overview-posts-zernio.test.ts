@@ -39,7 +39,7 @@ describe('the month, from Zernio', () => {
     expect(page).toContain("fetch('/api/overview/posts-month', { cache: 'no-store' })")
     expect(page).not.toContain("useTable<PublishJob>('publish_jobs'")
     expect(page).not.toContain("useTable<PostAnalytic>('post_analytics'")
-    expect(page).toContain('<NotifyClientButton clientId={r.client_id!} tab="scheduling" id={w.post_id}')
+    expect(page).toContain('<NotifyClientButton clientId={c.client_id!} tab="scheduling" id={w.post_id}')
     const route = readFileSync('app/api/overview/posts-month/route.ts', 'utf8')
     expect(route).toContain("if (user.role !== 'super_admin' && user.role !== 'account_manager') throw new AuthzError('Managers only', 403)")
     expect(route).toContain('zernioMonthCounts(zernio as ZernioPostLite[], byProvider, inMonth, log)')
@@ -62,8 +62,8 @@ describe('the log, post by post', () => {
   })
   it('each account opens to its posts', () => {
     const page = readFileSync('app/dashboard/page.tsx', 'utf8')
-    expect(page).toContain('{openKey === r.key && <PostLog entries={r.log ?? []} />}')
-    expect(page).toContain("{openKey === r.key ? 'Hide the posts' : 'See the posts'}")
+    expect(page).toContain('{openKey === c.key && <PostLog entries={c.log ?? []} />}')
+    expect(page).toContain("{openKey === c.key ? 'Hide the posts' : 'See the posts'}")
   })
 })
 
