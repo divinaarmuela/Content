@@ -37,7 +37,8 @@ export async function GET(req: Request) {
     // Who this viewer is allowed to see.
     const peopleRows = await table<TeamUser>('team_users').list({
       by: { active_status: true },
-      where: r => r.role !== 'client'
+      // a person taken off this page (team_users.activity_hidden, the owner 29 Oct 2026) has no line here
+      where: r => r.role !== 'client' && r.activity_hidden !== true
         && (isAdmin || r.id === me.id)
         && (type === 'employee' || type === 'contractor' ? r.employment_type === type : true),
       orderBy: [['name', 'asc']],

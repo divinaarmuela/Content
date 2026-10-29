@@ -1718,6 +1718,7 @@ export interface TeamUser {
   active_status: boolean
   quality_reviewer: boolean
   ops_contact: boolean | null
+  activity_hidden: boolean | null
   colourist: boolean | null
 }
 
@@ -1974,7 +1975,7 @@ export const TABLE_COLUMNS = {
   team_boards: ['id', 'name', 'client_id', 'status', 'submitted_by', 'submitted_at', 'reviewed_by', 'reviewed_at', 'review_note', 'canvas_cards', 'shared_with_client', 'client_shared_at', 'client_shared_by', 'created_by', 'updated_by', 'created_at', 'updated_at', 'board_type', 'milanote_id', 'archived_at', 'archived_by', 'icon_url', 'hex'],
   team_invites: ['id', 'created_at', 'email', 'role', 'employment_type', 'timezone', 'client_id', 'assigned_client_ids', 'invited_by', 'clerk_invitation_id', 'status'],
   team_user_clients: ['team_user_id', 'client_id', 'assigned_at', 'assigned_by', 'id'],
-  team_users: ['editors_lead', 'getting_started_dismissed_at', 'getting_started_dismissed_role', 'getting_started_dismissed_pages', 'id', 'created_at', 'updated_at', 'clerk_user_id', 'email', 'name', 'role', 'employment_type', 'timezone', 'workday_start', 'workday_end', 'client_id', 'asana_user_gid', 'notification_prefs', 'active_status', 'quality_reviewer', 'ops_contact', 'colourist'],
+  team_users: ['editors_lead', 'getting_started_dismissed_at', 'getting_started_dismissed_role', 'getting_started_dismissed_pages', 'id', 'created_at', 'updated_at', 'clerk_user_id', 'email', 'name', 'role', 'employment_type', 'timezone', 'workday_start', 'workday_end', 'client_id', 'asana_user_gid', 'notification_prefs', 'active_status', 'quality_reviewer', 'ops_contact', 'activity_hidden', 'colourist'],
   todo_comments: ['id', 'todo_id', 'author_id', 'body', 'mentions', 'likes', 'edited_at', 'asana_gid', 'created_at', 'updated_at'],
   todo_fields: ['id', 'name', 'type', 'options', 'position', 'asana_gid', 'created_at', 'updated_at'],
   todo_project_sections: ['id', 'client_id', 'name', 'position', 'asana_gid', 'created_at', 'updated_at'],
@@ -2084,7 +2085,7 @@ export const NULLABLE_COLUMNS = {
   team_boards: ['client_id', 'status', 'submitted_by', 'submitted_at', 'reviewed_by', 'reviewed_at', 'review_note', 'canvas_cards', 'shared_with_client', 'client_shared_at', 'client_shared_by', 'created_by', 'updated_by', 'board_type', 'milanote_id', 'archived_at', 'archived_by', 'icon_url', 'hex'],
   team_invites: ['client_id', 'invited_by', 'clerk_invitation_id'],
   team_user_clients: ['assigned_by'],
-  team_users: ['editors_lead', 'getting_started_dismissed_at', 'getting_started_dismissed_role', 'getting_started_dismissed_pages', 'clerk_user_id', 'client_id', 'asana_user_gid', 'ops_contact', 'colourist'],
+  team_users: ['editors_lead', 'getting_started_dismissed_at', 'getting_started_dismissed_role', 'getting_started_dismissed_pages', 'clerk_user_id', 'client_id', 'asana_user_gid', 'ops_contact', 'activity_hidden', 'colourist'],
   todo_comments: ['author_id', 'mentions', 'likes', 'edited_at', 'asana_gid'],
   todo_fields: ['options', 'position', 'asana_gid'],
   todo_project_sections: ['position', 'asana_gid'],

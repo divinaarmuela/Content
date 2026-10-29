@@ -117,7 +117,7 @@ export async function GET(req: Request) {
 
     const peopleRows = await table<TeamUser>('team_users').list({
       by: { active_status: true },
-      where: r => r.role !== 'client'
+      where: r => r.role !== 'client' && r.activity_hidden !== true
         && (isAdmin || heldBy.has(r.id))
         && (roleFilter ? r.role === roleFilter : true),
       orderBy: [['name', 'asc']],
