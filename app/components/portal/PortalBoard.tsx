@@ -25,6 +25,7 @@ import PortalPostCard from './PortalPostCard'
 import { LinkedText } from '../LinkedText'
 import { PlanCommentsProvider, PlanPart, PlanPartThreads } from '../PlanComments'
 import { inGeneralThread } from '../../lib/plan-comments-core'
+import { toneOf } from '../comment-tone'
 
 /**
  * ONE CARD ON THE CLIENT'S PORTAL — a piece of work or a shoot.
@@ -301,10 +302,11 @@ function WorkOrShootCard({ card, amName, accent, surface, className }: CardProps
 
   /** one comment, as a line */
   const commentLine = (c: PortalCard['comments'][number]) => (
-    <div key={c.id} className={cn('rounded-tile p-2.5 text-[14px]', ink ? 'bg-foreground/[0.06]' : 'bg-foreground/[0.04]')}>
-      <p className={cn('flex flex-wrap items-baseline gap-x-2 text-[12px]', muted)}>
-        <span className="font-semibold">{c.author_name}</span>
-        {c.from_team && <Chip tone="ink" className="px-1.5 py-0.5 text-[10px]">MD Media</Chip>}
+    // the client's in blue, MD Media's in green (comment-tone.ts)
+    <div key={c.id} data-comment-from={c.from_team ? 'team' : 'client'} className={cn('rounded-tile p-2.5 text-[14px] text-foreground', toneOf(c.from_team).box)}>
+      <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-muted-foreground">
+        <span className="font-semibold text-foreground">{c.author_name}</span>
+        <span className={cn('rounded px-1.5 py-px text-[10px] font-semibold uppercase tracking-wider', toneOf(c.from_team).chip)}>{toneOf(c.from_team).label}</span>
         <span suppressHydrationWarning>{when(c.created_at)}</span>
         {onCardLine(c.card_label) && <span className="italic">{onCardLine(c.card_label)}</span>}
       </p>

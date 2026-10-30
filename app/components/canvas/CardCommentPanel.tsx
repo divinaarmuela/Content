@@ -9,6 +9,7 @@ import MentionBox from '../../dashboard/MentionBox'
 import { extractMentions, type Mentionable } from '../../lib/mention-core'
 import { cardThreads, cardWords, markQuotes, MAX_QUOTE, snapToWords, type PlanThread } from '../../lib/plan-comments-core'
 import { LinkedText } from '../LinkedText'
+import { toneOf } from '../comment-tone'
 
 export type CardComment = {
   id: string
@@ -232,7 +233,6 @@ function CardThread({ t, viewer, onSend, onResolve, replyName }: {
   const resolved = !!t.root.resolved
   // a comment still on its way has no row to reply to or resolve yet
   const sending = t.root.id.startsWith('local-')
-  const otherSide = viewer === 'client' ? 'MD Media' : 'Client'
   const send = async () => {
     if (!reply.trim() || busy) return
     setBusy(true)
@@ -240,23 +240,25 @@ function CardThread({ t, viewer, onSend, onResolve, replyName }: {
     setBusy(false)
     if (ok) { setReply(''); setReplying(false) }
   }
-  const line = (c: CardComment) => (
-    <div key={c.id}>
-      <p className="flex flex-wrap items-baseline gap-x-2 text-[12px] text-muted-foreground">
-        <span className="font-semibold text-foreground">{c.author_name}</span>
-        {c.from_team !== (viewer === 'team') && (
-          <span className="rounded bg-foreground px-1.5 py-px text-[10px] uppercase tracking-wider text-background">{otherSide}</span>
-        )}
-        <span suppressHydrationWarning>{when(c.created_at)}</span>
-      </p>
-      <p className="mt-1 whitespace-pre-wrap break-words text-[14px] leading-[1.45]">{c.body}</p>
-    </div>
-  )
+  // the client's in blue, MD Media's in green (comment-tone.ts) — on both sides of the glass
+  const line = (c: CardComment) => {
+    const tone = toneOf(c.from_team)
+    return (
+      <div key={c.id} data-comment-from={c.from_team ? 'team' : 'client'} className={cn('rounded-[6px] px-2.5 py-2', tone.box)}>
+        <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-muted-foreground">
+          <span className="font-semibold text-foreground">{c.author_name}</span>
+          <span className={cn('rounded px-1.5 py-px text-[10px] font-semibold uppercase tracking-wider', tone.chip)}>{tone.label}</span>
+          <span suppressHydrationWarning>{when(c.created_at)}</span>
+        </p>
+        <p className="mt-1 whitespace-pre-wrap break-words text-[14px] leading-[1.45]">{c.body}</p>
+      </div>
+    )
+  }
   return (
-    <li id={`card-thread-${t.root.id}`} className={cn('flex flex-col gap-2 rounded-inner px-3 py-2.5', resolved ? 'bg-foreground/[0.03] opacity-75' : t.root.anchor_quote ? 'bg-tint-amber/40' : 'bg-foreground/[0.04]')}>
-      {t.root.anchor_quote && <p className="border-l-2 border-accent-amber pl-2 text-[12px] italic text-muted-foreground">“{t.root.anchor_quote}”</p>}
+    <li id={`card-thread-${t.root.id}`} className={cn('flex flex-col gap-2 rounded-inner border border-border px-3 py-2.5', resolved ? 'bg-foreground/[0.03] opacity-75' : 'bg-card')}>
+      {t.root.anchor_quote && <p className="w-fit rounded-[3px] bg-tint-amber px-1.5 py-0.5 text-[12px] italic">“{t.root.anchor_quote}”</p>}
       {line(t.root)}
-      {t.replies.length > 0 && <div className="flex flex-col gap-2 border-l-2 border-border pl-3">{t.replies.map(line)}</div>}
+      {t.replies.length > 0 && <div className="flex flex-col gap-2 pl-3">{t.replies.map(line)}</div>}
       {!sending && (
         <div className="flex flex-col gap-2">
           {replying && !resolved && (

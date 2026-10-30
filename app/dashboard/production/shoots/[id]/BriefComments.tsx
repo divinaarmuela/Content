@@ -12,6 +12,7 @@ import type { CanvasCard } from '../../../../lib/batch-brief-core'
 import { canvasCardLabel, findCanvasCard, onCardLine } from '../../../../lib/canvas-comments-core'
 import { OPEN_CARD_EVENT } from './BriefBoardComments'
 import { inGeneralThread } from '../../../../lib/plan-comments-core'
+import { COMMENT_TONE, toneOf } from '../../../../components/comment-tone'
 
 type Row = {
   id: string
@@ -149,11 +150,12 @@ export default function BriefComments({ batchId, cards = [] }: {
                       : <CircleDashed className="h-4 w-4 text-muted-foreground" />}
                   </button>
                 )}
-                <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                {/* the client's in blue, MD Media's in green (comment-tone.ts) */}
+                <div data-comment-from={fromClient ? 'client' : 'team'} className={`flex min-w-0 flex-1 flex-col gap-0.5 rounded-[6px] px-2.5 py-2 ${toneOf(!fromClient).box}`}>
                   <p className="flex flex-wrap items-baseline gap-2 text-secondary-13">
                     <span className="font-medium">{name}</span>
                     {fromClient && (
-                      <span className="rounded bg-tint-blue px-1 py-px text-[9px] uppercase tracking-wider text-accent-blue-deep">
+                      <span className={`rounded px-1.5 py-px text-[10px] font-semibold uppercase tracking-wider ${COMMENT_TONE.client.chip}`}>
                         client
                       </span>
                     )}

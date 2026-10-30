@@ -4,6 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import { Check, MessageSquarePlus, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { LinkedText } from './LinkedText'
+import { toneOf } from './comment-tone'
 import { markQuotes, planThreads, snapToWords, threadsOn, type PlanComment, type PlanThread } from '../lib/plan-comments-core'
 
 /**
@@ -161,16 +162,21 @@ function Thread({ t }: { t: PlanThread<PlanCommentRow> }) {
     if (ok) setReply('')
   }
   return (
-    <div id={`plan-thread-${t.root.id}`} className={`flex flex-col gap-1.5 rounded-inner border p-2.5 text-[13px] ${resolved ? 'border-border bg-muted/40 opacity-75' : 'border-accent-amber/60 bg-tint-amber/40'}`}>
-      <p className="border-l-2 border-accent-amber pl-2 text-[12px] italic text-muted-foreground">“{t.root.anchor_quote}”</p>
-      {[t.root, ...t.replies].map(c => (
-        <div key={c.id} className="flex flex-col">
-          <span className="text-[12px] font-semibold">{c.author_name ?? (c.from_team ? 'MD Media' : 'Client')}
-            <span className="ml-1.5 font-normal text-muted-foreground">{new Date(c.created_at).toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'Australia/Melbourne' })}</span>
-          </span>
-          <span className="whitespace-pre-wrap"><LinkedText text={c.body} /></span>
-        </div>
-      ))}
+    <div id={`plan-thread-${t.root.id}`} className={`flex flex-col gap-1.5 rounded-inner border p-2.5 text-[13px] ${resolved ? 'border-border bg-muted/40 opacity-75' : 'border-border bg-card'}`}>
+      <p className="w-fit rounded-[3px] bg-tint-amber px-1.5 py-0.5 text-[12px] italic">“{t.root.anchor_quote}”</p>
+      {/* the client's in blue, MD Media's in green (comment-tone.ts) */}
+      {[t.root, ...t.replies].map(c => {
+        const tone = toneOf(c.from_team)
+        return (
+          <div key={c.id} data-comment-from={c.from_team ? 'team' : 'client'} className={`flex flex-col rounded-[6px] px-2.5 py-1.5 ${tone.box}`}>
+            <span className="flex flex-wrap items-center gap-1.5 text-[12px] font-semibold">{c.author_name ?? tone.label}
+              <span className={`rounded px-1.5 py-px text-[10px] font-semibold uppercase tracking-wider ${tone.chip}`}>{tone.label}</span>
+              <span className="font-normal text-muted-foreground">{new Date(c.created_at).toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'Australia/Melbourne' })}</span>
+            </span>
+            <span className="whitespace-pre-wrap"><LinkedText text={c.body} /></span>
+          </div>
+        )
+      })}
       <div className="flex flex-wrap items-center gap-2 pt-1">
         {ctx.canComment && !resolved && !sending && (
           <>
