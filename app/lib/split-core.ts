@@ -4,7 +4,7 @@
  * 2"). Pure: what a split of this card would do, the Round N card's title and words. No I/O — split.ts does the work.
  */
 import { clipApprovalsOf } from './clip-approvals-core'
-import { assetIdOf, versionSnapshot } from './final-files-core'
+import { assetIdOf, versionSnapshot, type FinalFile } from './final-files-core'
 import { roundOf } from './edit-round-core'
 
 /** a card the client is looking at, or has asked changes on, is one a split may act on */
@@ -52,6 +52,43 @@ export function notApprovedFiles(open: readonly SplitVideo[]): { url: string; na
   return open.filter(v => !!v.url).map(v => ({ url: v.url!, name: `Not approved — ${v.name}` }))
 }
 
+/**
+ * THE UNAPPROVED VIDEOS ARE THE ROUND N CARD'S OWN FILES (the owner, 30 Oct 2026: "how would they know which videos to
+ * replace the versions"). Each is a piece of the new card at Version 1 — the cut the client turned down — so the
+ * editor's "+ New version" on it makes its Version 2, named as that video's new cut. They were only "files to work
+ * from" before: the editor uploaded loose files and nothing said which video each one replaced. `byOld` maps the
+ * original card's file id to the new one, so what the client said on a video lands on the same video here.
+ */
+export function roundCardFiles(
+  open: readonly SplitVideo[],
+  originals: readonly FinalFile[],
+  now: string,
+  by: string | null,
+  newId: () => string,
+): { files: FinalFile[]; byOld: Map<string, string> } {
+  const byOld = new Map<string, string>()
+  const files: FinalFile[] = []
+  for (const v of open) {
+    if (!v.url) continue
+    const was = originals.find(f => f.id === v.id)
+    const id = newId()
+    byOld.set(v.id, id)
+    files.push({ id, asset_id: id, name: v.name, url: v.url, mime: was?.mime || 'video/mp4', size: was?.size ?? null, version: 1, uploaded_at: was?.uploaded_at || now, by: was?.by ?? by })
+  }
+  return { files, byOld }
+}
+
+/** what the client said on each unapproved video, pinned to that video on the Round N card */
+export function carriedClipNotes(byOld: ReadonlyMap<string, string>, notes: readonly ClipNote[]): { file_id: string; body: string }[] {
+  const out: { file_id: string; body: string }[] = []
+  for (const n of notes) {
+    const id = n.video_file_id ? byOld.get(n.video_file_id) : undefined
+    const said = String(n.body ?? '').trim()
+    if (id && said && n.visibility === 'client') out.push({ file_id: id, body: `The client: ${said}` })
+  }
+  return out
+}
+
 /** the card's files to work from without an earlier round's 'Not approved' videos — the footage only */
 export function footageOnly(raw: unknown): { url: string; name: string }[] {
   return (Array.isArray(raw) ? raw as { url: string; name: string }[] : []).filter(a => !String(a?.name ?? '').startsWith('Not approved — '))
@@ -81,7 +118,7 @@ export function roundNote(open: readonly SplitVideo[], notes: readonly ClipNote[
   return [
     `The client did not approve ${open.length === 1 ? 'this video' : `these ${open.length} videos`}${approvedCount ? ` (the ${approvedCount} they approved went to handover)` : ''}:`,
     ...lines,
-    'Upload a new Google Drive link with the new versions of these videos, then submit.',
+    'Each one is on this card: press "+ New version" on it and upload its new cut, then submit.',
   ].join('\n')
 }
 

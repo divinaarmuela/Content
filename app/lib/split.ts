@@ -3,8 +3,8 @@ import { randomUUID } from 'node:crypto'
 import { table } from '@/lib/db'
 import type { ContentItem, TeamUser as TeamUserRow } from '@/lib/db-types'
 import { AuthzError, type TeamUser } from './authz'
-import { withRetired, finalFilesOf } from './final-files-core'
-import { ALREADY_SPLIT, carriedNotes, footageOnly, nextSplitRound, notApprovedFiles, roundNote, roundTitle, splitAlreadyDone, splitPlan, type ClipNote, type SplitVideo } from './split-core'
+import { withRetired, finalFilesOf, finalFileId } from './final-files-core'
+import { ALREADY_SPLIT, carriedClipNotes, carriedNotes, footageOnly, nextSplitRound, roundCardFiles, roundNote, roundTitle, splitAlreadyDone, splitPlan, type ClipNote, type SplitVideo } from './split-core'
 import { logActivity, performTransition } from './workflow'
 import { announceItemChange } from './production-live'
 import { notify, renderEmail, escapeHtml } from './mailer'
@@ -62,6 +62,8 @@ export async function splitCard(actor: TeamUser, itemId: string, opts: { by: 'cl
   const notes = (await table<{ id: string; item_id: string } & ClipNote>('item_comments' as never).list({ by: { item_id: item.id } as never }).catch(() => [])) as ClipNote[]
   const note = roundNote(plan.open, notes, plan.approved.length)
   const src = item as ContentItem & Record<string, unknown>
+  // the unapproved videos ON the new card, each its Version 1, so "+ New version" on it makes its Version 2 (30 Oct 2026)
+  const onCard = roundCardFiles(plan.open, finalFilesOf(item as never), now, actor.id, finalFileId)
   try {
     await table('content_items').insert({
       id: newId,
@@ -71,7 +73,13 @@ export async function splitCard(actor: TeamUser, itemId: string, opts: { by: 'cl
       title,
       content_type: item.content_type ?? null,
       platform_targets: (item as { platform_targets?: unknown }).platform_targets ?? null,
-      status: 'draft_uploaded',
+      // SENT BACK ON THESE VIDEOS, as a send-back reads: the client saw Version 1 and asked for changes on each, so the
+      // card opens on Version 2, every one of them named, and cannot go on until each has its new cut (stillToReplace)
+      status: 'revision_required',
+      final_files: onCard.files,
+      edit_round: 1,
+      client_rounds: [1],
+      change_assets: onCard.files.map(f => f.id),
       owner_id: item.owner_id ?? null,
       assigned_by: actor.id,
       due_date: null,
@@ -82,9 +90,8 @@ export async function splitCard(actor: TeamUser, itemId: string, opts: { by: 'cl
       // the brief and the footage to work from carry over; the finished link does not — the editor hands in a new one
       brief: src.brief ?? null,
       raw_assets_url: src.raw_assets_url ?? null,
-      // the videos the client did not approve, playable, ahead of the footage (the owner: "shows the unapproved videos")
-      // …and only THIS round's: an earlier round's 'Not approved' videos were redone already (2 Oct 2026, the Round 3 walk)
-      raw_assets: [...notApprovedFiles(plan.open), ...footageOnly(src.raw_assets)],
+      // the footage to work from only — the unapproved videos are the card's own files now, not references
+      raw_assets: footageOnly(src.raw_assets),
       link_url: src.raw_assets_url ?? null,
       link_kind: src.raw_assets_url ? (src.link_kind ?? null) : null,
       for_contact_id: src.for_contact_id ?? null,
@@ -110,6 +117,11 @@ export async function splitCard(actor: TeamUser, itemId: string, opts: { by: 'cl
   for (const body of carriedNotes(plan.open, notes)) {
     await table('item_comments').insert({ item_id: newId, author_id: actor.id, visibility: 'internal', body, resolved: false } as never).catch(() => undefined)
   }
+  // …and on the video itself, where the editor plays it
+  const nameOf = new Map(onCard.files.map(f => [f.id, f.name]))
+  for (const c of carriedClipNotes(onCard.byOld, notes)) {
+    await table('item_comments').insert({ item_id: newId, author_id: actor.id, visibility: 'internal', body: c.body, resolved: false, video_file_id: c.file_id, video_file_name: nameOf.get(c.file_id) ?? null } as never).catch(() => undefined)
+  }
 
   // 3. THE APPROVED VIDEOS GO TO HANDOVER — the client's approval, or the manager logging it
   const original = claimed.row as ContentItem
@@ -125,7 +137,7 @@ export async function splitCard(actor: TeamUser, itemId: string, opts: { by: 'cl
     actor, clientId: item.client_id, entityType: 'content_item', entityId: newId, action: 'split_round_made',
     detail: `Round ${n} of "${item.title}": ${plan.open.length} ${plan.open.length === 1 ? 'video' : 'videos'} the client did not approve`,
   }).catch(() => undefined)
-  announceItemChange({ item_id: newId, client_id: item.client_id, status: 'draft_uploaded', kind: 'created' })
+  announceItemChange({ item_id: newId, client_id: item.client_id, status: 'revision_required', kind: 'created' })
 
   await tellTheEditor(item, newId, title, note).catch(e => console.error('split: editor notice failed', e))
   return { ok: true, approved: plan.approved.length, open: plan.open.length, new_id: newId, new_title: title }
@@ -137,7 +149,7 @@ const names = (vs: readonly SplitVideo[]) => vs.map(v => v.name).join(', ')
 async function tellTheEditor(item: ContentItem, newId: string, title: string, note: string): Promise<void> {
   const editor = item.owner_id ? await table<TeamUserRow>('team_users').get(item.owner_id).catch(() => null) : null
   if (!editor || !editor.active_status || !editor.email || editor.role === 'client') return
-  const subject = `Upload a new Drive link: ${title}`
+  const subject = `New versions to make: ${title}`
   await notify({
     eventType: 'split_round', entityType: 'content_item', entityId: `${newId}#split`,
     recipientId: editor.id, recipientEmail: editor.email, clientId: item.client_id,

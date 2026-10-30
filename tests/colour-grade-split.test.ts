@@ -82,7 +82,9 @@ describe('C6–C9 — the split', () => {
     const note = roundNote([{ id: 'b', asset_id: 'b', name: 'Justin 3.mov', url: 'https://x/b' }], [{ video_file_id: 'b', visibility: 'client', body: 'Too dark' }, { video_file_id: 'b', visibility: 'internal', body: 'team only' }], 1)
     expect(note).toContain('• Justin 3.mov — the client said: Too dark')
     expect(note).not.toContain('team only')
-    expect(note).toContain('Upload a new Google Drive link')
+    // 30 Oct 2026: the videos are on the card, each with "+ New version" — no Drive link
+    expect(note).toContain('press "+ New version" on it and upload its new cut')
+    expect(note).not.toContain('Google Drive link')
   })
   it('the original is claimed first (with the client, not already split this round) and put back if the new card fails', () => {
     const src = readFileSync('app/lib/split.ts', 'utf8')
@@ -142,7 +144,8 @@ describe('the Round N card shows the unapproved videos and what the client said 
       { video_file_id: 'a', visibility: 'client', body: 'approved one' },
     ])).toEqual(['The client on Justin 3.mov: Too dark'])
     const src = readFileSync('app/lib/split.ts', 'utf8')
-    expect(src).toContain('raw_assets: [...notApprovedFiles(plan.open),')
+    // 30 Oct 2026: they are the card's own files now (tests/split-round-files.test.ts), not references in raw_assets
+    expect(src).toContain('raw_assets: footageOnly(src.raw_assets),')
     expect(src).toContain('for (const body of carriedNotes(plan.open, notes)) {')
   })
 })
@@ -152,7 +155,7 @@ describe('a Round N card carries only its own round\'s unapproved videos (2 Oct 
     const { footageOnly } = await import('../app/lib/split-core')
     expect(footageOnly([{ url: 'u1', name: 'Not approved — 8. HECS debt.mov' }, { url: 'u2', name: 'Raw clip A.mov' }])).toEqual([{ url: 'u2', name: 'Raw clip A.mov' }])
     expect(footageOnly(null)).toEqual([])
-    expect(readFileSync('app/lib/split.ts', 'utf8')).toContain('raw_assets: [...notApprovedFiles(plan.open), ...footageOnly(src.raw_assets)],')
+    expect(readFileSync('app/lib/split.ts', 'utf8')).toContain('raw_assets: footageOnly(src.raw_assets),')
   })
 })
 
