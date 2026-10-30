@@ -19,7 +19,8 @@ import { clearGroup, dismissUpload, uploadFiles } from '../../uploadQueue'
 import { UploadRows, useUploadGroup } from '../../UploadRows'
 import { Thumb } from './tiles'
 import type { RailMedia } from './useSchedulePosts'
-import { fileSummary } from '@/app/lib/rail-file-use-core'
+import { fileSummary, fileTag, type FileUse } from '@/app/lib/rail-file-use-core'
+import { USE_TONE } from './MediaRail'
 
 /**
  * NEW POST — THE MEDIA COMES FIRST.
@@ -64,7 +65,8 @@ export default function NewPostSources({
   allowUploads?: boolean
   /** the client has a Drive folder we can read — no folder, no tab */
   driveAvailable: boolean
-  onPick: (media: RailMedia) => void
+  /** start a post from this piece — with only the ticked files, when given */
+  onPick: (media: RailMedia, slides?: Slide[]) => void
   onApprove: (media: RailMedia) => void
   /** the upload became a post: open the composer on it */
   onCreated: (made: UploadedPostSummary) => void
@@ -77,6 +79,16 @@ export default function NewPostSources({
     [driveAvailable, media.length])
   const [source, setSource] = useState<NewPostSourceKey>(() => firstSource(sources))
   const [q, setQ] = useState('')
+  // A PIECE OPENS TO ITS FILES FIRST (the owner, 30 Oct 2026: "should open the files to select which shows the tags,
+  // not immediately open to schedule") — each with where it stands, the ones not scheduled ticked, then one press
+  const [openPiece, setOpenPiece] = useState<RailMedia | null>(null)
+  const [pieceTicks, setPieceTicks] = useState<Set<string>>(() => new Set())
+  const openFiles = (m: RailMedia) => {
+    const files = m.allSlides.length ? m.allSlides : m.slides
+    const uses = m.fileUse ?? {}
+    setOpenPiece(m)
+    setPieceTicks(new Set(files.filter(sl => !uses[sl.url]).map(sl => sl.url)))
+  }
   const [chosen, setChosen] = useState<Slide[]>([])
   const [problem, setProblem] = useState<string | null>(null)
   /** the post the server says already holds these files — one press opens it */
@@ -487,7 +499,11 @@ export default function NewPostSources({
                   className="min-h-11 w-full rounded-full border border-border bg-paper pl-10 pr-4 text-[14px] outline-none"
                 />
               </label>
-              {shown.length === 0 ? (
+              {openPiece ? (
+                <PieceFiles m={openPiece} ticks={pieceTicks} setTicks={setPieceTicks}
+                  onBack={() => setOpenPiece(null)}
+                  onPost={slides => { setOpenPiece(null); onPick(openPiece, slides) }} />
+              ) : shown.length === 0 ? (
                 <p className="py-6 text-center text-[13px] text-muted-foreground">
                   Nothing matches that.
                 </p>
@@ -504,7 +520,7 @@ export default function NewPostSources({
                       <button
                         type="button"
                         disabled={!m.ok}
-                        onClick={() => onPick(m)}
+                        onClick={() => openFiles(m)}
                         title={m.ok
                           ? (m.needsClientApproval ? `${m.title} — ${NOT_CLIENT_APPROVED}` : m.title)
                           : `${m.title} — ${m.reason}`}
@@ -628,6 +644,59 @@ function ChosenStrip({ files, onRemove }: {
             </button>
           </div>
         ))}
+      </div>
+    </div>
+  )
+}
+
+/** one piece's files, each tagged with where it stands, ticked to post (30 Oct 2026) */
+function PieceFiles({ m, ticks, setTicks, onBack, onPost }: {
+  m: RailMedia
+  ticks: Set<string>
+  setTicks: (next: Set<string>) => void
+  onBack: () => void
+  onPost: (slides: Slide[]) => void
+}) {
+  const files = m.allSlides.length ? m.allSlides : m.slides
+  const uses = new Map<string, FileUse>(Object.entries(m.fileUse ?? {}))
+  const free = files.filter(sl => !uses.has(sl.url))
+  const chosen = files.filter(sl => ticks.has(sl.url))
+  const flip = (url: string) => { const next = new Set(ticks); if (next.has(url)) next.delete(url); else next.add(url); setTicks(next) }
+  return (
+    <div data-piece-files className="flex flex-col gap-3">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <button type="button" onClick={onBack} className="inline-flex min-h-11 items-center text-[13px] font-semibold underline-offset-4 hover:underline">← All media</button>
+        <p className="min-w-0 flex-1 truncate text-[14px] font-semibold">{m.title}</p>
+        <p className="text-[12px] text-muted-foreground">{fileSummary(files.map(sl => sl.url), uses)}</p>
+      </div>
+      <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
+        {files.map((sl, i) => {
+          const on = ticks.has(sl.url)
+          const t = fileTag(uses.get(sl.url))
+          return (
+            <button key={sl.url} type="button" onClick={() => flip(sl.url)} aria-pressed={on}
+              aria-label={`${on ? 'Untick' : 'Tick'} ${sl.name || `file ${i + 1}`}, ${t.words}`}
+              className={cn('relative aspect-[4/5] overflow-hidden rounded-tile bg-foreground/[0.06]', on ? 'outline outline-2 outline-offset-1 outline-foreground' : 'opacity-70')}>
+              <Thumb slide={sl} label={sl.name} className="pointer-events-none h-full w-full" />
+              <span className={cn('absolute left-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold', on ? 'bg-foreground text-background' : 'bg-cream/90 text-ink')}>{on ? <Check className="h-3 w-3" aria-hidden /> : i + 1}</span>
+              <span data-file-use={t.tone} className={cn('absolute inset-x-0 bottom-0 px-1.5 py-1 text-center text-[11px] font-bold', USE_TONE[t.tone])}>{t.words}</span>
+            </button>
+          )
+        })}
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap gap-x-3">
+          {free.length > 0 && free.length < files.length && (
+            <button type="button" onClick={() => setTicks(new Set(free.map(sl => sl.url)))} className="inline-flex min-h-11 items-center text-[12px] font-semibold underline-offset-4 hover:underline">Tick the {free.length} not scheduled</button>
+          )}
+          <button type="button" onClick={() => setTicks(new Set(chosen.length === files.length ? [] : files.map(sl => sl.url)))} className="inline-flex min-h-11 items-center text-[12px] font-semibold underline-offset-4 hover:underline">
+            {chosen.length === files.length ? 'Untick all' : 'Tick all'}
+          </button>
+        </div>
+        <button type="button" disabled={chosen.length === 0} onClick={() => onPost(chosen)}
+          className="min-h-11 rounded-full bg-foreground px-5 text-[13px] font-semibold text-background disabled:opacity-40">
+          Post {chosen.length} {chosen.length === 1 ? 'file' : 'files'}
+        </button>
       </div>
     </div>
   )

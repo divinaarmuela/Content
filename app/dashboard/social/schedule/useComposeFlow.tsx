@@ -219,7 +219,7 @@ export function useComposeFlow({ clientId, data, role, userId, suggested, onShow
           // builds posts (the owner's decisions 4 and 7): it goes to the quality
           // check like any other
           allowUploads
-          onPick={m => openNew(m, choosing.at)}
+          onPick={(m, slides) => openNew(m, choosing.at, slides)}
           onApprove={approve}
           onCreated={made => openMade(made, choosing.at)}
           onOpenExisting={(itemId, postId) => { setChoosing(null); setComposing({ itemId, postId, at: null }) }}
