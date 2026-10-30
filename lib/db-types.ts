@@ -1558,6 +1558,7 @@ export interface ShootProposal {
   created_at: string
   notify_emails: string[] | null
   gcal_event_id: string | null
+  comments: unknown | null
 }
 
 export interface SocialAccount {
@@ -1967,7 +1968,7 @@ export const TABLE_COLUMNS = {
   scan_settings: ['allow_self_connect', 'id', 'lookback_days', 'max_messages', 'min_confidence', 'duplicate_window_days', 'rules_only', 'schedule_enabled', 'blocked_domains', 'blocked_senders', 'updated_at', 'updated_by'],
   schedule_entries: ['external_match_state', 'id', 'created_at', 'item_id', 'platform', 'scheduled_at', 'scheduler_id', 'tool_url', 'live_url', 'publish_status', 'published_at'],
   schedule_notes: ['id', 'client_id', 'at', 'text', 'created_by', 'created_at', 'updated_at'],
-  shoot_proposals: ['batch_id', 'id', 'token', 'client_id', 'title', 'starts_at', 'ends_at', 'location', 'note', 'send_to', 'status', 'created_by', 'responded_at', 'created_at', 'notify_emails', 'gcal_event_id'],
+  shoot_proposals: ['batch_id', 'id', 'token', 'client_id', 'title', 'starts_at', 'ends_at', 'location', 'note', 'send_to', 'status', 'created_by', 'responded_at', 'created_at', 'notify_emails', 'gcal_event_id', 'comments'],
   social_accounts: ['id', 'client_id', 'platform', 'provider_account_id', 'name', 'username', 'avatar_url', 'active', 'connected_at', 'last_synced_at', 'health', 'contact_id'],
   social_accounts_retired: ['id', 'client_id', 'platform', 'provider_account_id', 'username', 'row', 'retired_at'],
   social_posts: ['id', 'client_id', 'item_id', 'version_id', 'version_number', 'slides', 'caption', 'per_channel', 'channels', 'scheduled_for', 'timezone', 'status', 'publish_job_ids', 'created_by', 'created_at', 'updated_at', 'sent_at', 'approved_at', 'approved_by', 'approval_mode', 'note', 'stage', 'rev', 'stage_at', 'draft_version', 'sent_version', 'approval_steps', 'approval', 'qc_pass', 'changes_asked', 'client_send', 'last_client_send', 'booking', 'outcomes', 'problem', 'cancelled', 'assigned_to', 'source_item_id', 'source_deleted', 'sending', 'automation', 'batch', 'if_no_answer', 'client_review', 'review_asked', 'client_reviews'],
@@ -2077,7 +2078,7 @@ export const NULLABLE_COLUMNS = {
   scan_settings: ['allow_self_connect', 'updated_by'],
   schedule_entries: ['external_match_state', 'scheduled_at', 'scheduler_id', 'tool_url', 'live_url', 'published_at'],
   schedule_notes: ['created_by'],
-  shoot_proposals: ['batch_id', 'location', 'note', 'created_by', 'responded_at', 'notify_emails', 'gcal_event_id'],
+  shoot_proposals: ['batch_id', 'location', 'note', 'created_by', 'responded_at', 'notify_emails', 'gcal_event_id', 'comments'],
   social_accounts: ['client_id', 'name', 'username', 'avatar_url', 'health', 'contact_id'],
   social_accounts_retired: ['client_id', 'username'],
   social_posts: ['version_id', 'version_number', 'caption', 'scheduled_for', 'created_by', 'sent_at', 'approved_at', 'approved_by', 'approval_mode', 'note', 'stage', 'rev', 'stage_at', 'draft_version', 'sent_version', 'approval_steps', 'approval', 'qc_pass', 'changes_asked', 'client_send', 'last_client_send', 'booking', 'outcomes', 'problem', 'cancelled', 'assigned_to', 'source_item_id', 'source_deleted', 'sending', 'automation', 'batch', 'if_no_answer', 'client_review', 'review_asked', 'client_reviews'],
@@ -2194,7 +2195,7 @@ export const JSON_COLUMNS = {
   scan_settings: [],
   schedule_entries: [],
   schedule_notes: [],
-  shoot_proposals: [],
+  shoot_proposals: ['comments'],
   social_accounts: ['health'],
   social_accounts_retired: ['row'],
   social_posts: ['slides', 'per_channel', 'channels', 'publish_job_ids', 'approval', 'qc_pass', 'changes_asked', 'client_send', 'last_client_send', 'booking', 'outcomes', 'cancelled', 'sending', 'automation', 'batch', 'client_review', 'review_asked', 'client_reviews'],

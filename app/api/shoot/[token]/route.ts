@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { withRequestCache } from '@/lib/db'
-import { respondToShoot } from '../../../lib/shoots'
+import { commentOnShoot, respondToShoot } from '../../../lib/shoots'
+import { proposalComments } from '../../../lib/shoot-core'
 
 /**
  * PUBLIC — the client's Yes/No, POSTed by the buttons on /shoot/[token].
@@ -19,7 +20,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ tok
   const { getShootByToken } = await import('../../../lib/shoots')
   const proposal = await getShootByToken(token)
   if (!proposal) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  return NextResponse.json({ status: proposal.status })
+  // and what the client side has said on it (30 Oct 2026), so a second tab sees a comment from the first
+  return NextResponse.json({ status: proposal.status, comments: proposalComments(proposal.comments) })
  })
 }
 
@@ -27,6 +29,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
  return withRequestCache(async () => {
   const { token } = await params
   const body = await req.json().catch(() => ({}))
+  // A COMMENT, not an answer (the owner, 30 Oct 2026: "leave comments") — the same token is the credential
+  if ('comment' in body) {
+    const said = await commentOnShoot(token, body.comment)
+    if (!said) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    if (!said.ok) return NextResponse.json({ error: said.error }, { status: said.status })
+    return NextResponse.json({ comments: said.comments })
+  }
   const answer = body.answer === 'yes' ? 'yes' : body.answer === 'no' ? 'no' : null
   if (!answer) return NextResponse.json({ error: 'Answer must be yes or no' }, { status: 400 })
 

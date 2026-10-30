@@ -26,6 +26,7 @@ import { getIntakeByToken, listIntakeFiles } from '../../../lib/intake'
 import { getMonthlyByToken } from '../../../lib/monthly'
 import { monthLabel } from '../../../lib/monthly-core'
 import { getShootByToken } from '../../../lib/shoots'
+import { proposalComments } from '../../../lib/shoot-core'
 import IntakeForm from '../../../intake/[token]/IntakeForm'
 import MonthlyForm from '../../../monthly/[token]/MonthlyForm'
 import ShootAnswer from '../../../shoot/[token]/ShootAnswer'
@@ -103,7 +104,8 @@ export default async function OnePortalPage({ params, searchParams }: {
     return (
       <div className={fonts}>
         <ShootAnswer token={proposal.token} clientName={data.client.name} title={proposal.title} startsAt={proposal.starts_at}
-          endsAt={proposal.ends_at} location={proposal.location} note={proposal.note} initialStatus={proposal.status} backHref={backHref} />
+          endsAt={proposal.ends_at} location={proposal.location} note={proposal.note} initialStatus={proposal.status} backHref={backHref}
+          initialComments={proposalComments(proposal.comments)} />
       </div>
     )
   }
@@ -232,7 +234,16 @@ export default async function OnePortalPage({ params, searchParams }: {
       chip: null,
     })),
   ]
-  const dateRows = formListRows.filter(r => r.key.startsWith('proposal-'))
+  // A SHOOT DATE WAITING ON THEM IS OPEN ON THE TAB (the owner, 30 Oct 2026: "they should view it immediately") — the
+  // date, Yes / No and the comment box, no click first; an answered one stays a row
+  const waitingDates = tab === 'shoot' && !id && !opened && page.scope.kind === 'business'
+    ? (await Promise.all(forms.filter(f => f.kind === 'proposal' && f.waiting).map(async f => {
+        const row = await portalFormById<{ client_id: string }>('proposal', f.id, page.client.id)
+        return row ? getShootByToken(row.token) : null
+      }))).filter(p => p !== null)
+    : []
+  const openDate = new Set(waitingDates.map(p => `proposal-${p.id}`))
+  const dateRows = formListRows.filter(r => r.key.startsWith('proposal-') && !openDate.has(r.key))
   const formsTabRows = formListRows.filter(r => !r.key.startsWith('proposal-'))
   const boardRows: ListRow[] = page.boards.map(b => ({
     key: b.id, href: onePortalPath(token, 'boards', b.id), title: b.name, line: 'A board from the team',
@@ -285,6 +296,15 @@ export default async function OnePortalPage({ params, searchParams }: {
           {opened ?? (
             <>
               <h1 className="text-[26px] font-semibold leading-tight tracking-tight sm:text-[34px]">{tabLabel}</h1>
+              {waitingDates.length > 0 && (
+                <section className="flex flex-col gap-3" aria-label="Shoot dates waiting on you">
+                  <p className="text-[13px] font-semibold">Can you do this date?</p>
+                  {waitingDates.map(p => (
+                    <ShootAnswer key={p.id} inline token={p.token} clientName={data.client.name} title={p.title} startsAt={p.starts_at}
+                      endsAt={p.ends_at} location={p.location} note={p.note} initialStatus={p.status} initialComments={proposalComments(p.comments)} />
+                  ))}
+                </section>
+              )}
               {tab === 'shoot' && dateRows.length > 0 && <OnePortalList heading="Shoot dates" rows={dateRows} />}
               {tab === 'forms' && <OnePortalList rows={formsTabRows} empty="No forms for you yet. When the team sends you one, it shows here." />}
               {tab === 'shoot' && (

@@ -32,6 +32,30 @@ export function nextStatus(current: ShootStatus, answer: 'yes' | 'no'): ShootSta
   return answer === 'yes' ? 'accepted' : 'declined'
 }
 
+/** A COMMENT ON A PROPOSED DATE (the owner, 30 Oct 2026: "they should view it immediately and leave comments") —
+ *  anything more than Yes or No, e.g. "can we do Thursday instead?". Open in every state but cancelled. */
+export type ProposalComment = { id: string; at: string; body: string }
+export const MAX_PROPOSAL_COMMENT = 2000
+
+/** what a comment may say: trimmed, not empty, not over the limit; null when there is nothing to send */
+export function cleanProposalComment(raw: unknown): string | null {
+  const body = typeof raw === 'string' ? raw.trim() : ''
+  return body ? body.slice(0, MAX_PROPOSAL_COMMENT) : null
+}
+
+/** the comments a row holds, oldest first — whatever shape the database handed back */
+export function proposalComments(raw: unknown): ProposalComment[] {
+  const list = Array.isArray(raw) ? raw : raw && typeof raw === 'object' ? Object.values(raw) : []
+  return list
+    .filter((c): c is ProposalComment => !!c && typeof c === 'object' && typeof (c as ProposalComment).body === 'string' && typeof (c as ProposalComment).at === 'string')
+    .map(c => ({ id: String(c.id ?? c.at), at: c.at, body: c.body }))
+    .sort((a, b) => a.at.localeCompare(b.at))
+}
+
+export function canComment(status: ShootStatus): boolean {
+  return status !== 'cancelled'
+}
+
 /** send_to is stored comma-joined; every address on it receives the
  *  invitation, the confirmation and any cancellation. */
 export function splitRecipients(sendTo: string): string[] {

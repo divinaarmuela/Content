@@ -17,7 +17,7 @@ import {
 import { Ban, Copy } from 'lucide-react'
 import { publicUrl } from '@/app/lib/public-url'
 import { CAL_TZ } from '../../../lib/gcal-core'
-import { PROPOSAL_TAG, type ShootStatus } from '../../../lib/shoot-core'
+import { PROPOSAL_TAG, proposalComments, type ShootStatus } from '../../../lib/shoot-core'
 import { useRole } from '../../useRole'
 
 type Proposal = {
@@ -30,6 +30,8 @@ type Proposal = {
   status: ShootStatus
   created_at: string
   responded_at: string | null
+  /** what the client said beyond Yes or No (30 Oct 2026) */
+  comments?: unknown
   clients: { name: string } | null
 }
 
@@ -48,6 +50,9 @@ const fmtWhen = (startsAt: string, endsAt: string) => {
     new Date(iso).toLocaleTimeString('en-AU', { timeZone: CAL_TZ, hour: 'numeric', minute: '2-digit' })
   return `${day}, ${t(startsAt)}–${t(endsAt)}`
 }
+
+const fmtSaid = (iso: string) =>
+  new Date(iso).toLocaleString('en-AU', { timeZone: CAL_TZ, day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })
 
 /** Every invitation ever sent, newest first — and the place to call one off. */
 export default function ProposalsPage() {
@@ -128,6 +133,14 @@ export default function ProposalsPage() {
                   <div className="font-mono text-secondary-13 text-muted-foreground">
                     {p.clients?.name ?? '—'}
                   </div>
+                  {/* what the client said beyond Yes or No, newest last (30 Oct 2026) */}
+                  {proposalComments(p.comments).map(c => (
+                    <p key={c.id} data-proposal-comment className="mt-1.5 max-w-md whitespace-pre-wrap break-words rounded-tile bg-tint-amber px-2.5 py-1.5 text-secondary-13">
+                      <span className="font-semibold">{p.clients?.name ?? 'Client'}</span>{' '}
+                      <span className="text-muted-foreground">{fmtSaid(c.at)}</span>
+                      <br />{c.body}
+                    </p>
+                  ))}
                 </TableCell>
                 <TableCell className="whitespace-nowrap text-body-15 text-muted-foreground">
                   {fmtWhen(p.starts_at, p.ends_at)}

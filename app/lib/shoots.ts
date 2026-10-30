@@ -3,9 +3,9 @@ import { randomUUID } from 'node:crypto'
 import { table } from '@/lib/db'
 import { attachOne } from '@/lib/db-join'
 import type { ShootProposal as ShootProposalRow } from '@/lib/db-types'
-import { notify, renderEmail } from './mailer'
+import { escapeHtml, notify, renderEmail } from './mailer'
 import { publicUrl } from './public-url'
-import { nextStatus, shootIcs, splitRecipients, type ShootStatus } from './shoot-core'
+import { canComment, cleanProposalComment, nextStatus, proposalComments, shootIcs, splitRecipients, type ProposalComment, type ShootStatus } from './shoot-core'
 import { CAL_TZ } from './gcal-core'
 import { createBookingEvent, deleteBookingEvent } from './gcal'
 
@@ -33,6 +33,8 @@ export type ShootProposal = {
   status: ShootStatus
   created_by: string | null
   responded_at: string | null
+  /** what the client said beyond Yes or No (30 Oct 2026) */
+  comments?: unknown
   clients?: { name: string } | null
 }
 
@@ -317,4 +319,46 @@ export async function respondToShoot(
   }
 
   return { proposal, applied: true }
+}
+
+/**
+ * A COMMENT FROM THE CLIENT ON A PROPOSED DATE (the owner, 30 Oct 2026) — appended in one claim, so two at once both
+ * land, and the team is emailed it. Null when the proposal is not found; refused when it was called off.
+ */
+export async function commentOnShoot(
+  token: string, raw: unknown,
+): Promise<{ ok: true; comments: ProposalComment[] } | { ok: false; error: string; status: number } | null> {
+  const body = cleanProposalComment(raw)
+  if (!body) return { ok: false, error: 'Write something first', status: 400 }
+  const found = (await table<ShootProposalRow>('shoot_proposals').list({ by: { token }, limit: 1 }))[0]
+  if (!found) return null
+  const comment: ProposalComment = { id: randomUUID(), at: new Date().toISOString(), body }
+  const res = await table<ShootProposalRow>('shoot_proposals').claim(found.id, cur =>
+    cur && canComment(cur.status as ShootStatus) ? { ...cur, comments: [...proposalComments(cur.comments), comment] } : null)
+  if (!res.claimed) return { ok: false, error: 'This proposal is no longer active', status: 409 }
+  const proposal = (await withClientName([res.row]))[0]
+  const clientName = proposal.clients?.name ?? 'The client'
+  await Promise.all(teamRecipients(proposal).map(async teamTo => {
+    try {
+      await notify({
+        eventType: 'shoot_comment',
+        entityType: 'shoot_proposal',
+        entityId: `${proposal.id}:comment:${comment.id}`,
+        recipientEmail: teamTo,
+        clientId: proposal.client_id,
+        subject: `💬 ${clientName} commented — ${proposal.title}`,
+        bodyHtml: renderEmail(
+          'A comment on a shoot date',
+          `<p><strong>${escapeHtml(clientName)}</strong> on <strong>${escapeHtml(proposal.title)}</strong> ` +
+          `(${fmtRange(proposal.starts_at, proposal.ends_at)}):</p>` +
+          `<p style="white-space:pre-wrap">${escapeHtml(body)}</p>`,
+          'Open proposals',
+          publicUrl('/dashboard/production/proposals'),
+        ),
+      })
+    } catch (e) {
+      console.error(`shoot comment email failed for ${teamTo}:`, e)
+    }
+  }))
+  return { ok: true, comments: proposalComments(res.row.comments) }
 }
