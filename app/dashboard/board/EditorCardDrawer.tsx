@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import CardDriveUpload, { type CardUploadHandle } from '../editor/[id]/CardDriveUpload'
 import { deleteRefusal } from '../../lib/card-upload-core'
 import { toast } from 'sonner'
+import { isMarkedDone, mayMarkDone } from '@/app/lib/done-core'
 import { AlertTriangle, Check, ExternalLink, FolderDown, Pencil, Upload, X } from 'lucide-react'
 import { DriveHandInDialog, DriveHandInStatus } from './DriveHandIn'
 import { seesClientWords, visibleComments } from '../../lib/comment-access-core'
@@ -553,6 +554,20 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
                 <Pencil className="h-3.5 w-3.5" aria-hidden /> Edit the card
               </button>
             )}
+            {/* MARK DONE, at any stage (done-core, the owner, 30 Oct 2026) — the Done lane, off the board a week and a half later */}
+            {mayMarkDone(me) && (isMarkedDone(item as never) ? (
+              <button type="button" disabled={busy} data-mark-done="undo"
+                onClick={() => void post(`/api/production/items/${id}/done`, { done: false }, 'Back where it was', 'Saving')}
+                className="inline-flex min-h-9 items-center gap-1 rounded-full bg-tint-green px-3 text-[12px] font-semibold hover:opacity-90">
+                <Check className="h-3.5 w-3.5" aria-hidden /> Done · Not done
+              </button>
+            ) : (
+              <button type="button" disabled={busy} data-mark-done="do"
+                onClick={() => void post(`/api/production/items/${id}/done`, { done: true }, 'Marked done — it is in Done for a week and a half', 'Saving')}
+                className="inline-flex min-h-9 items-center gap-1 rounded-full border border-border px-3 text-[12px] font-semibold hover:bg-muted">
+                <Check className="h-3.5 w-3.5" aria-hidden /> Mark done
+              </button>
+            ))}
           </div>
           {/* THE NEXT STEP, at the top where it is seen (17 Sep 2026): the hand-in
               sits low in the card, so the one thing to do next is also here */}

@@ -2,6 +2,7 @@
 
 import { setArchived } from '../ui/Archived'
 import { mayArchiveCard } from '../../lib/archive-core'
+import { mayMarkDone } from '../../lib/done-core'
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -182,6 +183,12 @@ export function Board({
     return next
   }
   const archiveCard = useCallback((card: BoardViewCard) => { void setArchived('card', card.id, true) }, [])
+  // MARK DONE (done-core, 30 Oct 2026): the Done lane at any stage; the board updates itself from the live rows
+  const markDone = useCallback((card: BoardViewCard, done: boolean) => {
+    void fetch(`/api/production/items/${card.id}/done`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ done }) })
+      .then(async r => { if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error ?? 'Could not do that'); toast.success(done ? 'Marked done — it is in Done for a week and a half' : 'Back where it was') })
+      .catch(e => toast.error(e instanceof Error ? e.message : 'Could not do that'))
+  }, [])
   const onAckRef = useRef(onAcknowledge)
   onAckRef.current = onAcknowledge
   const acknowledgeCard = useCallback((card: BoardViewCard) => { onAckRef.current?.(card as BoardCardRow) }, [])
@@ -355,6 +362,7 @@ export function Board({
                 canDelete={mayDeleteCard(viewer, c as never)}
                 onDelete={setDeleteFor}
                 onArchive={mayArchiveCard(viewer, c as never) ? archiveCard : undefined}
+                onDone={mayMarkDone(viewer) ? markDone : undefined}
                 onAcknowledge={onAcknowledge ? acknowledgeCard : undefined}
               />
             ) : (
@@ -386,6 +394,7 @@ export function Board({
                 // ARCHIVE (20 Oct 2026): off the page and the client's portal, nothing deleted — the managers', or the
                 // card's own editor's or designer's; the page's "Archived" view brings it back
                 onArchive={mayArchiveCard(viewer, c as never) ? archiveCard : undefined}
+                onDone={mayMarkDone(viewer) ? markDone : undefined}
                 stats={statsByItem.get(c.id) ?? null}
                 statsHref={postByItem.has(c.id) ? postPageHref(postByItem.get(c.id)!) : null}
                 booking={bookingByItem.get(c.id) ?? null}

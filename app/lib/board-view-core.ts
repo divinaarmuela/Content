@@ -34,9 +34,12 @@ import { DEFAULT_TZ, dayKeyInZone } from './timezone-core'
 import { SCHEDULE_PAGE } from './page-access-core'
 import { POST_APPROVAL_BOARD } from './overview-links-core'
 import { needsColourGrade } from './colour-grade-core'
+import { doneStillShown, isMarkedDone } from './done-core'
 
 /** Everything a card is drawn from — the row plus its joins. */
 export type BoardViewCard = {
+  /** marked done by a person, at any stage (done-core, 30 Oct 2026) — Done lane, off the board a week and a half later */
+  done_at?: string | null
   /** true when the card exists only to hold a post made on the Schedule page */
   adhoc_post?: boolean | null
   id: string
@@ -517,7 +520,8 @@ export function pageCards<T extends BoardViewCard>(
   // production work: its card only holds the file, and it is on no board of
   // cards (audit V13). Its post is on Post approval like any other post.
   const work = (c: T) => (c as { adhoc_post?: unknown }).adhoc_post !== true
-  const fresh = (c: T) => work(c) && (!today || recentlyPosted(c, today))
+  // a card marked done leaves the board a week and a half later (done-core, 30 Oct 2026)
+  const fresh = (c: T) => work(c) && (!today || (recentlyPosted(c, today) && doneStillShown(c as never, today)))
   if (page === 'editor') {
     // a general user's Editor page is their own cards too — the making is
     // theirs, the checking is the manager's
@@ -687,7 +691,8 @@ export function groupByLane<T extends { status: ItemStatus; deliver_only?: unkno
     lanes.flatMap(l => l.columns.map((c): [BoardColumnKey, PageLaneKey] => [c, l.key])))
   for (const card of cards) {
     // the editor's road ends at the hand-over: the scheduler's posting job is not the editor's In Progress
-    const key = handedOver(card as never) && buckets.has('done') ? 'done' : laneByColumn.get(cardColumn(card))
+    // …and a card someone marked done, at whatever stage (done-core, 30 Oct 2026)
+    const key = (handedOver(card as never) || isMarkedDone(card as never)) && buckets.has('done') ? 'done' : laneByColumn.get(cardColumn(card))
     if (key) buckets.get(key)!.push(card)
   }
   return lanes.map(l => ({ lane: l, cards: buckets.get(l.key)! }))

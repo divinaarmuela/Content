@@ -1,6 +1,7 @@
 'use client'
 
-import { Archive, MessageCircle, MoreHorizontal, Trash2, UserPlus } from 'lucide-react'
+import { Archive, CheckCircle2, MessageCircle, MoreHorizontal, Trash2, Undo2, UserPlus } from 'lucide-react'
+import { isMarkedDone } from '@/app/lib/done-core'
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
   DropdownMenuSeparator, DropdownMenuTrigger,
@@ -42,7 +43,7 @@ const PILL = {
 const small = 'h-7 rounded-full px-2.5 text-[12px] font-semibold disabled:opacity-60'
 
 export function EditorBoardCard({
-  card, viewer, names, managers = [], today, busy, canEdit, onOpen, onAction, onMove, onHandTo, canDelete, onDelete, onArchive,
+  card, viewer, names, managers = [], today, busy, canEdit, onOpen, onAction, onMove, onHandTo, canDelete, onDelete, onArchive, onDone,
   onAcknowledge, tour,
 }: {
   card: BoardViewCard
@@ -60,6 +61,8 @@ export function EditorBoardCard({
   canDelete?: boolean
   onDelete?: (card: BoardViewCard) => void
   onArchive?: (card: BoardViewCard) => void
+  /** MARK DONE, OR NOT (done-core, 30 Oct 2026) — an account manager, an editor or a super admin, at any stage */
+  onDone?: (card: BoardViewCard, done: boolean) => void
   onAcknowledge?: (card: BoardViewCard) => void
   tour?: boolean
 }) {
@@ -83,7 +86,7 @@ export function EditorBoardCard({
   const settled = card.status === 'scheduled' || card.status === 'published'
   const mayDelete = Boolean(canDelete && onDelete)
   const menuMore = primary ? more : more.slice(1)
-  const hasMenu = menuMore.length > 0 || targets.length > 0 || (canEdit && !!onHandTo && !settled) || mayDelete || !!onArchive
+  const hasMenu = menuMore.length > 0 || targets.length > 0 || (canEdit && !!onHandTo && !settled) || mayDelete || !!onArchive || !!onDone
   const holder = card.owner_id ? (names.get(card.owner_id) ?? lines.assignee) : null
 
   return (
@@ -173,6 +176,14 @@ export function EditorBoardCard({
                   <>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={() => onHandTo(card)}><UserPlus className="h-4 w-4" aria-hidden /> Hand to…</DropdownMenuItem>
+                  </>
+                )}
+                {onDone && (
+                  <>
+                    <DropdownMenuSeparator />
+                    {isMarkedDone(card as never)
+                      ? <DropdownMenuItem onClick={() => onDone(card, false)}><Undo2 className="h-4 w-4" aria-hidden /> Not done — back where it was</DropdownMenuItem>
+                      : <DropdownMenuItem onClick={() => onDone(card, true)}><CheckCircle2 className="h-4 w-4" aria-hidden /> Mark done</DropdownMenuItem>}
                   </>
                 )}
                 {onArchive && (

@@ -3,7 +3,8 @@
 import { DELIVER_ONLY_CHIP } from '@/app/lib/deliver-only-core'
 import { useState } from 'react'
 import Link from 'next/link'
-import { ChevronDown, ChevronUp, ExternalLink, MessageCircle, MoreHorizontal, Trash2, UserPlus, Archive } from 'lucide-react'
+import { ChevronDown, ChevronUp, ExternalLink, MessageCircle, MoreHorizontal, Trash2, UserPlus, Archive, CheckCircle2, Undo2 } from 'lucide-react'
+import { isMarkedDone } from '@/app/lib/done-core'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
@@ -89,7 +90,7 @@ export function CompactCard({ card, today, onOpen, names }: {
   )
 }
 export function BoardCard({
-  card, viewer, names, today, busy, canEdit, onOpen, onAction, onMove, onLink, onKind, onHandTo, canDelete, onDelete, onArchive, stats,
+  card, viewer, names, today, busy, canEdit, onOpen, onAction, onMove, onLink, onKind, onHandTo, canDelete, onDelete, onArchive, onDone, stats,
   statsHref, booking, tour, onAcknowledge, page, managers = [],
 }: {
   card: BoardViewCard & { work_kinds?: { name: string; slug?: string; color?: string } | null }
@@ -116,6 +117,8 @@ export function BoardCard({
   onDelete?: (card: BoardViewCard) => void
   /** put the card away (20 Oct 2026, archive-core) — off this page and the client's portal; absent when not allowed */
   onArchive?: (card: BoardViewCard) => void
+  /** MARK DONE, OR NOT (done-core, 30 Oct 2026) — an account manager, an editor or a super admin, at any stage */
+  onDone?: (card: BoardViewCard, done: boolean) => void
   /** in Posted: "42 interactions · +12 followers" — how the live post did */
   stats?: string | null
   /** the post's own page, when the card was posted from a composition. The
@@ -202,7 +205,7 @@ export function BoardCard({
   const mayDelete = Boolean(canDelete && onDelete)
   const settled = card.status === 'scheduled' || card.status === 'published'
   const adhocPost = (card as { adhoc_post?: unknown }).adhoc_post === true
-  const hasMenu = more.length > 0 || targets.length > 0 || canEdit || mayDelete || !!onArchive
+  const hasMenu = more.length > 0 || targets.length > 0 || canEdit || mayDelete || !!onArchive || !!onDone
 
   return (
     <>
@@ -420,6 +423,20 @@ export function BoardCard({
                   {onHandTo && !settled && (
                     <DropdownMenuItem className="min-h-11" onClick={() => onHandTo(card)}>
                       <UserPlus className="h-4 w-4" aria-hidden /> Hand to…
+                    </DropdownMenuItem>
+                  )}
+                </>
+              )}
+              {onDone && (
+                <>
+                  <DropdownMenuSeparator />
+                  {isMarkedDone(card as never) ? (
+                    <DropdownMenuItem className="min-h-11" onClick={() => onDone(card, false)}>
+                      <Undo2 className="h-4 w-4" aria-hidden /> Not done — back where it was
+                    </DropdownMenuItem>
+                  ) : (
+                    <DropdownMenuItem className="min-h-11" onClick={() => onDone(card, true)}>
+                      <CheckCircle2 className="h-4 w-4" aria-hidden /> Mark done
                     </DropdownMenuItem>
                   )}
                 </>
