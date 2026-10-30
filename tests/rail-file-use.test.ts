@@ -48,3 +48,12 @@ describe('the rail and the new-post window say so', () => {
     expect(readFileSync('app/dashboard/social/schedule/NewPostSources.tsx', 'utf8')).toContain('data-piece-uses')
   })
 })
+
+describe('the same video uploaded again is the same file (Jordan Wilson, 30 Oct 2026)', () => {
+  it('matched by name and size when the address differs', async () => {
+    const { fileKeys, fileUses: uses, useOfFile } = await import('../app/lib/rail-file-use-core')
+    const booked = uses([{ stage: 'booked', live: false, at: '2026-11-01T03:30:00Z', urls: fileKeys({ url: 'https://r2/fresh-Video_01.mp4', name: 'Video 01 (1).mp4', bytes: 178176290 }) }])
+    expect(useOfFile({ url: 'https://r2/pulls/Video_01.mp4', name: 'Video 01.mp4', size: 178176290 }, booked)?.kind).toBe('scheduled')
+    expect(useOfFile({ url: 'https://r2/pulls/Video_04.mp4', name: 'Video 04.mp4', size: 80089944 }, booked)).toBeUndefined()
+  })
+})

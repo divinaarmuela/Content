@@ -52,7 +52,7 @@ import {
 } from '@/app/lib/scope-client'
 import { slidesOf, type Slide } from '@/app/lib/version-files-core'
 import { postedLine, readPostedSlides, remainingSlides, takenSlideUrls, urlsOf } from '@/app/lib/posted-slides-core'
-import { approvedAtOf, fileUses, type FileUse } from '@/app/lib/rail-file-use-core'
+import { approvedAtOf, fileKeys, fileUses, useOfFile, type FileUse } from '@/app/lib/rail-file-use-core'
 
 /**
  * A post as the calendar draws it: the row, the typed stage the rules read,
@@ -415,7 +415,10 @@ export function useSchedulePosts(
   // every file of the client's posts, where it stands — by address, whichever piece the post was made from
   const uses = useMemo(() => fileUses(posts.rows.map(row => {
     const st = readPostState(row as unknown as Record<string, unknown>)
-    return { stage: st?.stage ?? null, live: st ? anyNetworkLive(st) : false, at: (row as { scheduled_for?: string | null }).scheduled_for ?? null, urls: urlsOf(row as never) }
+    // every file the post holds, by its address and by its name with its size (a fresh upload of the same video)
+    const slides = [row.slides, ...Object.values((row as { per_channel?: Record<string, { slides?: unknown }> | null }).per_channel ?? {}).map(c => c?.slides)]
+      .flatMap(v => (Array.isArray(v) ? v : [])) as { url?: string; name?: string; bytes?: number }[]
+    return { stage: st?.stage ?? null, live: st ? anyNetworkLive(st) : false, at: (row as { scheduled_for?: string | null }).scheduled_for ?? null, urls: [...new Set([...urlsOf(row as never), ...slides.flatMap(fileKeys)])] }
   })), [posts.rows])
 
   /** the media rail: one card per item, ready-to-use first */
@@ -466,7 +469,7 @@ export function useSchedulePosts(
           posted: postedLine(readPostedSlides((item as { posted_slides?: unknown }).posted_slides)),
           driveFolderUrl: folderOf(item as Parameters<typeof folderOf>[0])?.kind === 'drive' ? folderOf(item as Parameters<typeof folderOf>[0])!.url : null,
           knownUrls: [...new Set(itemVersions.flatMap(v => slidesOf(v).map(sl => sl.url)))],
-          fileUse: Object.fromEntries((elig.ok ? elig.slides : []).flatMap(sl => (uses.has(sl.url) ? [[sl.url, uses.get(sl.url)!]] : []))),
+          fileUse: Object.fromEntries((elig.ok ? elig.slides : []).flatMap(sl => { const u = useOfFile(sl, uses); return u ? [[sl.url, u]] : [] })),
           approvedAt: approvedAtOf(item as never),
           coverUrl: coverForSlide(slides[0]?.url, itemVersions),
           updatedAt: String(item.updated_at ?? ''),

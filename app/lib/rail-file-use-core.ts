@@ -11,7 +11,30 @@
  */
 
 export type FileUse = { kind: 'posted' | 'scheduled' | 'approving'; at: string | null }
+/** `urls` are the post's files by any key fileKeys gives — its address, and its name with its size */
 export type UsePost = { stage: string | null; live: boolean; at: string | null; urls: readonly string[] }
+
+/** a file's name without the " (3)" a browser adds to a second download of it (as file-tags-core.plainName) */
+const plainName = (name: string) => name.replace(/\s*\(\d+\)(?=\.[^.]+$)/, '').trim().toLowerCase()
+
+/**
+ * THE KEYS A FILE IS KNOWN BY: its address, and — when it has both — its name and its size. The same video uploaded
+ * again into a post has a new address but the same bytes (Jordan Wilson's October Videos, 30 Oct 2026: Video 01 and 02
+ * were booked from fresh uploads, and the rail read them "not scheduled"); the editor's badges match the same way.
+ */
+export function fileKeys(f: { url?: string | null; name?: string | null; bytes?: number | null; size?: number | null }): string[] {
+  const keys = f.url ? [f.url] : []
+  const size = typeof f.bytes === 'number' ? f.bytes : typeof f.size === 'number' ? f.size : 0
+  if (size > 0 && f.name) keys.push(`nb:${plainName(f.name)}|${size}`)
+  return keys
+}
+
+/** where one file stands, by any of its keys */
+export function useOfFile(f: Parameters<typeof fileKeys>[0], uses: ReadonlyMap<string, FileUse>): FileUse | undefined {
+  const found = fileKeys(f).map(k => uses.get(k)).filter((u): u is FileUse => !!u)
+  return found.sort((a, b) => RANK[b.kind] - RANK[a.kind])[0]
+}
+
 
 const RANK: Record<FileUse['kind'], number> = { posted: 3, scheduled: 2, approving: 1 }
 
