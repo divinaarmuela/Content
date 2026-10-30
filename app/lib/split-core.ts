@@ -78,13 +78,15 @@ export function roundCardFiles(
   return { files, byOld }
 }
 
-/** what the client said on each unapproved video, pinned to that video on the Round N card */
-export function carriedClipNotes(byOld: ReadonlyMap<string, string>, notes: readonly ClipNote[]): { file_id: string; body: string }[] {
-  const out: { file_id: string; body: string }[] = []
+/** what the client said on each unapproved video, pinned to that video on the Round N card — as the client's own
+ *  words, by them, seen on the portal too (the owner, 30 Oct 2026: "make sure comments are there for the unapproved
+ *  ones so we can see and put on portal"), so Version 1 of the new card reads as they left it */
+export function carriedClipNotes(byOld: ReadonlyMap<string, string>, notes: readonly ClipNote[]): { file_id: string; body: string; author_id: string | null; at: number | null }[] {
+  const out: { file_id: string; body: string; author_id: string | null; at: number | null }[] = []
   for (const n of notes) {
     const id = n.video_file_id ? byOld.get(n.video_file_id) : undefined
     const said = String(n.body ?? '').trim()
-    if (id && said && n.visibility === 'client') out.push({ file_id: id, body: `The client: ${said}` })
+    if (id && said && n.visibility === 'client') out.push({ file_id: id, body: said, author_id: n.author_id ?? null, at: typeof n.video_timestamp_sec === 'number' ? n.video_timestamp_sec : null })
   }
   return out
 }
@@ -107,7 +109,7 @@ export function carriedNotes(open: readonly SplitVideo[], notes: readonly ClipNo
   return out
 }
 
-export type ClipNote = { video_file_id?: string | null; body?: string | null; visibility?: string | null }
+export type ClipNote = { video_file_id?: string | null; body?: string | null; visibility?: string | null; author_id?: string | null; video_timestamp_sec?: number | null }
 
 /** what the editor reads on the Round N card: which videos, and what the client said on each */
 export function roundNote(open: readonly SplitVideo[], notes: readonly ClipNote[], approvedCount: number): string {

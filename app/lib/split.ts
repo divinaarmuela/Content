@@ -117,10 +117,10 @@ export async function splitCard(actor: TeamUser, itemId: string, opts: { by: 'cl
   for (const body of carriedNotes(plan.open, notes)) {
     await table('item_comments').insert({ item_id: newId, author_id: actor.id, visibility: 'internal', body, resolved: false } as never).catch(() => undefined)
   }
-  // …and on the video itself, where the editor plays it
+  // …and on the video itself, as the client left it — the editor plays it there, and the portal shows it on Version 1
   const nameOf = new Map(onCard.files.map(f => [f.id, f.name]))
   for (const c of carriedClipNotes(onCard.byOld, notes)) {
-    await table('item_comments').insert({ item_id: newId, author_id: actor.id, visibility: 'internal', body: c.body, resolved: false, video_file_id: c.file_id, video_file_name: nameOf.get(c.file_id) ?? null } as never).catch(() => undefined)
+    await table('item_comments').insert({ item_id: newId, author_id: c.author_id ?? actor.id, visibility: 'client', body: c.body, resolved: false, video_file_id: c.file_id, video_file_name: nameOf.get(c.file_id) ?? null, video_timestamp_sec: c.at } as never).catch(() => undefined)
   }
 
   // 3. THE APPROVED VIDEOS GO TO HANDOVER — the client's approval, or the manager logging it

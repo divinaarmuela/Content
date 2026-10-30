@@ -39,7 +39,7 @@ describe('the unapproved videos are the Round N card’s own files', () => {
       { video_file_id: 'v3', visibility: 'client', body: 'Not getting to the point' },
       { video_file_id: 'v3', visibility: 'internal', body: 'team only' },
       { video_file_id: 'v1', visibility: 'client', body: 'approved one' },
-    ])).toEqual([{ file_id: 'new1', body: 'The client: Not getting to the point' }])
+    ])).toEqual([{ file_id: 'new1', body: 'Not getting to the point', author_id: null, at: null }])
   })
 
   it('the split writes it so, and tells the editor in those words', () => {
