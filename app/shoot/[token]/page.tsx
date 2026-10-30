@@ -4,7 +4,6 @@ import { onePortalFormRedirect } from '../../lib/one-portal-forms'
 import { archivo, sometype } from '../../components/lama/fonts'
 import { getShootByToken } from '../../lib/shoots'
 import ShootAnswer from './ShootAnswer'
-import { proposalComments } from '../../lib/shoot-core'
 
 export const metadata: Metadata = {
   title: 'Shoot proposal — MD Media',
@@ -36,7 +35,6 @@ export default async function ShootPage({ params }: { params: Promise<{ token: s
         location={proposal.location}
         note={proposal.note}
         initialStatus={proposal.status}
-        initialComments={proposalComments(proposal.comments)}
       />
     </div>
   )
