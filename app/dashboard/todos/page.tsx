@@ -788,7 +788,8 @@ function TaskRowView({ t, today, open, picked, editable, owner, ownerName, linkL
         <span className="ml-auto hidden shrink-0 items-center gap-0.5 text-[12px] text-muted-foreground group-hover:inline-flex">Details <ChevronRight className="h-3.5 w-3.5" aria-hidden /></span>
       </div>
       <div role="cell" className={`${CELL} ${dueTone(t.due_date, today, done)}`}>
-        {t.due_date ? shortDue(t.due_date, today) : <Calendar className="h-3.5 w-3.5 opacity-0 group-hover:opacity-60" aria-hidden />}
+        {/* the window when it has a start date (30 Oct 2026): "Mon – Fri" */}
+        {t.due_date ? ((t as { start_date?: string | null }).start_date ? `${shortDue((t as { start_date?: string | null }).start_date!, today)} – ${shortDue(t.due_date, today)}` : shortDue(t.due_date, today)) : <Calendar className="h-3.5 w-3.5 opacity-0 group-hover:opacity-60" aria-hidden />}
         {/* repeats, as Asana marks it beside the date (20 Oct 2026) */}
         {normaliseRepeat((t as { repeat?: unknown }).repeat) && (
           <Repeat className="ml-1 h-3.5 w-3.5 shrink-0" aria-label={repeatWords(normaliseRepeat((t as { repeat?: unknown }).repeat))} />
@@ -869,7 +870,7 @@ function Board({ groups, today, names, openId, viewer, link, meta, onOpen, onTic
                 {l?.label && <span className="text-[12px]"><LinkChip link={l} /></span>}
                 <div className="flex items-center gap-2">
                   {t.owner_id && <Avatar name={names.get(t.owner_id) ?? '?'} />}
-                  {t.due_date && <span className={`text-[12px] ${dueTone(t.due_date, today, done)}`}>{shortDue(t.due_date, today)}</span>}
+                  {t.due_date && <span className={`text-[12px] ${dueTone(t.due_date, today, done)}`}>{(t as { start_date?: string | null }).start_date ? `${shortDue((t as { start_date?: string | null }).start_date!, today)} – ` : ''}{shortDue(t.due_date, today)}</span>}
                   <span className="ml-auto flex items-center gap-2"><MetaIcons m={meta(t)} /></span>
                 </div>
               </article>

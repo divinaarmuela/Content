@@ -18,14 +18,20 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
  *
  * Its own small panel rather than a popover package: one more dependency for one picker was not worth it. It sits
  * on the popover surface so it does not vanish into the page in dark mode (trap 3).
+ *
+ * A START DATE, as Asana has it (Abby, 30 Oct 2026: "add start date on due date? So they can have flexibility within
+ * xx to xx day"): "Add start date" opens a second box; the month then picks the start, then the due date, the days
+ * between shaded. The picked day is the accent blue — it was the ink colour, a black circle on the calendar.
  */
-export default function DuePicker({ due: savedDue, repeat: savedRepeat, today, done, editable, onChange: save }: {
+type DuePatch = { due_date?: string | null; start_date?: string | null; repeat?: TodoRepeat | null }
+export default function DuePicker({ due: savedDue, start: savedStart = null, repeat: savedRepeat, today, done, editable, onChange: save }: {
   due: string | null
+  start?: string | null
   repeat: TodoRepeat | null
   today: string
   done: boolean
   editable: boolean
-  onChange: (patch: { due_date?: string | null; repeat?: TodoRepeat | null }) => void | Promise<unknown>
+  onChange: (patch: DuePatch) => void | Promise<unknown>
 }) {
   /**
    * SHOWN AT ONCE, SAVED BEHIND (the owner, 21 Oct 2026: "when choosing custom it takes time to update … laggy"): each
@@ -33,24 +39,25 @@ export default function DuePicker({ due: savedDue, repeat: savedRepeat, today, d
    * made in that wait was built on the old rule and lost the first. The picker now keeps its own copy, changes it on
    * the click, and saves one after another; it takes the saved task back only when nothing of its own is still saving.
    */
-  const [local, setLocal] = useState<{ due: string | null; repeat: TodoRepeat | null }>({ due: savedDue, repeat: savedRepeat })
+  const [local, setLocal] = useState<{ due: string | null; start: string | null; repeat: TodoRepeat | null }>({ due: savedDue, start: savedStart, repeat: savedRepeat })
   const latest = useRef(local)
   const pending = useRef(0)
   const queue = useRef<Promise<unknown>>(Promise.resolve())
-  const savedKey = JSON.stringify([savedDue, savedRepeat])
-  const saved = useRef({ due: savedDue, repeat: savedRepeat })
-  saved.current = { due: savedDue, repeat: savedRepeat }
+  const savedKey = JSON.stringify([savedDue, savedStart, savedRepeat])
+  const saved = useRef({ due: savedDue, start: savedStart, repeat: savedRepeat })
+  saved.current = { due: savedDue, start: savedStart, repeat: savedRepeat }
   const failed = useRef(false)
   useEffect(() => {
     if (pending.current > 0) return
-    const next = { due: savedDue, repeat: savedRepeat }
+    const next = { due: savedDue, start: savedStart, repeat: savedRepeat }
     latest.current = next
     setLocal(next)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [savedKey])
-  const onChange = (patch: { due_date?: string | null; repeat?: TodoRepeat | null }) => {
+  const onChange = (patch: DuePatch) => {
     const next = {
       due: 'due_date' in patch ? patch.due_date ?? null : latest.current.due,
+      start: 'start_date' in patch ? patch.start_date ?? null : latest.current.start,
       repeat: 'repeat' in patch ? patch.repeat ?? null : latest.current.repeat,
     }
     latest.current = next
@@ -63,8 +70,23 @@ export default function DuePicker({ due: savedDue, repeat: savedRepeat, today, d
       })
   }
   const due = local.due
+  const start = local.start
   const repeat = local.repeat
   const [open, setOpen] = useState(false)
+  /** which date the month sets next, once there is a start date: the start, then the due date */
+  const [which, setWhich] = useState<'start' | 'due'>('due')
+  const [startOn, setStartOn] = useState(false)
+  const ranged = startOn || !!start
+  /** a day pressed on the month: the start (the due date follows when it is later), else the due date (the start
+   *  follows when it is earlier) — the window never runs backwards */
+  const pickDay = (key: string) => {
+    if (ranged && which === 'start') {
+      onChange({ start_date: key, ...(due && key > due ? { due_date: key } : {}) })
+      setWhich('due')
+    } else {
+      onChange({ due_date: key, ...(start && key < start ? { start_date: key } : {}) })
+    }
+  }
   const box = useRef<HTMLDivElement>(null)
   const panel = useRef<HTMLDivElement>(null)
   const rule = normaliseRepeat(repeat)
@@ -154,14 +176,14 @@ export default function DuePicker({ due: savedDue, repeat: savedRepeat, today, d
   return (
     <div ref={box} className="relative flex items-center gap-1">
       <button type="button" disabled={!editable} onClick={() => setOpen(o => !o)} aria-expanded={open}
-        aria-label={`Due date: ${due ? shortDue(due, today) : 'none'}${rule ? `, ${repeatWords(rule)}` : ''}`}
+        aria-label={`Due date: ${start ? `${shortDue(start, today)} to ` : ''}${due ? shortDue(due, today) : 'none'}${rule ? `, ${repeatWords(rule)}` : ''}`}
         className={`flex h-8 items-center gap-1.5 rounded-md border border-transparent px-2 text-[14px] hover:border-border disabled:hover:border-transparent ${due ? dueTone(due, today, done) : 'text-muted-foreground'}`}>
         <Calendar className="h-3.5 w-3.5" aria-hidden />
-        {due ? shortDue(due, today) : 'No due date'}
+        {start && due ? `${shortDue(start, today)} – ${shortDue(due, today)}` : due ? shortDue(due, today) : 'No due date'}
         {rule && <Repeat className="h-3.5 w-3.5" aria-label={repeatWords(rule)} />}
       </button>
       {(due || rule) && editable && (
-        <button type="button" aria-label="Remove the due date and repeat" onClick={() => onChange({ due_date: null, repeat: null })}
+        <button type="button" aria-label="Remove the dates and repeat" onClick={() => { setStartOn(false); setWhich('due'); onChange({ due_date: null, start_date: null, repeat: null }) }}
           className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted">
           <X className="h-3.5 w-3.5" aria-hidden />
         </button>
@@ -171,10 +193,27 @@ export default function DuePicker({ due: savedDue, repeat: savedRepeat, today, d
         <div ref={panel} role="dialog" aria-label="Due date and repeat"
           style={{ position: 'fixed', left: place.left, top: place.top, bottom: place.bottom, maxHeight: place.maxHeight }}
           className="z-[60] flex w-[320px] flex-col gap-3 overflow-y-auto overscroll-contain rounded-inner border border-border bg-popover p-3 text-popover-foreground shadow-lg">
+          {/* START AND DUE (Asana's two boxes): pressing one says which the month sets next */}
           <div className="flex items-center gap-2">
-            <input type="date" value={due ?? ''} onChange={e => { onChange({ due_date: e.target.value || null }); if (e.target.value) setMonth(e.target.value.slice(0, 7)) }}
-              aria-label="Due date" className="h-9 flex-1 rounded-md border border-border bg-background px-2 text-[13px]" />
+            {ranged && (
+              <span className={`flex flex-1 items-center rounded-md border bg-background ${which === 'start' ? 'border-accent-blue ring-1 ring-accent-blue' : 'border-border'}`}>
+                <input type="date" value={start ?? ''} onFocus={() => setWhich('start')}
+                  onChange={e => { const v = e.target.value || null; onChange({ start_date: v, ...(v && due && v > due ? { due_date: v } : {}) }); if (v) setMonth(v.slice(0, 7)) }}
+                  aria-label="Start date" className="h-9 min-w-0 flex-1 bg-transparent px-2 text-[13px] outline-none" />
+                <button type="button" aria-label="Remove the start date" onClick={() => { setStartOn(false); setWhich('due'); onChange({ start_date: null }) }}
+                  className="flex h-8 w-7 shrink-0 items-center justify-center text-muted-foreground hover:text-foreground"><X className="h-3.5 w-3.5" aria-hidden /></button>
+              </span>
+            )}
+            <input type="date" value={due ?? ''} onFocus={() => setWhich('due')} onChange={e => { onChange({ due_date: e.target.value || null, ...(e.target.value && start && e.target.value < start ? { start_date: e.target.value } : {}) }); if (e.target.value) setMonth(e.target.value.slice(0, 7)) }}
+              aria-label="Due date" className={`h-9 min-w-0 flex-1 rounded-md border bg-background px-2 text-[13px] ${ranged && which === 'due' ? 'border-accent-blue ring-1 ring-accent-blue' : 'border-border'}`} />
           </div>
+          {!ranged && (
+            <button type="button" onClick={() => { setStartOn(true); setWhich('start') }}
+              className="-mt-1 w-fit text-[12px] font-semibold text-accent-blue-deep underline-offset-4 hover:underline">
+              + Add start date
+            </button>
+          )}
+          {ranged && <p className="-mt-1 text-[12px] text-muted-foreground">{which === 'start' ? 'Pick the start day' : 'Pick the due day'}</p>}
 
           <div className="flex items-center justify-between">
             <button type="button" onClick={() => shift(-1)} aria-label="Previous month" className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-muted"><ChevronLeft className="h-4 w-4" aria-hidden /></button>
@@ -184,12 +223,13 @@ export default function DuePicker({ due: savedDue, repeat: savedRepeat, today, d
           <div className="grid grid-cols-7 gap-0.5 text-center text-[12px]">
             {WEEKDAY_LETTER.map((l, i) => <span key={i} className="py-1 font-semibold text-muted-foreground">{l}</span>)}
             {cells.map(c => {
-              const picked = c.key === due
+              const picked = c.key === due || (!!start && c.key === start)
+              const between = !!start && !!due && c.key > start && c.key < due
               const again = coming.has(c.key)
               return (
-                <button key={c.key} type="button" onClick={() => onChange({ due_date: c.key })} aria-pressed={picked}
-                  aria-label={again ? `${c.key} — it repeats on this day` : c.key}
-                  className={`relative flex h-8 items-center justify-center rounded-full ${picked ? 'bg-foreground font-semibold text-background' : again ? 'bg-accent-blue/15 font-semibold text-accent-blue-deep' : c.key === today ? 'ring-1 ring-foreground/40' : ''} ${c.inMonth ? '' : 'text-muted-foreground/50'} hover:bg-muted`}>
+                <button key={c.key} type="button" onClick={() => pickDay(c.key)} aria-pressed={picked}
+                  aria-label={`${c.key}${c.key === start ? ' — start' : ''}${c.key === due ? ' — due' : ''}${again ? ' — it repeats on this day' : ''}`}
+                  className={`relative flex h-8 items-center justify-center rounded-full ${picked ? 'bg-accent-blue font-semibold text-white' : between ? 'rounded-none bg-tint-blue' : again ? 'bg-tint-blue font-semibold text-accent-blue-deep' : c.key === today ? 'ring-1 ring-foreground/40' : ''} ${c.inMonth || picked ? '' : 'text-muted-foreground/50'} ${picked ? 'hover:opacity-90' : 'hover:bg-muted'}`}>
                   {c.day}
                   {again && <span aria-hidden className="absolute bottom-0.5 h-1 w-1 rounded-full bg-accent-blue" />}
                 </button>

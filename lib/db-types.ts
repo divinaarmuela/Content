@@ -1791,6 +1791,7 @@ export interface Todo {
   note: string | null
   status: string
   due_date: string | null
+  start_date: string | null
   owner_id: string | null
   created_by: string | null
   client_id: string | null
@@ -1984,7 +1985,7 @@ export const TABLE_COLUMNS = {
   todo_project_stars: ['id', 'team_user_id', 'project_id', 'created_at'],
   todo_projects: ['id', 'name', 'colour', 'member_ids', 'asana_gid', 'created_at', 'updated_at'],
   todo_sections: ['id', 'owner_id', 'name', 'position', 'created_at', 'updated_at'],
-  todos: ['id', 'prospect_id', 'title', 'note', 'status', 'due_date', 'owner_id', 'created_by', 'client_id', 'files', 'created_at', 'updated_at', 'done_at', 'done_by', 'parent_id', 'followers', 'likes', 'section_id', 'position', 'blocked_by', 'asana_gid', 'repeat', 'repeat_of', 'fields', 'project_section_id'],
+  todos: ['id', 'prospect_id', 'title', 'note', 'status', 'due_date', 'start_date', 'owner_id', 'created_by', 'client_id', 'files', 'created_at', 'updated_at', 'done_at', 'done_by', 'parent_id', 'followers', 'likes', 'section_id', 'position', 'blocked_by', 'asana_gid', 'repeat', 'repeat_of', 'fields', 'project_section_id'],
   user_page_access: ['team_user_id', 'href', 'granted_at', 'granted_by', 'id'],
   video_frames: ['id', 'source', 'duration_ms', 'frames', 'error', 'created_at', 'updated_at'],
   video_previews: ['id', 'source_url', 'stream_uid', 'state', 'playback_hls', 'thumbnail_url', 'duration_sec', 'width', 'height', 'error', 'created_at', 'updated_at'],
@@ -2094,7 +2095,7 @@ export const NULLABLE_COLUMNS = {
   todo_project_stars: [],
   todo_projects: ['colour', 'member_ids', 'asana_gid'],
   todo_sections: ['position'],
-  todos: ['prospect_id', 'note', 'due_date', 'owner_id', 'created_by', 'client_id', 'files', 'done_at', 'done_by', 'parent_id', 'followers', 'likes', 'section_id', 'position', 'blocked_by', 'asana_gid', 'repeat', 'repeat_of', 'fields', 'project_section_id'],
+  todos: ['prospect_id', 'note', 'due_date', 'start_date', 'owner_id', 'created_by', 'client_id', 'files', 'done_at', 'done_by', 'parent_id', 'followers', 'likes', 'section_id', 'position', 'blocked_by', 'asana_gid', 'repeat', 'repeat_of', 'fields', 'project_section_id'],
   user_page_access: ['granted_by'],
   video_frames: ['duration_ms', 'frames', 'error'],
   video_previews: ['stream_uid', 'playback_hls', 'thumbnail_url', 'duration_sec', 'width', 'height', 'error'],

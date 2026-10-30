@@ -311,7 +311,7 @@ export default function TodoPanel({
               <dt className={label}>Due date</dt>
               <dd className="flex items-center gap-1">
                 {/* Asana's due date and "Repeats" (20 Oct 2026) */}
-                <DuePicker due={t.due_date} repeat={normaliseRepeat((t as { repeat?: unknown }).repeat)} today={today} done={done} editable={editable}
+                <DuePicker due={t.due_date} start={(t as { start_date?: string | null }).start_date ?? null} repeat={normaliseRepeat((t as { repeat?: unknown }).repeat)} today={today} done={done} editable={editable}
                   onChange={p => patch(p as never)} />
               </dd>
             </div>

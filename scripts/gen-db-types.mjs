@@ -438,6 +438,8 @@ const GHOST_TABLES = {
     ['note', col('string', true)],
     ['status', col('string', false)],
     ['due_date', col('string', true)],
+    //   start_date — Asana's 'Add start date' (Abby, 30 Oct 2026): from this day to the due date, a window to do it in
+    ['start_date', col('string', true)],
     ['owner_id', col('string', true)],
     ['created_by', col('string', true)],
     ['client_id', col('string', true)],

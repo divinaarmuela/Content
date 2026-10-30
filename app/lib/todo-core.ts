@@ -20,6 +20,8 @@ export type Todo = {
   note: string | null
   status: TodoStatus
   due_date: string | null
+  /** the first day of its window, Asana's start date (30 Oct 2026); null = just the due date */
+  start_date?: string | null
   /** who it is for */
   owner_id: string | null
   created_by: string | null
@@ -111,6 +113,14 @@ export function sanitiseTodoPatch(raw: unknown): { ok: true; patch: Partial<Todo
     if (d && !DATE.test(d)) return { ok: false, reason: 'The date is not a date' }
     patch.due_date = d
   }
+  // A START DATE (Abby, 30 Oct 2026: "add start date on due date? So they can have flexibility within xx to xx day")
+  if ('start_date' in p) {
+    const d = clean(p.start_date)
+    if (d && !DATE.test(d)) return { ok: false, reason: 'The start date is not a date' }
+    patch.start_date = d
+  }
+  const due = 'due_date' in patch ? patch.due_date : undefined
+  if (patch.start_date && due && patch.start_date > due) return { ok: false, reason: 'The start date is after the due date' }
   if ('owner_id' in p) patch.owner_id = clean(p.owner_id)
   if ('client_id' in p) patch.client_id = clean(p.client_id)
   if ('files' in p) patch.files = todoFilesOf(p.files)
