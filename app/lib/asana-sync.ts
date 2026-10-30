@@ -70,7 +70,11 @@ async function syncProject(projectGid: string, result: SyncResult): Promise<void
   const tasks = await asana.tasksForProject(projectGid)
   if (tasks.length > 0) {
     const mirror = table('asana_tasks')
+    // every task is read now (every page — asana.requestAll); only a new one, or one Asana changed since, is written
+    const have = new Map((await mirror.list({ where: (r: { project_gid?: unknown }) => r.project_gid === projectGid } as never) as { gid?: string; modified_at?: string | null }[]).map(r => [String(r.gid), r]))
     for (const t of tasks) {
+      const had = have.get(t.gid)
+      if (had && String(had.modified_at ?? '').slice(0, 19) === String(t.modified_at ?? '').slice(0, 19)) continue
       await mirror.upsert({
         gid: t.gid,
         name: t.name ?? '',
@@ -84,7 +88,7 @@ async function syncProject(projectGid: string, result: SyncResult): Promise<void
         synced_at: new Date().toISOString(),
       }, { onConflict: 'gid' })
     }
-    result.tasksMirrored += tasks.length
+    result.tasksMirrored += tasks.filter(t => { const had = have.get(t.gid); return !had || String(had.modified_at ?? '').slice(0, 19) !== String(t.modified_at ?? '').slice(0, 19) }).length
   }
 
   // ── Webhook health ──

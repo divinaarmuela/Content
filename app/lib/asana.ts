@@ -37,6 +37,35 @@ async function request<T>(
   init: RequestInit = {},
   attempt = 0
 ): Promise<T> {
+  return (await requestBody<T>(path, init, attempt)).data as T
+}
+
+type Body<T> = { data?: T; errors?: { message?: string }[]; sync?: string; next_page?: { offset?: string } | null }
+
+/**
+ * EVERY PAGE OF A LIST (30 Oct 2026). Asana hands a list back 100 at a time with a `next_page` offset; reading only
+ * the first page meant a project's tasks past its first hundred were never mirrored — 543 tasks in eight client
+ * projects (StretchWorks, Luxe Laser, Intersign, Basfoods, Releeph…) were missing from the activity page, among them
+ * everything the team added this month. 200 pages (20,000 rows) is the stop on a runaway loop.
+ */
+async function requestAll<T>(path: string): Promise<T[]> {
+  const out: T[] = []
+  let offset: string | null = null
+  for (let page = 0; page < 200; page++) {
+    const sep = path.includes('?') ? '&' : '?'
+    const body: Body<T[]> = await requestBody<T[]>(offset ? `${path}${sep}offset=${encodeURIComponent(offset)}` : path)
+    out.push(...(body.data ?? []))
+    offset = body.next_page?.offset ?? null
+    if (!offset) break
+  }
+  return out
+}
+
+async function requestBody<T>(
+  path: string,
+  init: RequestInit = {},
+  attempt = 0
+): Promise<Body<T>> {
   const pat = process.env.ASANA_PAT
   if (!pat) throw new AsanaError('ASANA_PAT is not set', 503)
 
@@ -52,18 +81,18 @@ async function request<T>(
 
   if (res.status === 429 && attempt < 3) {
     await new Promise(r => setTimeout(r, retryAfterMs(res.headers.get('retry-after'))))
-    return request<T>(path, init, attempt + 1)
+    return requestBody<T>(path, init, attempt + 1)
   }
 
   const text = await res.text()
-  let body: { data?: T; errors?: { message?: string }[]; sync?: string } = {}
+  let body: Body<T> = {}
   try { body = text ? JSON.parse(text) : {} } catch { /* Asana error pages are not JSON */ }
 
   if (!res.ok) {
     const message = body.errors?.[0]?.message ?? `Asana ${res.status}`
     throw new AsanaError(message, res.status)
   }
-  return body.data as T
+  return body
 }
 
 // ─── Workspace / people ───
@@ -76,13 +105,13 @@ export async function listWorkspaces(): Promise<{ gid: string; name: string }[]>
 
 /** Used to map team_users.asana_user_gid by email. */
 export async function listUsers(workspaceGid: string): Promise<AsanaUser[]> {
-  return request(`/users?workspace=${workspaceGid}&opt_fields=name,email`)
+  return requestAll(`/users?workspace=${workspaceGid}&opt_fields=name,email&limit=100`)
 }
 
 export type AsanaProject = { gid: string; name: string; archived?: boolean }
 
 export async function listProjects(workspaceGid: string): Promise<AsanaProject[]> {
-  return request(`/projects?workspace=${workspaceGid}&archived=false&opt_fields=name,archived&limit=100`)
+  return requestAll(`/projects?workspace=${workspaceGid}&archived=false&opt_fields=name,archived&limit=100`)
 }
 
 // ─── Tasks ───
@@ -105,7 +134,7 @@ const TASK_FIELDS = 'name,completed,completed_at,due_on,modified_at,permalink_ur
 
 export async function tasksForProject(projectGid: string, modifiedSince?: string): Promise<AsanaTask[]> {
   const since = modifiedSince ? `&modified_since=${encodeURIComponent(modifiedSince)}` : ''
-  return request(`/tasks?project=${projectGid}&opt_fields=${TASK_FIELDS}&limit=100${since}`)
+  return requestAll(`/tasks?project=${projectGid}&opt_fields=${TASK_FIELDS}&limit=100${since}`)
 }
 
 export async function getTask(taskGid: string): Promise<AsanaTask> {
@@ -127,7 +156,7 @@ export async function tasksForAssignee(
   workspaceGid: string,
   completedSince: string
 ): Promise<AsanaTask[]> {
-  return request(
+  return requestAll(
     `/tasks?assignee=${assigneeGid}&workspace=${workspaceGid}` +
     `&completed_since=${encodeURIComponent(completedSince)}` +
     `&opt_fields=${TASK_FIELDS},projects.gid,projects.name&limit=100`
