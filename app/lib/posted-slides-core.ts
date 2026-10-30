@@ -45,7 +45,7 @@ const slideUrls = (v: unknown): string[] =>
     .map(s => (s && typeof s === 'object' ? String((s as { url?: unknown }).url ?? '') : ''))
     .filter(Boolean)
 /** every file the post holds: its shared slides and any network's own */
-const urlsOf = (p: PostLike): string[] => {
+export const urlsOf = (p: PostLike): string[] => {
   const out = new Set(slideUrls(p.slides))
   for (const extras of listOf(p.per_channel)) {
     if (extras && typeof extras === 'object') for (const u of slideUrls((extras as { slides?: unknown }).slides)) out.add(u)

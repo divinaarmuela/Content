@@ -10,6 +10,17 @@ import { POST_APPROVAL_BOARD } from '@/app/lib/overview-links-core'
 import { Thumb } from './tiles'
 import { baseName, startOpenFolders, tileTree, type TileFolder } from '@/app/lib/drive-folder-files-core'
 import type { RailMedia } from './useSchedulePosts'
+import { isRecent, RECENT_DAYS, fileSummary, fileTag, type FileUse, type UseTone } from '@/app/lib/rail-file-use-core'
+
+/** the tag on a file, the same colours as the editor's badges: free green, booked amber, gone out blue */
+export const USE_TONE: Record<UseTone, string> = {
+  free: 'bg-accent-green text-ink',
+  approving: 'bg-ink/80 text-cream',
+  scheduled: 'bg-accent-amber text-ink',
+  posted: 'bg-accent-blue text-white',
+}
+const offerOf = (m: RailMedia) => (m.allSlides.length ? m.allSlides : m.slides)
+const usesOf = (m: RailMedia) => new Map<string, FileUse>(Object.entries(m.fileUse ?? {}))
 
 /**
  * The media rail: the client's approved photos and videos, ready to become a
@@ -108,7 +119,14 @@ export default function MediaRail({
   // another network, rather than uploaded a second time — free pieces still come first. "Unused" is one press.
   const [filters, setFilters] = useState<Set<RailFilter>>(() => new Set<RailFilter>())
   const [starred, toggleStar] = useStars()
-  const shown = useMemo(() => filterMedia(media, filters, starred), [media, filters, starred])
+  // RECENTLY APPROVED, ALWAYS THERE (the owner, 30 Oct 2026) — the last 30 days, newest approval first; or everything
+  const [tab, setTab] = useState<'recent' | 'all'>('recent')
+  const shown = useMemo(() => {
+    const now = new Date()
+    const rows = filterMedia(media, filters, starred)
+    return tab === 'all' ? rows : rows.filter(m => isRecent(m.approvedAt ?? null, now))
+      .sort((a, b) => String(b.approvedAt ?? '').localeCompare(String(a.approvedAt ?? '')))
+  }, [media, filters, starred, tab])
 
   /**
    * A FOLDER PER PIECE (the owner, 9 Sep 2026: "make sure approved media
@@ -132,8 +150,17 @@ export default function MediaRail({
     if (openFolder === m.itemId) { setOpenFolder(null); return }
     setOpenFolder(m.itemId)
     setOpenSub(startOpenFolders(tileTree(m.allSlides.length ? m.allSlides : m.slides)))
-    setTicked(new Set((m.slides.length ? m.slides : m.allSlides).map(sl => sl.url)))
+    // TICKS STAY ACROSS FOLDERS (the owner, 30 Oct 2026: "allow multi select") — opening the first folder ticks its
+    // files not scheduled yet; opening another adds nothing until a file is pressed
+    if (ticked.size === 0) {
+      const uses = usesOf(m)
+      setTicked(new Set((m.allSlides.length ? m.allSlides : m.slides).filter(sl => !uses.has(sl.url)).map(sl => sl.url)))
+    }
   }
+  /** every ticked file, in the rail's order, and the piece each comes from */
+  const tickedFiles = useMemo(() => media.flatMap(m => (m.allSlides.length ? m.allSlides : m.slides).filter(sl => ticked.has(sl.url)).map(sl => ({ m, sl }))), [media, ticked])
+  const tickedPieces = new Set(tickedFiles.map(t => t.m.itemId)).size
+  const tickedBusy = tickedFiles.filter(t => !!t.m.fileUse?.[t.sl.url]).length
   const tick = (url: string) => setTicked(prev => {
     const next = new Set(prev)
     if (next.has(url)) next.delete(url); else next.add(url)
@@ -157,6 +184,15 @@ export default function MediaRail({
         <Plus className="h-4 w-4" strokeWidth={2.2} aria-hidden />
         New post
       </button>
+
+      <div role="tablist" aria-label="Which approved media" className="grid grid-cols-2 gap-1 rounded-full border border-border bg-paper p-1">
+        {([['recent', 'Recently approved'], ['all', 'All approved']] as const).map(([k, words]) => (
+          <button key={k} type="button" role="tab" aria-selected={tab === k} onClick={() => setTab(k)}
+            className={cn('min-h-9 rounded-full px-2 text-[12px] font-semibold transition-colors', tab === k ? 'bg-foreground text-background' : 'text-muted-foreground hover:bg-muted')}>
+            {words}
+          </button>
+        ))}
+      </div>
 
       <div className="flex flex-wrap gap-1.5">
         {RAIL_FILTERS.map(f => {
@@ -190,7 +226,7 @@ export default function MediaRail({
           {/* the scheduler's question, answered in the heading (9 Sep 2026):
               what is approved and not yet posted */}
           <span className="text-[12px] text-muted-foreground">
-            {filters.has('Unused') ? 'Approved, not yet posted' : 'Everything approved'}
+            {tab === 'recent' ? `Approved in the last ${RECENT_DAYS} days` : filters.has('Unused') ? 'Approved, not yet posted' : 'Everything approved'}
           </span>
         </span>
         <span className="shrink-0 text-[12px] font-semibold text-muted-foreground">{shown.length}</span>
@@ -211,7 +247,7 @@ export default function MediaRail({
               // which is exactly when somebody most needs to post something.
               // The way in is one button above this line, and it says so.
               ? 'Nothing here yet. Press New post to upload a photo or video.'
-              : 'Nothing matches those filters.'}
+              : tab === 'recent' ? `Nothing approved in the last ${RECENT_DAYS} days — see All approved.` : 'Nothing matches those filters.'}
           </p>
         ) : (
           <div className="flex flex-col gap-2">
@@ -219,8 +255,9 @@ export default function MediaRail({
               const isOpen = openFolder === m.itemId
               // every approved file, in order; the ones a post already holds are marked
               const offer = m.allSlides.length ? m.allSlides : m.slides
-              const taken = new Set(m.takenUrls)
+              const uses = usesOf(m)
               const chosen = offer.filter(sl => ticked.has(sl.url))
+              const free = offer.filter(sl => !uses.has(sl.url))
               return (
                 <div
                   key={m.itemId}
@@ -250,10 +287,9 @@ export default function MediaRail({
                       <span className="flex min-w-0 flex-col leading-[1.2]">
                         <span className="truncate text-[13px] font-semibold">{m.title}</span>
                         <span className="truncate text-[12px] text-muted-foreground">
+                          {/* WHERE ITS FILES STAND, counted (30 Oct 2026): "2 not scheduled · 3 scheduled · 1 posted" */}
                           {m.ok
-                            ? (m.used
-                              ? `In a post · use again${m.posted ? ` · ${m.posted}` : ''}`
-                              : `${m.slides.length} ${m.slides.length === 1 ? 'file' : 'files'} to post${m.posted ? ` · ${m.posted}` : ''}${m.needsClientApproval ? ` · ${NOT_CLIENT_APPROVED}` : ''}`)
+                            ? `${fileSummary(offerOf(m).map(sl => sl.url), usesOf(m)) || 'No files'}${m.needsClientApproval ? ` · ${NOT_CLIENT_APPROVED}` : ''}`
                             : m.reason}
                         </span>
                         {/* THE FOLDER THE SCHEDULER WAS HANDED (the owner, 13 Sep
@@ -303,16 +339,18 @@ export default function MediaRail({
                               type="button"
                               onClick={() => tick(sl.url)}
                               aria-pressed={on}
-                              aria-label={`${on ? 'Untick' : 'Tick'} ${sl.type === 'video' ? 'video' : 'photo'} ${i + 1}${taken.has(sl.url) ? ', already in a post' : ''}`}
+                              aria-label={`${on ? 'Untick' : 'Tick'} ${sl.type === 'video' ? 'video' : 'photo'} ${i + 1}, ${fileTag(uses.get(sl.url)).words}`}
                               className={cn(
                                 'relative aspect-square overflow-hidden rounded-[6px] bg-foreground/[0.06]',
                                 on ? 'outline outline-2 outline-offset-1 outline-foreground' : 'opacity-60',
                               )}
                             >
                               <Thumb slide={sl} label={baseName(sl.name)} className="h-full w-full" />
-                              {taken.has(sl.url) && (
-                                <span className="absolute inset-x-0 bottom-0 bg-ink/70 px-1 py-0.5 text-center text-[9px] font-semibold text-cream">In a post</span>
-                              )}
+                              {/* every file says where it stands: Not scheduled, In post approval, Scheduled · day, Posted · day */}
+                              {(() => {
+                                const t = fileTag(uses.get(sl.url))
+                                return <span data-file-use={t.tone} className={cn('absolute inset-x-0 bottom-0 truncate px-1 py-0.5 text-center text-[9px] font-bold', USE_TONE[t.tone])}>{t.words}</span>
+                              })()}
                               <span className={cn(
                                 'absolute left-1 top-1 flex h-4 w-4 items-center justify-center rounded-full text-[9px] font-bold',
                                 on ? 'bg-foreground text-background' : 'bg-cream/90 text-ink',
@@ -320,18 +358,17 @@ export default function MediaRail({
                             </button>
                           )
                         }} />
-                      <div className="flex items-center justify-between gap-2">
-                        <button type="button" onClick={() => setTicked(new Set(chosen.length === offer.length ? [] : offer.map(sl => sl.url)))}
+                      {/* this folder's ticks — the ticked files of every folder go into one post from the bar below */}
+                      <div className="flex flex-wrap items-center gap-x-3">
+                        {free.length > 0 && free.length < offer.length && (
+                          <button type="button" onClick={() => setTicked(prev => new Set([...[...prev].filter(u => !offer.some(sl => sl.url === u)), ...free.map(sl => sl.url)]))}
+                            className="-my-1 inline-flex min-h-11 items-center text-[12px] font-semibold underline-offset-4 hover:underline">
+                            Tick the {free.length} not scheduled
+                          </button>
+                        )}
+                        <button type="button" onClick={() => setTicked(prev => (chosen.length === offer.length ? new Set([...prev].filter(u => !offer.some(sl => sl.url === u))) : new Set([...prev, ...offer.map(sl => sl.url)])))}
                           className="-my-1 inline-flex min-h-11 items-center text-[12px] font-semibold underline-offset-4 hover:underline">
                           {chosen.length === offer.length ? 'Untick all' : 'Tick all'}
-                        </button>
-                        <button
-                          type="button"
-                          disabled={chosen.length === 0}
-                          onClick={() => onPick(m, chosen)}
-                          className="flex min-h-11 items-center gap-1.5 rounded-full bg-foreground px-3.5 text-[12px] font-semibold text-background disabled:opacity-40"
-                        >
-                          <Plus className="h-3.5 w-3.5" aria-hidden /> Post {chosen.length === offer.length && offer.length > 1 ? 'all' : chosen.length} {chosen.length === 1 ? 'file' : 'files'}
                         </button>
                       </div>
                     </div>
@@ -380,10 +417,26 @@ export default function MediaRail({
         )}
       </div>
 
-      <p className="px-1.5 text-center text-[12px] text-muted-foreground">
-        Open a folder, tick the files you want, press Post. Or drag a folder
-        onto a time.
-      </p>
+      {/* ONE POST FROM THE TICKED FILES, whichever folders they are in (the owner, 30 Oct 2026: "allow multi select") */}
+      {tickedFiles.length > 0 ? (
+        <div data-rail-ticked className="flex flex-col gap-1.5 rounded-tile border border-border bg-surface p-2">
+          <p className="text-[12px] font-semibold">
+            {tickedFiles.length} {tickedFiles.length === 1 ? 'file' : 'files'} ticked{tickedPieces > 1 ? ` from ${tickedPieces} folders` : ''}
+            {tickedBusy > 0 && <span className="font-normal text-muted-foreground"> · {tickedBusy} already in a post</span>}
+          </p>
+          <div className="flex items-center justify-between gap-2">
+            <button type="button" onClick={() => setTicked(new Set())} className="-my-1 inline-flex min-h-11 items-center text-[12px] font-semibold underline-offset-4 hover:underline">Clear</button>
+            <button type="button" onClick={() => onPick(tickedFiles[0].m, tickedFiles.map(t => t.sl))}
+              className="flex min-h-11 items-center gap-1.5 rounded-full bg-foreground px-3.5 text-[12px] font-semibold text-background">
+              <Plus className="h-3.5 w-3.5" aria-hidden /> Post {tickedFiles.length} {tickedFiles.length === 1 ? 'file' : 'files'}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <p className="px-1.5 text-center text-[12px] text-muted-foreground">
+          Open folders, tick the files you want — from one folder or several — and press Post. Or drag a folder onto a time.
+        </p>
+      )}
 
       {/* POSTS STILL BEING APPROVED live on Post approval (the owner's
           decision 1): this page only counts them and says where they are */}

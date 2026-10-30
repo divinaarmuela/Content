@@ -19,6 +19,7 @@ import { clearGroup, dismissUpload, uploadFiles } from '../../uploadQueue'
 import { UploadRows, useUploadGroup } from '../../UploadRows'
 import { Thumb } from './tiles'
 import type { RailMedia } from './useSchedulePosts'
+import { fileSummary } from '@/app/lib/rail-file-use-core'
 
 /**
  * NEW POST — THE MEDIA COMES FIRST.
@@ -536,9 +537,10 @@ export default function NewPostSources({
                             {NOT_CLIENT_APPROVED}
                           </span>
                         )}
-                        {m.ok && m.used && (
-                          <span className="block truncate font-normal text-cream/80">
-                            In a post · use again
+                        {/* where its files stand, counted (30 Oct 2026): "2 not scheduled · 3 scheduled" */}
+                        {m.ok && (
+                          <span data-piece-uses className="block truncate font-normal text-cream/80">
+                            {fileSummary((m.allSlides.length ? m.allSlides : m.slides).map(sl => sl.url), new Map(Object.entries(m.fileUse ?? {})))}
                           </span>
                         )}
                       </span>

@@ -51,7 +51,8 @@ import {
   accessibleClientIdsOf, scopeContextOf, visibleItems, type ScopeViewer,
 } from '@/app/lib/scope-client'
 import { slidesOf, type Slide } from '@/app/lib/version-files-core'
-import { postedLine, readPostedSlides, remainingSlides, takenSlideUrls } from '@/app/lib/posted-slides-core'
+import { postedLine, readPostedSlides, remainingSlides, takenSlideUrls, urlsOf } from '@/app/lib/posted-slides-core'
+import { approvedAtOf, fileUses, type FileUse } from '@/app/lib/rail-file-use-core'
 
 /**
  * A post as the calendar draws it: the row, the typed stage the rules read,
@@ -157,6 +158,10 @@ export type RailMedia = {
    * in" from "somebody dragged slide 3 to the front".
    */
   knownUrls: string[]
+  /** WHERE EACH FILE STANDS — Posted, Scheduled, In post approval; a file not here is Not scheduled (30 Oct 2026) */
+  fileUse?: Record<string, FileUse>
+  /** when the client approved it, for the Recently approved tab */
+  approvedAt?: string | null
   /**
    * The cover picture somebody chose in the image editor, if they did — the
    * frame that goes OUT with a video, sent as the post's `thumbnailUrl`.
@@ -407,6 +412,12 @@ export function useSchedulePosts(
   const clientSignsOff = clientSignsOffEveryPost(client)
   const postWithoutApproval = mayPostWithoutApproval(viewer?.role ?? null, clientSignsOff)
 
+  // every file of the client's posts, where it stands — by address, whichever piece the post was made from
+  const uses = useMemo(() => fileUses(posts.rows.map(row => {
+    const st = readPostState(row as unknown as Record<string, unknown>)
+    return { stage: st?.stage ?? null, live: st ? anyNetworkLive(st) : false, at: (row as { scheduled_for?: string | null }).scheduled_for ?? null, urls: urlsOf(row as never) }
+  })), [posts.rows])
+
   /** the media rail: one card per item, ready-to-use first */
   const media: RailMedia[] = useMemo(() => {
     return scopedItems
@@ -455,6 +466,8 @@ export function useSchedulePosts(
           posted: postedLine(readPostedSlides((item as { posted_slides?: unknown }).posted_slides)),
           driveFolderUrl: folderOf(item as Parameters<typeof folderOf>[0])?.kind === 'drive' ? folderOf(item as Parameters<typeof folderOf>[0])!.url : null,
           knownUrls: [...new Set(itemVersions.flatMap(v => slidesOf(v).map(sl => sl.url)))],
+          fileUse: Object.fromEntries((elig.ok ? elig.slides : []).flatMap(sl => (uses.has(sl.url) ? [[sl.url, uses.get(sl.url)!]] : []))),
+          approvedAt: approvedAtOf(item as never),
           coverUrl: coverForSlide(slides[0]?.url, itemVersions),
           updatedAt: String(item.updated_at ?? ''),
         }
@@ -462,7 +475,7 @@ export function useSchedulePosts(
       .sort((a, b) =>
         // a piece with files still free first; one already in a post after it, there to be used again
         Number(b.ok) - Number(a.ok) || Number(a.used) - Number(b.used) || b.updatedAt.localeCompare(a.updatedAt))
-  }, [scopedItems, versionsByItem, posts.rows, postWithoutApproval, clientSignsOff, client])
+  }, [scopedItems, versionsByItem, posts.rows, postWithoutApproval, clientSignsOff, client, uses])
 
   /** posts still being approved — they live on Post approval; this page only counts them */
   const waiting = useMemo(
