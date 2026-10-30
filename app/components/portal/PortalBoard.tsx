@@ -91,7 +91,9 @@ function WorkOrShootCard({ card, amName, accent, surface, className }: CardProps
   const [asking, setAsking] = useState(false)
   const [note, setNote] = useState('')
   const [open, setOpen] = useState(false)
-  const [planOpen, setPlanOpen] = useState(false)
+  // THE PLAN IS OPEN FROM THE START (the owner, 30 Oct 2026: "they should view it immediately … and leave comments")
+  // — its words, ready to select and comment on, no "See the plan" press first; it can still be folded away
+  const [planOpen, setPlanOpen] = useState(true)
   const [draft, setDraft] = useState('')
   const [name, setName] = useState('')
   const [comments, setComments] = useState(card.comments)
