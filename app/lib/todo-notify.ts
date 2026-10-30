@@ -14,7 +14,7 @@ import { DASHBOARD_URL } from './app-url'
  */
 export async function notifyTodo(input: {
   actor: TeamUser
-  todo: { id: string; title: string; client_id?: string | null }
+  todo: { id: string; title: string; client_id?: string | null; parent_id?: string | null }
   recipientIds: readonly string[]
   /** what happened, said to the reader: "commented on", "tagged you on", "assigned you" */
   verb: string
@@ -23,8 +23,20 @@ export async function notifyTodo(input: {
   eventKey: string
   quote?: string | null
 }): Promise<void> {
-  const ids = [...new Set(input.recipientIds)].filter(id => id && id !== input.actor.id)
+  let ids = [...new Set(input.recipientIds)].filter(id => id && id !== input.actor.id)
   if (ids.length === 0) return
+  // A PRIVATE PROJECT'S NEWS STAYS WITH ITS MEMBERS (the owner, 30 Oct 2026, "- Team Operations": "make sure notifications
+  // here don't go to" anyone else) — a subtask goes by its parent's project
+  const projectId = input.todo.client_id
+    ?? (input.todo.parent_id ? (await table<{ id: string; client_id?: string | null }>('todos').get(input.todo.parent_id).catch(() => null))?.client_id ?? null : null)
+  if (projectId) {
+    const project = await table<{ id: string; private?: boolean | null; member_ids?: unknown }>('todo_projects' as never).get(projectId).catch(() => null)
+    if (project?.private === true) {
+      const members = Array.isArray(project.member_ids) ? project.member_ids.map(String) : []
+      ids = ids.filter(id => members.includes(id))
+      if (ids.length === 0) return
+    }
+  }
   const people = await table<TeamUserRow>('team_users').list({ where: u => ids.includes(String(u.id)) && u.active_status !== false && !!u.email })
   const who = input.actor.name || input.actor.email
   const href = `${DASHBOARD_URL}/dashboard/todos?task=${encodeURIComponent(input.todo.id)}`

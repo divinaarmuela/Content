@@ -3,10 +3,10 @@ import { readFileSync } from 'node:fs'
 
 // 29 Oct 2026: Asana's "- Team Operations" had nowhere to go — To-dos' projects were clients only
 describe("the agency's own projects", () => {
-  it('are listed first, for their members and every super admin', () => {
+  it('are listed first, for their members and every super admin — a private one its members only (30 Oct 2026)', () => {
     const s = readFileSync('app/api/todos/projects/route.ts', 'utf8')
     expect(s).toContain("table<InternalProject>('todo_projects' as never).list()")
-    expect(s).toContain("user.role === 'super_admin' || (Array.isArray(p.member_ids) && p.member_ids.includes(user.id))")
+    expect(s).toContain("(user.role === 'super_admin' && p.private !== true) || (Array.isArray(p.member_ids) && p.member_ids.includes(user.id))")
     expect(s).toContain('return NextResponse.json({ projects: [...ours, ...projects] })')
   })
   it('count as a member’s own on the page, and a task on one shows its project, not a client picker', () => {
@@ -24,5 +24,36 @@ describe("the agency's own projects", () => {
     expect(s).not.toMatch(/\/api\//)
     expect(s).toContain("const ourId = g => `asana_${g}`")
     expect(s).toContain("if (copied.has(t.gid)) { skipped++; continue }")
+  })
+})
+
+describe('a private project is its members’ only (the owner, 30 Oct 2026, "- Team Operations": "seen by that 3 only")', () => {
+  it('a super admin not on it does not see its to-dos; a member does; the person a to-do is theirs still sees that one', async () => {
+    const { hiddenProjectsFor, visibleWithFollowers, mayCommentOnTodo, mayEditTodo } = await import('../app/lib/todo-core')
+    const projects = [{ id: 'ops', private: true, member_ids: ['abby', 'martin', 'akmal'] }, { id: 'tech', member_ids: ['abby'] }]
+    const rows = [
+      { id: 't1', client_id: 'ops', owner_id: 'abby', created_by: 'abby' },
+      { id: 't2', client_id: 'ops', owner_id: 'divina', created_by: 'abby' },
+      { id: 't3', client_id: 'tech', owner_id: 'abby', created_by: 'abby' },
+      { id: 's1', client_id: null, parent_id: 't1', owner_id: 'abby', created_by: 'abby' },
+    ]
+    const divina = { id: 'divina', role: 'super_admin', hiddenProjects: hiddenProjectsFor('divina', projects) }
+    const martin = { id: 'martin', role: 'super_admin', hiddenProjects: hiddenProjectsFor('martin', projects) }
+    expect(divina.hiddenProjects).toEqual(['ops'])
+    expect(visibleWithFollowers(divina, rows).map(r => r.id)).toEqual(['t2', 't3'])
+    expect(visibleWithFollowers(martin, rows).map(r => r.id)).toEqual(['t1', 't2', 't3', 's1'])
+    expect(mayCommentOnTodo(divina, rows[0])).toBe(false)
+    expect(mayEditTodo(divina, rows[0])).toBe(false)
+    expect(mayEditTodo(divina, rows[1])).toBe(true)
+  })
+})
+
+describe('a private project’s notices go to its members only (the owner, 30 Oct 2026)', () => {
+  it('the one notifier every to-do notice goes through filters to the members', () => {
+    const s = readFileSync('app/lib/todo-notify.ts', 'utf8')
+    expect(s).toContain('if (project?.private === true) {')
+    expect(s).toContain('ids = ids.filter(id => members.includes(id))')
+    const search = readFileSync('app/dashboard/ui/GlobalSearch.tsx', 'utf8')
+    expect(search).toContain('const kept = allTodos.filter(t => !hiddenFrom(viewer, t))')
   })
 })

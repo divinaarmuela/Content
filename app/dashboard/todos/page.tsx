@@ -16,7 +16,7 @@ import { useRole } from '../useRole'
 import { personLabel } from '../../lib/identity-core'
 import {
   TODO_GROUP_BYS, TODO_SORTS, dueForGroup, groupTodos, groupTodosBy, idsOf, mayEditTodo, mayFilterByPerson, openBlockers, positionBetween,
-  todoFilesOf, todosEmptyWords, visibleWithFollowers,
+  todoFilesOf, todosEmptyWords, visibleWithFollowers, hiddenProjectsFor,
   type TodoGroup, type TodoGroupBy, type TodoGroupKey, type TodoSort,
 } from '../../lib/todo-core'
 import TodoPanel, { Avatar, CheckCircle } from './TodoPanel'
@@ -82,7 +82,10 @@ export default function TodosPage() {
   // the agency's own projects this person is on count as theirs, like a client they are on (29 Oct 2026)
   const myClientIds = useMemo(() => (me ? [...links.filter(l => l.team_user_id === me.id).map(l => l.client_id), ...projects.filter(p => p.internal && p.mine).map(p => p.id)] : []), [links, me, projects])
   const internalProjects = useMemo(() => projects.filter(p => p.internal).map(p => ({ id: p.id, name: p.name })), [projects])
-  const viewer = useMemo(() => (me && me.role !== 'client' ? { id: me.id, role: me.role, clientIds: myClientIds } : null), [me, myClientIds])
+  // PRIVATE PROJECTS this person is not on — their to-dos are kept from them, super admin or not (30 Oct 2026)
+  const { rows: ownProjects } = useTable<{ id: string; private?: boolean | null; member_ids?: unknown }>('todo_projects' as never)
+  const hiddenProjects = useMemo(() => (me ? hiddenProjectsFor(me.id, ownProjects) : []), [me, ownProjects])
+  const viewer = useMemo(() => (me && me.role !== 'client' ? { id: me.id, role: me.role, clientIds: myClientIds, hiddenProjects } : null), [me, myClientIds, hiddenProjects])
   const { rows: raw, loading } = useTable<TodoRow>('todos')
   const { rows: team } = useTable<TeamUser>('team_users')
   const { rows: clients } = useTable<Client>('clients')

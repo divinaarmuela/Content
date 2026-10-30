@@ -45,7 +45,24 @@ export type Todo = {
 
 /** who is looking — and, for a client's PROJECT (the owner, 20 Oct 2026, Manal's video of Asana's Projects: "if I am
  *  looking at StretchWorks I can see what other people are working on"), the clients they are on */
-export type TodoViewer = { id: string; role: string; clientIds?: readonly string[] }
+export type TodoViewer = {
+  id: string
+  role: string
+  clientIds?: readonly string[]
+  /** PRIVATE PROJECTS THIS PERSON IS NOT ON (30 Oct 2026) — their to-dos are hidden from them, super admin or not,
+   *  unless the to-do is theirs (assigned, made, followed) */
+  hiddenProjects?: readonly string[]
+}
+
+/** the private projects a person is not a member of — from the agency's own projects (todo_projects) */
+export function hiddenProjectsFor(viewerId: string, projects: readonly { id: string; private?: boolean | null; member_ids?: unknown }[]): string[] {
+  return projects.filter(p => p.private === true && !(Array.isArray(p.member_ids) && p.member_ids.includes(viewerId))).map(p => p.id)
+}
+
+/** is this to-do kept from this person: on a private project they are not on, and not theirs */
+export function hiddenFrom(viewer: TodoViewer, todo: { client_id?: string | null; owner_id?: string | null; created_by?: string | null; followers?: unknown }): boolean {
+  return !!todo.client_id && !!viewer.hiddenProjects?.includes(todo.client_id) && !isOnTodo(viewer.id, todo)
+}
 
 const clean = (v: unknown): string | null => {
   const s = typeof v === 'string' ? v.trim() : ''
@@ -66,8 +83,9 @@ export function mayFilterByPerson(viewer: TodoViewer | null): boolean {
   return viewer?.role === 'super_admin' || viewer?.role === 'account_manager'
 }
 
-export function mayEditTodo(viewer: TodoViewer | null, todo: { owner_id?: string | null; created_by?: string | null }): boolean {
+export function mayEditTodo(viewer: TodoViewer | null, todo: { owner_id?: string | null; created_by?: string | null; client_id?: string | null; followers?: unknown }): boolean {
   if (!viewer || viewer.role === 'client') return false
+  if (hiddenFrom(viewer, todo)) return false
   if (viewer.role === 'super_admin') return true
   return todo.owner_id === viewer.id || todo.created_by === viewer.id
 }
@@ -231,15 +249,20 @@ export function inTodoProject(viewer: TodoViewer, todo: { client_id?: string | n
  *  subtask is seen by whoever sees its parent; everyone on a client sees that client's to-dos (its project) */
 export function visibleWithFollowers<T extends { id?: string; owner_id?: string | null; created_by?: string | null; followers?: unknown; parent_id?: string | null; client_id?: string | null }>(viewer: TodoViewer | null, rows: readonly T[]): T[] {
   if (!viewer || viewer.role === 'client') return []
-  if (viewer.role === 'super_admin') return [...rows]
-  const mine = new Set(rows.filter(r => isOnTodo(viewer.id, r) || inTodoProject(viewer, r)).map(r => r.id))
-  return rows.filter(r => mine.has(r.id) || (!!r.parent_id && mine.has(r.parent_id)))
+  // a private project's to-dos are its members' — a super admin sees every row but those (30 Oct 2026)
+  // …and a subtask under one goes with it, unless the subtask is this person's own
+  const blocked = new Set(rows.filter(r => hiddenFrom(viewer, r)).map(r => r.id))
+  const off = (r: T) => blocked.has(String(r.id)) || (!!r.parent_id && blocked.has(r.parent_id) && !isOnTodo(viewer.id, r))
+  const mine = new Set(rows.filter(r => !off(r) && (viewer.role === 'super_admin' || isOnTodo(viewer.id, r) || inTodoProject(viewer, r))).map(r => r.id))
+  return rows.filter(r => !off(r) && (mine.has(r.id) || (!!r.parent_id && mine.has(r.parent_id))))
 }
 
 /** who may READ and COMMENT on a to-do: whoever is on it (or on its parent), everyone on its client's project, and a
  *  super admin */
 export function mayCommentOnTodo(viewer: TodoViewer | null, todo: { owner_id?: string | null; created_by?: string | null; followers?: unknown; client_id?: string | null }, parent?: { owner_id?: string | null; created_by?: string | null; followers?: unknown; client_id?: string | null } | null): boolean {
   if (!viewer || viewer.role === 'client') return false
+  // a private project's to-do: its members, and whoever the to-do (or its parent) is theirs
+  if (hiddenFrom(viewer, todo) && !(parent && isOnTodo(viewer.id, parent))) return false
   if (viewer.role === 'super_admin') return true
   return isOnTodo(viewer.id, todo) || (!!parent && isOnTodo(viewer.id, parent)) || inTodoProject(viewer, todo) || (!!parent && inTodoProject(viewer, parent))
 }

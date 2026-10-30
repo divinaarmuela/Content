@@ -4,6 +4,8 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
 import { CheckCircle2, Circle, LayoutList, MessageSquare, Search, User, X } from 'lucide-react'
 import { useTable } from '@/lib/db-client'
+import { useRole } from '../useRole'
+import { hiddenFrom, hiddenProjectsFor, isOnTodo } from '../../lib/todo-core'
 import { personLabel } from '../../lib/identity-core'
 import {
   FIRST_SHOWN, SEARCH_KINDS, addRecent, highlightParts, plainText, readRecents, searchAll, snippet,
@@ -56,9 +58,20 @@ export default function GlobalSearch() {
   const box = useRef<HTMLDivElement>(null)
   const input = useRef<HTMLInputElement>(null)
 
-  const { rows: todos } = useTable<SearchTask & { id: string }>('todos', { enabled: used })
+  const { rows: allTodos } = useTable<SearchTask & { id: string; created_by?: string | null; followers?: unknown }>('todos', { enabled: used })
+  // a PRIVATE project's to-dos are its members' — search never finds them for anyone else (30 Oct 2026)
+  const { me } = useRole()
+  const { rows: ownProjects } = useTable<{ id: string; private?: boolean | null; member_ids?: unknown }>('todo_projects' as never, { enabled: used })
+  const todos = useMemo(() => {
+    if (!me) return []
+    const viewer = { id: me.id, role: me.role, hiddenProjects: hiddenProjectsFor(me.id, ownProjects) }
+    const kept = allTodos.filter(t => !hiddenFrom(viewer, t))
+    const ids = new Set(kept.map(t => t.id))
+    // a subtask goes with its parent — unless it is this person's own
+    return kept.filter(t => !t.parent_id || ids.has(t.parent_id) || isOnTodo(me.id, t))
+  }, [allTodos, ownProjects, me])
   const { rows: team } = useTable<{ id: string; name?: string | null; email?: string | null; role?: string | null; active_status?: boolean | null }>('team_users', { enabled: used })
-  const { rows: comments } = useTable<SearchComment & { id: string }>('todo_comments', { enabled: used })
+  const { rows: allComments } = useTable<SearchComment & { id: string }>('todo_comments', { enabled: used })
 
   // the projects as the To-dos sidebar has them — each client with its logo or colour
   useEffect(() => {
@@ -72,6 +85,8 @@ export default function GlobalSearch() {
   const personOf = useMemo(() => new Map(people.map(p => [p.id, p])), [people])
   const projectOf = useMemo(() => new Map(projects.map(p => [p.id, p])), [projects])
   const taskOf = useMemo(() => new Map(todos.map(t => [t.id, t])), [todos])
+  // messages only on to-dos this person may see
+  const comments = useMemo(() => allComments.filter(c => taskOf.has(c.todo_id)), [allComments, taskOf])
   const found = useMemo(() => searchAll({ tasks: todos, projects, people, comments }, q), [todos, projects, people, comments, q])
   const typed = q.trim().length > 0
 

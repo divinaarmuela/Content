@@ -513,6 +513,10 @@ const GHOST_TABLES = {
     ['name', col('string', false)],
     ['colour', col('string', true)],
     ['member_ids', col('unknown', true, true)],
+    //   private — ONLY ITS MEMBERS SEE IT (the owner, 30 Oct 2026, of "- Team Operations": "make sure it can be seen by
+    //   that 3 only"): no super admin sees it for being one; whoever a task is assigned to, made it or follows it
+    //   still sees that task
+    ['private', col('boolean', true)],
     ['asana_gid', col('string', true)],
     ['created_at', col('string', false)],
     ['updated_at', col('string', false)],

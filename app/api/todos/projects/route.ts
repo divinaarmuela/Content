@@ -12,7 +12,7 @@ import { projectColour } from '../../../lib/todo-inbox-core'
  */
 type Social = { id: string; client_id?: string | null; avatar_url?: string | null; active?: boolean | null }
 type Link = { id: string; team_user_id: string; client_id: string }
-type InternalProject = { id: string; name: string; colour?: string | null; member_ids?: unknown }
+type InternalProject = { id: string; name: string; colour?: string | null; member_ids?: unknown; private?: boolean | null }
 type TodoLite = { id: string; client_id?: string | null; status?: string | null; parent_id?: string | null }
 
 export async function GET() {
@@ -43,7 +43,8 @@ export async function GET() {
         .sort((a, b) => Number(b.mine) - Number(a.mine) || a.name.localeCompare(b.name))
       // THE AGENCY'S OWN PROJECTS (29 Oct 2026, Asana's "- Team Operations"): first, for their members and every super admin
       const ours = internal
-        .filter(p => user.role === 'super_admin' || (Array.isArray(p.member_ids) && p.member_ids.includes(user.id)))
+        // a PRIVATE project its members only — no super admin for being one (30 Oct 2026, "- Team Operations")
+        .filter(p => (user.role === 'super_admin' && p.private !== true) || (Array.isArray(p.member_ids) && p.member_ids.includes(user.id)))
         .map(p => ({ id: p.id, name: p.name, logo: null, colour: p.colour || projectColour(p.id, null), open: open.get(p.id) ?? 0,
           mine: Array.isArray(p.member_ids) && p.member_ids.includes(user.id), internal: true }))
         .sort((a, b) => a.name.localeCompare(b.name))
