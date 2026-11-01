@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 const services = [
   {
@@ -32,13 +32,29 @@ const services = [
 export default function HomeServices() {
   const [active, setActive] = useState(0)
   const step = (d: number) => setActive(a => (a + d + services.length) % services.length)
+  const list = useRef<HTMLUListElement>(null)
+
+  // Phones have no hover: the service crossing the middle of the screen lights up as you scroll.
+  useEffect(() => {
+    const ul = list.current
+    if (!ul || !window.matchMedia('(max-width: 860px)').matches) return
+    const io = new IntersectionObserver(
+      entries => {
+        for (const e of entries) if (e.isIntersecting) setActive(Number((e.target as HTMLElement).dataset.i))
+      },
+      { rootMargin: '-45% 0px -45% 0px' },
+    )
+    ul.querySelectorAll('li').forEach(li => io.observe(li))
+    return () => io.disconnect()
+  }, [])
 
   return (
     <>
-      <ul className="hm-svc">
+      <ul className="hm-svc" ref={list}>
         {services.map((s, i) => (
           <li
             key={s.name}
+            data-i={i}
             className={i === active ? 'is-on' : undefined}
             onMouseEnter={() => setActive(i)}
           >

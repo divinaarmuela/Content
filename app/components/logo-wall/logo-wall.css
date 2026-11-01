@@ -5,10 +5,12 @@
 .logowall-list { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 36px 48px; }
 .logowall-list li { display: flex; align-items: center; height: 44px; }
 .logowall-list img { display: block; height: 100%; width: auto; max-width: 170px; object-fit: contain; opacity: 0.9; }
+/* phones: an even 3-column grid, every logo centred in the same-sized cell */
 @media (max-width: 760px) {
-  .logowall-list { gap: 28px 32px; }
-  .logowall-list li { height: 34px; }
-  .logowall-list img { max-width: 130px; }
+  .logowall-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 28px 16px; }
+  .logowall-list li { height: 30px; justify-content: center; }
+  .logowall-list img { max-width: 100%; }
+  .logowall-text { font-size: 14px; text-align: center; }
 }
 
 .logowall-text { font-family: var(--font-archivo), system-ui, sans-serif; font-size: 18px; letter-spacing: -0.01em; color: #f9f4eb; }

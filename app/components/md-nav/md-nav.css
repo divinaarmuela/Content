@@ -1,7 +1,7 @@
 .mdnav {
   position: absolute; top: 0; left: 0; right: 0; z-index: 20;
   max-width: 1320px; margin: 0 auto;
-  padding: 22px clamp(16px, 4vw, 48px);
+  padding: 22px clamp(24px, 5vw, 48px);
   display: flex; justify-content: space-between; align-items: center;
   color: #f9f4eb;
 }

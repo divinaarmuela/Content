@@ -10,8 +10,8 @@
   padding: 120px 0 40px;
 }
 .cv a { color: inherit; text-decoration: none; }
-.cv-wrap { max-width: 1280px; margin: 0 auto; padding: 0 clamp(16px, 4vw, 48px); }
-.cv-sec { padding: 72px 0; border-top: 1px solid var(--cv-line); }
+.cv-wrap { max-width: 1280px; margin: 0 auto; padding: 0 clamp(24px, 5vw, 48px); }
+.cv-sec { padding-top: 72px; padding-bottom: 72px; border-top: 1px solid var(--cv-line); }
 .cv-head { padding-bottom: 72px; }
 
 .cv-crumb, .cv-eyebrow, .cv-idx, .cv-view, .cv-card-cap, .cv-cta a {
@@ -87,7 +87,7 @@ a.cv-view:hover, a.cv-row:hover .cv-view { color: var(--cv-ink); }
 
 @media (max-width: 760px) {
   .cv { padding-top: 96px; }
-  .cv-sec { padding: 48px 0; }
+  .cv-sec { padding-top: 48px; padding-bottom: 48px; }
   .cv-row, .cv-row-link, .cv-faq { grid-template-columns: 1fr; gap: 6px; }
   .cv-steps { grid-template-columns: 1fr 1fr; }
   .cv-work { grid-template-columns: 1fr; }

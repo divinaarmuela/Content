@@ -1,5 +1,5 @@
 .mdfoot { width: 100%; background: #0b0b0b; color: #f9f4eb; border-top: 1px solid rgba(249, 244, 235, 0.16); font-family: var(--font-archivo), system-ui, sans-serif; }
-.mdfoot-in { max-width: 1320px; margin: 0 auto; padding: 64px clamp(16px, 4vw, 48px) 28px; }
+.mdfoot-in { max-width: 1320px; margin: 0 auto; padding: 64px clamp(24px, 5vw, 48px) 28px; }
 .mdfoot a { color: inherit; text-decoration: none; }
 .mdfoot p { margin: 0; }
 .mdfoot-mono { font-family: var(--font-sometype), ui-monospace, monospace; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; }
