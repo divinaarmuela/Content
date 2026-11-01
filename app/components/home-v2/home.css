@@ -113,6 +113,9 @@
   .hm-problem, .hm-team-head, .hm-contact { grid-template-columns: 1fr; }
   .hm-tiles { grid-template-columns: 1fr 1fr; }
   .hm-svc li { grid-template-columns: 1fr; gap: 12px; }
+  /* phones: the list never changes height as the highlight moves, so nothing jumps */
+  .hm-svc .hm-svc-subs { display: block; }
+  .hm-svc-nav { display: none; }
   .hm-steps { grid-template-columns: 1fr; }
   .hm-team { grid-template-columns: 1fr; }
 }

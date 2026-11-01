@@ -19,7 +19,7 @@ const services = [
     name: 'Custom Websites',
     desc: 'Fast, custom sites that look like your brand and are built to convert. Then we keep them running so they never go stale.',
     subs: ['Design & build', 'Copy', 'Mobile & speed', 'Hosting & care'],
-    href: '/website',
+    href: '/services/custom-websites',
   },
   {
     name: 'Content & Visibility',

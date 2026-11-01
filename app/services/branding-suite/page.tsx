@@ -58,6 +58,7 @@ export default function BrandingSuitePage() {
         { name: 'Señorita Debutante', builtSite: true, href: 'https://www.senoritadebutante.com', media: { image: '/images/branding-suite/senorita.jpg', label: 'Two Señorita Debutante gowns under stone arches' } },
         { name: 'Alia', builtSite: true, href: 'https://aliafragrance.com', media: { image: '/images/branding-suite/alia.jpg', label: 'Two Alia bottles on red satin in their gift box' } },
         { name: 'Capila Finance', builtSite: true, href: 'https://capila.finance', media: { image: '/images/branding-suite/capila.jpg', label: 'A Capila Finance branded folio' } },
+        { name: 'Releeph', builtSite: true, href: 'https://releeph.com.au', media: { video: '/videos/campaign-shoots/hero-portrait', label: 'Releeph Slow Mornings campaign, shot by MD Media' } },
       ]}
       quote={{
         text: 'Their attention to detail, thorough planning, and strategic guidance made what could have been an overwhelming process feel incredibly organised and manageable.',

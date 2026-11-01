@@ -7,7 +7,7 @@ const CALENDLY = 'https://calendly.com/mdmmarketing-info/10-minute-content-subsc
 const SERVICES = [
   ['Strategy & Consulting', '/services/strategy'],
   ['Branding Suite', '/services/branding-suite'],
-  ['Custom Websites', '/website'],
+  ['Custom Websites', '/services/custom-websites'],
   ['Content & Visibility', '/services/content-visibility'],
   ['Campaign Shoots', '/campaign-shoots'],
 ] as const

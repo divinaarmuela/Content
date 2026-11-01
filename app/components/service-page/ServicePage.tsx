@@ -16,7 +16,7 @@ export const CALENDLY = 'https://calendly.com/mdmmarketing-info/10-minute-conten
 export const SERVICE_LINKS = {
   strategy: { n: '01', name: 'Strategy & Consulting', href: '/services/strategy' },
   branding: { n: '02', name: 'Branding Suite', href: '/services/branding-suite' },
-  websites: { n: '03', name: 'Custom Websites', href: '/website' },
+  websites: { n: '03', name: 'Custom Websites', href: '/services/custom-websites' },
   content: { n: '04', name: 'Content & Visibility', href: '/services/content-visibility' },
 } as const
 type ServiceKey = keyof typeof SERVICE_LINKS

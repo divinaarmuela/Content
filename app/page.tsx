@@ -33,7 +33,7 @@ const tiles = [
   ['01', 'Campaign shoots', '/videos/campaign-shoots/hero-portrait', '/campaign-shoots'],
   ['02', 'Brand identity', '/videos/branding-suite/hero', '/services/branding-suite'],
   ['03', 'Social content', '/videos/content-visibility/cecconis', '/services/content-visibility'],
-  ['04', 'Custom websites', '/videos/home/websites', '/website'],
+  ['04', 'Custom websites', '/videos/home/websites', '/services/custom-websites'],
 ]
 
 const steps = [
