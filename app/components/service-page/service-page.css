@@ -64,7 +64,8 @@ a.cv-row:hover .cv-row-d { color: var(--cv-ink); }
 .cv-view { color: var(--cv-dim); white-space: nowrap; }
 a.cv-view:hover, a.cv-row:hover .cv-view { color: var(--cv-ink); }
 .cv-work { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
-.cv-work:has(> :nth-child(4)) { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+@media (min-width: 861px) { .cv-work:has(> :nth-child(4)) { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.cv-card-cap { overflow-wrap: anywhere; }
 .cv-card-media { aspect-ratio: 4 / 5; background: #161616; overflow: hidden; }
 .cv-card-media .cv-media { transition: transform 0.6s ease; }
 .cv-card:hover .cv-media { transform: scale(1.03); }
