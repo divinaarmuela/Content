@@ -13,15 +13,14 @@ import { useEffect, useRef } from 'react'
  *
  * `src` is the path without extension: `${src}.mp4` + `${src}.jpg` poster.
  *
- * NO FLASH: the poster must be the frame the clip starts on. It was a frame from a
- * second (or seven) in, so every clip jumped to another picture the moment it began
- * (the owner, 1 Nov 2026: "it flashes when we scroll to it"). Posters are now the
- * first frame; a clip whose poster is taken later (the site recordings open on a
- * loader) passes `start`, the second its poster shows. The clip rewinds while it is
- * off screen, never in sight. `skipOpening` loops back to `start` instead of 0, so a
- * site recording does not sit on its blank loader each time round (homepage tile 04).
+ * NO FLASH: the poster must be the clip's FIRST FRAME. It was a frame from a second
+ * (or seven) in, so every clip jumped to another picture the moment it began (the
+ * owner, 1 Nov 2026: "it flashes when we scroll to it"). Every clip plays from its
+ * start — the site recordings too, opening animation and all ("why are the phone
+ * mockup videos starting in the middle"). The clip rewinds while it is off screen,
+ * never in sight.
  */
-export default function LazyLoop({ src, className, label, start = 0, skipOpening = false }: { src: string; className?: string; label: string; start?: number; skipOpening?: boolean }) {
+export default function LazyLoop({ src, className, label, }: { src: string; className?: string; label: string }) {
   const ref = useRef<HTMLVideoElement>(null)
 
   useEffect(() => {
@@ -31,21 +30,19 @@ export default function LazyLoop({ src, className, label, start = 0, skipOpening
     const io = new IntersectionObserver(
       ([e]) => {
         if (e.isIntersecting) {
-          if (!v.src) v.src = start ? `${src}.mp4#t=${start}` : `${src}.mp4`
+          if (!v.src) v.src = `${src}.mp4`
           v.play().catch(() => {})
         } else if (v.src) {
           // rewound out of sight, so it comes back on its poster frame and plays from there
           v.pause()
-          v.currentTime = start
+          v.currentTime = 0
         }
       },
       { rootMargin: '0px', threshold: 0.35 },
     )
     io.observe(v)
-    const again = () => { v.currentTime = start; v.play().catch(() => {}) }
-    if (skipOpening) v.addEventListener('ended', again)
-    return () => { io.disconnect(); v.removeEventListener('ended', again) }
-  }, [src, start, skipOpening])
+    return () => io.disconnect()
+  }, [src])
 
-  return <video ref={ref} className={className} muted loop={!skipOpening} playsInline preload="none" poster={`${src}.jpg`} aria-label={label} />
+  return <video ref={ref} className={className} muted loop playsInline preload="none" poster={`${src}.jpg`} aria-label={label} />
 }

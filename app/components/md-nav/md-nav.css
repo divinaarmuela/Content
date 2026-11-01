@@ -29,6 +29,9 @@
 .mdnav-burger[aria-expanded="true"] span:first-child { transform: translateY(3.75px) rotate(45deg); }
 .mdnav-burger[aria-expanded="true"] span:last-child { transform: translateY(-3.75px) rotate(-45deg); }
 .mdnav-sheet { position: fixed; inset: 0; z-index: 1; background: #0b0b0b; color: #f9f4eb; padding: 84px 24px 120px; display: flex; flex-direction: column; overflow-y: auto; font-family: var(--font-archivo), system-ui, sans-serif; }
+/* the drawn scroll bar: a faint track down the right, the bright part is what is on screen */
+.mdnav-sheet-track { position: fixed; z-index: 2; right: 6px; top: 84px; bottom: calc(96px + env(safe-area-inset-bottom)); width: 3px; border-radius: 3px; background: rgba(249, 244, 235, 0.14); pointer-events: none; }
+.mdnav-sheet-track span { position: absolute; left: 0; right: 0; border-radius: 3px; background: rgba(249, 244, 235, 0.75); }
 .mdnav-sheet a { font-size: 26px; letter-spacing: -0.02em; padding: 9px 0; color: #f9f4eb; }
 .mdnav-sheet-label { color: rgba(249, 244, 235, 0.5); margin: 22px 0 6px; }
 .mdnav-sheet-label:first-child { margin-top: 0; }
