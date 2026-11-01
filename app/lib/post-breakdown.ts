@@ -3,6 +3,7 @@ import { table } from '@/lib/db'
 import type { ClientReport } from '@/lib/db-types'
 import { monthRange, readReportData, reportId, type MonthKey, type TopPost } from './client-report-core'
 import { accountsOf, postsBetween } from './client-report'
+import { keepPictures } from './report-pictures'
 import { aiClient, aiError, inlinePicture, postsModel } from './ai-gateway'
 import {
   BREAKDOWN_SYSTEM, BREAKDOWN_TOOL, buildBreakdownPrompt, codesFor, evidenceFor, indexPosts, pickComparison, postKind,
@@ -87,7 +88,8 @@ export async function explainMonth(clientId: string, m: MonthKey): Promise<{ ok:
     at: new Date().toISOString(),
     model: postsModel(),
     items,
-    posts: history.filter(p => named.has(p.id)).map(p => ({ ...p, images: undefined })),
+    // pictures Instagram signs to expire are kept as our own copies, so the cards never go blank (report-pictures.ts)
+    posts: await keepPictures(history.filter(p => named.has(p.id)).map(p => ({ ...p, images: undefined }))),
   }
   const now = explained.at
   await table<ClientReport>('client_reports').claim(id, cur => ({

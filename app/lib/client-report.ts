@@ -6,6 +6,7 @@ import {
   type Audience, type MonthKey, type PlatformFigures, type ReportData, type TopPost,
 } from './client-report-core'
 import { breakdownLines, readPostsExplained } from './post-breakdown-core'
+import { keepPictures } from './report-pictures'
 import { aiClient, aiError, viaGateway, writerModel } from './ai-gateway'
 
 /**
@@ -216,7 +217,9 @@ export async function loadReportData(clientId: string, m: MonthKey): Promise<Rep
   if (!accounts.length) gaps.push('This client has no Instagram or Facebook account connected in Zernio')
   const now = new Date()
   const profileId = String((client as { social_profile_id?: string | null }).social_profile_id ?? '') || null
-  const platforms = (await Promise.all(accounts.map(a => figuresOf(a, profileId, m, gaps)))).filter((p): p is PlatformFigures => !!p)
+  const read = (await Promise.all(accounts.map(a => figuresOf(a, profileId, m, gaps)))).filter((p): p is PlatformFigures => !!p)
+  // Instagram's own picture addresses expire within days: the top posts keep our own copies (report-pictures.ts)
+  const platforms = await Promise.all(read.map(async p => ({ ...p, topPosts: await keepPictures(p.topPosts) })))
   const ig = accounts.find(a => a.platform === 'instagram')
   const audience = ig ? await audienceOf(ig, clientId, m, now) : null
   if (ig && !audience) gaps.push('Audience breakdown: Instagram only gives it for the current month, to accounts with 100+ followers — none was kept for this month')

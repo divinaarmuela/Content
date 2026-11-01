@@ -72,11 +72,22 @@ export default function PostBreakdowns({ raw, clientId, month, onChange }: {
   )
 }
 
+/** the post's picture; one that will not load (an expired Instagram address saved before 2 Nov 2026) is a plain tile
+ *  that still opens the post, never an empty box */
 function Thumb({ post, className }: { post: TopPost | undefined; className: string }) {
+  const [failed, setFailed] = useState(false)
+  const small = className.includes('h-12')
   return (
     <div className={`overflow-hidden bg-muted ${className}`}>
-      {/* eslint-disable-next-line @next/next/no-img-element -- the platform's own picture of the post */}
-      {post?.thumbnail && <img src={post.thumbnail} alt="" className="h-full w-full object-cover" referrerPolicy="no-referrer" />}
+      {post?.thumbnail && !failed
+        // eslint-disable-next-line @next/next/no-img-element -- the platform's own picture of the post
+        ? <img src={post.thumbnail} alt="" className="h-full w-full object-cover" referrerPolicy="no-referrer" onError={() => setFailed(true)} />
+        : !small && (
+          <div className="flex h-full w-full flex-col items-center justify-center gap-1 p-2 text-center text-[12px] text-muted-foreground">
+            <span className="capitalize">{post ? postKind(post) : 'Post'}</span>
+            {post?.url && <a href={post.url} target="_blank" rel="noreferrer" className="underline underline-offset-4">Open the post</a>}
+          </div>
+        )}
     </div>
   )
 }
