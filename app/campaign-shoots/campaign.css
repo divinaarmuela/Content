@@ -39,8 +39,6 @@
 .cs-under { margin-top: 14px !important; font-size: 13px; color: var(--cs-dim-d); }
 
 /* top bar */
-.cs-top { display: flex; justify-content: space-between; align-items: center; padding-top: 22px; padding-bottom: 22px; border-bottom: 1px solid var(--cs-line-d); }
-.cs-top-brand, .cs-top-page { font-weight: 700; font-size: 15px; letter-spacing: -0.01em; text-transform: uppercase; }
 
 /* hero */
 .cs-hero { display: grid; grid-template-columns: 1.25fr 0.75fr; gap: 48px; align-items: end; padding-top: 48px; padding-bottom: 96px; }
