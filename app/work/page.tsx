@@ -6,6 +6,7 @@ import { CALENDLY } from '../components/service-page/ServicePage'
 import { getSiteProjects } from '../lib/websiteData'
 import { SECTORS, sectorCount, type SectorClient } from './sectors'
 import './work.css'
+import LazyLoop from '../components/lazy-loop/LazyLoop'
 
 export const metadata: Metadata = {
   title: 'Our Work — MD Media Marketing',
@@ -23,9 +24,7 @@ const pad = (i: number) => String(i + 1).padStart(2, '0')
 function Cover({ c }: { c: SectorClient }) {
   if (c.media?.video) {
     return (
-      <video className="wk-media" autoPlay muted loop playsInline preload="metadata" poster={`${c.media.video}.jpg`} aria-label={c.name}>
-        <source src={`${c.media.video}.mp4`} type="video/mp4" />
-      </video>
+      <LazyLoop className="wk-media" src={`${c.media.video}`} label={c.name} />
     )
   }
   // eslint-disable-next-line @next/next/no-img-element

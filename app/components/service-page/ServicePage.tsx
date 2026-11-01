@@ -3,6 +3,7 @@ import MdFooter from '../md-footer/MdFooter'
 import LogoWall from '../logo-wall/LogoWall'
 import { archivo, sometype } from '../lama/fonts'
 import './service-page.css'
+import LazyLoop from '../lazy-loop/LazyLoop'
 
 /**
  * One template for the five service pages (Oct 2026 design). Each page passes its copy;
@@ -42,9 +43,7 @@ export type ServicePageProps = {
 function Slot({ media }: { media: Media }) {
   if (media.video) {
     return (
-      <video className="cv-media" autoPlay muted loop playsInline preload="metadata" poster={`${media.video}.jpg`} aria-label={media.label}>
-        <source src={`${media.video}.mp4`} type="video/mp4" />
-      </video>
+      <LazyLoop className="cv-media" src={`${media.video}`} label={media.label} />
     )
   }
   // eslint-disable-next-line @next/next/no-img-element

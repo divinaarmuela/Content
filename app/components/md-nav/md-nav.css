@@ -23,3 +23,14 @@
 .mdnav-links a.mdnav-cta { color: #f9f4eb; border: 1px solid rgba(249, 244, 235, 0.4); padding: 8px 12px; }
 .mdnav-links a.mdnav-cta:hover { background: #f9f4eb; color: #0b0b0b; }
 .mdnav-band { position: relative; z-index: 50; background: #0b0b0b; height: 64px; }
+/* phone menu */
+.mdnav-burger { display: none; width: 44px; height: 44px; margin-right: -10px; background: none; border: 0; cursor: pointer; flex-direction: column; justify-content: center; align-items: center; gap: 6px; color: inherit; position: relative; z-index: 2; }
+.mdnav-burger span { display: block; width: 22px; height: 1.5px; background: currentColor; transition: transform 0.2s; }
+.mdnav-burger[aria-expanded="true"] span:first-child { transform: translateY(3.75px) rotate(45deg); }
+.mdnav-burger[aria-expanded="true"] span:last-child { transform: translateY(-3.75px) rotate(-45deg); }
+.mdnav-sheet { position: fixed; inset: 0; z-index: 1; background: #0b0b0b; color: #f9f4eb; padding: 84px 24px 32px; display: flex; flex-direction: column; overflow-y: auto; font-family: var(--font-archivo), system-ui, sans-serif; }
+.mdnav-sheet a { font-size: 26px; letter-spacing: -0.02em; padding: 9px 0; color: #f9f4eb; }
+.mdnav-sheet-label { color: rgba(249, 244, 235, 0.5); margin: 22px 0 6px; }
+.mdnav-sheet-label:first-child { margin-top: 0; }
+.mdnav-sheet a.mdnav-sheet-cta { margin-top: 28px; font-size: 12px; text-align: center; padding: 16px; background: #f9f4eb; color: #0b0b0b; }
+@media (max-width: 860px) { .mdnav-burger { display: flex; } }

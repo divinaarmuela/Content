@@ -5,6 +5,7 @@ import MdNav from './components/md-nav/MdNav'
 import MdFooter from './components/md-footer/MdFooter'
 import LogoWall from './components/logo-wall/LogoWall'
 import './components/home-v2/home.css'
+import LazyLoop from './components/lazy-loop/LazyLoop'
 
 export const metadata: Metadata = {
   title: 'MD Media | Content-Led Marketing for Founders & Local Businesses',
@@ -93,9 +94,7 @@ export default function HomePage() {
           <div className="hm-tiles">
             {tiles.map(([n, t, img, href]) => (
               <a key={n} href={href} className="hm-tile">
-                <video autoPlay muted loop playsInline preload="metadata" poster={`${img}.jpg`} aria-label={t}>
-                  <source src={`${img}.mp4`} type="video/mp4" />
-                </video>
+                <LazyLoop src={`${img}`} label={t} />
                 <span className="hm-mono">( {n} ) {t}</span>
               </a>
             ))}

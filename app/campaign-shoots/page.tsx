@@ -4,6 +4,7 @@ import LogoWall from '../components/logo-wall/LogoWall'
 import MdFooter from '../components/md-footer/MdFooter'
 import MdNav from '../components/md-nav/MdNav'
 import './campaign.css'
+import LazyLoop from '../components/lazy-loop/LazyLoop'
 
 export const metadata: Metadata = {
   title: 'Campaign Shoots for Ecommerce Brands — MD Media, Melbourne',
@@ -92,9 +93,7 @@ export default function CampaignShootsPage() {
             <p className="cs-under">15 minutes. Tell me what’s dropping next.</p>
           </div>
           <div className="cs-hero-media">
-            <video autoPlay muted loop playsInline preload="metadata" poster="/videos/campaign-shoots/hero-portrait.jpg" aria-label="Releeph Slow Mornings campaign, shot by MD Media">
-              <source src="/videos/campaign-shoots/hero-portrait.mp4" type="video/mp4" />
-            </video>
+            <LazyLoop src="/videos/campaign-shoots/hero-portrait" label="Releeph Slow Mornings campaign, shot by MD Media" />
           </div>
           <p className="cs-side" aria-hidden="true">MD Media — Get seen. Get known. Get booked.</p>
         </section>
@@ -133,9 +132,7 @@ export default function CampaignShootsPage() {
             <div className="cs-stills">
               {[1, 2, 3, 4].map(n => (
                 <figure key={n}>
-                  <video autoPlay muted loop playsInline preload="metadata" poster={`/videos/campaign-shoots/still-0${n}.jpg`} aria-label={`Campaign shoot clip ${n}`}>
-                    <source src={`/videos/campaign-shoots/still-0${n}.mp4`} type="video/mp4" />
-                  </video>
+                  <LazyLoop src={`/videos/campaign-shoots/still-0${n}`} label={`Campaign shoot clip ${n}`} />
                   <figcaption>/0{n}</figcaption>
                 </figure>
               ))}
@@ -148,9 +145,7 @@ export default function CampaignShootsPage() {
           <Label>03 — How it works</Label>
           <h2 className="cs-h2">You send the box.<br />We do the rest.</h2>
           <div className="cs-how">
-          <video className="cs-how-media" autoPlay muted loop playsInline preload="metadata" poster="/videos/campaign-shoots/how.jpg" aria-label="On location during an MD Media campaign shoot">
-            <source src="/videos/campaign-shoots/how.mp4" type="video/mp4" />
-          </video>
+          <LazyLoop className="cs-how-media" src="/videos/campaign-shoots/how" label="On location during an MD Media campaign shoot" />
           <ol className="cs-steps">
             {steps.map(([t, d], i) => (
               <li key={t}>
@@ -172,9 +167,7 @@ export default function CampaignShootsPage() {
             <div className="cs-cards">
               {deliverables.map(d => (
                 <div key={d.title} className="cs-card">
-                  <video className="cs-card-media" autoPlay muted loop playsInline preload="metadata" poster={`/videos/campaign-shoots/${d.media}.jpg`} aria-label={`${d.title}, from an MD Media shoot`}>
-                    <source src={`/videos/campaign-shoots/${d.media}.mp4`} type="video/mp4" />
-                  </video>
+                  <LazyLoop className="cs-card-media" src={`/videos/campaign-shoots/${d.media}`} label={`${d.title}, from an MD Media shoot`} />
                   <div className="cs-card-top">
                     <span className="cs-big">{d.n}</span>
                     <span className={`cs-tag${d.tag === 'Included' ? ' cs-tag-ok' : ''}`}>{d.tag}</span>
@@ -212,9 +205,7 @@ export default function CampaignShootsPage() {
 
         {/* 7 — about */}
         <section className="cs-wrap cs-sec cs-about">
-          <video className="cs-about-media" autoPlay muted loop playsInline preload="metadata" poster="/videos/campaign-shoots/bts.jpg" aria-label="Behind the scenes and the result, Releeph campaign shoot">
-            <source src="/videos/campaign-shoots/bts.mp4" type="video/mp4" />
-          </video>
+          <LazyLoop className="cs-about-media" src="/videos/campaign-shoots/bts" label="Behind the scenes and the result, Releeph campaign shoot" />
           <div>
             <Label><span>06 — About</span><span>Martin &amp; Divina</span></Label>
             <h2 className="cs-h2">Who’s running<br />your shoot</h2>

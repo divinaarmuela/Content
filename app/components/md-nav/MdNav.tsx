@@ -1,5 +1,6 @@
 import './md-nav.css'
 import { sometype } from '../lama/fonts'
+import MdNavMenu from './MdNavMenu'
 
 const CALENDLY = 'https://calendly.com/mdmmarketing-info/10-minute-content-subscription-discovery-call-m-clone?utm_source=website&utm_medium=book-a-call&utm_campaign=mdnav'
 
@@ -9,6 +10,14 @@ const SERVICES = [
   ['Custom Websites', '/website'],
   ['Content & Visibility', '/services/content-visibility'],
   ['Campaign Shoots', '/campaign-shoots'],
+] as const
+
+const LINKS = [
+  ['Work', '/work'],
+  ['Journal', '/journal'],
+  ['Events', '/events'],
+  ['About', '/about'],
+  ['Contact', '/#contact'],
 ] as const
 
 /** The site's top bar on the Oct 2026 pages (homepage, service pages, campaign shoots). One component, so every page shows the same nav. */
@@ -23,13 +32,10 @@ export default function MdNav({ band = false }: { band?: boolean } = {}) {
             {SERVICES.map(([name, href]) => <a key={href} href={href}>{name}</a>)}
           </div>
         </div>
-        <a href="/work">Work</a>
-        <a href="/journal">Journal</a>
-        <a href="/events">Events</a>
-        <a href="/about">About</a>
-        <a href="/#contact">Contact</a>
+        {LINKS.map(([name, href]) => <a key={href} href={href}>{name}</a>)}
         <a href={CALENDLY} target="_blank" rel="noreferrer noopener" className="mdnav-cta">Book a call ↗</a>
       </div>
+      <MdNavMenu services={SERVICES} links={LINKS} cta={CALENDLY} />
     </div>
   )
   // `band`: pages without a dark hero under the nav get a dark strip, so the light links stay readable.
