@@ -31,9 +31,9 @@ const HERO = 'https://pub-e66dd091eb38427e8eaca82bde7082ef.r2.dev/hero-spec-ad.m
 // Tile loops: real work from each service page (`${video}.mp4` + `${video}.jpg` poster).
 const tiles = [
   ['01', 'Campaign shoots', '/videos/campaign-shoots/hero-portrait', '/campaign-shoots'],
-  ['02', 'Brand identity', '/videos/branding-suite/hero', '/services/branding-suite'],
+  ['02', 'Brand identity', '/videos/home/brand', '/services/branding-suite'],
   ['03', 'Social content', '/videos/content-visibility/cecconis', '/services/content-visibility'],
-  ['04', 'Custom websites', '/videos/home/websites', '/services/custom-websites'],
+  ['04', 'Custom websites', '/videos/websites/alia', '/services/custom-websites'],
 ]
 
 const steps = [

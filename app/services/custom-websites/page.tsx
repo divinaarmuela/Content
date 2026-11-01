@@ -50,7 +50,7 @@ export default function CustomWebsitesPage() {
       work={[
         { name: 'Señorita Debutante', href: 'https://www.senoritadebutante.com', builtSite: true, media: { image: '/images/branding-suite/senorita.jpg', label: 'Señorita Debutante — website by MD Media' } },
         { name: 'Releeph', href: 'https://releeph.com.au', builtSite: true, media: { video: `${V}/releeph`, label: 'Releeph — website by MD Media' } },
-        { name: 'Capila Finance', href: 'https://capila.finance', builtSite: true, media: { video: `${V}/capila`, label: 'Capila Finance — website by MD Media' } },
+        { name: 'Capila Finance', href: 'https://capila.finance', builtSite: true, media: { video: `${V}/capila-v2`, label: 'Capila Finance — website by MD Media' } },
         { name: 'Alia Fragrance', href: 'https://aliafragrance.com', builtSite: true, media: { video: `${V}/alia`, label: 'Alia Fragrance — website by MD Media' } },
       ]}
       faqs={[
