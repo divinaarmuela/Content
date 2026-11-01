@@ -452,6 +452,7 @@ function PrintBreakdowns({ raw }: { raw: unknown }) {
         return (
           <p key={i.postId} className="pr-small">
             <strong>{p?.publishedAt ? new Date(p.publishedAt).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' }) : ''} · score {i.index.score} ({i.index.multiple}× a typical post).</strong> {i.breakdown!.verdict}
+            {p?.url && <> <a href={p.url}>See the post</a></>}
           </p>
         )
       })}
@@ -493,9 +494,10 @@ function PrintReport({ data, report, clientName }: { data: ReportData; report: S
                 {p.topPosts.map((t, i) => (
                   <div key={t.id} className="pr-post">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    {t.thumbnail && <img src={t.thumbnail} alt="" referrerPolicy="no-referrer" />}
+                    {t.thumbnail && (t.url ? <a href={t.url}><img src={t.thumbnail} alt="" referrerPolicy="no-referrer" /></a> : <img src={t.thumbnail} alt="" referrerPolicy="no-referrer" />)}
                     <p><strong>{i + 1}. {fmt(t.views)} views</strong></p>
                     <p className="pr-small">{fmt(t.likes)} likes · {fmt(t.comments)} comments · {fmt(t.shares)} shares</p>
+                    {t.url && <p className="pr-small"><a href={t.url}>See the post</a></p>}
                   </div>
                 ))}
               </div>
@@ -527,6 +529,7 @@ const PRINT_CSS = `
 .report-prose li{margin:3px 0}
 .report-prose table{width:100%;border-collapse:collapse;margin:8px 0 14px;font-size:13px}
 .report-prose th,.report-prose td{border:1px solid var(--border,#ddd);padding:6px 8px;text-align:left}
+.report-prose a,#report-print a{color:#2f6fed;text-decoration:underline;text-underline-offset:3px}
 #report-print{display:none}
 @media print{
   @page{size:A4;margin:16mm}

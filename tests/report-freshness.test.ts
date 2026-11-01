@@ -24,3 +24,23 @@ describe('how settled a month’s figures are', () => {
     expect(melbourneDay(new Date('2026-11-01T14:00:00Z'))).toBe('2026-11-02')
   })
 })
+
+import { reportHtml, reportPrompt } from '../app/lib/client-report-core'
+
+// 2 Nov 2026, the owner: "could it please provide hyperlinks in the pdf or the summary … so its easy to click"
+describe('links to the posts in the written report', () => {
+  it('[words](https://…) is a link that opens in a new tab', () => {
+    expect(reportHtml('See [the 3 Oct reel](https://www.instagram.com/reel/abc/) for more'))
+      .toContain('<a href="https://www.instagram.com/reel/abc/" target="_blank" rel="noreferrer noopener">the 3 Oct reel</a>')
+  })
+  it('only http(s): a script address stays plain text', () => {
+    const html = reportHtml('[bad](javascript:alert(1)) and [x](https://a.com/"onmouseover=alert(1))')
+    expect(html).not.toContain('href="javascript')
+    expect(html).not.toContain('"onmouseover')
+  })
+  it('the AI is told to link posts with their own address only', () => {
+    const { system } = reportPrompt({ data: { platforms: [], month: '2026-10' } as never, objective: '', notes: '', shootConcepts: [], previousReport: null })
+    expect(system).toContain('link it in Markdown')
+    expect(system).toContain('Never write a link that is not in the data')
+  })
+})

@@ -417,7 +417,7 @@ export function breakdownLines(items: readonly ExplainedPost[], posts: readonly 
     ...got.flatMap(i => {
       const p = byId.get(i.postId)
       return [
-        `- ${p ? `${(p.publishedAt ?? '').slice(0, 10)} ${postKind(p)}, "${clip(p.caption, 80)}"` : i.postId}: score ${i.index.score} (${i.index.multiple}x typical). ${i.breakdown!.verdict}`,
+        `- ${p ? `${(p.publishedAt ?? '').slice(0, 10)} ${postKind(p)}, "${clip(p.caption, 80)}"${p.url ? ` (url: ${p.url})` : ''}` : i.postId}: score ${i.index.score} (${i.index.multiple}x typical). ${i.breakdown!.verdict}`,
         ...i.breakdown!.whatWorked.slice(0, 3).map(w => `    ${w}`),
       ]
     })]

@@ -186,6 +186,7 @@ export function reportPrompt(input: {
     'You write monthly social media reports for MD Media, a Melbourne content agency, for its clients.',
     'Every figure you use must come from the JSON analytics provided. Never invent, round differently or estimate a number; if a figure is missing, say it was not available.',
     'Write in plain Australian English. Do not use dashes as punctuation anywhere in the report.',
+    'Whenever you name a post, link it in Markdown as [a few words about the post](its url), using only the url given for that post in the data. Never write a link that is not in the data; a post without a url is named without one.',
     'Format the report in Markdown with these sections, in this order: Summary, Key insights, Top performing content, What underperformed, Content themes and formats, Audience, Follower growth, Benchmark comparison, Content gaps, Strategy for next month, Content pillars (with a % split), Content ideas (10 to 20).',
   ].join('\n')
   const user = [
@@ -232,7 +233,11 @@ export function reportPrompt(input: {
  */
 export function reportHtml(md: string): string {
   const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
-  const inline = (s: string) => esc(s).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>')
+  // LINKS (the owner, 2 Nov 2026: "provide hyperlinks in the pdf or the summary … so its easy to click"): [words](https://…)
+  // opens the post; only http(s) addresses, escaped like everything else, so no link can carry script
+  const inline = (s: string) => esc(s)
+    .replace(/\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer noopener">$1</a>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>')
   const lines = md.replace(/\r\n/g, '\n').split('\n')
   const out: string[] = []
   let list: 'ul' | 'ol' | null = null
