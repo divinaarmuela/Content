@@ -229,8 +229,14 @@ export async function loadReportData(clientId: string, m: MonthKey): Promise<Rep
   }
   const id = reportId(clientId, m)
   const stamp = now.toISOString()
+  // the month's saved post breakdowns keep our own copies of their pictures too — no AI asked again (2 Nov 2026)
+  const saved = readPostsExplained((await table<ClientReport>('client_reports').get(id).catch(() => null))?.posts_explained)
+  const keptPosts = saved ? await keepPictures(saved.posts) : null
+  const changed = !!saved && !!keptPosts && keptPosts.some((p, i) => p.thumbnail !== saved.posts[i].thumbnail)
   await table<ClientReport>('client_reports').claim(id, cur => ({
     ...(cur ?? { id, client_id: clientId, month: m, created_at: stamp }), data: data as never, updated_at: stamp,
+    // only onto the same breakdowns that were read (a re-explain since then keeps its own)
+    ...(changed && readPostsExplained(cur?.posts_explained)?.at === saved!.at ? { posts_explained: { ...saved!, posts: keptPosts! } as never } : {}),
   } as ClientReport))
   return data
 }

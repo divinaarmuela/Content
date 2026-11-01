@@ -249,11 +249,15 @@ function PlatformSection({ p, month, running }: { p: PlatformFigures; month: Mon
 }
 
 function PostTile({ t, rank }: { t: TopPost; rank: number }) {
+  // a picture that will not load (an expired Instagram address on a month read before 2 Nov 2026) opens the post instead
+  const [failed, setFailed] = useState(false)
   return (
     <li className="flex flex-col overflow-hidden rounded-card border border-border bg-surface">
       <div className="relative aspect-[4/5] bg-muted">
-        {/* eslint-disable-next-line @next/next/no-img-element -- the platform's own picture of the post */}
-        {t.thumbnail && <img src={t.thumbnail} alt="" className="h-full w-full object-cover" referrerPolicy="no-referrer" />}
+        {t.thumbnail && !failed
+          // eslint-disable-next-line @next/next/no-img-element -- the platform's own picture of the post
+          ? <img src={t.thumbnail} alt="" className="h-full w-full object-cover" referrerPolicy="no-referrer" onError={() => setFailed(true)} />
+          : <div className="flex h-full items-center justify-center p-3 text-center text-[12px] text-muted-foreground">{t.url ? <a href={t.url} target="_blank" rel="noreferrer" className="underline underline-offset-4">Open the post</a> : 'No picture'}</div>}
         <span className="absolute left-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-foreground text-[13px] font-bold text-background">{rank}</span>
       </div>
       <div className="flex flex-1 flex-col gap-1.5 p-3">
