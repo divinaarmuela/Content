@@ -145,8 +145,8 @@ a.cv-view:hover, a.cv-row:hover .cv-view { color: var(--cv-ink); }
 
 /* laptop + phone together: phone overlaps the laptop's lower right */
 @media (min-width: 861px) { .cv-work.cv-work-pairs { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 48px 24px; } }
-.cv-card-pair { aspect-ratio: 16 / 11; background: radial-gradient(100% 80% at 50% 10%, #1e1e1e 0%, #111 75%); display: flex; align-items: center; justify-content: center; padding: 7% 8% 9%; }
+.cv-card-pair { aspect-ratio: 16 / 12; background: radial-gradient(100% 80% at 50% 10%, #1e1e1e 0%, #111 75%); display: flex; align-items: center; justify-content: center; padding: 9% 7% 11%; }
 .dv-pair { position: relative; width: 100%; }
-.dv-pair .dv-laptop { width: 86%; margin: 0; }
-.dv-pair .dv-phone { position: absolute; right: 0; bottom: -6%; height: 82%; }
-@media (max-width: 860px) { .cv-card-pair { aspect-ratio: 4 / 3.4; padding: 32px 22px 40px; } }
+.dv-pair .dv-laptop { width: 74%; margin: 0; }
+.dv-pair .dv-phone { position: absolute; right: 0; bottom: -14%; height: 128%; }
+@media (max-width: 860px) { .cv-card-pair { aspect-ratio: 4 / 3.6; padding: 40px 20px 52px; } }
