@@ -119,3 +119,5 @@ a.cv-view:hover, a.cv-row:hover .cv-view { color: var(--cv-ink); }
   .cv-pairs-head { display: none; }
   .cv-pair { grid-template-columns: 1fr; gap: 6px; }
 }
+.cv-card-desc { font-family: var(--font-archivo), system-ui, sans-serif; text-transform: none; letter-spacing: 0; font-size: 14px; line-height: 1.5; color: rgba(249, 244, 235, 0.8); margin-top: 6px; }
+.cv-card-stack { color: rgba(249, 244, 235, 0.5); }

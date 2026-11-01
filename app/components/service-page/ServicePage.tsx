@@ -34,7 +34,7 @@ export type ServicePageProps = {
   steps: [string, string][]
   related: { key: ServiceKey; desc: string }[]
   /** `builtSite`: we built the site `href` opens — the card says so under its name. */
-  work: { name: string; href: string; media: Media; builtSite?: boolean }[]
+  work: { name: string; href: string; media: Media; builtSite?: boolean; desc?: string; stack?: string[] }[]
   quote?: { text: string; who: string; tags: string[] }
   logosTitle?: string
   faqs: [string, string][]
@@ -144,6 +144,8 @@ export default function ServicePage(p: ServicePageProps) {
                 <span className="cv-card-cap">
                   <span>( {pad(i)} ) {w.name} ↗</span>
                   {w.builtSite && <span className="cv-card-site">Website we built · {new URL(w.href).hostname.replace(/^www\./, '')}</span>}
+                  {w.desc && <span className="cv-card-desc">{w.desc}</span>}
+                  {w.stack && <span className="cv-card-stack">{w.stack.join(' · ')}</span>}
                 </span>
               </a>
             ))}

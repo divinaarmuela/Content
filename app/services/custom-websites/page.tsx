@@ -48,10 +48,10 @@ export default function CustomWebsitesPage() {
         { key: 'content', desc: 'Photo and video from our shoots make the site feel real.' },
       ]}
       work={[
-        { name: 'Señorita Debutante', href: 'https://www.senoritadebutante.com', builtSite: true, media: { video: `${V}/m-senorita`, label: 'Señorita Debutante — website by MD Media, on a phone' } },
-        { name: 'Releeph', href: 'https://releeph.com.au', builtSite: true, media: { video: `${V}/m-releeph`, label: 'Releeph — website by MD Media' } },
-        { name: 'Capila Finance', href: 'https://capila.finance', builtSite: true, media: { video: `${V}/m-capila`, label: 'Capila Finance — website by MD Media' } },
-        { name: 'Alia Fragrance', href: 'https://aliafragrance.com', builtSite: true, media: { video: `${V}/m-alia`, label: 'Alia Fragrance — website by MD Media' } },
+        { name: 'Señorita Debutante', href: 'https://www.senoritadebutante.com', builtSite: true, media: { video: `${V}/m-senorita`, label: 'Señorita Debutante — website by MD Media, on a phone' }, desc: 'Custom site for a debutante gown label. Clients browse gowns and shoot galleries and book fittings online; the team still manages dresses and appointments in Wix.', stack: ['Next.js', 'Wix Bookings & Stores', 'GSAP', 'Three.js'] },
+        { name: 'Releeph', href: 'https://releeph.com.au', builtSite: true, media: { video: `${V}/m-releeph`, label: 'Releeph — website by MD Media' }, desc: 'Started as a custom build, then moved onto Shopify as a headless store. 3D sky visuals, an ad landing page, early-access links per customer, Klaviyo waitlist and email flows, and a store-credit launch for past customers.', stack: ['Next.js', 'Shopify', 'Klaviyo', 'GA4', 'Three.js'] },
+        { name: 'Capila Finance', href: 'https://capila.finance', builtSite: true, media: { video: `${V}/m-capila`, label: 'Capila Finance — website by MD Media' }, desc: 'Finance brokerage site with a 3D hero. Enquiries go straight into GoHighLevel for lead tracking, and a private admin lets the team write the journal and choose which Instagram and LinkedIn posts appear.', stack: ['Next.js', 'GoHighLevel', 'Resend', 'React Three Fiber', 'Vercel'] },
+        { name: 'Alia Fragrance', href: 'https://aliafragrance.com', builtSite: true, media: { video: `${V}/m-alia`, label: 'Alia Fragrance — website by MD Media' }, desc: 'Pre-launch site for a fragrance house: an animated hand-drawn intro, a scent finder, Shopify products and cart, and a Klaviyo waitlist with email flows for early sign-ups.', stack: ['Next.js', 'Shopify', 'Klaviyo', 'Three.js'] },
       ]}
       faqs={[
         ['How long does it take?', 'Usually 4 to 8 weeks from kickoff to launch, depending on the number of pages and how quickly we get feedback.'],
