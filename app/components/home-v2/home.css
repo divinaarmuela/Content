@@ -51,7 +51,11 @@
 .hm-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
 .hm-tile img, .hm-tile video { display: block; width: 100%; aspect-ratio: 4 / 5; object-fit: cover; background: #161616; transition: filter 0.4s; filter: grayscale(0.2); }
 .hm-tile:hover img, .hm-tile:hover video { filter: none; }
-.hm-tile span { display: block; padding: 14px 0; border-bottom: 1px solid var(--hm-line); }
+.hm-tile > span:last-child { display: block; padding: 14px 0; border-bottom: 1px solid var(--hm-line); }
+/* tile 04: the site on a phone, centred on the tile */
+.hm-tile-phone { display: flex; align-items: center; justify-content: center; aspect-ratio: 4 / 5; background: #161616; }
+.hm-phone { display: block; height: 86%; aspect-ratio: 9 / 17.5; padding: 2.4%; border-radius: 15% / 7%; background: linear-gradient(145deg, #3a3a3c, #1c1c1e 45%, #2c2c2e); box-shadow: 0 0 0 1px #4a4a4c, 0 18px 36px rgba(0, 0, 0, 0.5); }
+.hm-tile .hm-phone video { width: 100%; height: 100%; aspect-ratio: auto; object-position: top; border-radius: 12.5% / 5.8%; background: #000; }
 
 /* services */
 .hm-svc li {

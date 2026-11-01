@@ -12,8 +12,15 @@ import { useEffect, useRef } from 'react'
  * pauses again when it leaves. Reduced-motion visitors keep the poster.
  *
  * `src` is the path without extension: `${src}.mp4` + `${src}.jpg` poster.
+ *
+ * NO FLASH: the poster must be the frame the clip starts on. It was a frame from a
+ * second (or seven) in, so every clip jumped to another picture the moment it began
+ * (the owner, 1 Nov 2026: "it flashes when we scroll to it"). Posters are now the
+ * first frame; a clip whose poster is taken later (the site recordings open on a
+ * loader) passes `start`, the second its poster shows. The clip rewinds while it is
+ * off screen, never in sight.
  */
-export default function LazyLoop({ src, className, label }: { src: string; className?: string; label: string }) {
+export default function LazyLoop({ src, className, label, start = 0 }: { src: string; className?: string; label: string; start?: number }) {
   const ref = useRef<HTMLVideoElement>(null)
 
   useEffect(() => {
@@ -23,18 +30,19 @@ export default function LazyLoop({ src, className, label }: { src: string; class
     const io = new IntersectionObserver(
       ([e]) => {
         if (e.isIntersecting) {
-          if (!v.src) v.src = `${src}.mp4`
-          else v.currentTime = 0 // every time it comes into view it plays from the start
+          if (!v.src) v.src = start ? `${src}.mp4#t=${start}` : `${src}.mp4`
           v.play().catch(() => {})
         } else if (v.src) {
+          // rewound out of sight, so it comes back on its poster frame and plays from there
           v.pause()
+          v.currentTime = start
         }
       },
       { rootMargin: '0px', threshold: 0.35 },
     )
     io.observe(v)
     return () => io.disconnect()
-  }, [src])
+  }, [src, start])
 
   return <video ref={ref} className={className} muted loop playsInline preload="none" poster={`${src}.jpg`} aria-label={label} />
 }

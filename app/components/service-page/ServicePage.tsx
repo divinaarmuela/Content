@@ -23,7 +23,7 @@ type ServiceKey = keyof typeof SERVICE_LINKS
 
 /** A loop (`video`, served as `${video}.mp4` with `${video}.jpg` poster), a still (`image`), or neither (a labelled empty slot). */
 /** `device`: show the clip inside a drawn phone or laptop (for site recordings). */
-export type Media = { video?: string; image?: string; label: string; device?: 'phone' | 'laptop'; /** laptop + phone shown together; `video` is the phone clip */ laptop?: string; /** a still for the laptop screen instead of a clip */ laptopImage?: string }
+export type Media = { video?: string; image?: string; label: string; device?: 'phone' | 'laptop'; /** laptop + phone shown together; `video` is the phone clip */ laptop?: string; /** a still for the laptop screen instead of a clip */ laptopImage?: string; /** the second the clip's poster is from, where it starts (see LazyLoop) */ start?: number }
 
 export type ServicePageProps = {
   current: ServiceKey
@@ -51,7 +51,7 @@ function Slot({ media }: { media: Media }) {
           // eslint-disable-next-line @next/next/no-img-element
           ? <img className="dv-video" src={media.laptopImage} alt={`${media.label} (desktop)`} loading="lazy" />
           : <LazyLoop className="dv-video" src={media.laptop!} label={`${media.label} (desktop)`} />}</div></div>
-        <div className="dv dv-phone"><div className="dv-screen"><LazyLoop className="dv-video" src={media.video} label={`${media.label} (phone)`} /></div></div>
+        <div className="dv dv-phone"><div className="dv-screen"><LazyLoop className="dv-video" src={media.video} start={media.start} label={`${media.label} (phone)`} /></div></div>
       </div>
     )
   }
@@ -66,13 +66,13 @@ function Slot({ media }: { media: Media }) {
   if (media.device && media.video) {
     return (
       <div className={`dv dv-${media.device}`}>
-        <div className="dv-screen"><LazyLoop className="dv-video" src={media.video} label={media.label} /></div>
+        <div className="dv-screen"><LazyLoop className="dv-video" src={media.video} start={media.start} label={media.label} /></div>
       </div>
     )
   }
   if (media.video) {
     return (
-      <LazyLoop className="cv-media" src={`${media.video}`} label={media.label} />
+      <LazyLoop className="cv-media" src={`${media.video}`} start={media.start} label={media.label} />
     )
   }
   // eslint-disable-next-line @next/next/no-img-element
