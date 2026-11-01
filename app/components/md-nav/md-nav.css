@@ -28,9 +28,10 @@
 .mdnav-burger span { display: block; width: 22px; height: 1.5px; background: currentColor; transition: transform 0.2s; }
 .mdnav-burger[aria-expanded="true"] span:first-child { transform: translateY(3.75px) rotate(45deg); }
 .mdnav-burger[aria-expanded="true"] span:last-child { transform: translateY(-3.75px) rotate(-45deg); }
-.mdnav-sheet { position: fixed; inset: 0; z-index: 1; background: #0b0b0b; color: #f9f4eb; padding: 84px 24px 32px; display: flex; flex-direction: column; overflow-y: auto; font-family: var(--font-archivo), system-ui, sans-serif; }
+.mdnav-sheet { position: fixed; inset: 0; z-index: 1; background: #0b0b0b; color: #f9f4eb; padding: 84px 24px 120px; display: flex; flex-direction: column; overflow-y: auto; font-family: var(--font-archivo), system-ui, sans-serif; }
 .mdnav-sheet a { font-size: 26px; letter-spacing: -0.02em; padding: 9px 0; color: #f9f4eb; }
 .mdnav-sheet-label { color: rgba(249, 244, 235, 0.5); margin: 22px 0 6px; }
 .mdnav-sheet-label:first-child { margin-top: 0; }
-.mdnav-sheet a.mdnav-sheet-cta { margin-top: 28px; font-size: 12px; text-align: center; padding: 16px; background: #f9f4eb; color: #0b0b0b; }
+.mdnav-sheet-bar { position: fixed; left: 0; right: 0; bottom: 0; padding: 16px 24px calc(16px + env(safe-area-inset-bottom)); background: rgba(11, 11, 11, 0.6); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); border-top: 1px solid rgba(249, 244, 235, 0.12); }
+.mdnav-sheet-bar a.mdnav-sheet-cta { display: block; font-size: 12px; text-align: center; padding: 16px; background: #f9f4eb; color: #0b0b0b; }
 @media (max-width: 860px) { .mdnav-burger { display: flex; } }

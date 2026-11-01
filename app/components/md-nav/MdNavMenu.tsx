@@ -31,7 +31,7 @@ export default function MdNavMenu({ services, links, cta }: { services: readonly
           {services.map(([name, href]) => <a key={href} href={href} onClick={() => setOpen(false)}>{name}</a>)}
           <p className="mdnav-mono mdnav-sheet-label">MD Media</p>
           {links.map(([name, href]) => <a key={href} href={href} onClick={() => setOpen(false)}>{name}</a>)}
-          <a href={cta} target="_blank" rel="noreferrer noopener" className="mdnav-sheet-cta mdnav-mono">Book a call ↗</a>
+          <div className="mdnav-sheet-bar"><a href={cta} target="_blank" rel="noreferrer noopener" className="mdnav-sheet-cta mdnav-mono">Book a call ↗</a></div>
         </div>
       )}
     </>

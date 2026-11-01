@@ -6,6 +6,7 @@ import MdFooter from './components/md-footer/MdFooter'
 import LogoWall from './components/logo-wall/LogoWall'
 import './components/home-v2/home.css'
 import LazyLoop from './components/lazy-loop/LazyLoop'
+import HeroSync from './components/home-v2/HeroSync'
 
 export const metadata: Metadata = {
   title: 'MD Media | Content-Led Marketing for Founders & Local Businesses',
@@ -70,13 +71,14 @@ export default function HomePage() {
 
       <main>
         <section className="hm-hero">
-          <video className="hm-hero-bg" src={HERO} autoPlay muted loop playsInline aria-hidden="true" />
+          <video className="hm-hero-bg" src={HERO} muted loop playsInline preload="auto" aria-hidden="true" />
           <div className="hm-wrap hm-hero-in">
             <div className="hm-hero-top">
               <h1>We’re<br />MD Media.</h1>
               <p className="hm-mono hm-hero-side">Get seen.<br />Get known.<br />Get booked.</p>
             </div>
             <video className="hm-hero-reel" src={HERO} autoPlay muted loop playsInline aria-label="MD Media showreel" />
+            <HeroSync reel=".hm-hero-reel" bg=".hm-hero-bg" />
           </div>
         </section>
 

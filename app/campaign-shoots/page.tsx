@@ -168,10 +168,6 @@ export default function CampaignShootsPage() {
               {deliverables.map(d => (
                 <div key={d.title} className="cs-card">
                   <LazyLoop className="cs-card-media" src={`/videos/campaign-shoots/${d.media}`} label={`${d.title}, from an MD Media shoot`} />
-                  <div className="cs-card-top">
-                    <span className="cs-big">{d.n}</span>
-                    <span className={`cs-tag${d.tag === 'Included' ? ' cs-tag-ok' : ''}`}>{d.tag}</span>
-                  </div>
                   <h3>{d.title}</h3>
                   <p>{d.desc}</p>
                 </div>
@@ -185,21 +181,6 @@ export default function CampaignShootsPage() {
           <Label>05 — Proof</Label>
           <h2 className="cs-h2">Shot by the team behind</h2>
           <LogoWall tone="light" hideTitle title="Shot by the team behind" brands={PROOF_BRANDS} textOnly={['Layer & Loom']} />
-          <div className="cs-proof">
-            <div className="cs-result">
-              <p className="cs-label"><span>Result</span><span className="cs-tag">To confirm</span></p>
-              <p className="cs-huge">—00%</p>
-              <p>One ecom brand, one number. Ad cost down, or a sold-out drop.</p>
-            </div>
-            <div className="cs-quote">
-              <div className="cs-slot cs-slot-34">Founder photo</div>
-              <div>
-                <span className="cs-tag">To confirm</span>
-                <p className="cs-quote-text">“One line from an ecom founder on what changed.”</p>
-                <p className="cs-label">Founder name, Brand</p>
-              </div>
-            </div>
-          </div>
           <BookButton dark />
         </section>
 
