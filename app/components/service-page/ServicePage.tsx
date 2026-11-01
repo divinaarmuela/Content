@@ -23,7 +23,7 @@ type ServiceKey = keyof typeof SERVICE_LINKS
 
 /** A loop (`video`, served as `${video}.mp4` with `${video}.jpg` poster), a still (`image`), or neither (a labelled empty slot). */
 /** `device`: show the clip inside a drawn phone or laptop (for site recordings). */
-export type Media = { video?: string; image?: string; label: string; device?: 'phone' | 'laptop'; /** laptop + phone shown together; `video` is the phone clip */ laptop?: string }
+export type Media = { video?: string; image?: string; label: string; device?: 'phone' | 'laptop'; /** laptop + phone shown together; `video` is the phone clip */ laptop?: string; /** a still for the laptop screen instead of a clip */ laptopImage?: string }
 
 export type ServicePageProps = {
   current: ServiceKey
@@ -44,11 +44,22 @@ export type ServicePageProps = {
 }
 
 function Slot({ media }: { media: Media }) {
-  if (media.laptop && media.video) {
+  if ((media.laptop || media.laptopImage) && media.video) {
     return (
       <div className="dv-pair">
-        <div className="dv dv-laptop"><div className="dv-screen"><LazyLoop className="dv-video" src={media.laptop} label={`${media.label} (desktop)`} /></div></div>
+        <div className="dv dv-laptop"><div className="dv-screen">{media.laptopImage
+          // eslint-disable-next-line @next/next/no-img-element
+          ? <img className="dv-video" src={media.laptopImage} alt={`${media.label} (desktop)`} loading="lazy" />
+          : <LazyLoop className="dv-video" src={media.laptop!} label={`${media.label} (desktop)`} />}</div></div>
         <div className="dv dv-phone"><div className="dv-screen"><LazyLoop className="dv-video" src={media.video} label={`${media.label} (phone)`} /></div></div>
+      </div>
+    )
+  }
+  if (media.device === 'laptop' && media.image) {
+    return (
+      <div className="dv dv-laptop">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <div className="dv-screen"><img className="dv-video" src={media.image} alt={media.label} /></div>
       </div>
     )
   }
@@ -156,10 +167,10 @@ export default function ServicePage(p: ServicePageProps) {
             <h2 className="cv-eyebrow">Selected work</h2>
             <a className="cv-view" href="/work">( All work )</a>
           </div>
-          <div className={`cv-work${p.work.some(w => w.media.laptop) ? ' cv-work-pairs' : ''}`}>
+          <div className={`cv-work${p.work.some(w => w.media.laptop || w.media.laptopImage) ? ' cv-work-pairs' : ''}`}>
             {p.work.map((w, i) => (
               <a key={w.name} href={w.href} className="cv-card" {...(/^https?:/.test(w.href) ? { target: '_blank', rel: 'noreferrer noopener' } : {})}>
-                <div className={`cv-card-media${w.media.laptop ? ' cv-card-pair' : w.media.device ? ' cv-card-device' : ''}`}><Slot media={w.media} /></div>
+                <div className={`cv-card-media${(w.media.laptop || w.media.laptopImage) ? ' cv-card-pair' : w.media.device ? ' cv-card-device' : ''}`}><Slot media={w.media} /></div>
                 <span className="cv-card-cap">
                   <span>( {pad(i)} ) {w.name} ↗</span>
                   {w.builtSite && <span className="cv-card-site">Website we built · {new URL(w.href).hostname.replace(/^www\./, '')}</span>}

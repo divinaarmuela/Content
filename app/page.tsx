@@ -33,7 +33,7 @@ const tiles = [
   ['01', 'Campaign shoots', '/videos/campaign-shoots/hero-portrait', '/campaign-shoots'],
   ['02', 'Brand identity', '/videos/home/brand', '/services/branding-suite'],
   ['03', 'Social content', '/videos/content-visibility/cecconis', '/services/content-visibility'],
-  ['04', 'Custom websites', '/videos/websites/p4-senorita', '/services/custom-websites'],
+  ['04', 'Custom websites', '/images/websites/senorita-hero.jpg', '/services/custom-websites'],
 ]
 
 const steps = [
@@ -96,7 +96,10 @@ export default function HomePage() {
           <div className="hm-tiles">
             {tiles.map(([n, t, img, href]) => (
               <a key={n} href={href} className="hm-tile">
-                <LazyLoop src={`${img}`} label={t} />
+                {img.endsWith('.jpg')
+                  // eslint-disable-next-line @next/next/no-img-element
+                  ? <img src={img} alt={t} loading="lazy" />
+                  : <LazyLoop src={img} label={t} />}
                 <span className="hm-mono">( {n} ) {t}</span>
               </a>
             ))}

@@ -4,7 +4,11 @@ import MdNav from '../components/md-nav/MdNav'
 import MdFooter from '../components/md-footer/MdFooter'
 import { CALENDLY } from '../components/service-page/ServicePage'
 import { getSiteProjects } from '../lib/websiteData'
-import { SECTORS, sectorCount, type SectorClient } from './sectors'
+import { SECTORS as ALL_SECTORS, type SectorClient } from './sectors'
+
+// Clients without a cover are hidden for now (the owner, 1 Nov 2026) until their media is in.
+const SECTORS = ALL_SECTORS.map(s => ({ ...s, clients: s.clients.filter(c => c.media) })).filter(s => s.clients.length)
+const sectorCount = (s: (typeof SECTORS)[number]) => s.clients.length
 import './work.css'
 import LazyLoop from '../components/lazy-loop/LazyLoop'
 
