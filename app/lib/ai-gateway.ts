@@ -9,7 +9,8 @@ import Anthropic from '@anthropic-ai/sdk'
  *
  * The models, each overridable by env:
  *   REPORT_POSTS_MODEL   the post breakdowns — Qwen 3.7 Plus by default, UNLK's own model (about $0.001 a post)
- *   REPORT_WRITER_MODEL  the written client report — Claude Sonnet 5.5 by default: it goes to the client
+ *   REPORT_WRITER_MODEL  the written client report — Qwen 3.7 Plus too (the owner, 2 Nov 2026: 'sonnet is expensive…
+ *                        use qwen'); its thinking is left out, only the text is kept
  */
 
 const GATEWAY = 'https://ai-gateway.vercel.sh'
@@ -30,7 +31,7 @@ export function postsModel(): string {
   return process.env.REPORT_POSTS_MODEL?.trim() || (viaGateway() ? 'alibaba/qwen3.7-plus' : 'claude-opus-5-5')
 }
 export function writerModel(): string {
-  return process.env.REPORT_WRITER_MODEL?.trim() || (viaGateway() ? 'anthropic/claude-sonnet-5.5' : 'claude-opus-5-5')
+  return process.env.REPORT_WRITER_MODEL?.trim() || (viaGateway() ? 'alibaba/qwen3.7-plus' : 'claude-opus-5-5')
 }
 
 /** what the AI's account says, in words — a top-up is a person's job, not a retry */
