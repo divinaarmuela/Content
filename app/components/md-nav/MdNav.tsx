@@ -24,7 +24,10 @@ const LINKS = [
 export default function MdNav({ band = false }: { band?: boolean } = {}) {
   const nav = (
     <div role="navigation" aria-label="Main" className="mdnav">
-      <a href="/" className="mdnav-mono">MD Media.</a>
+      <a href="/" className="mdnav-logo" aria-label="MD Media home">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/MDLogo-trim.png" alt="MD Media" />
+      </a>
       <div className="mdnav-links mdnav-mono">
         <div className="mdnav-drop">
           <a href="/#services" aria-haspopup="true">Services ▾</a>
