@@ -301,3 +301,44 @@ export function readReportData(raw: unknown): ReportData | null {
     })),
   }
 }
+
+/* ── HOW SETTLED A MONTH'S FIGURES ARE (the owner, 2 Nov 2026: "can we specify this in the report dashboard") ──
+ * Zernio's own freshness (its docs, read 2 Nov 2026): likes and comments are up to an hour old; reach and views come
+ * from Instagram about a day behind; follower counts refresh once a day. So a month's figures keep moving until about
+ * two days after it ends. A month still running is not compared with last month: one day of November against all of
+ * October read "−96% views" on Jordan Wilson's report. */
+
+export const SETTLE_DAYS = 2
+
+export const FRESHNESS: readonly { what: string; how: string }[] = [
+  { what: 'Likes, comments, shares, saves', how: 'up to an hour behind' },
+  { what: 'Views and accounts reached', how: 'about a day behind (Instagram sends them late)' },
+  { what: 'Followers', how: 'counted once a day' },
+]
+
+export type MonthState =
+  | { kind: 'running'; settlesOn: string }
+  | { kind: 'settling'; settlesOn: string }
+  | { kind: 'final'; settlesOn: string; readEarly: boolean }
+
+/** the day (YYYY-MM-DD) a month's figures are complete: SETTLE_DAYS after its last day */
+export function settlesOn(m: MonthKey): string {
+  const { to } = monthRange(m)
+  const d = new Date(`${to}T00:00:00Z`)
+  d.setUTCDate(d.getUTCDate() + SETTLE_DAYS)
+  return d.toISOString().slice(0, 10)
+}
+
+/** where a month stands on `today` (YYYY-MM-DD, Melbourne), and whether its saved figures were read before it settled */
+export function monthState(m: MonthKey, today: string, fetchedAt?: string | null): MonthState {
+  const on = settlesOn(m)
+  if (today <= monthRange(m).to) return { kind: 'running', settlesOn: on }
+  if (today < on) return { kind: 'settling', settlesOn: on }
+  const readDay = fetchedAt ? melbourneDay(new Date(fetchedAt)) : null
+  return { kind: 'final', settlesOn: on, readEarly: !!readDay && readDay < on }
+}
+
+/** a moment as its Melbourne calendar day, YYYY-MM-DD */
+export function melbourneDay(d: Date): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Melbourne', year: 'numeric', month: '2-digit', day: '2-digit' }).format(d)
+}

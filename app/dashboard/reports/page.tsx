@@ -18,8 +18,8 @@ import LeadsReportCard from './LeadsReportCard'
 import PostBreakdowns from './PostBreakdowns'
 import { readPostsExplained } from '../../lib/post-breakdown-core'
 import {
-  REVIEW_CHECKS, allChecked, change, fmt, monthLabel, monthRange, readReportData, recentMonths, reportHtml,
-  type Breakdown, type MonthKey, type PlatformFigures, type ReportData, type TopPost,
+  FRESHNESS, REVIEW_CHECKS, allChecked, change, fmt, melbourneDay, monthLabel, monthRange, monthState, readReportData, recentMonths, reportHtml,
+  type Breakdown, type MonthKey, type MonthState, type PlatformFigures, type ReportData, type TopPost,
 } from '../../lib/client-report-core'
 
 /**
@@ -75,6 +75,8 @@ export default function ReportsPage() {
   // the saved figures with every list put back (the database keeps no empty list)
   const data = useMemo(() => readReportData(report?.data), [report?.data])
   const clientName = clients?.find(c => c.id === clientId)?.name ?? ''
+  // where the month stands: still running (nothing compared), settling (Instagram still sending), or final
+  const state = useMemo(() => monthState(month, melbourneDay(new Date()), data?.fetchedAt), [month, data?.fetchedAt])
 
   return (
     <div className="flex flex-col gap-6">
@@ -105,13 +107,18 @@ export default function ReportsPage() {
       {!clientId && !error && (
         <div className="no-print rounded-card border border-dashed border-border p-10 text-center">
           <p className="text-[17px] font-semibold">Pick a client and a month</p>
-          <p className="mt-1 text-[14px] text-muted-foreground">The figures are read from their Instagram and Facebook, then you can generate the report.</p>
+          <ol className="mx-auto mt-3 flex max-w-[640px] flex-wrap justify-center gap-x-5 gap-y-1 text-[14px] text-muted-foreground">
+            {['Pick the client and month', 'Check the numbers', 'Generate the report', 'Read it, edit, tick the checks', 'Download the PDF'].map((w, i) => (
+              <li key={w}><strong className="text-foreground">{i + 1}</strong> {w}</li>
+            ))}
+          </ol>
         </div>
       )}
       {clientId && loading && !data && <LoadingFigures />}
 
       {data && (
         <>
+          <FreshnessCard state={state} month={data.month} fetchedAt={data.fetchedAt} />
           {data.gaps.length > 0 && (
             <TintCard tone="amber" title="Not everything could be read">
               <ul className="list-disc pl-5 text-[14px]">{data.gaps.map(g => <li key={g}>{g}</li>)}</ul>
@@ -119,7 +126,7 @@ export default function ReportsPage() {
           )}
           {data.platforms.map(p => (
             <div key={p.platform} className="flex flex-col gap-6">
-              <PlatformSection p={p} month={data.month} />
+              <PlatformSection p={p} month={data.month} running={state.kind === 'running'} />
               {p.platform === 'instagram' && (
                 <PostBreakdowns raw={report?.posts_explained} clientId={clientId} month={month} onChange={r => setReport(r as Saved)} />
               )}
@@ -148,8 +155,32 @@ function LoadingFigures() {
   )
 }
 
-function Kpi({ label, value, was, suffix, note }: { label: string; value: number | null; was?: number | null; suffix?: string; note?: string }) {
-  const c = change(value, was)
+/** HOW UP TO DATE THIS IS: said on the page, not left to be guessed (the owner, 2 Nov 2026) */
+function FreshnessCard({ state, month, fetchedAt }: { state: MonthState; month: MonthKey; fetchedAt: string }) {
+  const name = monthLabel(month).split(' ')[0]
+  const on = new Date(`${state.settlesOn}T00:00:00`).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' })
+  const read = new Date(fetchedAt).toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })
+  const [tone, title, words] =
+    state.kind === 'running' ? ['blue', `${name} is still running`, `These are the numbers so far, so nothing is compared with last month yet. The month’s final numbers are in from ${on}.`] as const
+    : state.kind === 'settling' ? ['amber', `${name} has just ended. Its numbers are still coming in`, `Instagram sends the last days of a month late. Press “Read the figures again” on or after ${on} for the final numbers.`] as const
+    : state.readEarly ? ['amber', 'Read before the month’s numbers were complete', `These figures were read ${read}, before ${on}. Press “Read the figures again” for the final numbers.`] as const
+    : ['green', `${name}’s numbers are final`, `Read ${read}, after the month’s numbers were complete.`] as const
+  return (
+    <TintCard tone={tone} title={title}>
+      <p className="text-[14px]">{words}</p>
+      <details className="mt-2 text-[13px]">
+        <summary className="cursor-pointer font-semibold">How up to date each number is</summary>
+        <ul className="mt-1.5 flex flex-col gap-0.5">
+          {FRESHNESS.map(f => <li key={f.what}><strong>{f.what}</strong>: {f.how}</li>)}
+          <li>All of it comes from Zernio, which reads it from Instagram and Facebook.</li>
+        </ul>
+      </details>
+    </TintCard>
+  )
+}
+
+function Kpi({ label, value, was, suffix, note, hint, compare = true }: { label: string; value: number | null; was?: number | null; suffix?: string; note?: string; hint?: string; compare?: boolean }) {
+  const c = compare ? change(value, was) : null
   return (
     <div className="flex flex-col gap-1 rounded-card border border-border bg-surface p-4">
       <span className="text-[13px] text-muted-foreground">{label}</span>
@@ -160,29 +191,33 @@ function Kpi({ label, value, was, suffix, note }: { label: string; value: number
             {c.up ? <ArrowUpRight className="h-3.5 w-3.5" aria-hidden /> : <ArrowDownRight className="h-3.5 w-3.5" aria-hidden />}{c.text}
           </span>
         )}
-        <span className="text-muted-foreground">{c ? 'vs last month' : note ?? ''}</span>
+        <span className="text-muted-foreground">{c ? `vs last month (${fmt(was ?? null)})` : note ?? ''}</span>
       </span>
+      {hint && <span className="text-[12px] leading-snug text-muted-foreground">{hint}</span>}
     </div>
   )
 }
 
-function PlatformSection({ p, month }: { p: PlatformFigures; month: MonthKey }) {
+function PlatformSection({ p, month, running }: { p: PlatformFigures; month: MonthKey; running: boolean }) {
   const name = p.platform === 'instagram' ? 'Instagram' : 'Facebook'
   const { from, to } = monthRange(month)
+  const day = (d: string) => new Date(`${d}T00:00:00`).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })
+  const soFar = running ? 'so far this month' : undefined
   return (
     <section className="flex flex-col gap-4">
       <header className="flex flex-wrap items-baseline gap-2">
         <h2 className="text-[20px] font-semibold">{name}</h2>
         {p.handle && <span className="text-[14px] text-muted-foreground">@{p.handle}</span>}
-        <span className="ml-auto text-[13px] text-muted-foreground">{from} to {to} · {p.posts} {p.posts === 1 ? 'post' : 'posts'}</span>
+        <span className="ml-auto text-[13px] text-muted-foreground">{day(from)} – {day(to)} · {p.posts} {p.posts === 1 ? 'post' : 'posts'} this month</span>
       </header>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        <Kpi label="Followers at the end of the month" value={p.followers.end} was={p.followers.previousEnd} />
-        <Kpi label="Views" value={p.views} was={p.previous.views} />
-        <Kpi label="Accounts reached" value={p.reach} was={p.previous.reach} />
-        <Kpi label="Interactions" value={p.interactions} was={p.previous.interactions} />
-        {p.platform === 'instagram' && <Kpi label="Profile visits" value={p.profileVisits} note="this month" />}
-        {p.platform === 'instagram' && <Kpi label="Bio link taps" value={p.linkTaps} note="this month" />}
+        <Kpi label={running ? 'Followers now' : 'Followers at the end of the month'} value={p.followers.end} was={p.followers.previousEnd} compare={!running}
+          note={running ? `${fmt(p.followers.previousEnd)} when the month began` : undefined} hint="People following the account." />
+        <Kpi label="Views" value={p.views} was={p.previous.views} compare={!running} note={soFar} hint="How many times the posts were seen, repeat views included." />
+        <Kpi label="Accounts reached" value={p.reach} was={p.previous.reach} compare={!running} note={soFar} hint="How many different people saw them." />
+        <Kpi label="Interactions" value={p.interactions} was={p.previous.interactions} compare={!running} note={soFar} hint="Likes, comments, shares and saves added together." />
+        {p.platform === 'instagram' && <Kpi label="Profile visits" value={p.profileVisits} note={soFar ?? 'this month'} hint="People who opened the profile." />}
+        {p.platform === 'instagram' && <Kpi label="Bio link taps" value={p.linkTaps} note={soFar ?? 'this month'} hint="Taps on the link in the bio." />}
       </div>
       {p.viewsFromFollowers != null && p.viewsFromNonFollowers != null && (
         <div className="rounded-card border border-border bg-surface p-4">
