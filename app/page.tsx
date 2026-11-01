@@ -98,7 +98,7 @@ export default function HomePage() {
             {tiles.map(([n, t, img, href]) => (
               <a key={n} href={href} className="hm-tile">
                 {img.includes('/websites/')
-                  ? <span className="hm-tile-phone"><span className="hm-phone"><LazyLoop src={img} start={7} label={t} /></span></span>
+                  ? <span className="hm-tile-phone"><span className="hm-phone"><LazyLoop src={img} start={7} skipOpening label={t} /></span></span>
                   : <LazyLoop src={img} label={t} />}
                 <span className="hm-mono">( {n} ) {t}</span>
               </a>

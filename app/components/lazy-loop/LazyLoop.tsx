@@ -18,9 +18,10 @@ import { useEffect, useRef } from 'react'
  * (the owner, 1 Nov 2026: "it flashes when we scroll to it"). Posters are now the
  * first frame; a clip whose poster is taken later (the site recordings open on a
  * loader) passes `start`, the second its poster shows. The clip rewinds while it is
- * off screen, never in sight.
+ * off screen, never in sight. `skipOpening` loops back to `start` instead of 0, so a
+ * site recording does not sit on its blank loader each time round (homepage tile 04).
  */
-export default function LazyLoop({ src, className, label, start = 0 }: { src: string; className?: string; label: string; start?: number }) {
+export default function LazyLoop({ src, className, label, start = 0, skipOpening = false }: { src: string; className?: string; label: string; start?: number; skipOpening?: boolean }) {
   const ref = useRef<HTMLVideoElement>(null)
 
   useEffect(() => {
@@ -41,8 +42,10 @@ export default function LazyLoop({ src, className, label, start = 0 }: { src: st
       { rootMargin: '0px', threshold: 0.35 },
     )
     io.observe(v)
-    return () => io.disconnect()
-  }, [src, start])
+    const again = () => { v.currentTime = start; v.play().catch(() => {}) }
+    if (skipOpening) v.addEventListener('ended', again)
+    return () => { io.disconnect(); v.removeEventListener('ended', again) }
+  }, [src, start, skipOpening])
 
-  return <video ref={ref} className={className} muted loop playsInline preload="none" poster={`${src}.jpg`} aria-label={label} />
+  return <video ref={ref} className={className} muted loop={!skipOpening} playsInline preload="none" poster={`${src}.jpg`} aria-label={label} />
 }
