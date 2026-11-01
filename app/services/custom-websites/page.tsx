@@ -23,7 +23,7 @@ export default function CustomWebsitesPage() {
   return (
     <ServicePage
       current="websites"
-      hero={{ video: `${V}/hero`, label: 'Scrolling the Alia Fragrance website, built by MD Media' }}
+      hero={{ video: `${V}/d-hero`, label: 'Scrolling the Señorita Debutante website, built by MD Media' }}
       lead="Your website is where most people decide whether to get in touch. We design every page to make that an easy yes. After launch, we handle the hosting, updates and fixes."
       body="Fast, custom sites that look like your brand and are built to convert. Then we keep them running so they never go stale."
       covered={[
@@ -48,10 +48,10 @@ export default function CustomWebsitesPage() {
         { key: 'content', desc: 'Photo and video from our shoots make the site feel real.' },
       ]}
       work={[
-        { name: 'Señorita Debutante', href: 'https://www.senoritadebutante.com', builtSite: true, media: { image: '/images/branding-suite/senorita.jpg', label: 'Señorita Debutante — website by MD Media' } },
-        { name: 'Releeph', href: 'https://releeph.com.au', builtSite: true, media: { video: `${V}/releeph`, label: 'Releeph — website by MD Media' } },
-        { name: 'Capila Finance', href: 'https://capila.finance', builtSite: true, media: { video: `${V}/capila-v2`, label: 'Capila Finance — website by MD Media' } },
-        { name: 'Alia Fragrance', href: 'https://aliafragrance.com', builtSite: true, media: { video: `${V}/alia`, label: 'Alia Fragrance — website by MD Media' } },
+        { name: 'Señorita Debutante', href: 'https://www.senoritadebutante.com', builtSite: true, media: { video: `${V}/m-senorita`, label: 'Señorita Debutante — website by MD Media, on a phone' } },
+        { name: 'Releeph', href: 'https://releeph.com.au', builtSite: true, media: { video: `${V}/m-releeph`, label: 'Releeph — website by MD Media' } },
+        { name: 'Capila Finance', href: 'https://capila.finance', builtSite: true, media: { video: `${V}/m-capila`, label: 'Capila Finance — website by MD Media' } },
+        { name: 'Alia Fragrance', href: 'https://aliafragrance.com', builtSite: true, media: { video: `${V}/m-alia`, label: 'Alia Fragrance — website by MD Media' } },
       ]}
       faqs={[
         ['How long does it take?', 'Usually 4 to 8 weeks from kickoff to launch, depending on the number of pages and how quickly we get feedback.'],
