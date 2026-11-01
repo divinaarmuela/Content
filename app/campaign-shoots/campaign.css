@@ -141,3 +141,16 @@
 
 /* shared navbar on a dark band, same as the service pages */
 .cs-navband { position: relative; background: var(--cs-ink); height: 64px; }
+
+/* TYPE SCALE (Divina, 1 Nov 2026: "just watch the spacing and size of things") — the page had 13 sizes, labels
+   down at 10px and the headline jumping 64 → 124. Now: 12 labels · 14 small · 16 body · 17–18 lead · 20 titles ·
+   40 / 56 / 104 headings. Later rules win, so this block is the scale. */
+.cs-label, .cs-meta, .cs-list span, .cs-stills figcaption, .cs-crew span, .cs-side { font-size: 12px; }
+.cs-tag { font-size: 11px; }
+.cs-h1 { font-size: clamp(44px, 7vw, 104px); }
+.cs-h2 { font-size: clamp(32px, 4.2vw, 56px); margin-bottom: 40px !important; }
+.cs-huge { font-size: clamp(64px, 8vw, 112px); }
+.cs-h3, .cs-steps h3, .cs-card h3 { font-size: 20px; }
+.cs-under { font-size: 14px; }
+.cs-steps p, .cs-card p, .cs-crew li, .cs-faq p { font-size: 16px; }
+.cs-hero { gap: 64px; }
