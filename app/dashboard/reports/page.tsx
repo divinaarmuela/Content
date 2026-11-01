@@ -13,8 +13,6 @@ import {
 } from '@/components/ui/alert-dialog'
 import PageTitle from '../ui/PageTitle'
 import TintCard from '../ui/TintCard'
-import { useRole } from '../useRole'
-import LeadsReportCard from './LeadsReportCard'
 import PostBreakdowns from './PostBreakdowns'
 import { readPostsExplained } from '../../lib/post-breakdown-core'
 import {
@@ -39,7 +37,6 @@ const OBJECTIVES = ['Growth', 'Engagement', 'Leads', 'Positioning']
 const PREF_KEY = 'reports:last'
 
 export default function ReportsPage() {
-  const { me } = useRole()
   const [clients, setClients] = useState<{ id: string; name: string }[] | null>(null)
   const [mayDelete, setMayDelete] = useState(false)
   const months = useMemo(() => recentMonths(new Date()), [])
@@ -137,8 +134,6 @@ export default function ReportsPage() {
           <PrintReport data={data} report={report} clientName={clientName} />
         </>
       )}
-
-      {me?.role === 'super_admin' && <div className="no-print"><LeadsReportCard /></div>}
     </div>
   )
 }

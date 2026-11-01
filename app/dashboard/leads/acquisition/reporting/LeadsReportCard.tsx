@@ -17,7 +17,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { FileDown, Send, X, Plus, CalendarClock, Mail } from 'lucide-react'
-import { useRole } from '../useRole'
+import { useRole } from '../../../useRole'
 
 type Settings = {
   enabled: boolean
