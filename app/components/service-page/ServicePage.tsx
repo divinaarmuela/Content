@@ -30,6 +30,8 @@ export type ServicePageProps = {
   hero: Media
   /** a link shown under the hero, e.g. to the live site the hero film shows */
   heroLink?: { href: string; label: string }
+  /** Selected work straight under the hero (Custom Websites: the sites are the proof — the owner, 1 Nov 2026) */
+  workFirst?: boolean
   lead: string
   body: string
   familiar?: { heading: string; pairs: [string, string][] }
@@ -84,6 +86,31 @@ const pad = (i: number) => String(i + 1).padStart(2, '0')
 
 export default function ServicePage(p: ServicePageProps) {
   const me = SERVICE_LINKS[p.current]
+  const selectedWork = (
+          <section className="cv-wrap cv-sec">
+            <div className="cv-split">
+              <h2 className="cv-eyebrow">Selected work</h2>
+              <a className="cv-view" href="/work">( All work )</a>
+            </div>
+            <div className={`cv-work${p.work.some(w => w.media.laptop || w.media.laptopImage) ? ' cv-work-pairs' : ''}`}>
+              {p.work.map((w, i) => (
+                <a key={w.name} href={w.href} className="cv-card" {...(/^https?:/.test(w.href) ? { target: '_blank', rel: 'noreferrer noopener' } : {})}>
+                  <div className={`cv-card-media${(w.media.laptop || w.media.laptopImage) ? ' cv-card-pair' : w.media.device ? ' cv-card-device' : ''}`}><Slot media={w.media} /></div>
+                  <span className="cv-card-cap">
+                    <span>( {pad(i)} ) {w.name}{' '}↗</span>
+                    {w.builtSite && <span className="cv-card-site">Website we built · {new URL(w.href).hostname.replace(/^www\./, '')}</span>}
+                    {w.desc && <span className="cv-card-desc">{w.desc}</span>}
+                    {w.stack && (
+                      <span className="cv-stack" aria-label="Built with">
+                        {w.stack.map(t => <span key={t} className="cv-chip">{t}</span>)}
+                      </span>
+                    )}
+                  </span>
+                </a>
+              ))}
+            </div>
+          </section>
+  )
   return (
     <div className={`${archivo.variable} ${sometype.variable}`}>
       <MdNav />
@@ -92,8 +119,10 @@ export default function ServicePage(p: ServicePageProps) {
           <p className="cv-crumb"><a href="/services">Services</a> / ( {me.n} ) {me.name}</p>
           <h1 className="cv-h1">{me.name}</h1>
           <div className={`cv-hero${p.hero.device ? ' cv-hero-device' : ''}`}><Slot media={p.hero} /></div>
-          {p.heroLink && <a className="cv-hero-link" href={p.heroLink.href} target="_blank" rel="noreferrer noopener">{p.heroLink.label} ↗</a>}
+          {p.heroLink && <a className="cv-hero-link" href={p.heroLink.href} target="_blank" rel="noreferrer noopener">{p.heroLink.label}{' '}↗</a>}
         </div>
+
+        {p.workFirst && selectedWork}
 
         <section className="cv-wrap cv-sec">
           <h2 className="cv-eyebrow">Overview</h2>
@@ -162,29 +191,7 @@ export default function ServicePage(p: ServicePageProps) {
           </ul>
         </section>
 
-        <section className="cv-wrap cv-sec">
-          <div className="cv-split">
-            <h2 className="cv-eyebrow">Selected work</h2>
-            <a className="cv-view" href="/work">( All work )</a>
-          </div>
-          <div className={`cv-work${p.work.some(w => w.media.laptop || w.media.laptopImage) ? ' cv-work-pairs' : ''}`}>
-            {p.work.map((w, i) => (
-              <a key={w.name} href={w.href} className="cv-card" {...(/^https?:/.test(w.href) ? { target: '_blank', rel: 'noreferrer noopener' } : {})}>
-                <div className={`cv-card-media${(w.media.laptop || w.media.laptopImage) ? ' cv-card-pair' : w.media.device ? ' cv-card-device' : ''}`}><Slot media={w.media} /></div>
-                <span className="cv-card-cap">
-                  <span>( {pad(i)} ) {w.name} ↗</span>
-                  {w.builtSite && <span className="cv-card-site">Website we built · {new URL(w.href).hostname.replace(/^www\./, '')}</span>}
-                  {w.desc && <span className="cv-card-desc">{w.desc}</span>}
-                  {w.stack && (
-                    <span className="cv-stack" aria-label="Built with">
-                      {w.stack.map(t => <span key={t} className="cv-chip">{t}</span>)}
-                    </span>
-                  )}
-                </span>
-              </a>
-            ))}
-          </div>
-        </section>
+        {!p.workFirst && selectedWork}
 
         {p.quote && (
           <section className="cv-wrap cv-sec">

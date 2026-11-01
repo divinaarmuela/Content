@@ -23,6 +23,7 @@ export default function CustomWebsitesPage() {
   return (
     <ServicePage
       current="websites"
+      workFirst
       hero={{ image: '/images/websites/senorita-hero.jpg', device: 'laptop', label: 'Scrolling the Señorita Debutante website, built by MD Media' }}
       heroLink={{ href: 'https://www.senoritadebutante.com', label: 'Visit the site we built · senoritadebutante.com' }}
       lead="Your website is where most people decide whether to get in touch. We design every page to make that an easy yes. After launch, we handle the hosting, updates and fixes."
