@@ -1,5 +1,5 @@
 import { spaceMono } from '../components/space-mono'
-import LamaNav from '../components/lama/LamaNav'
+import MdNav from '../components/md-nav/MdNav'
 import LamaFooter from '../components/lama/LamaFooter'
 import LamaContact from '../components/lama/LamaContact'
 import Reveal from '../components/lama/Reveal'
@@ -38,7 +38,7 @@ export default function EventsPage() {
     <div className={`${spaceMono.variable} ${archivo.variable} ${sometype.variable}`} style={{ background: '#0B0B0B', color: '#ffffff', fontFamily: SANS, fontWeight: 400, WebkitFontSmoothing: 'antialiased', overflowX: 'hidden', position: 'relative' }}>
       <div style={{ position: 'fixed', inset: 0, zIndex: 200, pointerEvents: 'none', mixBlendMode: 'overlay', opacity: 0.05, backgroundImage: NOISE }} />
 
-      <LamaNav gate={false} />
+      <MdNav band />
 
       {/* HERO */}
       <header style={{ position: 'relative', minHeight: '92vh', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', padding: '140px clamp(20px, 4vw, 52px) clamp(44px, 6vh, 72px)', overflow: 'hidden' }}>

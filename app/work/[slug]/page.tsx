@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation'
 import { archivo, sometype } from '../../components/lama/fonts'
 import { Scramble } from '../../components/lama/Scramble'
 import Reveal from '../../components/lama/Reveal'
-import LamaNav from '../../components/lama/LamaNav'
+import MdNav from '../../components/md-nav/MdNav'
 import LamaFooter from '../../components/lama/LamaFooter'
 import ScrollObserver from '../../components/ScrollObserver'
 import SiteMedia from '../../components/SiteMedia'
@@ -95,7 +95,7 @@ export default async function CaseStudyPage({ params }: { params: Promise<{ slug
 
   return (
     <div className={`${archivo.variable} ${sometype.variable} bg-ink min-h-screen`}>
-      <LamaNav gate={false} />
+      <MdNav band />
       <main>
         {/* ── HERO ── */}
         <header className="px-6 pb-10 pt-28 sm:px-10 sm:pt-36">

@@ -1,3 +1,4 @@
+import SiteNav from '../components/SiteNav'
 import ScrollObserver from '../components/ScrollObserver'
 import GradientHero from '../components/GradientHero'
 import SiteFooter from '../components/SiteFooter'
@@ -53,6 +54,7 @@ const services = [
 export default function ServicesPage() {
   return (
     <>
+      <SiteNav />
       <main className="ed-main">
         <GradientHero
           asciiHands

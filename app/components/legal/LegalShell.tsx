@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import LamaNav from '../lama/LamaNav'
+import MdNav from '../md-nav/MdNav'
 import LamaFooter from '../lama/LamaFooter'
 import { archivo, sometype } from '../lama/fonts'
 import { LEGAL_UPDATED } from '../../lib/legal-pages'
@@ -26,7 +26,7 @@ export default function LegalShell({ eyebrow, title, intro, draft, vol, children
 }) {
   return (
     <div className={`${archivo.variable} ${sometype.variable}`} style={{ background: '#0B0B0B', color: '#f9f4eb', fontFamily: SANS, WebkitFontSmoothing: 'antialiased', overflowX: 'hidden', minHeight: '100vh' }}>
-      <LamaNav gate={false} />
+      <MdNav band />
 
       <main style={{ padding: '140px clamp(16px, 4vw, 52px) clamp(64px, 10vh, 120px)' }}>
         <div style={{ maxWidth: 760, margin: '0 auto' }}>

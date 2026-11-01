@@ -280,6 +280,8 @@ body:has(.dbx) {
    create a scroll container, so position: sticky is preserved. Belt-and-braces
    against any element that tries to push the page wider than the viewport. */
 html { scroll-behavior: smooth; overflow-x: clip; max-width: 100%; }
+/* Lenis does the smoothing; native smooth scrolling on top of it re-animates each Lenis step and the page twitches (31 Oct 2026). */
+html.lenis { scroll-behavior: auto !important; }
 /* …BUT NOT ON THE DASHBOARD (15 Sep 2026, the shoot page: "when I click the
    editor dropdown the right side goes blank and the page is stuck"). Every
    Radix menu, select and dialog locks the page with `body { overflow: hidden }`

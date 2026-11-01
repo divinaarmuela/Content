@@ -1,0 +1,143 @@
+/* Campaign Shoots landing page (Oct 2026) — scoped under .cs. Cream + black, one red accent. */
+.cs {
+  --cs-cream: #efebe3;
+  --cs-ink: #0b0b0b;
+  --cs-paper: #f9f4eb;
+  --cs-red: #d7261e;
+  --cs-line-d: rgba(11, 11, 11, 0.16);
+  --cs-line-l: rgba(249, 244, 235, 0.16);
+  --cs-dim-d: rgba(11, 11, 11, 0.6);
+  --cs-dim-l: rgba(249, 244, 235, 0.6);
+  --cs-mono: var(--font-sometype), ui-monospace, monospace;
+  background: var(--cs-cream);
+  color: var(--cs-ink);
+  font-family: var(--font-archivo), system-ui, sans-serif;
+  overflow-x: clip;
+}
+.cs a { color: inherit; text-decoration: none; }
+.cs h1, .cs h2, .cs h3, .cs p, .cs ol, .cs ul, .cs figure { margin: 0; padding: 0; }
+.cs ol, .cs ul { list-style: none; }
+.cs-wrap { max-width: 1320px; margin: 0 auto; padding-left: clamp(16px, 4vw, 48px); padding-right: clamp(16px, 4vw, 48px); position: relative; }
+.cs-sec { padding-top: 96px; padding-bottom: 96px; }
+.cs-dark { background: var(--cs-ink); color: var(--cs-paper); }
+
+/* type */
+.cs-label { display: flex; flex-wrap: wrap; gap: 8px 28px; font-family: var(--cs-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--cs-dim-d); margin-bottom: 28px !important; }
+.cs-dark .cs-label { color: var(--cs-dim-l); }
+.cs-h1 { font-size: clamp(48px, 8.5vw, 124px); line-height: 0.9; letter-spacing: -0.045em; font-weight: 700; text-transform: uppercase; }
+.cs-h2 { font-size: clamp(32px, 4.6vw, 64px); line-height: 1; letter-spacing: -0.035em; font-weight: 500; margin-bottom: 48px !important; }
+.cs-h3 { font-size: 22px; font-weight: 500; letter-spacing: -0.01em; margin-bottom: 20px !important; }
+.cs-h3-big { font-size: clamp(28px, 3vw, 40px); line-height: 1.05; letter-spacing: -0.03em; }
+.cs-copy { display: grid; gap: 16px; max-width: 52ch; color: var(--cs-dim-l); font-size: 17px; line-height: 1.55; margin-bottom: 48px; }
+.cs-copy-light { color: var(--cs-dim-d); }
+.cs-dim { color: var(--cs-dim-d); }
+
+/* buttons */
+.cs-btn { display: inline-block; padding: 16px 22px; font-family: var(--cs-mono); font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; background: var(--cs-paper); color: var(--cs-ink) !important; border: 1px solid var(--cs-ink); transition: background 0.2s, color 0.2s; }
+.cs-btn-dark { background: var(--cs-ink); color: var(--cs-paper) !important; }
+.cs-btn:hover { background: var(--cs-red); border-color: var(--cs-red); color: #fff !important; }
+.cs-under { margin-top: 14px !important; font-size: 13px; color: var(--cs-dim-d); }
+
+/* top bar */
+.cs-top { display: flex; justify-content: space-between; align-items: center; padding-top: 22px; padding-bottom: 22px; border-bottom: 1px solid var(--cs-line-d); }
+.cs-top-brand, .cs-top-page { font-weight: 700; font-size: 15px; letter-spacing: -0.01em; text-transform: uppercase; }
+
+/* hero */
+.cs-hero { display: grid; grid-template-columns: 1.25fr 0.75fr; gap: 48px; align-items: end; padding-top: 48px; padding-bottom: 96px; }
+.cs-meta { display: flex; flex-wrap: wrap; gap: 6px 28px; font-family: var(--cs-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--cs-dim-d); margin-bottom: 40px !important; }
+.cs-hero .cs-h1 { margin-bottom: 32px; }
+.cs-sub { max-width: 46ch; font-size: 18px; line-height: 1.5; margin-bottom: 32px !important; }
+.cs-hero-media { position: relative; }
+.cs-hero-media video { display: block; width: 100%; aspect-ratio: 4 / 5; object-fit: cover; background: #ddd; }
+.cs-side {
+  position: absolute; right: 6px; top: 50%; transform: translateY(-50%) rotate(180deg); writing-mode: vertical-rl;
+  font-family: var(--cs-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--cs-dim-d);
+}
+
+/* two columns + numbered lists */
+.cs-two { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; }
+.cs-list li { display: flex; gap: 20px; padding: 18px 0; border-top: 1px solid var(--cs-line-d); font-size: 17px; line-height: 1.4; }
+.cs-dark .cs-list li { border-color: var(--cs-line-l); }
+.cs-list span { font-family: var(--cs-mono); font-size: 11px; padding-top: 4px; color: var(--cs-red); min-width: 18px; }
+
+/* problem stills */
+.cs-stills { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.cs-stills img, .cs-stills video { display: block; width: 100%; aspect-ratio: 1; object-fit: cover; }
+.cs-stills figcaption { font-family: var(--cs-mono); font-size: 11px; color: var(--cs-dim-l); padding-top: 10px; }
+
+/* how it works */
+.cs-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 40px 32px; margin-bottom: 48px; }
+.cs-steps li { border-top: 2px solid var(--cs-ink); padding-top: 16px; }
+.cs-num { font-family: var(--cs-mono); font-size: 12px; color: var(--cs-red); }
+.cs-steps h3 { font-size: 22px; font-weight: 500; margin: 14px 0 10px; }
+.cs-steps p { color: var(--cs-dim-d); font-size: 15px; line-height: 1.55; max-width: 38ch; }
+
+/* what you get */
+.cs-cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.cs-card { border: 1px solid var(--cs-line-l); padding: 24px; display: flex; flex-direction: column; gap: 10px; min-height: 260px; }
+.cs-card-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: auto; }
+.cs-big { font-size: 64px; line-height: 0.9; letter-spacing: -0.04em; font-weight: 500; }
+.cs-card h3 { font-size: 19px; font-weight: 500; }
+.cs-card p { color: var(--cs-dim-l); font-size: 14px; }
+.cs-tag { display: inline-block; font-family: var(--cs-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; background: var(--cs-red); color: #fff; padding: 4px 8px; }
+.cs-tag-ok { background: transparent; color: var(--cs-paper); border: 1px solid var(--cs-line-l); }
+
+/* proof */
+.cs .logowall { margin-bottom: 64px; }
+.cs-proof { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 48px; }
+.cs-result { background: var(--cs-ink); color: var(--cs-paper); padding: 28px; display: flex; flex-direction: column; justify-content: space-between; gap: 24px; min-height: 320px; }
+.cs-result .cs-label { color: var(--cs-dim-l); margin-bottom: 0 !important; align-items: center; }
+.cs-result p:last-child { color: var(--cs-dim-l); max-width: 36ch; }
+.cs-huge { font-size: clamp(72px, 9vw, 128px); line-height: 0.85; letter-spacing: -0.05em; font-weight: 500; }
+.cs-quote { background: var(--cs-paper); padding: 28px; display: grid; grid-template-columns: 0.7fr 1fr; gap: 24px; align-items: start; }
+.cs-quote-text { font-size: clamp(20px, 2vw, 26px); line-height: 1.25; letter-spacing: -0.01em; margin: 16px 0 20px !important; }
+.cs-slot { display: flex; align-items: center; justify-content: center; text-align: center; padding: 16px; background: rgba(11, 11, 11, 0.07); color: var(--cs-dim-d); font-family: var(--cs-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; }
+.cs-slot-34 { aspect-ratio: 3 / 4; }
+.cs-slot-45 { aspect-ratio: 4 / 5; }
+
+/* about */
+.cs-about-media { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; background: #ddd; }
+.cs-about { display: grid; grid-template-columns: 1.1fr 1fr; gap: 56px; align-items: start; }
+.cs-crew ol { columns: 2; column-gap: 32px; }
+.cs-crew li { display: flex; gap: 14px; padding: 10px 0; border-top: 1px solid var(--cs-line-d); font-size: 15px; break-inside: avoid; }
+.cs-crew span { font-family: var(--cs-mono); font-size: 11px; padding-top: 3px; color: var(--cs-red); }
+
+/* faq */
+.cs-faq details { border-top: 1px solid var(--cs-line-l); padding: 18px 0; }
+.cs-faq details:last-child { border-bottom: 1px solid var(--cs-line-l); }
+.cs-faq summary { cursor: pointer; list-style: none; display: flex; justify-content: space-between; gap: 16px; font-size: 18px; }
+.cs-faq summary::-webkit-details-marker { display: none; }
+.cs-faq summary::after { content: '+'; font-family: var(--cs-mono); color: var(--cs-red); }
+.cs-faq details[open] summary::after { content: '−'; }
+.cs-faq summary:focus-visible { outline: 1px solid var(--cs-paper); outline-offset: 4px; }
+.cs-faq p { color: var(--cs-dim-l); font-size: 15px; line-height: 1.55; margin-top: 12px !important; max-width: 52ch; }
+
+/* final */
+.cs-final .cs-h1 { margin-bottom: 40px; max-width: 12ch; }
+.cs-final-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 24px; }
+.cs-final-row .cs-under { margin: 0 !important; }
+
+@media (max-width: 860px) {
+  .cs-sec { padding-top: 64px; padding-bottom: 64px; }
+  .cs-hero, .cs-two, .cs-about, .cs-proof, .cs-quote { grid-template-columns: 1fr; }
+  .cs-side { display: none; }
+  .cs-stills, .cs-cards { grid-template-columns: 1fr 1fr; }
+  .cs-steps { grid-template-columns: 1fr; }
+  .cs-crew ol { columns: 1; }
+}
+
+/* media added to How it works + What you get */
+.cs-how { display: grid; grid-template-columns: 0.55fr 1fr; gap: 48px; align-items: start; margin-bottom: 48px; }
+.cs-how .cs-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-bottom: 0; }
+.cs-how-media { display: block; width: 100%; aspect-ratio: 4 / 5; object-fit: cover; background: #ddd; }
+.cs-card { padding: 0 0 24px; min-height: 0; }
+.cs-card > *:not(.cs-card-media) { margin-left: 24px; margin-right: 24px; }
+.cs-card-media { display: block; width: 100%; aspect-ratio: 4 / 5; object-fit: cover; margin-bottom: 14px; }
+.cs-card-top { margin-bottom: 6px; }
+@media (max-width: 860px) {
+  .cs-how { grid-template-columns: 1fr; }
+  .cs-how .cs-steps { grid-template-columns: 1fr; }
+}
+
+/* shared navbar on a dark band, same as the service pages */
+.cs-navband { position: relative; background: var(--cs-ink); height: 64px; }
