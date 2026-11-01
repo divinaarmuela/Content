@@ -71,6 +71,7 @@ export default function TodosPage() {
   // the clients I am on — a client's project shows everyone's to-dos for it (20 Oct 2026, todo-core)
   const { rows: links } = useTable<{ id: string; team_user_id: string; client_id: string }>('team_user_clients')
   const [projects, setProjects] = useState<Project[]>([])
+  const [projectsRead, setProjectsRead] = useState(false)
   // THIS PERSON'S STARRED PROJECTS (Abby, 29 Oct 2026: "can we add a Star? … so it comes up on top") — live, by their id
   const starBy = useMemo(() => ({ team_user_id: me?.id ?? '' }), [me?.id])
   const { rows: starRows } = useTable<{ id: string; team_user_id: string; project_id: string }>('todo_project_stars' as never, { by: starBy as never, enabled: !!me?.id })
@@ -123,8 +124,17 @@ export default function TodosPage() {
     if (projectLink) { setPlace(`project:${projectLink}`); store.set('mdm.todos.place', `project:${projectLink}`) }
     // a project reopens as it opened: by who is doing what
     if (saved?.startsWith('project:') || projectLink) setGroupBy('project')
-    fetch('/api/todos/projects', { cache: 'no-store' }).then(r => (r.ok ? r.json() : { projects: [] })).then(j => setProjects(j.projects ?? [])).catch(() => undefined)
+    fetch('/api/todos/projects', { cache: 'no-store' }).then(r => (r.ok ? r.json() : null)).then(j => { if (j) { setProjects(j.projects ?? []); setProjectsRead(true) } }).catch(() => undefined)
   }, [])
+  // A PROJECT THIS PERSON CANNOT SEE (made private since they last opened it — '- Team Operations', 30 Oct 2026) is
+  // not reopened as an empty page called 'Project': they land on My tasks instead (the owner, 2 Nov 2026)
+  useEffect(() => {
+    if (!projectsRead || !place.startsWith('project:')) return
+    if (!projects.some(p => `project:${p.id}` === place)) {
+      setPlace('mine'); store.set('mdm.todos.place', 'mine')
+      const g = store.get('mdm.todos.group'); setGroupBy(TODO_GROUP_BYS.some(x => x.key === g) ? (g as TodoGroupBy) : 'date')
+    }
+  }, [projectsRead, projects, place])
   const inbox = useTodoInbox()
   const project = place.startsWith('project:') ? projects.find(p => `project:${p.id}` === place) ?? null : null
   const projectId = place.startsWith('project:') ? place.slice(8) : null
