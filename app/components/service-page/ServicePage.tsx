@@ -22,11 +22,14 @@ export const SERVICE_LINKS = {
 type ServiceKey = keyof typeof SERVICE_LINKS
 
 /** A loop (`video`, served as `${video}.mp4` with `${video}.jpg` poster), a still (`image`), or neither (a labelled empty slot). */
-export type Media = { video?: string; image?: string; label: string }
+/** `device`: show the clip inside a drawn phone or laptop (for site recordings). */
+export type Media = { video?: string; image?: string; label: string; device?: 'phone' | 'laptop' }
 
 export type ServicePageProps = {
   current: ServiceKey
   hero: Media
+  /** a link shown under the hero, e.g. to the live site the hero film shows */
+  heroLink?: { href: string; label: string }
   lead: string
   body: string
   familiar?: { heading: string; pairs: [string, string][] }
@@ -41,6 +44,13 @@ export type ServicePageProps = {
 }
 
 function Slot({ media }: { media: Media }) {
+  if (media.device && media.video) {
+    return (
+      <div className={`dv dv-${media.device}`}>
+        <div className="dv-screen"><LazyLoop className="dv-video" src={media.video} label={media.label} /></div>
+      </div>
+    )
+  }
   if (media.video) {
     return (
       <LazyLoop className="cv-media" src={`${media.video}`} label={media.label} />
@@ -62,7 +72,8 @@ export default function ServicePage(p: ServicePageProps) {
         <div className="cv-wrap cv-head">
           <p className="cv-crumb"><a href="/services">Services</a> / ( {me.n} ) {me.name}</p>
           <h1 className="cv-h1">{me.name}</h1>
-          <div className="cv-hero"><Slot media={p.hero} /></div>
+          <div className={`cv-hero${p.hero.device ? ' cv-hero-device' : ''}`}><Slot media={p.hero} /></div>
+          {p.heroLink && <a className="cv-hero-link" href={p.heroLink.href} target="_blank" rel="noreferrer noopener">{p.heroLink.label} ↗</a>}
         </div>
 
         <section className="cv-wrap cv-sec">
@@ -140,12 +151,16 @@ export default function ServicePage(p: ServicePageProps) {
           <div className="cv-work">
             {p.work.map((w, i) => (
               <a key={w.name} href={w.href} className="cv-card" {...(/^https?:/.test(w.href) ? { target: '_blank', rel: 'noreferrer noopener' } : {})}>
-                <div className="cv-card-media"><Slot media={w.media} /></div>
+                <div className={`cv-card-media${w.media.device ? ' cv-card-device' : ''}`}><Slot media={w.media} /></div>
                 <span className="cv-card-cap">
                   <span>( {pad(i)} ) {w.name} ↗</span>
                   {w.builtSite && <span className="cv-card-site">Website we built · {new URL(w.href).hostname.replace(/^www\./, '')}</span>}
                   {w.desc && <span className="cv-card-desc">{w.desc}</span>}
-                  {w.stack && <span className="cv-card-stack">{w.stack.join(' · ')}</span>}
+                  {w.stack && (
+                    <span className="cv-stack" aria-label="Built with">
+                      {w.stack.map(t => <span key={t} className="cv-chip">{t}</span>)}
+                    </span>
+                  )}
                 </span>
               </a>
             ))}
