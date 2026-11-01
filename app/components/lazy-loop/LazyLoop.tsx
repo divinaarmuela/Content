@@ -8,7 +8,7 @@ import { useEffect, useRef } from 'react'
  * `autoPlay` makes browsers fetch the whole file on page load even with
  * preload="metadata" — a page of ten loops was downloading ~14 MB before
  * anyone scrolled. Here the poster shows first; the video source is attached
- * only when the element comes within 300px of the viewport, and the clip
+ * only when a third of it is on screen, and the clip
  * pauses again when it leaves. Reduced-motion visitors keep the poster.
  *
  * `src` is the path without extension: `${src}.mp4` + `${src}.jpg` poster.
@@ -24,12 +24,13 @@ export default function LazyLoop({ src, className, label }: { src: string; class
       ([e]) => {
         if (e.isIntersecting) {
           if (!v.src) v.src = `${src}.mp4`
+          else v.currentTime = 0 // every time it comes into view it plays from the start
           v.play().catch(() => {})
         } else if (v.src) {
           v.pause()
         }
       },
-      { rootMargin: '300px 0px' },
+      { rootMargin: '0px', threshold: 0.35 },
     )
     io.observe(v)
     return () => io.disconnect()
