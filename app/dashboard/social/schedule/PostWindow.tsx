@@ -581,8 +581,10 @@ export default function PostWindow({
   /* ── what is wrong with the draft on screen — the same rule the server runs ── */
 
   const composition = useMemo(
-    () => (post && editable ? compositionProblems(post, accountRefs, nowMs) : []),
-    [post, editable, accountRefs, nowMs])
+    // a STORY SET is made into one Story per file on booking, so 'one item per Story' and 'no mixing' do not apply (2 Nov 2026)
+    () => (post && editable ? compositionProblems(post, accountRefs, nowMs) : [])
+      .filter(p => !(storyPlan?.ok && /Story takes exactly one|cannot mix photos and video/i.test(p))),
+    [post, editable, accountRefs, nowMs, storyPlan])
   const igCounter = editable ? instagramCounter(working, accountRefs) : null
   const igChoices = editable ? instagramChoices(working, accountRefs) : null
   const draftTimeHint = editable ? timeHint(state.scheduledFor, nowMs, false) : null
@@ -1688,7 +1690,7 @@ export default function PostWindow({
             {storyPlan?.ok && (
               <div className="flex flex-wrap items-center gap-2 rounded-inner border border-accent-blue/40 bg-tint-blue px-3 py-2 text-[12px]" data-story-split>
                 <span className="min-w-0 flex-1">
-                  <strong>{storyPlan.parts.length} pictures in a Story.</strong> Instagram takes one per Story, so this becomes {storyPlan.parts.length} Stories in this order
+                  <strong>{storyPlan.parts.length} files in a Story.</strong> Instagram takes one per Story, so this becomes {storyPlan.parts.length} Stories in this order
                   .
                   {post?.stage === 'ready' ? ' Each keeps this approval. Story 1 is booked in; each next one goes out the moment the one before it is live, so the order never swaps.' : ' Each then goes through the quality check and the client; once approved, each goes out right after the one before it is live.'}
                 </span>

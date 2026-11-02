@@ -30,7 +30,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       const nameOf = (uid: string | null | undefined) => (uid ? team.find(t => t.id === uid)?.name ?? null : null)
       // the last time it left the schedule, and whether it was booked again after
       const ev = [...events].sort((a, b) => a.rev - b.rev)
-      const lastOff = [...ev].reverse().find(e => e.from === 'booked' && (e.to === 'draft' || e.to === 'ready'))
+      // taken off by a PERSON (Edit, Take off the schedule) — a booking the channel refused is not 'was booked' (2 Nov 2026)
+      const lastOff = [...ev].reverse().find(e => e.from === 'booked' && (e.action === 'edit_booked' || e.action === 'unbook'))
       const bookedAfter = lastOff ? ev.some(e => e.rev > lastOff.rev && e.to === 'booked') : true
       const offVersion = lastOff ? versions.find(v => v.n === (lastOff.version ?? post.sent_version)) : null
       const wasBooked = lastOff && !bookedAfter && offVersion && ['draft', 'ready', 'cancelled'].includes(post.stage)
