@@ -22,8 +22,10 @@ describe('validatePost', () => {
   })
 
   it('rejects mixing images and video where the platform forbids it', () => {
-    const issues = validatePost({ caption: 'a', media: [...img(2), ...vid(1)], platforms: ['instagram'] })
+    // Facebook: up to 10 images OR one video (Zernio's guide); Instagram makes several items a carousel, mixed or not
+    const issues = validatePost({ caption: 'a', media: [...img(2), ...vid(1)], platforms: ['facebook'] })
     expect(issues.some(i => /cannot mix/.test(i.problem))).toBe(true)
+    expect(validatePost({ caption: 'a', media: [...img(2), ...vid(1)], platforms: ['instagram'] })).toEqual([])
   })
 
   it('enforces per-platform image counts', () => {
@@ -109,10 +111,18 @@ describe('post kinds — reels, stories, carousels', () => {
 
   it('still refuses that mix in an ordinary post', () => {
     const issues = validatePost({
-      caption: 'a', media: [...img(4), ...vid(2)], platforms: ['instagram'],
-      kinds: { instagram: 'feed' },
+      caption: 'a', media: [...img(4), ...vid(2)], platforms: ['facebook'],
+      kinds: { facebook: 'feed' },
     })
     expect(issues.some(i => /cannot mix/.test(i.problem))).toBe(true)
+  })
+
+  // Renee, 2 Nov 2026: two videos on Instagram showed as a Carousel on screen and were refused 'instagram: 2 videos;
+  // instagram allows 1' — the post carried no kind (or Feed), and several items are a carousel on Instagram
+  it('two videos on Instagram are a carousel, whatever kind was saved; on Facebook they are still one too many', () => {
+    expect(validatePost({ caption: 'a', media: vid(2), platforms: ['instagram'] })).toEqual([])
+    expect(validatePost({ caption: 'a', media: vid(2), platforms: ['instagram'], kinds: { instagram: 'feed' } })).toEqual([])
+    expect(validatePost({ caption: 'a', media: vid(2), platforms: ['facebook'] }).map(i => i.problem).join(' ')).toMatch(/2 videos; facebook allows 1/)
   })
 
   it('says so when the platform has no carousel at all', () => {

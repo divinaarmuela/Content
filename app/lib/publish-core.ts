@@ -78,7 +78,8 @@ export const PLATFORM_RULES: Record<Platform, {
   tiktok:    { captionMax: 2200,  images: 35, videos: 1, documents: 0, mixed: false, requiresMedia: true,  carousel: 35, mixedCarousel: false, stories: false, shortForm: true  },
   twitter:   { captionMax: 280,   images: 4,  videos: 1, documents: 0, mixed: false, requiresMedia: false, carousel: 4,  mixedCarousel: false, stories: false, shortForm: false },
   linkedin:  { captionMax: 3000,  images: 20, videos: 1, documents: 1, mixed: false, requiresMedia: false, carousel: 20, mixedCarousel: false, stories: false, shortForm: false },
-  facebook:  { captionMax: 63206, images: 10, videos: 1, documents: 0, mixed: false, requiresMedia: false, carousel: 10, mixedCarousel: true,  stories: true,  shortForm: true  },
+  // Facebook's multi-item post is up to 10 images OR one video, never mixed (Zernio's Facebook guide, read 2 Nov 2026)
+  facebook:  { captionMax: 63206, images: 10, videos: 1, documents: 0, mixed: false, requiresMedia: false, carousel: 10, mixedCarousel: false, stories: true,  shortForm: true  },
   threads:   { captionMax: 500,   images: 10, videos: 1, documents: 0, mixed: false, requiresMedia: false, carousel: 10, mixedCarousel: true,  stories: false, shortForm: false },
   youtube:   { captionMax: 5000,  images: 0,  videos: 1, documents: 0, mixed: false, requiresMedia: true,  carousel: 0,  mixedCarousel: false, stories: false, shortForm: true  },
   pinterest: { captionMax: 500,   images: 1,  videos: 1, documents: 0, mixed: false, requiresMedia: true,  carousel: 0,  mixedCarousel: false, stories: false, shortForm: false },
@@ -254,9 +255,15 @@ export function validatePost(input: {
     if (r.requiresMedia && media.length === 0) {
       issues.push({ platform: p, problem: `${p} requires at least one image or video` })
     }
+    // WHAT THIS POST IS ON THIS NETWORK: the kind picked, else what Automatic makes of it — and several items are a
+    // carousel whatever was picked, because that is what the network receives (Zernio: a post with more than one
+    // media item is a carousel). Renee, 2 Nov 2026: two videos on Instagram showed as a Carousel and were refused
+    // with 'instagram: 2 videos; instagram allows 1' — the post carried no kind, so it was measured as a single post.
+    const picked = input.kinds?.[p] ?? autoKindFor(p as Platform, media)
+    const kind: PostKind = picked === 'feed' && media.length > 1 && r.carousel > 0 ? 'carousel' : picked
     // a carousel is measured as a carousel: one ceiling for the whole set,
     // and — where the platform allows it — no objection to mixing kinds
-    const asCarousel = input.kinds?.[p] === 'carousel' && r.carousel > 0
+    const asCarousel = kind === 'carousel' && r.carousel > 0
     const imageMax = asCarousel ? r.carousel : r.images
     const videoMax = asCarousel && r.mixedCarousel ? r.carousel : r.videos
     if (images > imageMax) {
@@ -279,7 +286,6 @@ export function validatePost(input: {
 
     // intent-specific rules — a Reel is a single vertical video, a Story is a
     // single item, and a carousel needs more than one
-    const kind = input.kinds?.[p]
     if (kind === 'reel') {
       if (videos !== 1) {
         issues.push({ platform: p, problem: 'A Reel needs exactly one video' })
