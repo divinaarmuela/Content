@@ -28,6 +28,20 @@ function mergeDaily(raws: unknown[]): { dailyData: { date: string; metrics: Reco
   }
 }
 
+/** Every post published between two days with its numbers (Zernio's /analytics, 100 a page, at most 10 pages). */
+async function postsBetween(fromDate: string, toDate: string): Promise<{ posts: unknown[] } | null> {
+  const publisher = getPublisher()
+  const posts: unknown[] = []
+  for (let page = 1; page <= 10; page++) {
+    const res = await publisher.analyticsPage({ fromDate, toDate, page, limit: 100 }).catch(() => null) as
+      { posts?: unknown[]; pagination?: { pages?: number } } | null
+    if (!res) return page === 1 ? null : { posts }
+    posts.push(...(res.posts ?? []))
+    if (page >= Number(res.pagination?.pages ?? 1) || (res.posts ?? []).length === 0) break
+  }
+  return { posts }
+}
+
 /**
  * Cross-account analytics for the whole agency, or one client.
  *
@@ -38,7 +52,11 @@ export async function GET(req: Request) {
   return withRequestCache(async () => {
   try {
     await requireRole('scheduler')
-    const clientId = new URL(req.url).searchParams.get('clientId')
+    const url = new URL(req.url)
+    const clientId = url.searchParams.get('clientId')
+    // A WEEK (2 Nov 2026): every post published in those days, page by page — the default list is only the newest
+    const day = (v: string | null) => (v && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null)
+    const from = day(url.searchParams.get('from')), to = day(url.searchParams.get('to'))
 
     const rows = await table<SocialAccount>('social_accounts').list({
       by: { active: true },
@@ -60,7 +78,7 @@ export async function GET(req: Request) {
         ? Promise.all(providerIds.map(id => publisher.dailyMetrics(id))).then(mergeDaily)
         : publisher.dailyMetrics(),
       publisher.followerStats(),
-      publisher.postAnalytics(),
+      from && to ? postsBetween(from, to) : publisher.postAnalytics(),
       clientId
         ? Promise.all(providerIds.map(id => publisher.bestTimes(id)))
             .then(list => ({ sources: list.filter(Boolean) }))

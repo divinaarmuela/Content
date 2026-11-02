@@ -15,6 +15,7 @@ import EmptyState from '../../EmptyState'
 import { CAL_TZ } from '@/app/lib/gcal-core'
 import { zoneAbbrev, zoneLabel } from '@/app/lib/timezone-core'
 import PageTitle from '../../ui/PageTitle'
+import { ANALYTICS_PERIODS, inRange, periodRange, rangeWords, type AnalyticsPeriod } from '@/app/lib/analytics-period-core'
 
 type Account = {
   id: string; client_id: string | null; platform: string
@@ -138,6 +139,9 @@ export default function SocialAnalyticsPage() {
     bestTimes?: unknown
   } | null>(null)
   const [clientId, setClientId] = useState<string>('all')
+  // WEEKLY (the owner, 2 Nov 2026): this week or last week, Monday to Sunday in Melbourne; all time as before
+  const [period, setPeriod] = useState<AnalyticsPeriod>('all')
+  const range = useMemo(() => periodRange(period, new Date().toLocaleDateString('en-CA', { timeZone: CAL_TZ })), [period])
   const [failed, setFailed] = useState<string | null>(null)
 
   // refetched per client: daily and best-times come from the provider already
@@ -145,7 +149,11 @@ export default function SocialAnalyticsPage() {
   const load = useCallback(async () => {
     setFailed(null)
     try {
-      const res = await fetch(`/api/social/analytics${clientId === 'all' ? '' : `?clientId=${encodeURIComponent(clientId)}`}`)
+      const q = new URLSearchParams()
+      if (clientId !== 'all') q.set('clientId', clientId)
+      if (range) { q.set('from', range.from); q.set('to', range.to) }
+      setData(null)
+      const res = await fetch(`/api/social/analytics${q.toString() ? `?${q}` : ''}`)
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? 'Could not load analytics')
       setData(json)
@@ -156,7 +164,7 @@ export default function SocialAnalyticsPage() {
       setFailed(e instanceof Error ? e.message : 'unknown')
       toast.error('We couldn’t load the numbers. Try again in a moment.')
     }
-  }, [clientId])
+  }, [clientId, range])
 
   useEffect(() => { load() }, [load])
 
@@ -168,7 +176,8 @@ export default function SocialAnalyticsPage() {
     const ids = new Set(accounts.map(a => a.provider_account_id))
 
     const posts = (data.analytics?.posts ?? []).filter(p =>
-      clientId === 'all' || p.platforms?.some(x => x.accountId && ids.has(x.accountId)))
+      (clientId === 'all' || p.platforms?.some(x => x.accountId && ids.has(x.accountId)))
+      && inRange(p.publishedAt ? new Date(p.publishedAt).toLocaleDateString('en-CA', { timeZone: CAL_TZ }) : null, range))
 
     const totals: Record<string, number> = {}
     for (const p of posts) {
@@ -183,7 +192,7 @@ export default function SocialAnalyticsPage() {
       .reduce((sum, f) => sum + (f.currentFollowers ?? 0), 0)
 
     return { accounts, posts, totals, followers }
-  }, [data, clientId])
+  }, [data, clientId, range])
 
   if (failed && !data) {
     return (
@@ -206,7 +215,7 @@ export default function SocialAnalyticsPage() {
     )
   }
 
-  const daily = data.daily?.dailyData ?? []
+  const daily = (data.daily?.dailyData ?? []).filter(d => inRange(String(d.date).slice(0, 10), range))
   const bestSlots = parseBestTimes(data.bestTimes)
 
   return (
@@ -225,6 +234,13 @@ export default function SocialAnalyticsPage() {
                 {data.clients.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
               </SelectContent>
             </Select>
+            <Select value={period} onValueChange={v => setPeriod(v as AnalyticsPeriod)}>
+              <SelectTrigger className="w-40" aria-label="Which days"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {ANALYTICS_PERIODS.map(p => <SelectItem key={p.key} value={p.key}>{p.label}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            {range && <span className="font-mono text-secondary-13 tabular-nums text-muted-foreground">{rangeWords(range)}</span>}
           </div>
         </>}
       />
