@@ -443,10 +443,19 @@ export default function PostWindow({
   // a .mov original: Cloudflare's preview of it, or its still and "Preview being made" — never a black
   // box. What is SHOWN only; the slides that are published are untouched (1 Oct 2026)
   const shownFor = useShownVideos(shown.slides)
+  // THE CHOSEN COVER IS WHAT THE PREVIEW SHOWS before play (the owner, 2 Nov 2026: Manal changed a cover, it was saved
+  // and booked, but the preview still showed the video's own first frame — "it still shows the old one")
+  const chosenCover = currentCover(shown.perChannel, chosen.map(a => ({ id: a.id, platform: String(a.platform) })), null)?.url ?? null
   const videoView = (s: { url: string; type?: string; name?: string } | null, label: string, className: string, compact = false) => {
     if (!s || s.type !== 'video') return null
     const v = shownFor(s.url)
-    return v.kind === 'file' ? null : <ShownVideoBox shown={v} label={label} className={className} compact={compact} />
+    const isThis = shown.slides[0]?.url === s.url && !!chosenCover
+    if (v.kind === 'file') {
+      return isThis && !compact
+        ? <video src={playable(s.url)} poster={chosenCover!} controls muted playsInline preload="none" aria-label={label} className={cn('bg-ink object-contain', className)} />
+        : null
+    }
+    return <ShownVideoBox shown={isThis ? { ...v, poster: chosenCover } : v} label={label} className={className} compact={compact} />
   }
 
   /* the lists only the network knows — playlists, pages, privacy levels, today's cap. Drafts only. */
