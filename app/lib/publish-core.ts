@@ -267,10 +267,13 @@ export function validatePost(input: {
     const imageMax = asCarousel ? r.carousel : r.images
     const videoMax = asCarousel && r.mixedCarousel ? r.carousel : r.videos
     if (images > imageMax) {
-      issues.push({ platform: p, problem: `${images} images; ${p} allows ${imageMax}` })
+      // SAID AS WHAT TO DO, not as a limit (the owner, 2 Nov 2026: 'make sure this thing mentions in the popup')
+      issues.push({ platform: p, problem: `${networkName(p)} takes up to ${imageMax} photo${imageMax === 1 ? '' : 's'} in one post — this has ${images}. Take some out, or make a second post.` })
     }
     if (videos > videoMax) {
-      issues.push({ platform: p, problem: `${videos} videos; ${p} allows ${videoMax}` })
+      issues.push({ platform: p, problem: videoMax === 1
+        ? `${networkName(p)} takes one video per post — this has ${videos}. Only Instagram takes several videos as a carousel: make a post for each video on ${networkName(p)}, or take ${networkName(p)} off this one.`
+        : `${networkName(p)} takes up to ${videoMax} videos in one post — this has ${videos}. Take some out, or make a second post.` })
     }
     if (docs > r.documents) {
       issues.push({
@@ -281,7 +284,7 @@ export function validatePost(input: {
       })
     }
     if (!r.mixed && !(asCarousel && r.mixedCarousel) && images > 0 && videos > 0) {
-      issues.push({ platform: p, problem: `${p} cannot mix images and video in one post` })
+      issues.push({ platform: p, problem: `${networkName(p)} cannot mix photos and video in one post — make one post with the photos and one with the video, or take ${networkName(p)} off this one.` })
     }
 
     // intent-specific rules — a Reel is a single vertical video, a Story is a

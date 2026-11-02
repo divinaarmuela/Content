@@ -1432,6 +1432,13 @@ export default function PostWindow({
              (decision 2; audit W8). ── */}
         <div className="sticky bottom-0 z-20 mt-auto flex flex-col gap-2 border-t border-border bg-popover p-3.5 lg:flex-row lg:items-center lg:gap-4 lg:px-4 lg:py-2">
           <div ref={messagesRef} className="flex flex-col gap-2 scroll-mt-4 lg:min-w-0 lg:max-w-[560px] lg:flex-1 lg:gap-1.5">
+            {/* SEVERAL VIDEOS IN ONE POST: who takes them, said before anyone presses anything (the owner, 2 Nov 2026) */}
+            {beforeBooking && !storyPlan?.ok && shown.slides.filter(s => s.type === 'video').length > 1 && (
+              <p className="rounded-inner border border-border bg-muted/40 px-3 py-1.5 text-[12px] leading-snug" data-many-videos>
+                <strong>{shown.slides.filter(s => s.type === 'video').length} videos in one post:</strong> Instagram posts them as a carousel (up to 10, photos and videos mixed).
+                Facebook, TikTok, LinkedIn, X and YouTube take one video per post — make a post for each video there.
+              </p>
+            )}
             {/* SEVERAL PICTURES AS STORIES (Renee, 2 Nov 2026): one Story post each, in slide order, waiting for the one before */}
             {storyPlan?.ok && (
               <div className="flex flex-wrap items-center gap-2 rounded-inner border border-accent-blue/40 bg-tint-blue px-3 py-2 text-[12px]" data-story-split>

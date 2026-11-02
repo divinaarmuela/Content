@@ -30,7 +30,7 @@ describe('validatePost', () => {
 
   it('enforces per-platform image counts', () => {
     expect(validatePost({ caption: 'a', media: img(5), platforms: ['twitter'] })[0].problem)
-      .toMatch(/5 images; twitter allows 4/)
+      .toMatch(/X takes up to 4 photos in one post — this has 5/)
     // the same media is fine on TikTok
     expect(validatePost({ caption: 'a', media: img(5), platforms: ['tiktok'] })).toEqual([])
   })
@@ -122,7 +122,7 @@ describe('post kinds — reels, stories, carousels', () => {
   it('two videos on Instagram are a carousel, whatever kind was saved; on Facebook they are still one too many', () => {
     expect(validatePost({ caption: 'a', media: vid(2), platforms: ['instagram'] })).toEqual([])
     expect(validatePost({ caption: 'a', media: vid(2), platforms: ['instagram'], kinds: { instagram: 'feed' } })).toEqual([])
-    expect(validatePost({ caption: 'a', media: vid(2), platforms: ['facebook'] }).map(i => i.problem).join(' ')).toMatch(/2 videos; facebook allows 1/)
+    expect(validatePost({ caption: 'a', media: vid(2), platforms: ['facebook'] }).map(i => i.problem).join(' ')).toMatch(/Facebook takes one video per post — this has 2/)
   })
 
   it('says so when the platform has no carousel at all', () => {
@@ -136,7 +136,7 @@ describe('post kinds — reels, stories, carousels', () => {
     const issues = validatePost({
       caption: 'a', media: vid(3), platforms: ['linkedin'], kinds: { linkedin: 'carousel' },
     })
-    expect(issues.some(i => /3 videos; linkedin allows 1/.test(i.problem))).toBe(true)
+    expect(issues.some(i => /LinkedIn takes one video per post — this has 3/.test(i.problem))).toBe(true)
   })
 
   it('leaves ordinary feed posts unaffected', () => {
@@ -546,7 +546,7 @@ describe('a channel with its own media and words', () => {
     expect(validatePost({
       caption: 'a', media: img(1), platforms: ['twitter'],
       mediaByPlatform: { twitter: img(5) },
-    })[0].problem).toMatch(/5 images/)
+    })[0].problem).toMatch(/this has 5/)
   })
 })
 
