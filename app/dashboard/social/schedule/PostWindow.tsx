@@ -678,7 +678,7 @@ export default function PostWindow({
     setBusy(false)
     const outcome: PostWindowOutcome = {
       postId: made.postIds[0] ?? null, itemId, words, stage: post.stage === 'ready' || schedule ? 'booked' : 'draft',
-      at: post.scheduled_for, channels: [...post.channels], createdPostId: null, link: null,
+      at: schedule?.at ?? post.scheduled_for, channels: [...post.channels], createdPostId: null, link: null,
     }
     if (onDone) onDone(outcome)
     else setReply({ action: 'save', tone: 'ok', text: words, problems: [] })
@@ -1458,7 +1458,7 @@ export default function PostWindow({
             <PostNotes slides={shown.slides} notes={notes} version={noteVersionOf(post)} onAdd={addNote} />
           )
           const previewPane = (frame?: string, intro?: string) => (
-            <PostPreviewPane playable={playable} videoFor={(url, label) => videoView({ url, type: 'video' }, label, 'h-full w-full')} previews={preview.networks} intro={intro}
+            <PostPreviewPane playable={playable} videoFor={(url, label) => videoView({ url, type: 'video' }, label, 'h-full w-full')} previews={storyPlan?.ok ? preview.networks.map(n => ({ ...n, problems: (n.problems ?? []).filter(x => !/Story takes exactly one|cannot mix photos and video/i.test(x)) })) : preview.networks} intro={intro}
               frameClassName={frame}
               empty="Pick a channel and the post appears here as that network will show it." />
           )
