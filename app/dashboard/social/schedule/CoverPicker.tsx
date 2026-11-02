@@ -102,8 +102,18 @@ export default function CoverPicker({
     return () => { cancelled = true; el.src = ''; video.current = null }
   }, [mode, videoUrl, playable])
 
-  /** seek to where the slider is and show that frame; a drag that outruns the seeks settles on the last place asked for */
+  /** SCRUBBING WITHOUT LAG (the owner, 2 Nov 2026: 'choosing frames is laggy'): the slider moves a VISIBLE player that
+   *  loads straight from storage, so the frame shows at once — it used to seek a hidden copy read through our own
+   *  server and draw a still on every move. Only 'Use this frame' draws the still, once. */
+  const live = useRef<HTMLVideoElement | null>(null)
   const scrubTo = (at: number) => {
+    const v = live.current
+    if (v) {
+      setScrub(cur => ({ at, still: cur?.still ?? '' }))
+      const fast = (v as HTMLVideoElement & { fastSeek?: (t: number) => void }).fastSeek
+      if (typeof fast === 'function') fast.call(v, at); else v.currentTime = at
+      return
+    }
     scrubWant.current = at
     if (scrubRun.current) return
     scrubRun.current = true
@@ -279,16 +289,18 @@ export default function CoverPicker({
             <input type="range" min={0} max={Math.max(0.1, Math.round(duration * 10) / 10)} step={0.1} value={scrub?.at ?? 0}
               onChange={e => scrubTo(Number(e.target.value))} aria-label="Scroll through the clip" className="w-full accent-[var(--dbx-blue)]" />
           </label>
+          <div className="flex items-center gap-3">
+              <video ref={live} src={playable(videoUrl)} muted playsInline preload="auto" aria-label="The frame at the slider"
+                className="h-[150px] w-auto rounded-tile border border-border bg-black" />
           {scrub && (
-            <div className="flex items-center gap-3">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={scrub.still} alt={`Frame at ${scrub.at.toFixed(1)} seconds`} className="h-[90px] w-auto rounded-tile border border-border" />
+            <>
               <button type="button" disabled={busy !== null && busy !== 'Reading the video'} onClick={() => void useFrame(scrub.at)}
                 className="min-h-11 rounded-full bg-foreground px-4 text-[12px] font-semibold text-background hover:bg-foreground/90 disabled:opacity-50">
                 Use this frame · {scrub.at.toFixed(1)}s
               </button>
-            </div>
+            </>
           )}
+          </div>
         </div>
       )}
 
