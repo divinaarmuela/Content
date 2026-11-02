@@ -7,8 +7,8 @@ describe('the cover picker scrolls through the clip', () => {
   it('a slider over the whole clip, the frame it lands on, and one button to use it', () => {
     expect(s).toContain('setDuration(el.duration)')
     expect(s).toContain('onChange={e => scrubTo(Number(e.target.value))}')
-    expect(s).toContain('Use this frame · {scrub.at.toFixed(1)}s')
-    expect(s).toContain('onClick={() => void useFrame(scrub.at)}')
+    expect(s).toContain('Use this frame · ${scrub.at.toFixed(1)}s')
+    expect(s).toContain('onClick={() => scrub && void useFrame(scrub.at)}')
   })
   it('a fast drag settles on the last place asked for, never a pile of seeks', () => {
     expect(s).toContain('scrubWant.current = at')
