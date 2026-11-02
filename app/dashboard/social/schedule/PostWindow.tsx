@@ -694,6 +694,35 @@ export default function PostWindow({
   // a draft's cover is kept once the draft is saved: the note says so then
   useEffect(() => { if (!state.dirty && coverNote?.startsWith('Cover set')) setCoverNote('Cover saved') }, [state.dirty, coverNote])
   const mayRecover = !!saved && saved.stage === 'booked' && !!me && ['super_admin', 'account_manager', 'scheduler', 'tester'].includes(me.role)
+  /** a booked post's CAPTION changed the same way (Renee, 2 Nov 2026: 'edit time and caption without making a new version' —
+   *  Manal: 'version tracked'): it stays booked for the same time, and the change is a saved version and a Log line */
+  const [quickCaption, setQuickCaption] = useState<{ caption: string; per: Record<string, string> } | null>(null)
+  const changeBookedCaption = async (caption: string, per: Record<string, string>) => {
+    if (!saved || !id || busy) return
+    const at = saved.scheduled_for
+    if (!at || Date.parse(at) - Date.now() < 15 * 60_000) { setReply({ action: 'save', tone: 'error', text: 'It goes out in under 15 minutes — too close to change the caption now.', problems: [] }); return }
+    setBusy(true); setReply(null)
+    const off = await api.act(id, { action: 'edit_booked', expect_rev: saved.rev, confirm: true, note: 'Changing the caption' })
+    if (!off.ok || !off.post) { setBusy(false); setReply({ action: 'save', tone: 'error', text: off.ok ? 'It could not be taken off to change the caption' : off.reason, problems: [] }); return }
+    const p = off.post
+    const perChannel = { ...p.per_channel }
+    for (const [ch, words] of Object.entries(per)) perChannel[ch] = { ...(perChannel[ch] ?? {}), caption: words }
+    const s1 = await api.save(id, { slides: p.slides, caption, channels: p.channels, per_channel: perChannel, scheduled_for: at,
+      timezone: p.timezone ?? tz ?? 'Australia/Melbourne', ...(p.automation ? { automation: p.automation } : {}), expect_rev: p.rev } as never)
+    const rev = s1.ok ? readPostState(s1.row)?.rev : null
+    const back = rev == null ? null : await api.act(id, { action: 'schedule_direct', expect_rev: rev, scheduled_for: at, note: 'Caption changed — booked back in for the same time' })
+    setBusy(false)
+    if (!back?.ok) {
+      const why = !s1.ok ? s1.reason : back && !back.ok ? back.reason : 'it could not be booked back in'
+      setReply({ action: 'save', tone: 'error', text: `The caption was not changed and the post is now a draft: ${why}. Book it again from here.`, problems: [] })
+      if (back && !back.ok && back.post) { loadedKey.current = null; setAnswered(back.post) }
+      return
+    }
+    if (back.post) { loadedKey.current = null; setAnswered(back.post) }
+    setQuickCaption(null)
+    setReply({ action: 'save', tone: 'ok', text: `Caption changed — still booked for ${melb(at)}. The old caption is in Versions.`, problems: [] })
+  }
+
   const changeBookedCover = async (url: string | null, ids: string[] | null) => {
     if (!saved || !id || busy) return
     const at = saved.scheduled_for
@@ -1600,7 +1629,39 @@ export default function PostWindow({
                 <div data-window-write data-window-scroll className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto px-4 py-3">
                   {open === 'caption' && (
                     <>
-                      {captionBox(10, true)}
+                      {mayRecover && !quickCaption && (
+                        <button type="button" disabled={busy} data-quick-caption
+                          onClick={() => setQuickCaption({ caption: shown.caption ?? '', per: Object.fromEntries(chosen.filter(a => (shown.perChannel[a.id]?.caption ?? '').trim()).map(a => [a.id, String(shown.perChannel[a.id]?.caption ?? '')])) })}
+                          className="self-start rounded-full bg-foreground px-4 py-2 text-[12px] font-semibold text-background disabled:opacity-60">
+                          Edit caption — stays booked
+                        </button>
+                      )}
+                      {quickCaption && (
+                        <div className="flex flex-col gap-2 rounded-inner border border-accent-blue/40 bg-tint-blue p-3" data-quick-caption-box>
+                          <p className="text-[12px]">Change the words and Save — the post stays booked for {melb(saved?.scheduled_for)}. The caption it had now is kept in <strong>Versions</strong>.</p>
+                          {Object.keys(quickCaption.per).length === 0 || (shown.caption ?? '').trim() ? (
+                            <label className="flex flex-col gap-1 text-[12px] font-semibold">Caption (every channel without its own)
+                              <textarea rows={6} value={quickCaption.caption} onChange={e => setQuickCaption({ ...quickCaption, caption: e.target.value })}
+                                className="rounded-inner border border-border bg-background p-2 text-[13px] font-normal" />
+                            </label>
+                          ) : null}
+                          {Object.entries(quickCaption.per).map(([ch, words]) => {
+                            const a = chosen.find(x => x.id === ch)
+                            return (
+                              <label key={ch} className="flex flex-col gap-1 text-[12px] font-semibold">{a ? `${String(a.platform)[0].toUpperCase()}${String(a.platform).slice(1)} @${a.username ?? a.name ?? ''}` : 'Channel'}
+                                <textarea rows={5} value={words} onChange={e => setQuickCaption({ ...quickCaption, per: { ...quickCaption.per, [ch]: e.target.value } })}
+                                  className="rounded-inner border border-border bg-background p-2 text-[13px] font-normal" />
+                              </label>
+                            )
+                          })}
+                          <div className="flex gap-2">
+                            <button type="button" disabled={busy} onClick={() => void changeBookedCaption(quickCaption.caption, quickCaption.per)}
+                              className="min-h-10 rounded-full bg-foreground px-4 text-[12px] font-semibold text-background disabled:opacity-60">{busy ? 'Saving…' : 'Save — keep it booked'}</button>
+                            <button type="button" disabled={busy} onClick={() => setQuickCaption(null)} className="min-h-10 rounded-full border border-border px-4 text-[12px] font-semibold">Never mind</button>
+                          </div>
+                        </div>
+                      )}
+                      {!quickCaption && captionBox(10, true)}
                       {ticks}
                       {chosen.length > 1 && !allStory && (
                         <button type="button" onClick={() => setSection('channels')} className="self-start text-[12px] font-semibold text-muted-foreground underline underline-offset-4 hover:text-foreground">

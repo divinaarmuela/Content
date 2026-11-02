@@ -154,19 +154,20 @@ export default function NewPostSources({
       const landed = await done
       // by URL, so a file the queue effect above already picked up is
       // REPLACED with this measured copy rather than listed twice
+      // IN THE ORDER THEY WERE PICKED, not the order they finished uploading (the live Story test, 2 Nov 2026: three
+      // files picked 1, 2, 3 landed 2, 3, 1 — a small picture finishes before a video — and Stories post in this order)
       setChosen(prev => {
-        const byUrl = new Map(prev.map(s => [s.url, s] as const))
-        for (const { file, url } of landed) {
-          byUrl.set(url, {
-            url,
-            name: file.name,
-            type: file.type.startsWith('video/') ? 'video' as const : slideTypeFromUrl(url),
-            bytes: file.size,
-            source: 'upload' as const,
-            ...(byName.get(file.name + file.size) ?? {}),
-          })
-        }
-        return [...byUrl.values()]
+        const mine = new Set(landed.map(l => l.url))
+        const before = prev.filter(s => !mine.has(s.url))
+        const fresh = landed.map(({ file, url }) => ({
+          url,
+          name: file.name,
+          type: file.type.startsWith('video/') ? 'video' as const : slideTypeFromUrl(url),
+          bytes: file.size,
+          source: 'upload' as const,
+          ...(byName.get(file.name + file.size) ?? {}),
+        }))
+        return [...before, ...fresh]
       })
     } catch (e) {
       setProblem(friendlyError(e instanceof Error ? e.message : '', 'the upload'))
