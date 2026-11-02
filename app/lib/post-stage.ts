@@ -1667,8 +1667,12 @@ async function advanceStoryChain(postId: string): Promise<void> {
     if (isDone(r)) continue
     // the first Story not yet live: it goes now if it is approved and waiting, otherwise everything after it waits
     if (chainOf(r)!.n > 1 && stageOf(r) === 'ready') {
-      const res = await performSystemTransition(String(r.id), 'chain_post', { quiet: true })
-      console.info('[story chain]', c.group, `story ${chainOf(r)!.n}/${c.of}`, res.ok ? 'posted after the one before' : `not posted: ${res.reason}`)
+      // NEVER BEFORE ITS OWN TIME (2 Nov 2026: Renee cancelled Story 1 of a Tuesday 3 pm pair and Story 2 went out on the
+      // Monday, at once): still ahead → booked for its own time; its time already here → posted now
+      const due = Date.parse(String(r.scheduled_for ?? ''))
+      const ahead = Number.isFinite(due) && due - Date.now() > 15 * 60_000
+      const res = await performSystemTransition(String(r.id), ahead ? 'auto_book' : 'chain_post', { quiet: true })
+      console.info('[story chain]', c.group, `story ${chainOf(r)!.n}/${c.of}`, ahead ? 'booked for its own time' : 'posted after the one before', res.ok ? '' : `— not done: ${res.reason}`)
     }
     return
   }

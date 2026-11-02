@@ -73,3 +73,12 @@ describe('each Story goes only after the one before it is live', () => {
     expect(win).not.toContain('for (const [i, sid] of made.postIds.entries())')
   })
 })
+
+// 2 Nov 2026: Renee cancelled Story 1 of a Tuesday 3 pm pair and Story 2 went out at once, on the Monday
+describe('a Story never goes out before its own time', () => {
+  it('the next Story is booked for its own time while that is still ahead, posted now only once it has come', () => {
+    const src = readFileSync('app/lib/post-stage.ts', 'utf8')
+    expect(src).toContain("const ahead = Number.isFinite(due) && due - Date.now() > 15 * 60_000")
+    expect(src).toContain("ahead ? 'auto_book' : 'chain_post'")
+  })
+})
