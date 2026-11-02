@@ -26,7 +26,11 @@ export async function GET(req: Request) {
       let complete = true
       let readable = true
       if (clientId) {
-        const each = await Promise.all(channels.map(c => publishedBetween(from, to, { accountId: c.provider_account_id })))
+        // two channels at a time: Zernio allows about 6 analytics calls a second
+        const each: Awaited<ReturnType<typeof publishedBetween>>[] = []
+        for (let i = 0; i < channels.length; i += 2) {
+          each.push(...await Promise.all(channels.slice(i, i + 2).map(c => publishedBetween(from, to, { accountId: c.provider_account_id }))))
+        }
         readable = each.some(Boolean) || channels.length === 0
         for (const r of each) { posts.push(...(r?.posts ?? [])); if (r && !r.complete) complete = false }
       } else {

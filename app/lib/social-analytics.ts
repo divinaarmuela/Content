@@ -9,7 +9,8 @@ const PAGE = 100
 /**
  * Every post published between two days (inclusive) with its numbers — Zernio's /analytics, which covers posts
  * made on the platform itself too. One channel when `accountId` (Zernio's id) is given. The first page says how
- * many there are; the rest are read five at a time. Null when Zernio cannot be read at all.
+ * many there are; the rest are read three at a time — Zernio allows about 6 analytics calls a second (its rate-limit
+ * docs, read 2 Nov 2026), and a client's page reads two channels at once. Null when Zernio cannot be read at all.
  */
 export async function publishedBetween(
   from: string, to: string, opts: { accountId?: string; maxPages?: number } = {},
@@ -23,8 +24,8 @@ export async function publishedBetween(
   const raws: unknown[] = [...(first.posts ?? [])]
   const pages = Math.max(1, Number(first.pagination?.pages ?? 1))
   const last = Math.min(pages, opts.maxPages ?? 30)
-  for (let start = 2; start <= last; start += 5) {
-    const batch = await Promise.all(Array.from({ length: Math.min(5, last - start + 1) }, (_, i) => read(start + i)))
+  for (let start = 2; start <= last; start += 3) {
+    const batch = await Promise.all(Array.from({ length: Math.min(3, last - start + 1) }, (_, i) => read(start + i)))
     for (const res of batch) raws.push(...(res?.posts ?? []))
   }
   const posts = raws.map(trimPost).filter((p): p is AnalyticsPost => p !== null)
