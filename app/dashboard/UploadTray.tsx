@@ -1,6 +1,6 @@
 'use client'
 
-import { useSyncExternalStore } from 'react'
+import { useEffect, useSyncExternalStore } from 'react'
 import { X } from 'lucide-react'
 import { awaitingPickup, clearFinishedUploads, dismissUpload, getUploads, subscribeUploads } from './uploadQueue'
 import { UploadOverall, UploadRows } from './UploadRows'
@@ -21,6 +21,15 @@ export default function UploadTray() {
   const uploads = useSyncExternalStore(subscribeUploads, getUploads, getUploads)
   // A DRIVE HAND-IN'S COPY shows here too (30 Sep 2026) — it runs on the server, so it is watched, not uploaded
   const driveCopies = useSyncExternalStore(subscribeDriveCopies, getDriveCopies, getNoDriveCopies)
+  // ALL DONE, NOTHING TO SAY: the box goes after a few seconds by itself. It sat over the Add media window's Save
+  // button (Renee's walk, 2 Nov 2026) and every window already shows its own files as Done. A failed file, or one
+  // waiting in New post, keeps it up — those still need saying.
+  const quietDone = uploads.length > 0 && uploads.every(u => u.status === 'done') && !uploads.some(awaitingPickup)
+  useEffect(() => {
+    if (!quietDone) return
+    const t = setTimeout(clearFinishedUploads, 4000)
+    return () => clearTimeout(t)
+  }, [quietDone])
   if (uploads.length === 0 && driveCopies.length === 0) return null
   if (uploads.length === 0) {
     return (

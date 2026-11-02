@@ -385,7 +385,7 @@ export default function NewPostSources({
                 <span className="text-[14px] font-semibold">Drop photos or video here</span>
                 <span className="text-[12px] text-muted-foreground">or browse your computer</span>
                 <span className="mt-1 max-w-[360px] text-[12px] leading-snug text-muted-foreground">
-                  One photo or one video is one post. <b className="font-semibold text-foreground">Several files together make a carousel</b> people swipe through: up to 10 on Instagram and Facebook (photos and videos mixed), 20 on LinkedIn, 35 on TikTok (photos only). Drop them all at once, or add more below.
+                  One photo or one video is one post. <b className="font-semibold text-foreground">Several files together make a carousel</b> people swipe through: up to 10 on Instagram (photos and videos mixed), 10 photos or one video on Facebook, 20 on LinkedIn, 35 on TikTok (photos only). Drop them all at once, or add more below.
                 </span>
                 <input
                   ref={fileInput}
