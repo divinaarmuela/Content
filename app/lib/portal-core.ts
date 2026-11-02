@@ -749,6 +749,9 @@ export function instagramProfileGrid(
   const ig = igOf(post.channels)
   if (!ig) return null
   const coverOf = (p: GridPost, acc: string | null) => {
+    // the cover chosen for this Instagram channel, when there is one (the owner, 2 Nov 2026)
+    const chosen = acc ? String((p.per_channel[acc] as { thumbnailUrl?: string } | undefined)?.thumbnailUrl ?? '').trim() : ''
+    if (chosen) return { url: chosen, type: 'image' as const } as unknown as NonNullable<GridPost['slides'][number]>
     const own = acc ? p.per_channel[acc]?.slides ?? [] : []
     return (own.length ? own : p.slides)[0] ?? null
   }

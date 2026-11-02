@@ -81,6 +81,14 @@ type FeedRow = { id: string; client_id: string; platform: string; tiles: LiveTil
 
 /** One account's posted feed: the stored copy, refreshed from Zernio when older than 15 minutes. The portal's
  *  "Your feed" AND the dashboard's feed route (/api/social/schedule/feed) both read it — one source, one cache. */
+/** the cover chosen for a post's video, as its feed tile shows it: Instagram's, else TikTok's, else any channel's */
+function chosenCoverOf(perChannel: unknown, platformOf: (id: string) => string | undefined): string | null {
+  const entries = Object.entries((perChannel ?? {}) as Record<string, { thumbnailUrl?: string; videoCoverImageUrl?: string }>)
+  const urlOf = (x: { thumbnailUrl?: string; videoCoverImageUrl?: string }) => (x.thumbnailUrl ?? x.videoCoverImageUrl ?? '').trim()
+  const by = (pf: string) => entries.find(([id, x]) => platformOf(id) === pf && urlOf(x))
+  const hit = by('instagram') ?? by('tiktok') ?? entries.find(([, x]) => urlOf(x))
+  return hit ? urlOf(hit[1]) : null
+}
 export async function feedFor(account: SocialAccount, now: Date): Promise<{ tiles: LiveTile[]; problem: string | null }> {
   const feeds = table<FeedRow>('portal_feeds')
   const stored = await feeds.get(account.id).catch(() => null)
@@ -194,7 +202,8 @@ export async function loadScheduling(
       title: String(item?.title ?? '').trim() || 'Your post',
       when: scheduledWhen(p.scheduled_for, tz),
       scheduled_for: p.scheduled_for,
-      cover: files[0] ? { url: files[0].url, type: files[0].type === 'video' ? 'video' : 'image' } : null,
+      // a video's CHOSEN COVER is its still on the client's feed (the owner, 2 Nov 2026): Instagram's first, else any channel's
+      cover: files[0] ? { url: files[0].url, type: files[0].type === 'video' ? 'video' : 'image', ...(files[0].type === 'video' ? { poster: chosenCoverOf(v.per_channel, id => accountById.get(id)?.platform as string | undefined) } : {}) } : null,
       files: files.length,
       caption: v.caption,
       own_captions: ownCaptions(v, id => accountById.get(id)?.platform as string | undefined),
@@ -246,7 +255,7 @@ export async function loadScheduling(
     const previews = await table<PreviewRow & { id: string; source_url: string }>('video_previews' as never).list({ where: r => videoUrls.has(r.source_url) }).catch(() => [])
     const posterOf = new Map(previews.map(r => [r.source_url, pickPoster(r)]))
     for (const t of out.flatMap(p => [...p.booked, ...p.off])) {
-      if (t.cover?.type === 'video') t.cover = { ...t.cover, poster: posterOf.get(t.cover.url) ?? null }
+      if (t.cover?.type === 'video') t.cover = { ...t.cover, poster: t.cover.poster ?? posterOf.get(t.cover.url) ?? null }
     }
   }
   return out
