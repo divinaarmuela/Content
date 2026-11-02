@@ -313,6 +313,18 @@ export default function PostWindow({
   const showPreview = wide || pane === 'preview'
   /** the open section of the wide window's right side */
   const [section, setSection] = useState<WindowSection>('caption')
+  // THE LOG'S NUMBER: moves on this post since this person last opened its Log (the owner, 2 Nov 2026). Kept in this
+  // browser — a convenience, not a record; a private window simply shows every move as new
+  const [logSeen, setLogSeen] = useState<number | null>(null)
+  useEffect(() => {
+    if (!id) return
+    try { const v = Number(localStorage.getItem(`mdm.postlog.seen.${id}`)); setLogSeen(Number.isFinite(v) ? v : 0) } catch { setLogSeen(0) }
+  }, [id])
+  useEffect(() => {
+    if (section !== 'log' || !id || !saved) return
+    try { localStorage.setItem(`mdm.postlog.seen.${id}`, String(saved.rev)) } catch { /* convenience only */ }
+    setLogSeen(saved.rev)
+  }, [section, id, saved])
   const [chosenSlide, setChosenSlide] = useState(0)
 
   // measure a slide nobody measured, so the checks below can judge its shape
@@ -1347,7 +1359,7 @@ export default function PostWindow({
             { key: 'options', label: 'Options', show: !!options || !!alsoPost || (!!automation && (editable || !!shown.automation)) },
             { key: 'notes', label: 'Notes', count: noteCount, show: !!notesBox },
             // who did what, and who was told (the owner, 2 Nov 2026)
-            { key: 'log', label: 'Log', show: !!id },
+            { key: 'log', label: 'Log', count: saved && logSeen != null && saved.rev > logSeen ? saved.rev - logSeen : undefined, show: !!id },
           ]
           const visible = tabs.filter(t => t.show)
           const open = visible.some(t => t.key === section) ? section : 'caption'
