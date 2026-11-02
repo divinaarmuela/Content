@@ -15,7 +15,7 @@ import { REVIEW_WORDS } from '../../lib/one-portal-core'
  * Approve / Not approved. Tap a posted one → its numbers.
  */
 
-const NETWORK_WORD: Record<SchedulingNetwork, string> = { instagram: 'Instagram', linkedin: 'LinkedIn', tiktok: 'TikTok' }
+const NETWORK_WORD: Record<SchedulingNetwork, string> = { instagram: 'Instagram', facebook: 'Facebook', linkedin: 'LinkedIn', tiktok: 'TikTok' }
 const NAME_KEY = 'mdm-portal-name'
 
 const STATE_TONE: Record<ScheduledTile['state'], string> = {
@@ -106,7 +106,7 @@ export default function OnePortalScheduling({ token, profiles, openPostId }: {
             Tap a booked post to approve it, or tell us what to change. Posts go out at their time unless you say otherwise.
           </p>
 
-          {profile.network === 'linkedin'
+          {profile.network === 'linkedin' || profile.network === 'facebook'
             ? <LinkedInFeed profile={profile} onOpen={setOpen} />
             : <Grid profile={profile} tall={profile.network === 'tiktok'} onOpen={setOpen} />}
 
@@ -179,7 +179,7 @@ function LinkedInFeed({ profile, onOpen }: { profile: NetworkProfile; onOpen: (o
   return (
     <div className="flex flex-col gap-3" data-feed>
       {profile.booked.map(t => {
-        const frame = t.preview.find(p => p.platform === 'linkedin')
+        const frame = t.preview.find(p => p.platform === profile.network)
         return (
           <button key={t.post_id} type="button" onClick={() => onOpen({ booked: t })} className="relative rounded-card border border-border bg-card p-3 text-left hover:border-foreground/40" data-booked={t.post_id}>
             <span className="mb-2 inline-flex items-center gap-1.5 text-[12px] font-semibold">

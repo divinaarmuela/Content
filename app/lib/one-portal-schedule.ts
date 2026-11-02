@@ -21,8 +21,8 @@ import { pickPoster, type PreviewRow } from './stream-core'
  * only what it draws.
  */
 
-/** the networks the tab draws, in its order */
-export const SCHEDULING_NETWORKS = ['instagram', 'linkedin', 'tiktok'] as const
+/** the networks the tab draws, in its order — Facebook since 2 Nov 2026 (the owner: "client portal doesnt include fb?") */
+export const SCHEDULING_NETWORKS = ['instagram', 'facebook', 'linkedin', 'tiktok'] as const
 export type SchedulingNetwork = (typeof SCHEDULING_NETWORKS)[number]
 
 export type ScheduledTile = {
