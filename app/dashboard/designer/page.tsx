@@ -8,6 +8,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Plus } from 'lucide-react'
 import { pageCards, type BoardViewer } from '../../lib/board-view-core'
 import { useWorkRows } from '../useLiveWork'
+import { taggedIdsOfItem } from '@/app/lib/workflow-core'
 import { useSteadyRows } from '@/lib/db-client'
 import { useRole } from '../useRole'
 import PageTitle from '../ui/PageTitle'
@@ -84,7 +85,12 @@ export default function DesignerPage() {
   const allCards = useMemo(() => {
     if (!viewer) return [] as BoardCardRow[]
     // the graphics cards only — the designer's kind of work
-    const base = (live.items as unknown as BoardCardRow[]).filter(c => (c.work_kinds?.slug ?? '') === 'graphics')
+    // …and any other card this person is tagged on — it is on their board too (the owner, 3 Nov 2026: "anyone that's
+    // tagged from now on will have that card also in their page")
+    const base = (live.items as unknown as BoardCardRow[]).filter(c => {
+      const slug = c.work_kinds?.slug ?? ''
+      return slug === 'graphics' || (slug !== 'shoot_brief' && taggedIdsOfItem(c as { tagged_ids?: unknown }).includes(viewer.id))
+    })
     const shootTitle = new Map(live.tables.batches.rows.map(b => [b.id, String(b.title ?? '')]))
     const shootDate = new Map(live.tables.batches.rows.map(b => [b.id, (b as { shoot_date?: string | null }).shoot_date ?? null]))
     const activityByItem = new Map<string, typeof live.tables.activity.rows>()

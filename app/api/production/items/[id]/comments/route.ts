@@ -2,9 +2,10 @@ import { NextResponse } from 'next/server'
 import { managesClients } from '../../../../../lib/identity-core'
 import { table, withRequestCache } from '@/lib/db'
 import { attachOne } from '@/lib/db-join'
-import type { ItemComment, TeamUser, TeamUserClient } from '@/lib/db-types'
+import type { ContentItem, ItemComment, TeamUser, TeamUserClient } from '@/lib/db-types'
 import { requireSignedIn, requireRole, authzErrorResponse } from '../../../../../lib/authz'
 import { loadItemForUser } from '../../../../../lib/production-access'
+import { taggedIdsOfItem } from '../../../../../lib/workflow-core'
 import { logActivity } from '../../../../../lib/workflow'
 import { notify, renderEmail, escapeHtml } from '../../../../../lib/mailer'
 import { announceItemChange } from '../../../../../lib/production-live'
@@ -90,6 +91,20 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       action: 'comment_added', detail: visibility,
     })
 
+    // EVERYONE TAGGED JOINS THE CARD (the owner, 3 Nov 2026: "anyone that's tagged from now on will have that card also
+    // in their page … they can delete and also do anything, move cards etc"): kept on the card, so every rule that reads
+    // the card — who sees it, whose board it is on, who may move or delete it — counts them. Added under a claim, so two
+    // comments landing together both keep their people; never removed.
+    if (tagged.length > 0) {
+      const add = tagged.map(t => t.id)
+      await table<ContentItem>('content_items').claim(id, cur => {
+        if (!cur) return null
+        const have = taggedIdsOfItem(cur)
+        const next = [...new Set([...have, ...add])]
+        return next.length === have.length ? null : { ...cur, tagged_ids: next }
+      }).catch(e => console.error('tag joins card:', e))
+    }
+
     // gatekeeper routing: client comments → assigned AMs (fallback super admins)
     if (user.role === 'client') {
       const links = await table<TeamUserClient>('team_user_clients')
@@ -103,6 +118,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         const admins = await table<TeamUser>('team_users')
           .list({ where: u => u.role === 'super_admin' && u.active_status === true })
         recipients = admins as unknown as typeof recipients
+      }
+      // …and everyone tagged on the card — it is their card too (the owner, 3 Nov 2026: "if client comments they would
+      // receive it too")
+      const onCard = taggedIdsOfItem(item).filter(uid => !recipients.some(r => r.id === uid))
+      if (onCard.length > 0) {
+        const people = await table<TeamUser>('team_users')
+          .list({ where: u => onCard.includes(u.id) && u.active_status === true && u.role !== 'client' && !!u.email })
+        recipients = [...recipients, ...(people as unknown as typeof recipients)]
       }
       // …and the editor holding the card, who reads the client's words now (the owner, 23 Oct 2026)
       if (item.owner_id && !recipients.some(r => r.id === item.owner_id)) {
@@ -169,7 +192,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       const holders = noteAudience({
         authorId: user.id,
         ownerId: item.owner_id ? String(item.owner_id) : null,
-        schedulerIds: Array.isArray(item.scheduler_ids) ? (item.scheduler_ids as unknown[]).map(String) : [],
+        // …and everyone tagged on the card before — it is theirs too (3 Nov 2026)
+        schedulerIds: [...(Array.isArray(item.scheduler_ids) ? (item.scheduler_ids as unknown[]).map(String) : []), ...taggedIdsOfItem(item)],
         managerIds,
         creatorId,
         creatorIsSuperAdmin: creator?.role === 'super_admin',

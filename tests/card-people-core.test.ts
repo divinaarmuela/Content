@@ -27,7 +27,9 @@ const LINKS = [
 describe('cardPeople', () => {
   it('offers the client’s managers, the quality checkers, the super admins, the holder and the schedulers — each once, with email and job', () => {
     const people = cardPeople({ client_id: 'c-1', owner_id: 'ed', scheduler_ids: ['sc'] }, TEAM, LINKS)
-    expect(people.map(p => p.id)).toEqual(['am-1', 'qc', 'am-flag', 'sa', 'ed', 'sc'])
+    // the card's own people first, then the rest of the team by name (3 Nov 2026: "please show everyone")
+    expect(people.map(p => p.id)).toEqual(['am-1', 'qc', 'am-flag', 'sa', 'ed', 'sc', 'ed-2', 'am-2'])
+    expect(people.find(p => p.id === 'ed-2')?.hint).toBe(roleLabel('editor'))
     expect(people[0]).toEqual({ id: 'am-1', name: 'Priya Patel', email: 'priya@x.invalid', hint: `${roleLabel('account_manager')} · this client` })
     expect(people.find(p => p.id === 'qc')?.hint).toBe(roleLabel('quality_checker'))
     expect(people.find(p => p.id === 'am-flag')?.hint).toBe(`${roleLabel('account_manager')} · quality checker`)
@@ -36,17 +38,18 @@ describe('cardPeople', () => {
     expect(people.find(p => p.id === 'sc')?.hint).toBe(`${roleLabel('scheduler')} · scheduling it`)
     for (const p of people) expect(p.email).toContain('@')
   })
-  it('never offers another client’s manager, an editor not on the card, someone inactive, a client, or the writer', () => {
+  it('offers everyone on the team, but never someone inactive, a client, or the writer', () => {
     const ids = cardPeople({ client_id: 'c-1', owner_id: 'ed' }, TEAM, LINKS, 'sa').map(p => p.id)
-    expect(ids).not.toContain('am-2')
-    expect(ids).not.toContain('ed-2')
+    expect(ids).toContain('am-2')
+    expect(ids).toContain('ed-2')
     expect(ids).not.toContain('gone')
     expect(ids).not.toContain('cl')
     expect(ids).not.toContain('sa')
     expect(ids).toContain('ed')
   })
-  it('a card with nobody on it still offers the checkers and the super admins', () => {
+  it('a card with nobody on it offers the checkers and the super admins first, then everyone', () => {
     const ids = cardPeople({ client_id: 'c-none' }, TEAM, LINKS).map(p => p.id)
-    expect(ids).toEqual(['qc', 'am-flag', 'sa'])
+    expect(ids.slice(0, 3)).toEqual(['qc', 'am-flag', 'sa'])
+    expect(ids).toHaveLength(8)
   })
 })

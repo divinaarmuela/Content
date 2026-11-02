@@ -277,11 +277,17 @@ export const STATUS_TURN: Record<ItemStatus, Hat | null> = {
 }
 
 /** The fields of an item that decide which hats a viewer wears on it. */
-export type ActingItem = { owner_id?: string | null; scheduler_ids?: unknown } & AskedItem
+export type ActingItem = { owner_id?: string | null; scheduler_ids?: unknown; tagged_ids?: unknown } & AskedItem
 
 /** scheduler_ids as it is meant: a list of user ids. Anything else is none. */
 export function schedulerIdsOf(item: { scheduler_ids?: unknown }): string[] {
   return Array.isArray(item.scheduler_ids) ? item.scheduler_ids.map(String) : []
+}
+
+/** EVERYONE "@"-TAGGED IN A CARD'S COMMENTS (the owner, 3 Nov 2026: "anyone that's tagged from now on will have that
+ *  card also in their page … they can delete and also do anything, move cards etc"). Anything else is none. */
+export function taggedIdsOfItem(item: { tagged_ids?: unknown }): string[] {
+  return Array.isArray(item.tagged_ids) ? item.tagged_ids.map(String) : []
 }
 
 /**
@@ -319,11 +325,16 @@ export function actingRoles(viewer: ActingViewer, item: ActingItem): Hat[] {
   // up someone else's draft is not a thing
   if (owner === viewer.id || (!owner && roleSatisfies(viewer.role, 'editor'))) roles.push('editor')
 
+  // TAGGED ON THE CARD = ITS HOLDER'S HATS (the owner, 3 Nov 2026: "they can delete and also do anything, move cards
+  // etc"): the maker's and the scheduler's, as whoever holds it — never a manager's (approving, sending to the client)
+  const tagged = taggedIdsOfItem(item).includes(viewer.id)
+  if (tagged) roles.push('editor')
+
   const ids = schedulerIdsOf(item)
   // handed the item = the hat, whatever the title; nobody handed it = the
   // schedulers can pick it up
   // …and a general user books in what nobody was handed, like a scheduler
-  if (ids.includes(viewer.id) || (ids.length === 0 && (viewer.role === 'scheduler' || viewer.role === 'general'))) roles.push('scheduler')
+  if (ids.includes(viewer.id) || tagged || (ids.length === 0 && (viewer.role === 'scheduler' || viewer.role === 'general'))) roles.push('scheduler')
   // THE SCHEDULER'S DRAFT IS THEIRS TO MAKE (the owner, 25 Sep 2026: a handed card goes Draft → Quality check → With
   // client → Ready to post): the person it was handed to holds the maker's hat on it while it is in Draft, so they
   // can send it on — it was stuck, only an editor or account manager could

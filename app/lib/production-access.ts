@@ -3,7 +3,7 @@ import { isQualityReviewer } from './identity-core'
 import { table } from '@/lib/db'
 import type { Batch, ContentItem, ItemComment, BatchComment, TeamUserClient, WorkflowActivity } from '@/lib/db-types'
 import { AuthzError, type TeamUser } from './authz'
-import { schedulerIdsOf, SCHEDULER_STATUSES, type ItemStatus } from './workflow-core'
+import { schedulerIdsOf, taggedIdsOfItem, SCHEDULER_STATUSES, type ItemStatus } from './workflow-core'
 import { canManageShoot, isOnShoot, type SopManager, isAskedToReview, madeOrAssignedShoot } from './shoot-sop-core'
 
 /**
@@ -195,6 +195,8 @@ export async function assignedItemsFilter(
     || schedulerIdsOf(item).includes(me)
     || (item.batch_id != null && heldBatches.has(item.batch_id))
     || taggedItems.has(item.id)
+    // everyone "@"-tagged on the card, kept on the card (3 Nov 2026)
+    || taggedIdsOfItem(item).includes(me)
     // the quality reviewer's desk, and what they reviewed
     || (isQualityReviewer(user) && (item.status === 'quality_check' || reviewedItems.has(item.id)))
 }
@@ -355,9 +357,9 @@ export async function loadItemForUser(user: TeamUser, itemId: string) {
  */
 async function assignmentOpensItem(
   user: TeamUser,
-  item: { id: string; batch_id?: string | null; owner_id?: string | null; scheduler_ids?: unknown },
+  item: { id: string; batch_id?: string | null; owner_id?: string | null; scheduler_ids?: unknown; tagged_ids?: unknown },
 ): Promise<boolean> {
-  if (item.owner_id === user.id || schedulerIdsOf(item).includes(user.id)) return true
+  if (item.owner_id === user.id || schedulerIdsOf(item).includes(user.id) || taggedIdsOfItem(item).includes(user.id)) return true
   const tag = await table<ItemComment>('item_comments').list({
     by: { item_id: item.id },
     where: r => r.assigned_to === user.id,

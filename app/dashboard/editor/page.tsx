@@ -9,6 +9,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Plus } from 'lucide-react'
 import { pageCards, type BoardViewer } from '../../lib/board-view-core'
 import { useWorkRows } from '../useLiveWork'
+import { taggedIdsOfItem } from '@/app/lib/workflow-core'
 import { useSteadyRows } from '@/lib/db-client'
 import { useRole } from '../useRole'
 import PageTitle from '../ui/PageTitle'
@@ -97,7 +98,12 @@ export default function EditorPage() {
     // a shoot plan lives on Production; everything else somebody is making
     // is a card here
     // …and a graphics card is the designer's, on the Designer board only (22 Sep 2026)
-    const base = (live.items as unknown as BoardCardRow[]).filter(c => !['shoot_brief', 'graphics'].includes(c.work_kinds?.slug ?? ''))
+    // …unless this person is tagged on a graphics card: a card you are tagged on is on your board too (the owner,
+    // 3 Nov 2026: "anyone that's tagged from now on will have that card also in their page")
+    const base = (live.items as unknown as BoardCardRow[]).filter(c => {
+      const slug = c.work_kinds?.slug ?? ''
+      return slug !== 'shoot_brief' && (slug !== 'graphics' || taggedIdsOfItem(c as { tagged_ids?: unknown }).includes(viewer.id))
+    })
     // WHAT THE VIDEO EDITORS SOP ASKS OF A CARD, read off what is already on
     // the wire: which shoot it came from (the shoot board makes these
     // cards), whether the holder acknowledged it, and a standing risk

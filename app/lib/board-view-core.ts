@@ -660,12 +660,14 @@ export function handedOver(card: { scheduler_ids?: unknown; adhoc_post?: unknown
  */
 export function mayDeleteCard(
   viewer: { id: string; role: string },
-  card: { status?: unknown; owner_id?: unknown; assigned_by?: unknown; scheduler_ids?: unknown },
+  card: { status?: unknown; owner_id?: unknown; assigned_by?: unknown; scheduler_ids?: unknown; tagged_ids?: unknown },
 ): boolean {
   const status = String(card.status ?? '')
   if (viewer.role === 'account_manager' || viewer.role === 'super_admin') return status !== 'published'
-  if (viewer.role !== 'editor') return false
-  const mine = card.owner_id === viewer.id || card.assigned_by === viewer.id
+  // tagged on the card, whatever the job title, deletes it as its holder could (the owner, 3 Nov 2026)
+  const tagged = Array.isArray(card.tagged_ids) && card.tagged_ids.map(String).includes(viewer.id)
+  if (viewer.role !== 'editor' && !tagged) return false
+  const mine = card.owner_id === viewer.id || card.assigned_by === viewer.id || tagged
   const handed = Array.isArray(card.scheduler_ids) && card.scheduler_ids.length > 0
   return mine && !handed && !['scheduled', 'published'].includes(status)
 }

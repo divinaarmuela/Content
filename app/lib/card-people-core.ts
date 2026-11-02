@@ -6,10 +6,11 @@ import { tagNameOf, type Mentionable } from './mention-core'
  * 2026: "if I click @ it will show email options available for tagging
  * within that card, like super admin, the AM and quality review").
  *
- * Not the whole team: the client's account managers, the quality
+ * The card's own people first — the client's account managers, the quality
  * checkers, the super admins, whoever holds the card and whoever it was
- * handed to for scheduling — each once, with their email and their job, so
- * the right Priya is picked. The writer is never offered to themselves.
+ * handed to for scheduling — then everyone else on the team (3 Nov 2026),
+ * each once, with their email and their job, so the right Priya is picked.
+ * The writer is never offered to themselves.
  * A name typed for anybody else on the team still tags them (the server
  * resolves "@Name" against the whole roster); this is only what the list
  * suggests. Pure.
@@ -59,6 +60,13 @@ export function cardPeople(
   // whoever holds the card, and whoever it was handed to
   take(card.owner_id ? byId.get(card.owner_id) : undefined, `${roleLabel(byId.get(String(card.owner_id))?.role)} · has the card`)
   for (const id of schedulers) take(byId.get(id), `${roleLabel(byId.get(id)?.role)} · scheduling it`)
+
+  // …THEN EVERYONE ELSE ON THE TEAM (the owner, 3 Nov 2026: "look at who it's tagging, it's limited … please show
+  // everyone"): the card's own people stay first, the rest follow by name, each with their job
+  const rest = active
+    .filter(u => !seen.has(u.id))
+    .sort((a, b) => tagNameOf(a).localeCompare(tagNameOf(b)))
+  for (const u of rest) take(u, roleLabel(u.role))
 
   return picked
     .map(({ u, hint }) => ({ id: u.id, name: tagNameOf(u), email: String(u.email ?? ''), hint }))

@@ -21,7 +21,7 @@
  */
 
 import { isQualityReviewer } from './identity-core'
-import { SCHEDULER_STATUSES, schedulerIdsOf, type ItemStatus } from './workflow-core'
+import { SCHEDULER_STATUSES, schedulerIdsOf, taggedIdsOfItem, type ItemStatus } from './workflow-core'
 import { isOnShoot, isAskedToReview, madeOrAssignedShoot } from './shoot-sop-core'
 import { askedIdsOf } from './asked-core'
 import { deliverOnly } from './deliver-only-core'
@@ -279,6 +279,8 @@ export function assignedItemsPredicate(
     || (item.batch_id != null && heldBatches.has(item.batch_id))
     || taggedItems.has(item.id)
     || createdItems.has(item.id)
+    // tagged on the card itself — everyone "@"-tagged in its comments (3 Nov 2026)
+    || taggedIdsOfItem(item as { tagged_ids?: unknown }).includes(viewer.id)
 }
 
 /** The work kind's slug for an item, whichever way the row carries it. */
