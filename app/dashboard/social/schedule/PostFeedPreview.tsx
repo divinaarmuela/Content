@@ -153,8 +153,17 @@ function FeedCards({ tiles, media }: { tiles: FeedPreviewTile[]; media: (tile: {
               <a href={t.permalink} target="_blank" rel="noopener noreferrer" className="font-semibold underline underline-offset-4">Open</a>
             )}
           </div>
-          {t.caption && <p className="line-clamp-3 whitespace-pre-line px-3 pb-2 text-[13px]">{t.caption}</p>}
-          {t.cover && <Cover t={t} media={media} className="aspect-[4/5] max-h-[360px] w-full" />}
+          {t.caption && <p className="line-clamp-3 overflow-hidden whitespace-pre-line break-words px-3 pb-2 text-[13px]">{t.caption}</p>}
+          {/* a plain picture or video still, held inside its own box — the window's media player spilled over the next
+              card and the caption (the owner's screenshot, 2 Nov 2026: 'looks broken') */}
+          {t.cover && (
+            <div className="relative aspect-[4/5] max-h-[360px] w-full overflow-hidden bg-foreground/[0.06]">
+              {t.cover.type === 'video'
+                ? <video src={`${t.cover.url}#t=0.1`} muted playsInline preload="metadata" className="absolute inset-0 h-full w-full object-cover" />
+                // eslint-disable-next-line @next/next/no-img-element
+                : <img src={t.cover.url} alt="" loading="lazy" className="absolute inset-0 h-full w-full object-cover" />}
+            </div>
+          )}
         </li>
       ))}
     </ul>
