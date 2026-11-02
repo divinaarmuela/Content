@@ -20,7 +20,7 @@ import {
 } from '@/app/lib/schedule-compose-core'
 import {
   AGREED_VIA, APPROVAL_STEPS, APPROVAL_STEPS_LABEL, approvalStepsOf, compositionProblems, defaultApproveBy,
-  hatsFor, isReminderSend, lostChannels, postActions, postVersionId, readPostState,
+  hatsFor, isReminderSend, lostChannels, postActions, postVersionId, readPostState, STORY_SPLIT_STAGES, storySplitPlan,
   type AccountRef, type OfferedAction, type PostAction, type PostActionList, type PostStage, type PostState,
 } from '@/app/lib/post-stage-core'
 import {
@@ -280,6 +280,8 @@ export default function PostWindow({
     [post, hats, nowMs, accountRefs, context.client, recipients.length])
   const buttons = footerButtons(list)
   const now = nowChip(list)
+  /** a Story with several pictures: the Stories it becomes (storySplitPlan), offered while it can be split */
+  const storyPlan = post && STORY_SPLIT_STAGES.includes(post.stage) && post.slides.length > 1 ? storySplitPlan(post) : null
 
   const nameOf = useCallback((who: string | null | undefined) => {
     if (!who) return null
@@ -568,6 +570,52 @@ export default function PostWindow({
       ? defaultApproveBy(post.scheduled_for, nowMs)
       : null,
   })
+
+  /**
+   * MAKE THE STORIES: a draft is saved first (the split is of what is on screen), the server makes one Story post per
+   * picture and retires this one (splitStoryPost), and an approved post's Stories are then booked in, in order. A
+   * Story that cannot be booked is left on Ready to post with its reason — the others are not held back by it.
+   */
+  const splitStories = async () => {
+    if (!post || busy) return
+    setReply(null)
+    let pid = id
+    let rev = saved?.rev ?? null
+    if (unsaved || (post.stage === 'draft' && state.dirty)) {
+      setBusy(true)
+      const r = await pressAction(api, { post: saved, itemId, working, dirty: true, timezone: tz, action: 'save', answers: {} as Answers })
+      setBusy(false)
+      if (!r.ok || !r.postId || !r.post) { setReply({ action: 'save', tone: 'error', text: r.ok ? 'It could not be saved first' : r.reason, problems: [] }); return }
+      pid = r.postId
+      rev = r.post.rev
+    }
+    if (!pid) return
+    setBusy(true)
+    const made = await fetch(`/api/posts/${encodeURIComponent(pid)}/split-story`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ expect_rev: rev }),
+    }).then(r => r.json()).catch(() => ({ ok: false, reason: 'It did not reach the server — nothing has changed. Try again.' })) as
+      { ok: true; postIds: string[]; words: string } | { ok: false; reason: string }
+    if (!made.ok) { setBusy(false); setReply({ action: 'save', tone: 'error', text: made.reason, problems: [] }); return }
+    let words = made.words
+    if (post.stage === 'ready') {
+      // booked one after another, in order; each is its own post, so one refusal does not stop the rest
+      const refused: string[] = []
+      for (const [i, sid] of made.postIds.entries()) {
+        const b = await api.act(sid, { action: 'book', expect_rev: 0, version: 1 })
+        if (!b.ok) refused.push(`Story ${i + 1}: ${b.reason}`)
+      }
+      words = refused.length
+        ? `${made.postIds.length} Stories made; ${made.postIds.length - refused.length} booked in. Not booked — ${refused.join(' · ')}`
+        : `${made.postIds.length} Stories made and booked in, in order`
+    }
+    setBusy(false)
+    const outcome: PostWindowOutcome = {
+      postId: made.postIds[0] ?? null, itemId, words, stage: post.stage === 'ready' ? 'booked' : 'draft',
+      at: post.scheduled_for, channels: [...post.channels], createdPostId: null, link: null,
+    }
+    if (onDone) onDone(outcome)
+    else setReply({ action: 'save', tone: 'ok', text: words, problems: [] })
+  }
 
   const go = async (action: PostAction, answers: Answers): Promise<boolean> => {
     if (!post || busy) return false
@@ -1387,6 +1435,20 @@ export default function PostWindow({
              (decision 2; audit W8). ── */}
         <div className="sticky bottom-0 z-20 mt-auto flex flex-col gap-2 border-t border-border bg-popover p-3.5 lg:flex-row lg:items-center lg:gap-4 lg:px-4 lg:py-2">
           <div ref={messagesRef} className="flex flex-col gap-2 scroll-mt-4 lg:min-w-0 lg:max-w-[560px] lg:flex-1 lg:gap-1.5">
+            {/* SEVERAL PICTURES AS STORIES (Renee, 2 Nov 2026): one Story post each, in slide order, waiting for the one before */}
+            {storyPlan?.ok && (
+              <div className="flex flex-wrap items-center gap-2 rounded-inner border border-accent-blue/40 bg-tint-blue px-3 py-2 text-[12px]" data-story-split>
+                <span className="min-w-0 flex-1">
+                  <strong>{storyPlan.parts.length} pictures in a Story.</strong> Instagram takes one per Story, so this becomes {storyPlan.parts.length} Stories in this order
+                  {storyPlan.parts[0].scheduled_for ? `: ${storyPlan.parts.map(x => new Date(x.scheduled_for!).toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit' })).join(', ')}` : ''}.
+                  {post?.stage === 'ready' ? ' Each keeps this approval and is booked in.' : ' Each then goes through the quality check and the client as this one would.'}
+                </span>
+                <button type="button" disabled={busy} onClick={() => void splitStories()}
+                  className="min-h-9 shrink-0 rounded-full bg-foreground px-3 text-[12px] font-semibold text-background disabled:opacity-60">
+                  {busy ? 'Working…' : post?.stage === 'ready' ? `Make ${storyPlan.parts.length} Stories and book them` : `Make ${storyPlan.parts.length} Stories`}
+                </button>
+              </div>
+            )}
             {/* ON A LAPTOP THE BUTTONS SIT IN ONE LINE (the owner's screenshot, 27 Oct 2026: a reason under a button pushed it
                 up and the row ran at four heights). Each reason is said here instead, naming its button, once. */}
             {wide && buttons.map((b, i) => {

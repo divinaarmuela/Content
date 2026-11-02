@@ -8,7 +8,7 @@ import type {
 import type { TeamUser } from './authz'
 import { autoBookAfter,
   CLIENT_ACTIONS, ROW_OF, SYSTEM_ACTIONS, anyNetworkLive, defaultApproveBy, failedNetworks, hatsFor,
-  isPostAction, mayWorkOnPost, planPostTransition, postVersionId, readPostState,
+  isPostAction, mayWorkOnPost, planPostTransition, postVersionId, readPostState, storySplitPlan,
   type AccountRef, type FrozenFor, type NotifyTarget, type Plan, type PostAction, type PostActor,
   type PostEventRow, type PostHat, type PostStage, type PostState, type Refusal, type RefusalCode,
   type TransitionContext, type TransitionInput,
@@ -1520,4 +1520,93 @@ async function defaultDeliver(input: DeliveryInput): Promise<{ delivered: string
     return { delivered: [], failed: [...input.emails], link }
   }
   return { delivered: sent.delivered, failed: sent.results.filter(r => !sent.delivered.includes(r.email)).map(r => r.email), link }
+}
+
+/* ── several pictures as Stories (Renee, 2 Nov 2026) — the rule is storySplitPlan in post-stage-core ── */
+
+export type StorySplitResult =
+  | { ok: true; postIds: string[]; words: string }
+  | { ok: false; reason: string }
+
+/**
+ * ONE STORY POST PER PICTURE. Each new post is an ordinary post in the original's stage, one picture, a minute after
+ * the one before: a draft is a draft (it goes through the quality check and the client as any draft does); an
+ * approved post (Ready to post) is born Ready to post with its own frozen version 1 and the same approval and quality
+ * check — the client approved these very pictures. Every new post's history says where it came from ("Story 2 of 3,
+ * split from post …"); the original is then deleted (a draft that never went anywhere) or cancelled with the same
+ * words (an approved post, kept on the record). Booking each one is the window's next step, through the same moves
+ * as any post — nothing about booking changes.
+ */
+export async function splitStoryPost(user: TeamUser, postId: string, expectRev: number | null): Promise<StorySplitResult> {
+  const { post } = await loadPostState(postId)
+  if (!post) return { ok: false, reason: 'That post is not there any more.' }
+  if (!(await mayActOn(user, post))) return { ok: false, reason: 'You cannot change this post.' }
+  if (expectRev != null && post.rev !== expectRev) return { ok: false, reason: STALE }
+  // an approved post splits what was approved; a draft splits what is on screen
+  const frozen = post.stage === 'ready' ? copyOfVersion(await loadFrozenVersion(post.id, post.sent_version)) : null
+  const source: PostState = frozen ? { ...post, slides: frozen.slides, channels: frozen.channels, per_channel: frozen.per_channel, caption: frozen.caption } : post
+  const plan = storySplitPlan(source)
+  if (!plan.ok) return plan
+  const actor = teamActorFor(user, post)
+  // THE ORIGINAL GOES FIRST: a draft is deleted (it never went anywhere), an approved post is cancelled and keeps the
+  // record. Only then are the Stories made — so there is never an original AND its Stories waiting to be booked
+  const why = `Made into ${plan.parts.length} Stories, one picture each, a minute apart`
+  const gone = post.stage === 'draft'
+    ? await performPostTransition(post.id, 'delete_draft', actor, { expect_rev: post.rev, confirm: true, note: why, quiet: true })
+    : await performPostTransition(post.id, 'cancel', actor, { expect_rev: post.rev, confirm: true, note: why, reason: why, quiet: true })
+  if (!gone.ok) return { ok: false, reason: gone.reason }
+  console.info('[story split]', post.id, post.stage, '->', plan.parts.length, 'stories')
+  const at = new Date().toISOString()
+  const ids: string[] = []
+  for (const part of plan.parts) {
+    const id = randomUUID()
+    const note = `Story ${part.n} of ${part.of}, split from post ${post.id}${part.n > 1 ? `, a minute after Story ${part.n - 1}` : ''}`
+    const base: Record<string, unknown> = {
+      id,
+      client_id: post.client_id,
+      item_id: post.source_item_id ?? '',
+      source_item_id: post.source_item_id,
+      slides: part.slides,
+      caption: source.caption,
+      channels: source.channels,
+      per_channel: source.per_channel,
+      scheduled_for: part.scheduled_for,
+      timezone: post.timezone ?? 'Australia/Melbourne',
+      ...(post.automation ? { automation: post.automation } : {}),
+      ...(post.approval_steps ? { approval_steps: post.approval_steps } : {}),
+      ...(post.if_no_answer ? { if_no_answer: post.if_no_answer } : {}),
+      ...(post.assigned_to ? { assigned_to: post.assigned_to } : {}),
+      created_by: post.created_by ?? actor.id,
+      created_at: at,
+      updated_at: at,
+      rev: 0,
+      stage_at: at,
+    }
+    if (post.stage === 'draft') {
+      await posts().insert({ ...base, stage: 'draft', draft_version: 1 } as unknown as SocialPost)
+    } else {
+      const v1: PostVersion = {
+        id: postVersionId(id, 1), post_id: id, client_id: post.client_id, n: 1,
+        slides: part.slides, per_channel: source.per_channel, channels: source.channels, caption: source.caption,
+        scheduled_for: part.scheduled_for, timezone: String(base.timezone), frozen_for: 'retime', frozen_by: actor.id,
+        frozen_at: at, from_migration: false, automation: post.automation ?? null,
+      }
+      await versionsT().claim(v1.id, cur => (cur ? null : v1))
+      await posts().insert({
+        ...base,
+        stage: 'ready',
+        sent_version: 1,
+        draft_version: 2,
+        ...(post.approval ? { approval: { ...post.approval, version: 1 } } : {}),
+        ...(post.qc_pass ? { qc_pass: { ...post.qc_pass, version: 1 } } : {}),
+      } as unknown as SocialPost)
+    }
+    await writeEvent({
+      id: `${id}_r0`, post_id: id, client_id: post.client_id, rev: 0, from: post.stage, to: post.stage,
+      action: 'duplicate', actor_id: actor.id, hat: (actor.hats[0] ?? 'system') as PostHat,
+      on_behalf_of_client: false, version: post.stage === 'ready' ? 1 : null, note, at,
+    })
+    ids.push(id)
+  }
+  return { ok: true, postIds: ids, words: `${plan.parts.length} Stories made, a minute apart` }
 }

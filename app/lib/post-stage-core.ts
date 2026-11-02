@@ -1980,3 +1980,50 @@ export const AUTO_BOOK_AFTER: readonly PostAction[] = ['pass', 'client_approve',
 export function autoBookAfter(action: string, landed: Pick<PostState, 'stage' | 'scheduled_for'> | null | undefined): boolean {
   return !!landed && landed.stage === 'ready' && !!landed.scheduled_for && (AUTO_BOOK_AFTER as readonly string[]).includes(action)
 }
+
+/* ── SEVERAL PICTURES AS STORIES (Renee, 2 Nov 2026: "when you upload stories its usually going to have 1-3 slides for
+ * our clients, itll be hard to schedule if i have to do individually for the same time and day") ──
+ * A Story is one picture or video (Zernio's Instagram guide: "It publishes one media item: when the request has
+ * several, only the first is used"). So a Story post with several slides becomes one Story post per slide, in slide
+ * order, ONE MINUTE APART so they land in that order (Zernio promises no order for posts at the same minute). Each
+ * new post is an ordinary post in the original's stage: a draft goes through the quality check and the client like
+ * any draft; an approved one (Ready to post) keeps the approval and the quality check it had. A post part-way
+ * through a check or the client's answer is not split — an approval never moves onto something nobody saw. */
+
+export const STORY_SPLIT_STAGES: readonly PostStage[] = ['draft', 'ready']
+
+export type StorySplitPlan =
+  | { ok: true; parts: { slides: Slide[]; scheduled_for: string | null; n: number; of: number }[] }
+  | { ok: false; reason: string }
+
+/** is every channel of this post a Story */
+export function allStories(post: Pick<PostState, 'channels' | 'per_channel'>): boolean {
+  return post.channels.length > 0 && post.channels.every(id => post.per_channel[id]?.kind === 'story')
+}
+
+export function storySplitPlan(post: Pick<PostState, 'stage' | 'channels' | 'per_channel' | 'slides' | 'scheduled_for'>): StorySplitPlan {
+  if (!allStories(post)) return { ok: false, reason: 'Only a post going out as a Story on every channel can be made into several Stories.' }
+  if (post.slides.length < 2) return { ok: false, reason: 'This Story has one picture — there is nothing to split.' }
+  if (!STORY_SPLIT_STAGES.includes(post.stage)) {
+    return { ok: false, reason: 'Make it into Stories while it is a draft, or once it is approved (Ready to post) — not while it is waiting on a check or the client.' }
+  }
+  const at = post.scheduled_for ? Date.parse(post.scheduled_for) : NaN
+  const of = post.slides.length
+  // each Story waits for the one before: a minute after a picture; after a VIDEO, long enough for Instagram to take it
+  // in first (the owner, 2 Nov 2026: "a video might take up 3 stories due to length make sure it goes after that")
+  let offset = 0
+  const parts = post.slides.map((s, i) => {
+    const part = { slides: [s], n: i + 1, of, scheduled_for: Number.isFinite(at) ? new Date(at + offset * 60_000).toISOString() : null }
+    offset += storyGapAfter(s)
+    return part
+  })
+  return { ok: true, parts }
+}
+
+/** minutes before the next Story: 1 after a picture; after a video 1 + one per 20 seconds of it, at least 3 (a
+ *  60-second video, Instagram's longest Story, waits 4) — a video's length unknown counts as the longest */
+export function storyGapAfter(s: Pick<Slide, 'type' | 'seconds'>): number {
+  if (s.type !== 'video') return 1
+  const secs = typeof s.seconds === 'number' && s.seconds > 0 ? s.seconds : 60
+  return Math.max(3, 1 + Math.ceil(secs / 20))
+}
