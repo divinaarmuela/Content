@@ -13,14 +13,16 @@ import {
   SORT_WORDS, engagement, groupFor, groupPosts, sortPosts, sumMetrics,
   type AnalyticsPost, type PostSort,
 } from '@/app/lib/social-analytics-core'
-import { Crumbs, LoadingBlock, PeriodPicker, PostRow, PostSheet, TotalsRow, followerWords, n, usePeriod } from '../../shared'
+import { Crumbs, FreshnessCard, LoadingBlock, PeriodPicker, PostRow, PostSheet, TotalsRow, followerWords, n, usePeriod } from '../../shared'
 
 type ChannelData = {
-  channel: { id: string; platform: string; username: string | null; name: string | null; followers: number | null; growth: number | null; growthSince: string | null }
+  channel: { id: string; platform: string; username: string | null; name: string | null; followers: number | null; growth: number | null; growthSince: string | null; followersReadAt: string | null }
   client: { id: string; name: string } | null
   posts: AnalyticsPost[]
   complete: boolean
   readable: boolean
+  asOf: string | null
+  syncing: boolean
 }
 
 /**
@@ -88,6 +90,7 @@ function ChannelAnalytics() {
         <LoadFailed what="this channel’s posts" detail={failed} onRetry={() => setAttempt(a => a + 1)} />
       ) : !data ? <LoadingBlock /> : (
         <>
+          <FreshnessCard range={range} asOf={data.asOf} syncing={data.syncing} followersReadAt={data.channel.followersReadAt} />
           <TotalsRow followers={data.channel.followers} followerNote={followerWords(data.channel.growth, data.channel.growthSince)} posts={data.posts.length} totals={totals} />
           {!data.readable && <p className="text-secondary-13 text-muted-foreground">The platforms did not answer, so the posts are missing. Try again in a moment.</p>}
           {data.readable && !data.complete && <p className="text-secondary-13 text-muted-foreground">Showing the first 3,000 posts — pick fewer days to see them all.</p>}

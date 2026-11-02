@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  engagement, followerChange, groupFor, groupPosts, pictureExpired, refreshPictures, mondayOf, readTimeline, sortPosts, sumMetrics, summariseByAccount, trimPost,
+  engagement, followerChange, freshnessFor, groupFor, groupPosts, pictureExpired, refreshPictures, mondayOf, readTimeline, sortPosts, sumMetrics, summariseByAccount, trimPost,
 } from '../app/lib/social-analytics-core'
 
 const TZ = 'Australia/Melbourne'
@@ -102,5 +102,16 @@ describe('dead TikTok pictures (2 Nov 2026)', () => {
       { id: '7562222222222222222', permalink: '', picture: 'https://fresh/b.jpg' },
     ] }
     expect(refreshPictures(posts, feed, now).map(p => p.thumbnail)).toEqual(['https://fresh/a.jpg', 'https://fresh/b.jpg', null, alive])
+  })
+})
+
+describe('how up to date the numbers are (2 Nov 2026)', () => {
+  it('a range reaching yesterday is still filling in; an older one is complete; a re-read says so first', () => {
+    expect(freshnessFor({ from: '2026-10-26', to: '2026-11-01' }, '2026-11-02', false).tone).toBe('blue')
+    expect(freshnessFor({ from: '2026-10-19', to: '2026-10-25' }, '2026-11-02', false)).toMatchObject({ tone: 'green', title: 'These days are complete' })
+    expect(freshnessFor({ from: '2026-10-19', to: '2026-10-25' }, '2026-11-02', true).tone).toBe('amber')
+  })
+  it('keeps when a post’s numbers were read', () => {
+    expect(trimPost({ _id: 'a', analytics: { lastUpdated: '2026-11-02T09:40:06Z' } })?.updatedAt).toBe('2026-11-02T09:40:06Z')
   })
 })

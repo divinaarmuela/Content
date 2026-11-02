@@ -11,10 +11,11 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import PlatformIcon, { brandFor } from '../PlatformIcon'
+import TintCard from '../../ui/TintCard'
 import { CAL_TZ } from '@/app/lib/gcal-core'
 import { ANALYTICS_PERIODS, customRange, isPeriod, periodRange, rangeWords, type AnalyticsPeriod } from '@/app/lib/analytics-period-core'
 import {
-  METRIC_WORDS, engagement, pictureExpired, type AnalyticsPost, type Metrics, type TimelineDay,
+  FRESHNESS_RULES, METRIC_WORDS, engagement, freshnessFor, pictureExpired, type AnalyticsPost, type Metrics, type TimelineDay,
 } from '@/app/lib/social-analytics-core'
 
 export type Picked = AnalyticsPeriod | 'custom'
@@ -103,6 +104,40 @@ export function followerWords(growth: number | null | undefined, since: string |
   const day = new Date(`${since}T00:00:00Z`).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', timeZone: 'UTC' })
   return `${growth > 0 ? '+' : ''}${growth.toLocaleString('en-AU')} since ${day}`
 }
+
+const when = (iso: string) => new Date(iso).toLocaleString('en-AU', { timeZone: CAL_TZ, weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })
+
+/**
+ * HOW UP TO DATE THIS IS (the owner, 2 Nov 2026: "mention when the data is full, like the reporting page … so we know
+ * when the data is"): whether the days picked are complete, when the numbers and the followers were last read, and
+ * how often each kind of number is renewed.
+ */
+export function FreshnessCard({ range, asOf, syncing, followersReadAt }: {
+  range: { from: string; to: string }; asOf: string | null; syncing: boolean; followersReadAt?: string | null
+}) {
+  const f = freshnessFor(range, todayHere(), syncing)
+  return (
+    <TintCard tone={f.tone} title={f.title}>
+      <div className="flex flex-col gap-1 text-[14px]">
+        <p>{f.words}</p>
+        <p className="text-[13px] text-muted-foreground">
+          {asOf ? `Post numbers last read ${when(asOf)}` : 'When the post numbers were last read is not known'}
+          {followersReadAt ? ` · followers counted ${when(followersReadAt)}` : ''}
+        </p>
+      </div>
+      <details className="-mt-2 text-[13px]">
+        <summary className="cursor-pointer font-semibold">How up to date each number is</summary>
+        <ul className="mt-1.5 flex flex-col gap-0.5">
+          {FRESHNESS_RULES.map(r => <li key={r.what}><strong>{r.what}</strong>: {r.how}</li>)}
+        </ul>
+      </details>
+    </TintCard>
+  )
+}
+
+/** The newest of several moments (ISO), or null. */
+export const newest = (list: (string | null | undefined)[]): string | null =>
+  list.filter((x): x is string => !!x).sort().pop() ?? null
 
 /** Analytics › Client › Channel */
 export function Crumbs({ items }: { items: { label: string; href?: string }[] }) {
@@ -234,7 +269,9 @@ export function PostSheet({ post, onClose }: { post: AnalyticsPost | null; onClo
               <SheetTitle className="flex items-center gap-2">
                 {p.platform && <PlatformIcon platform={p.platform} size={22} />} Post analytics
               </SheetTitle>
-              <SheetDescription>{postedOn(p.publishedAt)}</SheetDescription>
+              <SheetDescription>
+                Posted {postedOn(p.publishedAt)}{p.updatedAt ? ` · numbers read ${when(p.updatedAt)}` : ''}
+              </SheetDescription>
             </SheetHeader>
 
             <div className="flex gap-3">

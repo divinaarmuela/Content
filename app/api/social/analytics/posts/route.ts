@@ -36,10 +36,13 @@ export async function GET(req: Request) {
           id: account.id, platform: account.platform, username: account.username, name: account.name,
           avatar_url: account.avatar_url, active: account.active,
           followers: f?.followers ?? null, growth: f?.growth ?? null, growthSince: f?.growthSince ?? null,
+          followersReadAt: f?.readAt ?? null,
         },
         client: client ? { id: client.id, name: client.name } : null,
         posts,
         complete: read?.complete ?? false,
+        asOf: read?.asOf ?? null,
+        syncing: read?.syncing ?? false,
         readable: !!read,
       })
     } catch (e) {

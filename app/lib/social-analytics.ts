@@ -14,11 +14,14 @@ const PAGE = 100
  */
 export async function publishedBetween(
   from: string, to: string, opts: { accountId?: string; maxPages?: number } = {},
-): Promise<{ posts: AnalyticsPost[]; complete: boolean } | null> {
+): Promise<{ posts: AnalyticsPost[]; complete: boolean; asOf: string | null; syncing: boolean } | null> {
   const publisher = getPublisher()
   const read = (page: number) => publisher
     .analyticsPage({ fromDate: from, toDate: to, page, limit: PAGE, ...(opts.accountId ? { accountId: opts.accountId } : {}) })
-    .catch(() => null) as Promise<{ posts?: unknown[]; pagination?: { pages?: number } } | null>
+    .catch(() => null) as Promise<{
+      posts?: unknown[]; pagination?: { pages?: number }
+      overview?: { lastSync?: string; dataStaleness?: { staleAccountCount?: number; syncTriggered?: boolean } }
+    } | null>
   const first = await read(1)
   if (!first) return null
   const raws: unknown[] = [...(first.posts ?? [])]
@@ -29,7 +32,13 @@ export async function publishedBetween(
     for (const res of batch) raws.push(...(res?.posts ?? []))
   }
   const posts = raws.map(trimPost).filter((p): p is AnalyticsPost => p !== null)
-  return { posts, complete: last >= pages }
+  // when Zernio last read these accounts, and whether it is reading some again now ("data as of", its guide says)
+  const stale = first.overview?.dataStaleness
+  return {
+    posts, complete: last >= pages,
+    asOf: typeof first.overview?.lastSync === 'string' ? first.overview.lastSync : null,
+    syncing: !!stale?.syncTriggered,
+  }
 }
 
 export type ChannelRow = {
@@ -40,23 +49,26 @@ export type ChannelRow = {
   /** gained (or lost) over the days picked, counted from `growthSince` — the first reading inside them */
   growth: number | null
   growthSince: string | null
+  /** when today's follower count was read */
+  followersReadAt: string | null
 }
 
 type FollowerStats = {
-  accounts?: { _id: string; currentFollowers?: number }[]
+  accounts?: { _id: string; currentFollowers?: number; lastUpdated?: string }[]
   stats?: Record<string, unknown>
 } | null
 
 /** Today's followers and the change over the days picked, per Zernio account id. */
 export async function followersFor(range: { from: string; to: string }, accountIds?: string[]) {
   const raw = await getPublisher().followerStats({ fromDate: range.from, toDate: range.to, accountIds }).catch(() => null) as FollowerStats
-  const out = new Map<string, { followers: number | null; growth: number | null; growthSince: string | null }>()
+  const out = new Map<string, { followers: number | null; growth: number | null; growthSince: string | null; readAt: string | null }>()
   for (const a of raw?.accounts ?? []) {
     const ch = followerChange(raw?.stats?.[a._id])
     out.set(a._id, {
       followers: typeof a.currentFollowers === 'number' ? a.currentFollowers : null,
       growth: ch?.change ?? null,
       growthSince: ch?.since ?? null,
+      readAt: typeof a.lastUpdated === 'string' ? a.lastUpdated : null,
     })
   }
   return out
@@ -79,6 +91,7 @@ export async function channelsWithFollowers(clientId: string | null, range: { fr
         id: r.id, client_id: r.client_id, platform: r.platform, provider_account_id: r.provider_account_id,
         username: r.username, name: r.name, avatar_url: r.avatar_url,
         followers: f?.followers ?? null, growth: f?.growth ?? null, growthSince: f?.growthSince ?? null,
+        followersReadAt: f?.readAt ?? null,
       }
     }),
     clients: clients.map(c => ({ id: c.id, name: c.name })),

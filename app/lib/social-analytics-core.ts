@@ -27,6 +27,8 @@ export type AnalyticsPost = {
   metrics: Metrics
   /** Zernio's engagement rate, a percentage — null when it gave none */
   engagementRate: number | null
+  /** when these numbers were last read from the platform */
+  updatedAt: string | null
 }
 
 const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : 0)
@@ -59,6 +61,7 @@ export function trimPost(raw: unknown): AnalyticsPost | null {
     mediaType: str(r.mediaType),
     metrics,
     engagementRate: typeof a.engagementRate === 'number' ? a.engagementRate : null,
+    updatedAt: str(a.lastUpdated),
   }
 }
 
@@ -224,4 +227,36 @@ export function refreshPictures(posts: readonly AnalyticsPost[], feed: unknown, 
     const fresh = fromLink ?? (idInLink ? byId.get(idInLink) : undefined)
     return { ...p, thumbnail: fresh ?? null }
   })
+}
+
+/**
+ * HOW UP TO DATE THESE NUMBERS ARE — said on the page, as the Reporting page does (the owner, 2 Nov 2026: "mention when
+ * the data is full … so we know when the data is"). The timings are Zernio's own (its analytics guide, "Show freshness,
+ * not real time", read 2 Nov 2026): likes and comments are re-read about every hour, reach and views arrive about a day
+ * after a post goes up on Instagram, followers are counted once a day, posts made on the platforms are picked up about
+ * every 90 minutes.
+ */
+export const FRESHNESS_RULES: readonly { what: string; how: string }[] = [
+  { what: 'Likes and comments', how: 'updated about every hour' },
+  { what: 'Reach and views', how: 'come in about a day after a post goes up' },
+  { what: 'Followers', how: 'counted once a day' },
+  { what: 'Posts made on the apps directly', how: 'show here within about an hour and a half' },
+]
+
+export type Freshness = { tone: 'green' | 'blue' | 'amber'; title: string; words: string }
+
+/** Whether the days picked are complete yet, from Melbourne's today: a range reaching yesterday or today is still filling in. */
+export function freshnessFor(range: { from: string; to: string }, today: string, syncing: boolean): Freshness {
+  const y = new Date(`${today}T00:00:00Z`); y.setUTCDate(y.getUTCDate() - 1)
+  const yesterday = y.toISOString().slice(0, 10)
+  if (syncing) {
+    return { tone: 'amber', title: 'Some channels are being read again right now',
+      words: 'A few channels’ numbers were more than a day old, so they are being fetched again. Open this page again in a few minutes for the newest figures.' }
+  }
+  if (range.to >= yesterday) {
+    return { tone: 'blue', title: 'The newest days are still coming in',
+      words: 'Posts from today and yesterday are still collecting their reach and views, so their numbers will grow. Everything older than that is in.' }
+  }
+  return { tone: 'green', title: 'These days are complete',
+    words: 'Every post here has been up for over a day, so its reach and views are in. Likes and comments still tick up as people find older posts.' }
 }

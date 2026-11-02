@@ -25,6 +25,14 @@ export async function GET(req: Request) {
       let posts: AnalyticsPost[] = []
       let complete = true
       let readable = true
+      let asOf: string | null = null
+      let syncing = false
+      const note = (r: { asOf: string | null; syncing: boolean } | null) => {
+        if (!r) return
+        // the oldest reading is the honest "as of" for the whole page
+        if (r.asOf && (!asOf || r.asOf < asOf)) asOf = r.asOf
+        if (r.syncing) syncing = true
+      }
       if (clientId) {
         // two channels at a time: Zernio allows about 6 analytics calls a second
         const each: Awaited<ReturnType<typeof publishedBetween>>[] = []
@@ -32,12 +40,13 @@ export async function GET(req: Request) {
           each.push(...await Promise.all(channels.slice(i, i + 2).map(c => publishedBetween(from, to, { accountId: c.provider_account_id }))))
         }
         readable = each.some(Boolean) || channels.length === 0
-        for (const r of each) { posts.push(...(r?.posts ?? [])); if (r && !r.complete) complete = false }
+        for (const r of each) { posts.push(...(r?.posts ?? [])); if (r && !r.complete) complete = false; note(r) }
       } else {
         const r = await publishedBetween(from, to)
         readable = !!r
         posts = r?.posts ?? []
         complete = r?.complete ?? false
+        note(r)
       }
       const mine = new Set(channels.map(c => c.provider_account_id))
       posts = posts.filter(p => p.accountId && mine.has(p.accountId))
@@ -50,6 +59,8 @@ export async function GET(req: Request) {
         top: clientId ? sortPosts(posts, 'views').slice(0, 6) : [],
         complete,
         readable,
+        asOf,
+        syncing,
         configured: getPublisher().configured(),
       })
     } catch (e) {

@@ -12,7 +12,7 @@ import EmptyState from '../../EmptyState'
 import PageTitle from '../../ui/PageTitle'
 import { emptyMetrics, engagement, type ChannelSummary, type Metrics } from '@/app/lib/social-analytics-core'
 import type { ChannelRow } from '@/app/lib/social-analytics'
-import { LoadingBlock, PeriodPicker, TotalsRow, n, usePeriod } from './shared'
+import { FreshnessCard, LoadingBlock, PeriodPicker, TotalsRow, n, usePeriod } from './shared'
 
 type Overview = {
   clients: { id: string; name: string }[]
@@ -20,6 +20,8 @@ type Overview = {
   summaries: Record<string, ChannelSummary>
   complete: boolean
   readable: boolean
+  asOf: string | null
+  syncing: boolean
 }
 
 /**
@@ -89,6 +91,7 @@ function Clients() {
         <LoadFailed what="the numbers for these accounts" detail={failed} onRetry={() => setAttempt(a => a + 1)} />
       ) : !data ? <LoadingBlock /> : (
         <>
+          <FreshnessCard range={range} asOf={data.asOf} syncing={data.syncing} />
           <TotalsRow posts={all.posts} totals={all.totals} />
           {!data.readable && <p className="text-secondary-13 text-muted-foreground">The platforms did not answer, so the post numbers are missing. Try again in a moment.</p>}
           {data.readable && !data.complete && <p className="text-secondary-13 text-muted-foreground">Showing the first 3,000 posts of these days — pick fewer days to see them all.</p>}

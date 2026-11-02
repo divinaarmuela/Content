@@ -12,7 +12,7 @@ import EmptyState from '../../../EmptyState'
 import PageTitle from '../../../ui/PageTitle'
 import { emptyMetrics, engagement, type AnalyticsPost, type ChannelSummary, type Metrics } from '@/app/lib/social-analytics-core'
 import type { ChannelRow } from '@/app/lib/social-analytics'
-import { Crumbs, LoadingBlock, PeriodPicker, PostSheet, Thumb, TotalsRow, followerWords, n, postedOn, usePeriod } from '../shared'
+import { Crumbs, FreshnessCard, LoadingBlock, PeriodPicker, PostSheet, Thumb, TotalsRow, followerWords, n, newest, postedOn, usePeriod } from '../shared'
 
 type ClientData = {
   clients: { id: string; name: string }[]
@@ -21,6 +21,8 @@ type ClientData = {
   top: AnalyticsPost[]
   complete: boolean
   readable: boolean
+  asOf: string | null
+  syncing: boolean
 }
 
 /** ONE CLIENT'S ANALYTICS (2 Nov 2026): their channels, each with its numbers for the days picked, and their best posts. */
@@ -77,6 +79,7 @@ function ClientAnalytics() {
         <LoadFailed what="this client’s numbers" detail={failed} onRetry={() => setAttempt(a => a + 1)} />
       ) : !data ? <LoadingBlock /> : (
         <>
+          <FreshnessCard range={range} asOf={data.asOf} syncing={data.syncing} followersReadAt={newest(data.channels.map(c => c.followersReadAt))} />
           <TotalsRow followers={all.followers} posts={all.posts} totals={all.totals} />
           {!data.readable && <p className="text-secondary-13 text-muted-foreground">The platforms did not answer, so the post numbers are missing. Try again in a moment.</p>}
 
