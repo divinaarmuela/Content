@@ -70,7 +70,8 @@ describe('each Story goes only after the one before it is live', () => {
   it('only Story 1 is booked from the window', () => {
     const win = readFileSync('app/dashboard/social/schedule/PostWindow.tsx', 'utf8')
     expect(win).toContain("api.act(made.postIds[0], { action: 'book'")
-    expect(win).not.toContain('for (const [i, sid] of made.postIds.entries())')
+    // an approved set books only Story 1; a DRAFT set scheduled with Schedule it places each at its spaced time (2 Nov 2026)
+    expect(win).toContain("if (storyPlan?.ok && (action === 'book' || action === 'schedule_direct'))")
   })
 })
 

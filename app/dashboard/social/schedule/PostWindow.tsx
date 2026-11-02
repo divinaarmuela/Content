@@ -23,7 +23,7 @@ import {
 } from '@/app/lib/schedule-compose-core'
 import {
   AGREED_VIA, APPROVAL_STEPS, APPROVAL_STEPS_LABEL, approvalStepsOf, compositionProblems, defaultApproveBy,
-  hatsFor, isReminderSend, lostChannels, postActions, postVersionId, readPostState, STORY_SPLIT_STAGES, storySplitPlan,
+  hatsFor, isReminderSend, lostChannels, postActions, postVersionId, readPostState, STORY_SPLIT_STAGES, storySplitPlan, storyGapAfter,
   type AccountRef, type OfferedAction, type PostAction, type PostActionList, type PostStage, type PostState,
 } from '@/app/lib/post-stage-core'
 import {
@@ -630,7 +630,9 @@ export default function PostWindow({
    * picture and retires this one (splitStoryPost), and an approved post's Stories are then booked in, in order. A
    * Story that cannot be booked is left on Ready to post with its reason — the others are not held back by it.
    */
-  const splitStories = async () => {
+  /** `schedule`: Schedule it was pressed on a draft with several Story frames — each Story is scheduled from that time, in
+   *  order, spaced as storySplitPlan spaces them (a minute after a picture, longer after a video) */
+  const splitStories = async (schedule?: { at: string }) => {
     if (!post || busy) return
     setReply(null)
     let pid = id
@@ -651,6 +653,18 @@ export default function PostWindow({
       { ok: true; postIds: string[]; words: string } | { ok: false; reason: string }
     if (!made.ok) { setBusy(false); setReply({ action: 'save', tone: 'error', text: made.reason, problems: [] }); return }
     let words = made.words
+    if (post.stage === 'draft' && schedule) {
+      // SCHEDULE IT ON A DRAFT WITH SEVERAL FRAMES (2 Nov 2026: Renee pressed Schedule it and was told 'A Story takes exactly
+      // one image or video'): every Story is scheduled, in order, from the time picked
+      const refused: string[] = []
+      let at = Date.parse(schedule.at)
+      for (const [i, sid] of made.postIds.entries()) {
+        const b = await api.act(sid, { action: 'schedule_direct', expect_rev: 0, scheduled_for: new Date(at).toISOString(), note: `Story ${i + 1} of ${made.postIds.length}` })
+        if (!b.ok) refused.push(`Story ${i + 1}: ${b.reason}`)
+        at += storyGapAfter(post.slides[i] ?? { type: 'image' }) * 60_000
+      }
+      words = refused.length ? `${made.postIds.length} Stories made; not all scheduled — ${refused.join(' · ')}` : `${made.postIds.length} Stories scheduled in order from ${melb(schedule.at)}`
+    }
     if (post.stage === 'ready') {
       // ONLY STORY 1 IS BOOKED. Each next one is posted by the app the moment the one before it is live, so the order
       // can never swap (the owner, 2 Nov 2026) — advanceStoryChain on the server
@@ -661,7 +675,7 @@ export default function PostWindow({
     }
     setBusy(false)
     const outcome: PostWindowOutcome = {
-      postId: made.postIds[0] ?? null, itemId, words, stage: post.stage === 'ready' ? 'booked' : 'draft',
+      postId: made.postIds[0] ?? null, itemId, words, stage: post.stage === 'ready' || schedule ? 'booked' : 'draft',
       at: post.scheduled_for, channels: [...post.channels], createdPostId: null, link: null,
     }
     if (onDone) onDone(outcome)
@@ -780,6 +794,13 @@ export default function PostWindow({
   }, [id, saved?.stage, saved?.sent_version]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const go = async (action: PostAction, answers: Answers): Promise<boolean> => {
+    // SEVERAL STORY FRAMES: booking or scheduling makes them into Stories first — whichever button is pressed, never the
+    // 'A Story takes exactly one image or video' refusal (Renee, 2 Nov 2026)
+    if (storyPlan?.ok && (action === 'book' || action === 'schedule_direct')) {
+      if (action === 'schedule_direct' && answers.scheduled_for) await splitStories({ at: String(answers.scheduled_for) })
+      else await splitStories()
+      return true
+    }
     if (!post || busy) return false
     setBusy(true)
     setReply(null)

@@ -1185,7 +1185,8 @@ export async function actOnPost(user: TeamUser, postId: string, request: PostAct
     return refusal('not_allowed', `Only ${ROW_OF[request.action].who.includes('client') ? 'the client' : 'the app'} can do that.`, post)
   }
   // a Story waiting its turn is posted by the app once the one before it is live — never booked ahead of it by hand
-  if (CHAIN_HELD.includes(request.action)) {
+  // a DRAFT Story scheduled directly is the person placing it themselves (Schedule it on a split draft): let it through
+  if (CHAIN_HELD.includes(request.action) && !(request.action === 'schedule_direct' && post.stage === 'draft')) {
     const waiting = await storyWaitingFor(row as unknown as Record<string, unknown>)
     if (waiting) return refusal('wrong_stage', waiting, post)
   }
