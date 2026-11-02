@@ -2,7 +2,7 @@ import 'server-only'
 import { table } from '@/lib/db'
 import type { Client, SocialAccount } from '@/lib/db-types'
 import { getPublisher } from './publisher'
-import { trimPost, type AnalyticsPost } from './social-analytics-core'
+import { followerChange, pictureExpired, refreshPictures, trimPost, type AnalyticsPost } from './social-analytics-core'
 
 const PAGE = 100
 
@@ -35,30 +35,60 @@ export async function publishedBetween(
 export type ChannelRow = {
   id: string; client_id: string | null; platform: string; provider_account_id: string
   username: string | null; name: string | null; avatar_url: string | null
-  followers: number | null; growth: number | null
+  /** today's count */
+  followers: number | null
+  /** gained (or lost) over the days picked, counted from `growthSince` — the first reading inside them */
+  growth: number | null
+  growthSince: string | null
 }
 
-/** The active channels (one client's, or everyone's) with their follower counts, and the clients' names. */
-export async function channelsWithFollowers(clientId?: string | null): Promise<{ channels: ChannelRow[]; clients: { id: string; name: string }[] }> {
-  const [rows, clients, followers] = await Promise.all([
+type FollowerStats = {
+  accounts?: { _id: string; currentFollowers?: number }[]
+  stats?: Record<string, unknown>
+} | null
+
+/** Today's followers and the change over the days picked, per Zernio account id. */
+export async function followersFor(range: { from: string; to: string }, accountIds?: string[]) {
+  const raw = await getPublisher().followerStats({ fromDate: range.from, toDate: range.to, accountIds }).catch(() => null) as FollowerStats
+  const out = new Map<string, { followers: number | null; growth: number | null; growthSince: string | null }>()
+  for (const a of raw?.accounts ?? []) {
+    const ch = followerChange(raw?.stats?.[a._id])
+    out.set(a._id, {
+      followers: typeof a.currentFollowers === 'number' ? a.currentFollowers : null,
+      growth: ch?.change ?? null,
+      growthSince: ch?.since ?? null,
+    })
+  }
+  return out
+}
+
+/** The active channels (one client's, or everyone's) with their followers over the days picked, and the clients' names. */
+export async function channelsWithFollowers(clientId: string | null, range: { from: string; to: string }): Promise<{ channels: ChannelRow[]; clients: { id: string; name: string }[] }> {
+  const [rows, clients] = await Promise.all([
     table<SocialAccount>('social_accounts').list({
       by: { active: true },
       where: clientId ? a => a.client_id === clientId : undefined,
     }),
     table<Client>('clients').list(),
-    getPublisher().followerStats().catch(() => null) as Promise<{ accounts?: { _id: string; currentFollowers?: number; growth?: number }[] } | null>,
   ])
-  const byId = new Map((followers?.accounts ?? []).map(f => [f._id, f]))
+  const followers = await followersFor(range, clientId ? rows.map(r => r.provider_account_id).filter(Boolean) : undefined)
   return {
     channels: rows.map(r => {
-      const f = byId.get(r.provider_account_id)
+      const f = followers.get(r.provider_account_id)
       return {
         id: r.id, client_id: r.client_id, platform: r.platform, provider_account_id: r.provider_account_id,
         username: r.username, name: r.name, avatar_url: r.avatar_url,
-        followers: typeof f?.currentFollowers === 'number' ? f.currentFollowers : null,
-        growth: typeof f?.growth === 'number' ? f.growth : null,
+        followers: f?.followers ?? null, growth: f?.growth ?? null, growthSince: f?.growthSince ?? null,
       }
     }),
     clients: clients.map(c => ({ id: c.id, name: c.name })),
   }
+}
+
+/** Expired TikTok pictures swapped for fresh ones from the account's live feed — one feed read, only when needed. */
+export async function withLivePictures(posts: AnalyticsPost[], providerAccountId: string): Promise<AnalyticsPost[]> {
+  const now = Date.now()
+  if (!posts.some(p => pictureExpired(p.thumbnail, now))) return posts
+  const feed = await getPublisher().accountPosts(providerAccountId).catch(() => null)
+  return refreshPictures(posts, feed, now)
 }

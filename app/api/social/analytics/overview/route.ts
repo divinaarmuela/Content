@@ -21,7 +21,7 @@ export async function GET(req: Request) {
       if (!from || !to) return NextResponse.json({ error: 'Pick the days to show' }, { status: 400 })
       const clientId = url.searchParams.get('clientId')
 
-      const { channels, clients } = await channelsWithFollowers(clientId)
+      const { channels, clients } = await channelsWithFollowers(clientId, { from, to })
       let posts: AnalyticsPost[] = []
       let complete = true
       let readable = true

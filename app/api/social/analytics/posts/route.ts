@@ -2,8 +2,7 @@ import { NextResponse } from 'next/server'
 import { table, withRequestCache } from '@/lib/db'
 import type { Client, SocialAccount } from '@/lib/db-types'
 import { requireRole, authzErrorResponse } from '@/app/lib/authz'
-import { getPublisher } from '@/app/lib/publisher'
-import { publishedBetween } from '@/app/lib/social-analytics'
+import { followersFor, publishedBetween, withLivePictures } from '@/app/lib/social-analytics'
 
 const day = (v: string | null) => (v && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null)
 
@@ -25,19 +24,21 @@ export async function GET(req: Request) {
       const client = account.client_id ? await table<Client>('clients').get(account.client_id) : null
       const [read, followers] = await Promise.all([
         publishedBetween(from, to, { accountId: account.provider_account_id }),
-        getPublisher().followerStats().catch(() => null) as Promise<{ accounts?: { _id: string; currentFollowers?: number; growth?: number }[] } | null>,
+        followersFor({ from, to }, [account.provider_account_id]),
       ])
-      const f = followers?.accounts?.find(x => x._id === account.provider_account_id)
+      const f = followers.get(account.provider_account_id)
+      const posts = await withLivePictures(
+        (read?.posts ?? []).filter(p => !p.accountId || p.accountId === account.provider_account_id),
+        account.provider_account_id)
 
       return NextResponse.json({
         channel: {
           id: account.id, platform: account.platform, username: account.username, name: account.name,
           avatar_url: account.avatar_url, active: account.active,
-          followers: typeof f?.currentFollowers === 'number' ? f.currentFollowers : null,
-          growth: typeof f?.growth === 'number' ? f.growth : null,
+          followers: f?.followers ?? null, growth: f?.growth ?? null, growthSince: f?.growthSince ?? null,
         },
         client: client ? { id: client.id, name: client.name } : null,
-        posts: (read?.posts ?? []).filter(p => !p.accountId || p.accountId === account.provider_account_id),
+        posts,
         complete: read?.complete ?? false,
         readable: !!read,
       })

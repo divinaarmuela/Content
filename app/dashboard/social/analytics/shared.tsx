@@ -12,43 +12,96 @@ import {
 } from '@/components/ui/select'
 import PlatformIcon, { brandFor } from '../PlatformIcon'
 import { CAL_TZ } from '@/app/lib/gcal-core'
-import { ANALYTICS_PERIODS, isPeriod, periodRange, rangeWords, type AnalyticsPeriod } from '@/app/lib/analytics-period-core'
+import { ANALYTICS_PERIODS, customRange, isPeriod, periodRange, rangeWords, type AnalyticsPeriod } from '@/app/lib/analytics-period-core'
 import {
-  METRIC_WORDS, engagement, type AnalyticsPost, type Metrics, type TimelineDay,
+  METRIC_WORDS, engagement, pictureExpired, type AnalyticsPost, type Metrics, type TimelineDay,
 } from '@/app/lib/social-analytics-core'
 
-/** The period lives in the address (`?period=`), so it carries from the client to the channel to a shared link. */
+export type Picked = AnalyticsPeriod | 'custom'
+
+const todayHere = () => new Date().toLocaleDateString('en-CA', { timeZone: CAL_TZ })
+
+/**
+ * The days picked live in the address (`?period=`, or `?period=custom&from=&to=` for dates typed in), so they carry
+ * from the client to the channel to a shared link.
+ */
 export function usePeriod(fallback: AnalyticsPeriod) {
   const params = useSearchParams()
   const router = useRouter()
   const pathname = usePathname()
   const raw = params.get('period')
-  const period: AnalyticsPeriod = isPeriod(raw) ? raw : fallback
+  const typed = raw === 'custom' ? customRange(params.get('from'), params.get('to'), todayHere()) : null
+  const period: Picked = typed ? 'custom' : isPeriod(raw) ? raw : fallback
+  const from = typed?.from, to = typed?.to
   const range = useMemo(
-    () => periodRange(period, new Date().toLocaleDateString('en-CA', { timeZone: CAL_TZ }))!,
-    [period])
-  const setPeriod = useCallback((p: AnalyticsPeriod) => {
+    () => (from && to ? { from, to } : periodRange(period as AnalyticsPeriod, todayHere())!),
+    [period, from, to])
+  const go = useCallback((set: Record<string, string>) => {
     const q = new URLSearchParams(params.toString())
-    q.set('period', p)
+    q.delete('from'); q.delete('to')
+    for (const [k, v] of Object.entries(set)) q.set(k, v)
     router.replace(`${pathname}?${q}`, { scroll: false })
   }, [params, pathname, router])
-  return { period, range, setPeriod, query: `period=${period}` }
+  const setPeriod = useCallback((p: AnalyticsPeriod) => go({ period: p }), [go])
+  const setCustom = useCallback((r: { from: string; to: string }) => go({ period: 'custom', from: r.from, to: r.to }), [go])
+  const query = period === 'custom' ? `period=custom&from=${range.from}&to=${range.to}` : `period=${period}`
+  return { period, range, setPeriod, setCustom, query }
 }
 
-export function PeriodPicker({ period, range, onChange }: {
-  period: AnalyticsPeriod; range: { from: string; to: string }; onChange: (p: AnalyticsPeriod) => void
+/** The days to show: a ready-made period, or "Custom dates" and two days typed in (at most 366 days, none ahead). */
+export function PeriodPicker({ period, range, onChange, onCustom }: {
+  period: Picked; range: { from: string; to: string }
+  onChange: (p: AnalyticsPeriod) => void; onCustom: (r: { from: string; to: string }) => void
 }) {
+  const [choosing, setChoosing] = useState(period === 'custom')
+  const [from, setFrom] = useState(range.from)
+  const [to, setTo] = useState(range.to)
+  useEffect(() => { setFrom(range.from); setTo(range.to) }, [range.from, range.to])
+  useEffect(() => { if (period === 'custom') setChoosing(true) }, [period])
+  const today = todayHere()
+  const typed = customRange(from, to, today)
+  const changed = !!typed && (typed.from !== range.from || typed.to !== range.to || period !== 'custom')
+  const custom = choosing || period === 'custom'
+
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <Select value={period} onValueChange={v => onChange(v as AnalyticsPeriod)}>
-        <SelectTrigger className="w-44" aria-label="Which days"><SelectValue /></SelectTrigger>
-        <SelectContent>
-          {ANALYTICS_PERIODS.map(p => <SelectItem key={p.key} value={p.key}>{p.label}</SelectItem>)}
-        </SelectContent>
-      </Select>
-      <span className="font-mono text-secondary-13 tabular-nums text-muted-foreground">{rangeWords(range)}</span>
+    <div className="flex flex-col items-start gap-2 sm:items-end">
+      <div className="flex flex-wrap items-center gap-2">
+        <Select value={custom ? 'custom' : period}
+          onValueChange={v => { if (v === 'custom') setChoosing(true); else { setChoosing(false); onChange(v as AnalyticsPeriod) } }}>
+          <SelectTrigger className="w-44" aria-label="Which days"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            {ANALYTICS_PERIODS.map(p => <SelectItem key={p.key} value={p.key}>{p.label}</SelectItem>)}
+            <SelectItem value="custom">Custom dates…</SelectItem>
+          </SelectContent>
+        </Select>
+        {!custom && <span className="font-mono text-secondary-13 tabular-nums text-muted-foreground">{rangeWords(range)}</span>}
+      </div>
+      {custom && (
+        <form className="flex flex-wrap items-center gap-2" onSubmit={e => { e.preventDefault(); if (typed) onCustom(typed) }}>
+          <label className="flex items-center gap-1.5 text-secondary-13 text-muted-foreground">From
+            <input type="date" value={from} max={today} onChange={e => setFrom(e.target.value)}
+              className="rounded-md border border-border bg-background px-2 py-1 text-body-15 text-foreground" />
+          </label>
+          <label className="flex items-center gap-1.5 text-secondary-13 text-muted-foreground">To
+            <input type="date" value={to} max={today} onChange={e => setTo(e.target.value)}
+              className="rounded-md border border-border bg-background px-2 py-1 text-body-15 text-foreground" />
+          </label>
+          <button type="submit" disabled={!changed}
+            className="rounded-md bg-foreground px-3 py-1.5 text-secondary-13 font-medium text-background disabled:opacity-40">
+            Show
+          </button>
+          {!typed && <span className="basis-full text-[12px] text-destructive sm:text-right">Pick a start before the end, no later than today, up to 366 days.</span>}
+        </form>
+      )}
     </div>
   )
+}
+
+/** "+85 since 1 Sep" — the change over the days picked, from the first reading inside them; nothing when there is none. */
+export function followerWords(growth: number | null | undefined, since: string | null | undefined): string | null {
+  if (typeof growth !== 'number' || !since) return null
+  const day = new Date(`${since}T00:00:00Z`).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', timeZone: 'UTC' })
+  return `${growth > 0 ? '+' : ''}${growth.toLocaleString('en-AU')} since ${day}`
 }
 
 /** Analytics › Client › Channel */
@@ -82,11 +135,13 @@ export function Stat({ label, value, hint }: { label: string; value: number | nu
 
 /** Followers, posts, and the numbers that matter most, in one row. */
 /** `followers` left out on the all-clients page — a sum of everyone's followers says nothing (the owner, 2 Nov 2026) */
-export function TotalsRow({ followers, posts, totals }: { followers?: number | null; posts: number; totals: Metrics }) {
+export function TotalsRow({ followers, followerNote, posts, totals }: {
+  followers?: number | null; followerNote?: string | null; posts: number; totals: Metrics
+}) {
   const withFollowers = followers !== undefined
   return (
     <div className={`grid grid-cols-2 gap-3 ${withFollowers ? 'lg:grid-cols-5' : 'lg:grid-cols-4'}`}>
-      {withFollowers && <Stat label="Followers" value={followers} hint="today" />}
+      {withFollowers && <Stat label="Followers" value={followers} hint={followerNote ? `today · ${followerNote}` : 'today'} />}
       <Stat label="Posts" value={posts} />
       <Stat label="Views" value={Math.max(totals.views, totals.impressions)} hint={totals.views ? 'plays and views' : 'times shown'} />
       <Stat label="Reach" value={totals.reach} hint="people" />
@@ -105,12 +160,17 @@ export function LoadingBlock() {
 }
 
 /** A platform's picture, or a quiet blank when it has none or the link has expired (Meta's links do). */
-export function Thumb({ src, className = '' }: { src: string | null; className?: string }) {
+export function Thumb({ src, platform, className = '' }: { src: string | null; platform?: string | null; className?: string }) {
   const [broken, setBroken] = useState(false)
-  if (!src || broken) {
+  // a TikTok picture link that has run out cannot be opened by anyone — say so instead of drawing a broken image
+  const expired = pictureExpired(src, Date.now())
+  if (!src || broken || expired) {
+    const word = platform ? brandFor(platform).label : null
     return (
-      <div className={`flex items-center justify-center bg-muted text-muted-foreground ${className}`}>
-        <ImageOff className="h-4 w-4" />
+      <div className={`flex flex-col items-center justify-center gap-1 bg-muted text-center text-muted-foreground ${className}`}
+        title={word ? `${word} no longer gives this post's picture — open it on ${word} to see it` : 'No picture for this post'}>
+        {platform ? <PlatformIcon platform={platform} size={18} /> : <ImageOff className="h-4 w-4" />}
+        <span className="px-1 text-[10px] leading-tight">{src ? 'Picture expired' : 'No picture'}</span>
       </div>
     )
   }
@@ -128,7 +188,7 @@ export function PostRow({ post, onOpen }: { post: AnalyticsPost; onOpen: (p: Ana
   return (
     <button type="button" onClick={() => onOpen(post)}
       className="flex w-full items-center gap-3 rounded-inner border border-border p-2.5 text-left transition-colors hover:border-foreground/25 hover:bg-muted/40">
-      <Thumb src={post.thumbnail} className="h-14 w-14 shrink-0 rounded-md" />
+      <Thumb src={post.thumbnail} platform={post.platform} className="h-14 w-14 shrink-0 rounded-md" />
       <div className="min-w-0 flex-1">
         <p className="line-clamp-2 text-body-15">{post.content || '(no caption)'}</p>
         <p className="mt-0.5 text-secondary-13 text-muted-foreground">
@@ -178,7 +238,7 @@ export function PostSheet({ post, onClose }: { post: AnalyticsPost | null; onClo
             </SheetHeader>
 
             <div className="flex gap-3">
-              <Thumb src={p.thumbnail} className="h-24 w-24 shrink-0 rounded-md" />
+              <Thumb src={p.thumbnail} platform={p.platform} className="h-24 w-24 shrink-0 rounded-md" />
               <p className="line-clamp-5 whitespace-pre-line text-body-15">{p.content || '(no caption)'}</p>
             </div>
             {p.url && (
@@ -205,10 +265,9 @@ export function PostSheet({ post, onClose }: { post: AnalyticsPost | null; onClo
               <h3 className="mb-2 text-card-title">Day by day</h3>
               {timeline === null ? <Skeleton className="h-28 w-full" />
                 : timeline.length === 0 ? (
-                  <p className="text-secondary-13 text-muted-foreground">No day-by-day figures for this post yet — {brand} hands them over within a day or two.</p>
+                  <p className="text-secondary-13 text-muted-foreground">No day-by-day figures for this post yet.</p>
                 ) : <Growth days={timeline} />}
             </div>
-            <p className="text-[12px] text-muted-foreground">From {brand}, through Zernio. Figures can lag by up to 48 hours.</p>
           </div>
         )}
       </SheetContent>

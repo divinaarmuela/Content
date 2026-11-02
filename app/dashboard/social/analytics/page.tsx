@@ -32,7 +32,7 @@ export default function AnalyticsPage() {
 }
 
 function Clients() {
-  const { period, range, setPeriod, query } = usePeriod('this_week')
+  const { period, range, setPeriod, setCustom, query } = usePeriod('this_week')
   const [data, setData] = useState<Overview | null>(null)
   const [failed, setFailed] = useState<string | null>(null)
   const [find, setFind] = useState('')
@@ -82,7 +82,7 @@ function Clients() {
       <PageTitle
         title="Analytics"
         summary="Pick a client to see each of their social channels, then a channel to see its posts and how each one did."
-        actions={<PeriodPicker period={period} range={range} onChange={setPeriod} />}
+        actions={<PeriodPicker period={period} range={range} onChange={setPeriod} onCustom={setCustom} />}
       />
 
       {failed && !data ? (
@@ -90,7 +90,7 @@ function Clients() {
       ) : !data ? <LoadingBlock /> : (
         <>
           <TotalsRow posts={all.posts} totals={all.totals} />
-          {!data.readable && <p className="text-secondary-13 text-muted-foreground">Zernio did not answer, so the post numbers are missing. Try again in a moment.</p>}
+          {!data.readable && <p className="text-secondary-13 text-muted-foreground">The platforms did not answer, so the post numbers are missing. Try again in a moment.</p>}
           {data.readable && !data.complete && <p className="text-secondary-13 text-muted-foreground">Showing the first 3,000 posts of these days — pick fewer days to see them all.</p>}
 
           <div className="relative w-full sm:w-72">
@@ -139,7 +139,6 @@ function Clients() {
               ))}
             </ul>
           )}
-          <p className="text-[12px] text-muted-foreground">From the platforms, through Zernio — posts made on the platforms directly count too. Figures can lag by up to 48 hours.</p>
         </>
       )}
     </div>

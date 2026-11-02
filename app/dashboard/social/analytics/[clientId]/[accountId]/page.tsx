@@ -13,10 +13,10 @@ import {
   SORT_WORDS, engagement, groupFor, groupPosts, sortPosts, sumMetrics,
   type AnalyticsPost, type PostSort,
 } from '@/app/lib/social-analytics-core'
-import { Crumbs, LoadingBlock, PeriodPicker, PostRow, PostSheet, TotalsRow, n, usePeriod } from '../../shared'
+import { Crumbs, LoadingBlock, PeriodPicker, PostRow, PostSheet, TotalsRow, followerWords, n, usePeriod } from '../../shared'
 
 type ChannelData = {
-  channel: { id: string; platform: string; username: string | null; name: string | null; followers: number | null; growth: number | null }
+  channel: { id: string; platform: string; username: string | null; name: string | null; followers: number | null; growth: number | null; growthSince: string | null }
   client: { id: string; name: string } | null
   posts: AnalyticsPost[]
   complete: boolean
@@ -35,7 +35,7 @@ export default function ChannelAnalyticsPage() {
 function ChannelAnalytics() {
   const { clientId, accountId } = useParams<{ clientId: string; accountId: string }>()
   // the posts page opens on the last 90 days, so "by week" has weeks to show
-  const { period, range, setPeriod, query } = usePeriod('last_90')
+  const { period, range, setPeriod, setCustom, query } = usePeriod('last_90')
   const [data, setData] = useState<ChannelData | null>(null)
   const [failed, setFailed] = useState<string | null>(null)
   const [attempt, setAttempt] = useState(0)
@@ -59,8 +59,8 @@ function ChannelAnalytics() {
   // ONE FILTER (the owner, 2 Nov 2026: "why are there two filters here, can be confusing"): the days picked decide
   // the grouping — a week is one list, a month or 90 days goes by week, twelve months by month
   const groups = useMemo(
-    () => groupPosts(sortPosts(data?.posts ?? [], sort), groupFor(period), CAL_TZ),
-    [data, sort, period])
+    () => groupPosts(sortPosts(data?.posts ?? [], sort), groupFor(range), CAL_TZ),
+    [data, sort, range])
   const totals = useMemo(() => sumMetrics(data?.posts ?? []), [data])
 
   const label = data ? brandFor(data.channel.platform).label : 'Channel'
@@ -79,7 +79,7 @@ function ChannelAnalytics() {
           <PageTitle
             title={data ? `${label}${handle ? ` · ${handle}` : ''}` : 'Posts'}
             summary="Every post in these days. Click one to see how it did."
-            actions={<PeriodPicker period={period} range={range} onChange={setPeriod} />}
+            actions={<PeriodPicker period={period} range={range} onChange={setPeriod} onCustom={setCustom} />}
           />
         </div>
       </div>
@@ -88,8 +88,8 @@ function ChannelAnalytics() {
         <LoadFailed what="this channel’s posts" detail={failed} onRetry={() => setAttempt(a => a + 1)} />
       ) : !data ? <LoadingBlock /> : (
         <>
-          <TotalsRow followers={data.channel.followers} posts={data.posts.length} totals={totals} />
-          {!data.readable && <p className="text-secondary-13 text-muted-foreground">Zernio did not answer, so the posts are missing. Try again in a moment.</p>}
+          <TotalsRow followers={data.channel.followers} followerNote={followerWords(data.channel.growth, data.channel.growthSince)} posts={data.posts.length} totals={totals} />
+          {!data.readable && <p className="text-secondary-13 text-muted-foreground">The platforms did not answer, so the posts are missing. Try again in a moment.</p>}
           {data.readable && !data.complete && <p className="text-secondary-13 text-muted-foreground">Showing the first 3,000 posts — pick fewer days to see them all.</p>}
 
           {data.posts.length > 1 && (

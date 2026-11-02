@@ -34,8 +34,9 @@ export interface Publisher {
   accountInsights(providerAccountId: string, platform: string): Promise<unknown>
   /** Day-by-day aggregate metrics. */
   dailyMetrics(providerAccountId?: string): Promise<unknown>
-  /** Follower history and growth. */
-  followerStats(): Promise<unknown>
+  /** Follower history and growth — the last 30 days unless a range is given; `growth` is the latest reading
+   *  minus the first one inside the range, `stats[id]` the readings themselves (Zernio, read 2 Nov 2026). */
+  followerStats(range?: { fromDate: string; toDate: string; accountIds?: string[] }): Promise<unknown>
   /** Published and scheduled posts. */
   listPosts(params?: { limit?: number }): Promise<unknown>
   /** every post Zernio holds whose time falls between two dates, page by page — null when it cannot be read */
@@ -604,8 +605,11 @@ class ZernioPublisher implements Publisher {
     return this.getJson(`/analytics/daily-metrics${id ? `?accountId=${encodeURIComponent(id)}` : ''}`)
   }
 
-  followerStats() {
-    return this.getJson('/accounts/follower-stats')
+  followerStats(range?: { fromDate: string; toDate: string; accountIds?: string[] }) {
+    if (!range) return this.getJson('/accounts/follower-stats')
+    const qs = new URLSearchParams({ fromDate: range.fromDate, toDate: range.toDate, granularity: 'daily' })
+    if (range.accountIds?.length) qs.set('accountIds', range.accountIds.join(','))
+    return this.getJson(`/accounts/follower-stats?${qs}`)
   }
 
   listPosts(params: { limit?: number } = {}) {

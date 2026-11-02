@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { inRange, periodRange, rangeWords } from '../app/lib/analytics-period-core'
+import { customRange, inRange, periodRange, rangeWords } from '../app/lib/analytics-period-core'
 
 describe('the analytics page’s weeks (2 Nov 2026)', () => {
   it('this week runs Monday to today; last week the Monday to Sunday before', () => {
@@ -22,5 +22,14 @@ describe('the analytics page’s weeks (2 Nov 2026)', () => {
     expect(inRange('2026-10-30', { from: '2026-10-26', to: '2026-11-01' })).toBe(true)
     expect(inRange('2026-11-02', { from: '2026-10-26', to: '2026-11-01' })).toBe(false)
     expect(inRange(null, null)).toBe(true)
+  })
+
+  it('takes a range typed in: in order, not in the future, at most 366 days', () => {
+    expect(customRange('2026-10-01', '2026-10-15', '2026-11-02')).toEqual({ from: '2026-10-01', to: '2026-10-15' })
+    expect(customRange('2026-10-15', '2026-10-01', '2026-11-02')).toBeNull()
+    expect(customRange('2026-10-01', '2026-11-03', '2026-11-02')).toBeNull()
+    expect(customRange('2025-11-01', '2026-11-02', '2026-11-02')).toBeNull()
+    expect(customRange('2025-11-03', '2026-11-02', '2026-11-02')).toEqual({ from: '2025-11-03', to: '2026-11-02' })
+    expect(customRange('1 Oct', '2026-10-15', '2026-11-02')).toBeNull()
   })
 })

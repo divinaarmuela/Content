@@ -12,7 +12,7 @@ import EmptyState from '../../../EmptyState'
 import PageTitle from '../../../ui/PageTitle'
 import { emptyMetrics, engagement, type AnalyticsPost, type ChannelSummary, type Metrics } from '@/app/lib/social-analytics-core'
 import type { ChannelRow } from '@/app/lib/social-analytics'
-import { Crumbs, LoadingBlock, PeriodPicker, PostSheet, Thumb, TotalsRow, n, postedOn, usePeriod } from '../shared'
+import { Crumbs, LoadingBlock, PeriodPicker, PostSheet, Thumb, TotalsRow, followerWords, n, postedOn, usePeriod } from '../shared'
 
 type ClientData = {
   clients: { id: string; name: string }[]
@@ -30,7 +30,7 @@ export default function ClientAnalyticsPage() {
 
 function ClientAnalytics() {
   const { clientId } = useParams<{ clientId: string }>()
-  const { period, range, setPeriod, query } = usePeriod('this_week')
+  const { period, range, setPeriod, setCustom, query } = usePeriod('this_week')
   const [data, setData] = useState<ClientData | null>(null)
   const [failed, setFailed] = useState<string | null>(null)
   const [attempt, setAttempt] = useState(0)
@@ -70,7 +70,7 @@ function ClientAnalytics() {
       <PageTitle
         title={name}
         summary="Each social channel and how it did. Open one to see its posts."
-        actions={<PeriodPicker period={period} range={range} onChange={setPeriod} />}
+        actions={<PeriodPicker period={period} range={range} onChange={setPeriod} onCustom={setCustom} />}
       />
 
       {failed && !data ? (
@@ -78,7 +78,7 @@ function ClientAnalytics() {
       ) : !data ? <LoadingBlock /> : (
         <>
           <TotalsRow followers={all.followers} posts={all.posts} totals={all.totals} />
-          {!data.readable && <p className="text-secondary-13 text-muted-foreground">Zernio did not answer, so the post numbers are missing. Try again in a moment.</p>}
+          {!data.readable && <p className="text-secondary-13 text-muted-foreground">The platforms did not answer, so the post numbers are missing. Try again in a moment.</p>}
 
           <section className="flex flex-col gap-2">
             <h2 className="text-card-title">Channels</h2>
@@ -106,9 +106,10 @@ function ClientAnalytics() {
                               </div>
                               <div className="ml-auto text-right">
                                 <p className="font-mono text-body-15 tabular-nums">{n(ch.followers)}</p>
-                                <p className="text-[12px] text-muted-foreground">
-                                  followers{typeof ch.growth === 'number' && ch.growth !== 0 ? ` · ${ch.growth > 0 ? '+' : ''}${ch.growth}` : ''}
-                                </p>
+                                <p className="text-[12px] text-muted-foreground">followers today</p>
+                                {followerWords(ch.growth, ch.growthSince) && (
+                                  <p className="text-[12px] text-muted-foreground">{followerWords(ch.growth, ch.growthSince)}</p>
+                                )}
                               </div>
                             </div>
                             <dl className="grid grid-cols-4 gap-2 border-t border-border pt-3">
@@ -138,7 +139,7 @@ function ClientAnalytics() {
                     <button type="button" onClick={() => setOpen(p)}
                       className="flex w-full flex-col gap-1.5 rounded-inner border border-border p-2 text-left transition-colors hover:border-foreground/25">
                       <div className="relative">
-                        <Thumb src={p.thumbnail} className="aspect-square w-full rounded-md" />
+                        <Thumb src={p.thumbnail} platform={p.platform} className="aspect-square w-full rounded-md" />
                         {p.platform && <span className="absolute left-1.5 top-1.5"><PlatformIcon platform={p.platform} size={18} /></span>}
                       </div>
                       <p className="line-clamp-2 text-secondary-13">{p.content || '(no caption)'}</p>

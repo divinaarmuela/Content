@@ -53,3 +53,14 @@ export function inRange(day: string | null | undefined, r: { from: string; to: s
   if (!r) return true
   return !!day && day >= r.from && day <= r.to
 }
+
+/**
+ * A RANGE TYPED IN (the owner, 2 Nov 2026: "make sure i can enter a custom range"). Both days YYYY-MM-DD, from no
+ * later than to, to no later than today, and at most 366 days — the most Zernio reads at once. Null otherwise.
+ */
+export function customRange(from: string | null | undefined, to: string | null | undefined, today: string): { from: string; to: string } | null {
+  const ok = (v: unknown): v is string => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(`${v}T00:00:00Z`))
+  if (!ok(from) || !ok(to) || from > to || to > today) return null
+  const days = (Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000 + 1
+  return days <= 366 ? { from, to } : null
+}

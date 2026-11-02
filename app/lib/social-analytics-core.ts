@@ -90,11 +90,12 @@ const short = (day: string, withYear = false) => new Date(`${day}T00:00:00Z`)
 
 export type GroupBy = 'week' | 'month' | 'none'
 
-/** The grouping follows the days picked — no second filter (the owner, 2 Nov 2026): a week is one list, a month
- *  or 90 days goes week by week, twelve months month by month. */
-export function groupFor(period: string): GroupBy {
-  if (period === 'this_week' || period === 'last_week') return 'none'
-  return period === 'last_365' ? 'month' : 'week'
+/** The grouping follows the days picked — no second filter (the owner, 2 Nov 2026): up to a fortnight is one
+ *  list, up to about four months goes week by week, anything longer month by month. */
+export function groupFor(range: { from: string; to: string }): GroupBy {
+  const days = Math.round((Date.parse(`${range.to}T00:00:00Z`) - Date.parse(`${range.from}T00:00:00Z`)) / 86_400_000) + 1
+  if (!(days > 0)) return 'none'
+  return days <= 14 ? 'none' : days <= 124 ? 'week' : 'month'
 }
 
 export type PostGroup = { key: string; label: string; posts: AnalyticsPost[]; totals: Metrics }
@@ -170,4 +171,57 @@ export function readTimeline(raw: unknown): TimelineDay[] {
     byDate.set(date, m)
   }
   return [...byDate.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([date, metrics]) => ({ date, metrics }))
+}
+
+/**
+ * HOW MANY FOLLOWERS IN THESE DAYS (the owner, 2 Nov 2026: "+followers since what? this can be confusing"). Zernio's
+ * follower-stats readings for one account, asked for the days picked: the change is the latest reading minus the
+ * first, and `since` is the day of that first reading — which is later than the range's start when Zernio's history
+ * is shorter, so the words say which day it really counts from. Null with fewer than two readings.
+ */
+export function followerChange(readings: unknown): { change: number; since: string } | null {
+  if (!Array.isArray(readings)) return null
+  const pts = readings
+    .map(r => (r ?? {}) as { date?: unknown; followers?: unknown })
+    .filter((r): r is { date: string; followers: number } => typeof r.date === 'string' && typeof r.followers === 'number')
+    .sort((a, b) => a.date.localeCompare(b.date))
+  if (pts.length < 2) return null
+  return { change: pts[pts.length - 1].followers - pts[0].followers, since: pts[0].date.slice(0, 10) }
+}
+
+/**
+ * A DEAD PICTURE (the owner, 2 Nov 2026: "how come some show no thumbnail"). TikTok's picture links are signed and
+ * carry `x-expires` (seconds); Zernio keeps the link it read when the post first synced and — unlike Meta's, which it
+ * copies to its own storage — never renews it, so a TikTok post a few weeks old has a link that no longer opens
+ * (Basfoods' late-September posts: expired 17 Oct). True when the link says it has run out.
+ */
+export function pictureExpired(url: string | null, nowMs: number): boolean {
+  if (!url) return false
+  try {
+    const exp = Number(new URL(url).searchParams.get('x-expires'))
+    return Number.isFinite(exp) && exp > 0 && exp * 1000 <= nowMs
+  } catch { return false }
+}
+
+/** Swap expired pictures for the ones in the account's live feed (Zernio's /accounts/{id}/posts: `{ posts: [{ id,
+ *  permalink, picture }] }`, read from the platform at that moment — its latest 25 or so). Matched on the post's
+ *  link, or the platform's post id inside it. Posts older than the feed keep no picture. */
+export function refreshPictures(posts: readonly AnalyticsPost[], feed: unknown, nowMs: number): AnalyticsPost[] {
+  const list = Array.isArray((feed as { posts?: unknown } | null)?.posts) ? (feed as { posts: Record<string, unknown>[] }).posts : []
+  const norm = (u: string) => u.replace(/[?#].*$/, '').replace(/\/+$/, '').toLowerCase()
+  const byLink = new Map<string, string>()
+  const byId = new Map<string, string>()
+  for (const f of list) {
+    const pic = typeof f.picture === 'string' && f.picture ? f.picture : null
+    if (!pic) continue
+    if (typeof f.permalink === 'string' && f.permalink) byLink.set(norm(f.permalink), pic)
+    if (typeof f.id === 'string' && f.id) byId.set(f.id, pic)
+  }
+  return posts.map(p => {
+    if (p.thumbnail && !pictureExpired(p.thumbnail, nowMs)) return p
+    const fromLink = p.url ? byLink.get(norm(p.url)) : undefined
+    const idInLink = p.url?.match(/(\d{8,})/)?.[1]
+    const fresh = fromLink ?? (idInLink ? byId.get(idInLink) : undefined)
+    return { ...p, thumbnail: fresh ?? null }
+  })
 }
