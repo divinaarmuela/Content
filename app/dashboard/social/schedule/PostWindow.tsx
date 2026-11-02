@@ -1,5 +1,6 @@
 'use client'
 
+import PostLog from './PostLog'
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { Clock, Eye, Pencil, Plus, Trash2, Wand2, X, Zap } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -1320,6 +1321,12 @@ export default function PostWindow({
                       {alsoPost}
                       {outcomes}
                       {notesBox}
+                      {id && (
+                        <details className="rounded-inner border border-border px-3 py-2">
+                          <summary className="cursor-pointer text-[13px] font-semibold">Log — who did what, and who was told</summary>
+                          <div className="mt-2"><PostLog postId={id} /></div>
+                        </details>
+                      )}
                     </>
                   )}
                 </div>
@@ -1339,6 +1346,8 @@ export default function PostWindow({
             // 2026: MGMT's booked REEL 4 opened an empty Options tab)
             { key: 'options', label: 'Options', show: !!options || !!alsoPost || (!!automation && (editable || !!shown.automation)) },
             { key: 'notes', label: 'Notes', count: noteCount, show: !!notesBox },
+            // who did what, and who was told (the owner, 2 Nov 2026)
+            { key: 'log', label: 'Log', show: !!id },
           ]
           const visible = tabs.filter(t => t.show)
           const open = visible.some(t => t.key === section) ? section : 'caption'
@@ -1418,6 +1427,7 @@ export default function PostWindow({
                     </>
                   )}
                   {open === 'notes' && notesBox}
+                  {open === 'log' && id && <PostLog postId={id} />}
                 </div>
               </div>
             </div>
@@ -1767,4 +1777,4 @@ function useWideWindow(): boolean {
 }
 
 /** the sections of the wide post window's right side, one open at a time */
-type WindowSection = 'caption' | 'channels' | 'media' | 'options' | 'notes'
+type WindowSection = 'caption' | 'channels' | 'media' | 'options' | 'notes' | 'log'
