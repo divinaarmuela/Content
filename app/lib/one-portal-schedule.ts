@@ -79,8 +79,9 @@ const FEED_FRESH_MS = 15 * 60 * 1000
 
 type FeedRow = { id: string; client_id: string; platform: string; tiles: LiveTile[]; fetched_at: string; error: string | null }
 
-/** One account's posted feed: the stored copy, refreshed from Zernio when older than 15 minutes. */
-async function feedFor(account: SocialAccount, now: Date): Promise<{ tiles: LiveTile[]; problem: string | null }> {
+/** One account's posted feed: the stored copy, refreshed from Zernio when older than 15 minutes. The portal's
+ *  "Your feed" AND the dashboard's feed route (/api/social/schedule/feed) both read it — one source, one cache. */
+export async function feedFor(account: SocialAccount, now: Date): Promise<{ tiles: LiveTile[]; problem: string | null }> {
   const feeds = table<FeedRow>('portal_feeds')
   const stored = await feeds.get(account.id).catch(() => null)
   const fresh = stored && now.getTime() - Date.parse(stored.fetched_at) < FEED_FRESH_MS

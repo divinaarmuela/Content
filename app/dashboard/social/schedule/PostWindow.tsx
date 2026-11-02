@@ -47,7 +47,8 @@ import AssetCheck from '../AssetCheck'
 import { usePlayable } from '../usePlayable'
 import { buildPostPreview, POST_KIND_WORD, PREVIEW_INTRO } from '@/app/lib/post-preview-core'
 import PostPreviewPane from '@/app/components/social/PostPreview'
-import { instagramGrid } from '@/app/lib/portal-core'
+import { instagramProfileGrid } from '@/app/lib/portal-core'
+import type { LiveTile } from '@/app/lib/feed-preview-core'
 import type { ChannelOptions } from '@/app/lib/publisher'
 import { formatInZone, safeZone } from '@/app/lib/timezone-core'
 import type { Slide } from '@/app/lib/version-files-core'
@@ -524,19 +525,37 @@ export default function PostWindow({
   const usedBefore = useMemo(
     () => mediaUsedBefore(clientPosts.rows as unknown as Parameters<typeof mediaUsedBefore>[0], context.clientId, id),
     [clientPosts.rows, context.clientId, id])
+  // the post's Instagram account — whose real feed sits under the booked posts, as on the portal's "Your feed"
+  const igAccountId = useMemo(() => {
+    const all = context.allAccounts ?? accounts
+    return shown.channels.find(acc => String(all.find(a => a.id === acc)?.platform ?? '') === 'instagram') ?? null
+  }, [context.allAccounts, accounts, shown.channels])
+  // THE PORTAL'S FEED (the owner, 2 Nov 2026: "doesnt fetch … the current instagram posts, like client portal"):
+  // the same route the Preview reads, which reads the portal's own `feedFor` (portal_feeds, Zernio's 25 newest)
+  const [liveFeed, setLiveFeed] = useState<LiveTile[] | null>(null)
+  useEffect(() => {
+    if (!igAccountId || !showPreview) return
+    let alive = true
+    void fetch(`/api/social/schedule/feed?account=${encodeURIComponent(igAccountId)}`, { cache: 'no-store' })
+      .then(r => r.json())
+      .then(j => { if (alive) setLiveFeed(Array.isArray(j?.tiles) ? j.tiles : []) })
+      .catch(() => { if (alive) setLiveFeed([]) })
+    return () => { alive = false }
+  }, [igAccountId, showPreview])
   const grid = useMemo(() => {
     const all = context.allAccounts ?? accounts
     const platformOf = (acc: string) => all.find(a => a.id === acc)?.platform ?? null
-    if (!shown.channels.some(acc => String(platformOf(acc) ?? '') === 'instagram')) return null
+    if (!igAccountId) return null
     const others = clientPosts.rows
       .filter(r => r.client_id === context.clientId)
       .map(r => readPostState(r as unknown as Record<string, unknown>))
       .filter((p): p is PostState => !!p)
-    return instagramGrid(
-      { id: id ?? '', channels: shown.channels, slides: shown.slides, per_channel: shown.perChannel },
-      others, platformOf,
+    // this post among the client's BOOKED Instagram posts, latest top left, above what is already live
+    return instagramProfileGrid(
+      { id: id ?? '', channels: shown.channels, slides: shown.slides, per_channel: shown.perChannel, scheduled_for: shown.scheduledFor ?? null },
+      others, platformOf, liveFeed ?? [],
     )
-  }, [context.allAccounts, context.clientId, accounts, shown.channels, shown.slides, shown.perChannel, clientPosts.rows, id])
+  }, [context.allAccounts, context.clientId, accounts, igAccountId, shown.channels, shown.slides, shown.perChannel, shown.scheduledFor, clientPosts.rows, id, liveFeed])
 
   /* ── what is wrong with the draft on screen — the same rule the server runs ── */
 
@@ -1392,18 +1411,31 @@ export default function PostWindow({
           const igGrid = grid && grid.length > 0 && (
             <div className="flex flex-col gap-2" data-instagram-grid>
               <p className="text-[13px] font-semibold">How it sits on the client&rsquo;s Instagram</p>
-              <ul className="grid max-w-[300px] grid-cols-3 gap-0.5">
-                {grid.slice(0, 9).map((g, i) => (
-                  <li key={`${g.url}-${i}`} className={cn('relative aspect-[4/5] overflow-hidden bg-foreground/[0.06]', i === 0 && 'ring-2 ring-foreground ring-offset-1 ring-offset-background')}>
-                    {g.type === 'video'
-                      ? (videoView(g, i === 0 ? 'This post' : '', 'h-full w-full', true)
-                        ?? <video src={playable(g.url)} muted playsInline preload="metadata" className="h-full w-full object-cover" />)
-                      // eslint-disable-next-line @next/next/no-img-element
-                      : <img src={g.url} alt={i === 0 ? 'This post' : ''} loading="lazy" className="h-full w-full object-cover" />}
+              <ul className="grid max-h-[520px] max-w-[300px] grid-cols-3 gap-0.5 overflow-y-auto">
+                {grid.map((g, i) => (
+                  <li key={`${g.kind}-${g.id}-${i}`} data-grid-kind={g.kind}
+                    title={g.kind === 'this' ? 'This post' : g.kind === 'booked' ? `Booked${g.at ? ` · ${formatInZone(g.at, tz, 'full') ?? ''}` : ''}` : `Already posted${g.at ? ` · ${formatInZone(g.at, tz, 'full') ?? ''}` : ''}`}
+                    className={cn('relative aspect-[4/5] overflow-hidden bg-foreground/[0.06]', g.kind === 'this' && 'ring-2 ring-foreground ring-offset-1 ring-offset-background')}>
+                    {g.kind === 'live'
+                      ? (
+                        <a href={g.permalink ?? undefined} target="_blank" rel="noopener noreferrer" className="block h-full w-full">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={g.url} alt="" loading="lazy" className="h-full w-full object-cover" />
+                        </a>
+                      )
+                      : g.type === 'video'
+                        ? (videoView(g, g.kind === 'this' ? 'This post' : '', 'h-full w-full', true)
+                          ?? <video src={playable(g.url)} muted playsInline preload="metadata" className="h-full w-full object-cover" />)
+                        // eslint-disable-next-line @next/next/no-img-element
+                        : <img src={g.url} alt={g.kind === 'this' ? 'This post' : ''} loading="lazy" className="h-full w-full object-cover" />}
+                    {g.kind === 'booked' && <span className="absolute bottom-1 left-1 rounded-full bg-ink/80 px-1.5 py-0.5 text-[10px] font-semibold text-cream">Booked</span>}
                   </li>
                 ))}
               </ul>
-              <p className="text-[12px] text-muted-foreground">This post is outlined, before the newest posts already live.</p>
+              <p className="text-[12px] text-muted-foreground">
+                This post is outlined, among the booked posts, above what is already live
+                {liveFeed === null ? ' (reading the feed…)' : liveFeed.length === 0 ? ' (the live feed could not be read just now)' : ''}.
+              </p>
             </div>
           )
 

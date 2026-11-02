@@ -717,6 +717,61 @@ export function instagramGrid(
   return [tile(first), ...live]
 }
 
+/** One square of the post window's "How it sits" grid: this post, another booked post, or one already live. */
+export type ProfileGridTile = GridTile & {
+  kind: 'this' | 'booked' | 'live'
+  id: string
+  at: string | null
+  /** a live tile opens the real post on Instagram */
+  permalink: string | null
+}
+
+/** a live post as the portal's feed holds it (`LiveTile`, portal_feeds) — only what the grid draws */
+type LiveSquare = { id: string; at: string | null; thumbnail: string | null; permalink: string | null }
+
+/**
+ * HOW IT SITS ON THE CLIENT'S INSTAGRAM, AS THE PORTAL'S "YOUR FEED" DRAWS IT (the owner, 2 Nov 2026: "it
+ * doesnt fetch the scheduled one there and also the current instagram posts, like client portal").
+ *
+ * `instagramGrid` drew this post before the app's own POSTED rows only — no booked post, nothing published
+ * outside the app. The portal (`loadScheduling`) draws every booked Instagram post, latest time top left (the
+ * order Instagram will show them), above the account's real feed (`portal_feeds`, Zernio's 25 newest). This is
+ * that grid with this post in its place: a post with no time yet leads, where the next post goes.
+ * Null when Instagram is not one of the post's channels, or it has nothing to draw.
+ */
+export function instagramProfileGrid(
+  post: GridPost & { scheduled_for?: string | null },
+  others: readonly PostState[],
+  platformOf: (accountId: string) => string | null | undefined,
+  live: readonly LiveSquare[],
+): ProfileGridTile[] | null {
+  const igOf = (channels: readonly string[]) => channels.find(acc => String(platformOf(acc) ?? '').toLowerCase() === 'instagram') ?? null
+  const ig = igOf(post.channels)
+  if (!ig) return null
+  const coverOf = (p: GridPost, acc: string | null) => {
+    const own = acc ? p.per_channel[acc]?.slides ?? [] : []
+    return (own.length ? own : p.slides)[0] ?? null
+  }
+  const square = (s: { url: string; type?: string | null }, kind: 'this' | 'booked', id: string, at: string | null): ProfileGridTile =>
+    ({ url: s.url, type: s.type === 'video' ? 'video' : 'image', kind, id, at, permalink: null })
+  const first = coverOf(post, ig)
+  if (!first) return null
+  const planned: ProfileGridTile[] = [square(first, 'this', post.id, post.scheduled_for ?? null)]
+  for (const p of others) {
+    if (p.id === post.id || p.stage !== 'booked') continue
+    const acc = igOf(p.channels)
+    const cover = acc ? coverOf(p as unknown as GridPost, acc) : null
+    if (cover) planned.push(square(cover, 'booked', p.id, p.scheduled_for ?? null))
+  }
+  const time = (t: ProfileGridTile) => Date.parse(String(t.at ?? ''))
+  const undated = planned.filter(t => !Number.isFinite(time(t)))
+  const dated = planned.filter(t => Number.isFinite(time(t))).sort((a, b) => time(b) - time(a))
+  const feed = live
+    .filter(t => t.id && t.thumbnail)
+    .map((t): ProfileGridTile => ({ url: t.thumbnail!, type: 'image', kind: 'live', id: t.id, at: t.at, permalink: t.permalink }))
+  return [...undated, ...dated, ...feed]
+}
+
 /**
  * THE ONE LIST OF WHAT IS WAITING ON THE CLIENT (decision 15): every post
  * with them, sent, and still open — the one whose time runs out first on top.
