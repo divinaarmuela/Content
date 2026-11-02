@@ -154,12 +154,13 @@ export function PlanParts({ batch, itemCount, booked, onPatch, onShots, team }: 
     const on = briefItemFilled(batch, key, { itemCount })
     const fromCanvas = briefItemSource(batch, key, { itemCount }) === 'canvas'
     return (
-      <div key={key} className="flex gap-3">
+      // EACH PART READS AS A HEADING OVER ITS BOX (the owner, 2 Nov 2026: "hard to read with all the text
+      // looking the same"): a rule between parts, the name larger than what is typed, the hint on its own line
+      <div key={key} className="flex gap-3 border-t border-border pt-4">
         <Tick on={on} />
-        <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-          <div className="flex flex-wrap items-baseline gap-x-2">
-            <span className="text-[15px] font-semibold">{item.label}</span>
-            <span className="text-[12px] text-muted-foreground">{item.hint}</span>
+        <div className="flex min-w-0 flex-1 flex-col gap-2">
+          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+            <span className="text-[17px] font-semibold leading-snug">{item.label}</span>
             {fromCanvas && <Chip tone="green" className="text-[12px]">from the canvas</Chip>}
             {maySkipBriefItem(key) && (
               <button type="button" onClick={() => setSkipped([...skipped, key])}
@@ -169,6 +170,7 @@ export function PlanParts({ batch, itemCount, booked, onPatch, onShots, team }: 
               </button>
             )}
             <span className="sr-only">{on ? (fromCanvas ? 'filled in, on the canvas' : 'filled in') : 'still to fill in'}</span>
+            <span className="basis-full text-[13px] text-muted-foreground">{item.hint}</span>
           </div>
           {field}
         </div>
