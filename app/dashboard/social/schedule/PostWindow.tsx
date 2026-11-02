@@ -627,6 +627,46 @@ export default function PostWindow({
     else setReply({ action: 'save', tone: 'ok', text: words, problems: [] })
   }
 
+  /**
+   * A NEW COVER ON A BOOKED POST, IN ONE STEP (the owner, 2 Nov 2026 — Manal's two posts came off the schedule when a
+   * booked post was opened to change it): off the schedule, the cover written onto the chosen channels, and booked back
+   * in for the SAME time on the SAME channels. Its approval stands. A step that is refused leaves the post as a draft
+   * with the reason said here and in its Log — never silently off the schedule.
+   */
+  const mayRecover = !!saved && saved.stage === 'booked' && !!me && ['super_admin', 'account_manager', 'scheduler', 'tester'].includes(me.role)
+  const changeBookedCover = async (url: string | null, ids: string[] | null) => {
+    if (!saved || !id || busy) return
+    const at = saved.scheduled_for
+    if (!at || Date.parse(at) - Date.now() < 15 * 60_000) {
+      setReply({ action: 'save', tone: 'error', text: 'It goes out in under 15 minutes — too close to change the cover now.', problems: [] })
+      return
+    }
+    setBusy(true); setReply(null)
+    const off = await api.act(id, { action: 'edit_booked', expect_rev: saved.rev, confirm: true, note: 'Changing the cover' })
+    if (!off.ok || !off.post) { setBusy(false); setReply({ action: 'save', tone: 'error', text: off.ok ? 'It could not be taken off to change the cover' : off.reason, problems: [] }); return }
+    const p = off.post
+    const per = { ...p.per_channel }
+    for (const a of chosen.filter(x => !ids || ids.includes(x.id))) {
+      const patch = coverPatchFor(String(a.platform), url)
+      if (Object.keys(patch).length) per[a.id] = { ...(per[a.id] ?? {}), ...patch }
+    }
+    const savedCopy = await api.save(id, {
+      slides: p.slides, caption: p.caption, channels: p.channels, per_channel: per, scheduled_for: at,
+      timezone: p.timezone ?? tz ?? 'Australia/Melbourne', ...(p.automation ? { automation: p.automation } : {}), expect_rev: p.rev,
+    } as never)
+    const rev = savedCopy.ok ? readPostState(savedCopy.row)?.rev : null
+    const back = rev == null ? null : await api.act(id, { action: 'schedule_direct', expect_rev: rev, scheduled_for: at, note: 'Cover changed — booked back in for the same time' })
+    setBusy(false)
+    if (!back?.ok) {
+      const why = !savedCopy.ok ? savedCopy.reason : back && !back.ok ? back.reason : 'it could not be booked back in'
+      setReply({ action: 'save', tone: 'error', text: `The cover was not changed and the post is now a draft: ${why}. Book it again from here.`, problems: [] })
+      if (back && !back.ok && back.post) setAnswered(back.post)
+      return
+    }
+    if (back.post) setAnswered(back.post)
+    setReply({ action: 'save', tone: 'ok', text: 'Cover changed — booked back in for the same time', problems: [] })
+  }
+
   const go = async (action: PostAction, answers: Answers): Promise<boolean> => {
     if (!post || busy) return false
     setBusy(true)
@@ -1120,9 +1160,12 @@ export default function PostWindow({
                     playable={playable}
                     platforms={chosen.map(a => String(a.platform))}
                     current={currentCover(shown.perChannel, chosen.map(a => ({ id: a.id, platform: String(a.platform) })), seed?.coverUrl ?? null)}
-                    locked={locked}
-                    onPick={url => {
-                      for (const a of chosen) {
+                    locked={locked && !mayRecover}
+                    channels={chosen.map(a => ({ id: a.id, platform: String(a.platform), name: a.username ?? a.name ?? null }))}
+                    saveWords={mayRecover ? 'Booked: a new cover is saved and the post is booked back in for the same time, on the same channels.' : undefined}
+                    onPick={(url, ids) => {
+                      if (mayRecover) { void changeBookedCover(url, ids); return }
+                      for (const a of chosen.filter(x => !ids || ids.includes(x.id))) {
                         const patch = coverPatchFor(String(a.platform), url)
                         if (Object.keys(patch).length) dispatch({ type: 'extra', channel: a.id, patch })
                       }

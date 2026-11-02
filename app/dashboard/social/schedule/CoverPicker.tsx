@@ -24,7 +24,7 @@ import PlatformIcon from '../PlatformIcon'
  * not allow that is said plainly rather than shown as a black strip.
  */
 export default function CoverPicker({
-  videoUrl, playable, platforms, current, locked, onPick,
+  videoUrl, playable, platforms, current, locked, onPick, channels, saveWords,
 }: {
   /** the master file in the post */
   videoUrl: string
@@ -35,10 +35,20 @@ export default function CoverPicker({
   /** what the post carries now, and where it came from */
   current: { url: string; source: 'window' | 'editor' } | null
   locked: boolean
-  /** a new cover URL, or null to go back to the editor's / the network's own */
-  onPick: (url: string | null) => void
+  /** a new cover URL, or null to go back to the editor's / the network's own — for these channels */
+  onPick: (url: string | null, channelIds: string[] | null) => void
+  /** the post's channels; with two or more that take a cover, the person picks which ones get it (the owner, 2 Nov
+   *  2026: 'same one for both … make sure it applies to which channels') */
+  channels?: readonly { id: string; platform: string; name: string | null }[]
+  /** on a booked post: what saving does, said on the picker ('Saved and booked back in for its time') */
+  saveWords?: string
 }) {
   const takers = coverPlatforms(platforms)
+  // WHICH CHANNELS GET IT: every channel that takes a cover, until the person unticks one
+  const coverChannels = (channels ?? []).filter(c => String(c.platform).toLowerCase() in COVER_RULES)
+  const [targets, setTargets] = useState<string[] | null>(null)
+  const ticked = targets ?? coverChannels.map(c => c.id)
+  const pick = (url: string | null) => onPick(url, coverChannels.length > 1 ? ticked : null)
   const [mode, setMode] = useState<'closed' | 'frames'>('closed')
   const [frames, setFrames] = useState<{ at: number; still: string }[]>([])
   const [busy, setBusy] = useState<string | null>(null)
@@ -124,7 +134,7 @@ export default function CoverPicker({
       const blob = await new Promise<Blob | null>(r => canvas.toBlob(r, 'image/jpeg', 0.92))
       if (!blob) throw new Error('The cover picture could not be written out')
       const url = await send(new File([blob], `cover-${Math.round(at * 10)}.jpg`, { type: 'image/jpeg' }))
-      onPick(url)
+      pick(url)
       setMode('closed')
     } catch (e) {
       setProblem(words(e))
@@ -140,7 +150,7 @@ export default function CoverPicker({
     setBusy('Uploading the cover')
     setProblem(null)
     try {
-      onPick(await send(f))
+      pick(await send(f))
       setMode('closed')
     } catch (e) {
       setProblem(words(e))
@@ -177,6 +187,27 @@ export default function CoverPicker({
         </span>
       </div>
 
+      {!locked && coverChannels.length > 1 && (
+        <div className="flex flex-wrap items-center gap-1.5" data-cover-targets>
+          <span className="text-[12px] font-semibold text-muted-foreground">Apply to</span>
+          {coverChannels.map(c => {
+            const on = ticked.includes(c.id)
+            return (
+              <button key={c.id} type="button" aria-pressed={on}
+                onClick={() => setTargets(on ? ticked.filter(x => x !== c.id) : [...ticked, c.id])}
+                className={cn('flex min-h-9 items-center gap-1.5 rounded-full border px-2.5 text-[12px] font-semibold',
+                  on ? 'border-foreground bg-foreground text-background' : 'border-border text-muted-foreground hover:bg-muted')}>
+                <PlatformIcon platform={c.platform} size={14} className="rounded-full" />
+                {c.name ?? c.platform}
+              </button>
+            )
+          })}
+          {ticked.length !== coverChannels.length && (
+            <button type="button" onClick={() => setTargets(null)} className="min-h-9 rounded-full px-2 text-[12px] font-semibold text-accent-blue-deep hover:underline">Same for all</button>
+          )}
+        </div>
+      )}
+      {saveWords && !locked && <p className="text-[12px] text-muted-foreground">{saveWords}</p>}
       {!locked && (
         <div className="flex flex-wrap gap-2">
           <button
@@ -210,7 +241,7 @@ export default function CoverPicker({
             <button
               type="button"
               disabled={busy !== null}
-              onClick={() => { onPick(null); setMode('closed') }}
+              onClick={() => { pick(null); setMode('closed') }}
               className="flex min-h-11 items-center gap-1 rounded-full px-3 text-[12px] font-semibold text-muted-foreground hover:bg-muted"
             >
               <X className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
