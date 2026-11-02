@@ -1193,6 +1193,7 @@ export default function PostWindow({
               <TimePicker
                 value={state.scheduledFor}
                 tz={tz}
+                minLeadMs={15 * 60_000}
                 onChange={iso => { pickedTime.current = true; dispatch({ type: 'time', iso }) }}
                 now={{ ...now, onNow: pressNow }}
               />
@@ -1926,7 +1927,7 @@ function QuestionPanel({ asking, busy, tz, recipients, team, makerId, now, onNow
 
       {q.needs.includes('time') && (
         <div className="flex flex-wrap items-center gap-2">
-          <TimePicker value={a.scheduled_for ?? null} tz={tz} onChange={iso => set({ scheduled_for: iso })}
+          <TimePicker value={a.scheduled_for ?? null} tz={tz} minLeadMs={15 * 60_000} onChange={iso => set({ scheduled_for: iso })}
             now={q.action === 'change_time' ? { ...now, onNow } : null} />
           <span className="text-[12px] text-muted-foreground">{a.scheduled_for ? formatInZone(a.scheduled_for, tz, 'full') : ''}</span>
         </div>

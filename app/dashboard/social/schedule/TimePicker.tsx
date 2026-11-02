@@ -50,7 +50,7 @@ const dayOf = dayKeyToCalendarDate
 const keyOf = calendarDateToDayKey
 
 export default function TimePicker({
-  value, tz, onChange, disabled, now: nowChip,
+  value, tz, onChange, disabled, now: nowChip, minLeadMs = 0,
 }: {
   /** the instant the post goes out, or null */
   value: string | null
@@ -65,7 +65,11 @@ export default function TimePicker({
    * someone to choose it. Leave it out where "now" means nothing.
    */
   now?: { enabled: boolean; reason: string | null; onNow: () => void } | null
+  /** a POSTING time is never less than this far away (15 minutes — the files are prepared first); an earlier pick jumps to
+   *  the earliest allowed time and says so (the owner, 2 Nov 2026: 'always the next 15 minutes and they can never go below that') */
+  minLeadMs?: number
 }) {
+  const [bumped, setBumped] = useState<string | null>(null)
   const [open, setOpen] = useState(false)
   const box = useRef<HTMLDivElement>(null)
   // the zone this browser is in — a scheduler overseas sees the client's
@@ -137,7 +141,15 @@ export default function TimePicker({
 
   const set = (patch: Partial<ClockValue>) => {
     const next = { ...current, ...patch }
-    onChange(joinClock(next, tz))
+    const iso = joinClock(next, tz)
+    if (minLeadMs > 0 && iso && Date.parse(iso) < Date.now() + minLeadMs) {
+      const earliest = defaultPostTime(Date.now())
+      setBumped(earliest)
+      onChange(earliest)
+      return
+    }
+    setBumped(null)
+    onChange(iso)
   }
 
   return (
@@ -248,6 +260,13 @@ export default function TimePicker({
               Done
             </button>
           </div>
+          {minLeadMs > 0 && (
+            <p className={bumped ? 'text-[12px] font-semibold text-foreground' : 'text-[12px] text-muted-foreground'} data-min-lead>
+              {bumped
+                ? 'That is less than 15 minutes away, so it was moved to the earliest time allowed.'
+                : 'Pick a time at least 15 minutes from now — the files are prepared first.'}
+            </p>
+          )}
 
           {nowChip && (
             <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-border pt-3">
