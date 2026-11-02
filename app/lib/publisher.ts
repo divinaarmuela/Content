@@ -52,7 +52,7 @@ export interface Publisher {
   postAnalytics(postId?: string): Promise<unknown>
   /** One page of every post published between two days (YYYY-MM-DD, inclusive), newest first, with its numbers —
    *  the Content tracker's source; covers posts made outside the app too. */
-  analyticsPage(params: { fromDate: string; toDate: string; page: number; limit: number }): Promise<unknown>
+  analyticsPage(params: { fromDate: string; toDate: string; page: number; limit: number; accountId?: string }): Promise<unknown>
   /** One page of Zernio's own posts list — what its Posts page shows, every post sent through the API (GET /posts),
    *  newest first; `status` narrows it (scheduled, published, partial, failed). */
   postsPage(params: { page: number; limit: number; status?: string; dateFrom?: string; dateTo?: string }): Promise<unknown>
@@ -816,11 +816,13 @@ class ZernioPublisher implements Publisher {
     return this.getJson(`/analytics${postId ? `?postId=${encodeURIComponent(postId)}` : ''}`)
   }
 
-  analyticsPage(params: { fromDate: string; toDate: string; page: number; limit: number }) {
+  analyticsPage(params: { fromDate: string; toDate: string; page: number; limit: number; accountId?: string }) {
     const qs = new URLSearchParams({
       fromDate: params.fromDate, toDate: params.toDate, page: String(params.page), limit: String(params.limit),
       sortBy: 'date', order: 'desc',
     })
+    // one channel's posts only (Zernio's `accountId` filter) — the Analytics page's channel view, 2 Nov 2026
+    if (params.accountId) qs.set('accountId', params.accountId)
     return this.getJson(`/analytics?${qs}`)
   }
 

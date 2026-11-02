@@ -1,0 +1,175 @@
+/**
+ * ANALYTICS BY CLIENT → CHANNEL → POST (the owner, 2 Nov 2026: "revamp it by client then branch it out through
+ * social medias, and when click in it the posts are there, then when click analytic is there; in the posts page
+ * can categorize by weekly etc"). Pure: Zernio's /analytics rows in, the page's numbers out.
+ */
+
+export type MetricKey = 'views' | 'impressions' | 'reach' | 'likes' | 'comments' | 'shares' | 'saves' | 'clicks'
+
+export const METRIC_WORDS: readonly [MetricKey, string][] = [
+  ['views', 'Views'], ['impressions', 'Impressions'], ['reach', 'Reach'], ['likes', 'Likes'],
+  ['comments', 'Comments'], ['shares', 'Shares'], ['saves', 'Saves'], ['clicks', 'Clicks'],
+]
+
+export type Metrics = Record<MetricKey, number>
+
+/** One published post, only what the pages draw (Zernio's row is ~10 KB of media links). */
+export type AnalyticsPost = {
+  id: string
+  content: string
+  publishedAt: string | null
+  platform: string | null
+  /** Zernio's account id — our social_accounts.provider_account_id */
+  accountId: string | null
+  url: string | null
+  thumbnail: string | null
+  mediaType: string | null
+  /** made on the platform itself, not through the app */
+  external: boolean
+  metrics: Metrics
+  /** Zernio's engagement rate, a percentage — null when it gave none */
+  engagementRate: number | null
+}
+
+const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : 0)
+
+export const emptyMetrics = (): Metrics =>
+  ({ views: 0, impressions: 0, reach: 0, likes: 0, comments: 0, shares: 0, saves: 0, clicks: 0 })
+
+/** Zernio's row → the page's post. Null for a row without an id. */
+export function trimPost(raw: unknown): AnalyticsPost | null {
+  if (!raw || typeof raw !== 'object') return null
+  const r = raw as Record<string, unknown>
+  // a list row carries `_id` and `platforms`; one post asked for by id carries `postId` and `platformAnalytics`
+  const id = typeof r._id === 'string' ? r._id : typeof r.postId === 'string' ? r.postId : null
+  if (!id) return null
+  const perPlatform = Array.isArray(r.platforms) ? r.platforms : Array.isArray(r.platformAnalytics) ? r.platformAnalytics : []
+  const first = (perPlatform[0] ?? null) as Record<string, unknown> | null
+  const a = (r.analytics ?? first?.analytics ?? {}) as Record<string, unknown>
+  const metrics = emptyMetrics()
+  for (const [k] of METRIC_WORDS) metrics[k] = num(a[k])
+  const media = Array.isArray(r.mediaItems) ? r.mediaItems[0] as Record<string, unknown> | undefined : undefined
+  const str = (v: unknown) => (typeof v === 'string' && v ? v : null)
+  return {
+    id,
+    content: typeof r.content === 'string' ? r.content.slice(0, 600) : '',
+    publishedAt: str(r.publishedAt),
+    platform: str(r.platform) ?? str(first?.platform),
+    accountId: str(first?.accountId),
+    url: str(r.platformPostUrl) ?? str(first?.platformPostUrl),
+    thumbnail: str(r.thumbnailUrl) ?? str(media?.thumbnail) ?? (media?.type === 'image' ? str(media?.url) : null),
+    mediaType: str(r.mediaType),
+    external: r.isExternal === true,
+    metrics,
+    engagementRate: typeof a.engagementRate === 'number' ? a.engagementRate : null,
+  }
+}
+
+/** Likes + comments + shares + saves — what "engagement" means on these pages. */
+export const engagement = (m: Metrics): number => m.likes + m.comments + m.shares + m.saves
+
+export function sumMetrics(posts: readonly AnalyticsPost[]): Metrics {
+  const out = emptyMetrics()
+  for (const p of posts) for (const [k] of METRIC_WORDS) out[k] += p.metrics[k]
+  return out
+}
+
+/** The day a post went up where the audience is (YYYY-MM-DD). */
+export function dayIn(iso: string | null, tz: string): string | null {
+  if (!iso) return null
+  const d = new Date(iso)
+  return Number.isNaN(d.getTime()) ? null : d.toLocaleDateString('en-CA', { timeZone: tz })
+}
+
+/** The Monday of a day's week. */
+export function mondayOf(day: string): string {
+  const d = new Date(`${day}T00:00:00Z`)
+  d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7))
+  return d.toISOString().slice(0, 10)
+}
+
+const short = (day: string, withYear = false) => new Date(`${day}T00:00:00Z`)
+  .toLocaleDateString('en-AU', { day: 'numeric', month: 'short', ...(withYear ? { year: 'numeric' } : {}), timeZone: 'UTC' })
+
+export type GroupBy = 'week' | 'month' | 'none'
+
+export const GROUP_WORDS: readonly { key: GroupBy; label: string }[] = [
+  { key: 'week', label: 'By week' },
+  { key: 'month', label: 'By month' },
+  { key: 'none', label: 'All together' },
+]
+
+export type PostGroup = { key: string; label: string; posts: AnalyticsPost[]; totals: Metrics }
+
+/** Posts into weeks (Monday to Sunday) or months, newest group first; each group keeps the order it was given. */
+export function groupPosts(posts: readonly AnalyticsPost[], by: GroupBy, tz: string): PostGroup[] {
+  if (by === 'none') return [{ key: 'all', label: 'All posts', posts: [...posts], totals: sumMetrics(posts) }]
+  const groups = new Map<string, AnalyticsPost[]>()
+  for (const p of posts) {
+    const day = dayIn(p.publishedAt, tz)
+    const key = !day ? 'undated' : by === 'week' ? mondayOf(day) : day.slice(0, 7)
+    groups.set(key, [...(groups.get(key) ?? []), p])
+  }
+  return [...groups.entries()]
+    .sort(([a], [b]) => (a === 'undated' ? 1 : b === 'undated' ? -1 : b.localeCompare(a)))
+    .map(([key, list]) => {
+      let label = 'No date'
+      if (key !== 'undated' && by === 'week') {
+        const end = new Date(`${key}T00:00:00Z`); end.setUTCDate(end.getUTCDate() + 6)
+        label = `Week of ${short(key)} – ${short(end.toISOString().slice(0, 10), true)}`
+      } else if (key !== 'undated') {
+        label = new Date(`${key}-01T00:00:00Z`).toLocaleDateString('en-AU', { month: 'long', year: 'numeric', timeZone: 'UTC' })
+      }
+      return { key, label, posts: list, totals: sumMetrics(list) }
+    })
+}
+
+export type PostSort = 'newest' | 'views' | 'engagement' | 'reach'
+
+export const SORT_WORDS: readonly { key: PostSort; label: string }[] = [
+  { key: 'newest', label: 'Newest first' },
+  { key: 'views', label: 'Most views' },
+  { key: 'reach', label: 'Most reach' },
+  { key: 'engagement', label: 'Most engagement' },
+]
+
+export function sortPosts(posts: readonly AnalyticsPost[], by: PostSort): AnalyticsPost[] {
+  const score = (p: AnalyticsPost) => by === 'views' ? Math.max(p.metrics.views, p.metrics.impressions)
+    : by === 'reach' ? p.metrics.reach : engagement(p.metrics)
+  return [...posts].sort((a, b) => by === 'newest'
+    ? (b.publishedAt ?? '').localeCompare(a.publishedAt ?? '')
+    : score(b) - score(a) || (b.publishedAt ?? '').localeCompare(a.publishedAt ?? ''))
+}
+
+/** One channel's numbers for a period, for the client's page. */
+export type ChannelSummary = { accountId: string; posts: number; totals: Metrics }
+
+export function summariseByAccount(posts: readonly AnalyticsPost[]): Map<string, ChannelSummary> {
+  const out = new Map<string, ChannelSummary>()
+  for (const p of posts) {
+    if (!p.accountId) continue
+    const s = out.get(p.accountId) ?? { accountId: p.accountId, posts: 0, totals: emptyMetrics() }
+    s.posts += 1
+    for (const [k] of METRIC_WORDS) s.totals[k] += p.metrics[k]
+    out.set(p.accountId, s)
+  }
+  return out
+}
+
+/** One day of a post's life, from Zernio's post-timeline (one row per day per platform). */
+export type TimelineDay = { date: string; metrics: Metrics }
+
+export function readTimeline(raw: unknown): TimelineDay[] {
+  const rows = (raw as { timeline?: unknown } | null)?.timeline
+  if (!Array.isArray(rows)) return []
+  const byDate = new Map<string, Metrics>()
+  for (const row of rows) {
+    const r = (row ?? {}) as Record<string, unknown>
+    const date = typeof r.date === 'string' ? r.date.slice(0, 10) : null
+    if (!date) continue
+    const m = byDate.get(date) ?? emptyMetrics()
+    for (const [k] of METRIC_WORDS) m[k] += num(r[k])
+    byDate.set(date, m)
+  }
+  return [...byDate.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([date, metrics]) => ({ date, metrics }))
+}
