@@ -204,7 +204,13 @@ export default function MediaPicker({
 
   /* ── uploads ──────────────────────────────────────────────────────────── */
 
-  const takeFiles = useCallback(async (chosen: File[]) => {
+  /**
+   * `at`: where files dropped straight from the computer go — 'tray' (the dashed "Drop here" slot, or the post's
+   * empty space) adds them at the end; a slot's number puts the first in that slot and the rest after (Renee, 2 Nov
+   * 2026: a picture dragged from Finder onto "Drop here" did nothing — only the library's own files were taken).
+   * Without `at` (the Upload tab), as before.
+   */
+  const takeFiles = useCallback(async (chosen: File[], at?: number | 'tray') => {
     if (chosen.length === 0) return
     setProblem(null)
     try {
@@ -218,6 +224,8 @@ export default function MediaPicker({
         source: 'upload' as const,
       }))
       setBrought(b => [...files, ...b])
+      if (at === 'tray') { setTray(t => files.reduce((acc, f) => addToPost(acc, f), t)); return }
+      if (typeof at === 'number') { setTray(t => files.slice(1).reduce((acc, f) => addToPost(acc, f), replaceInPost(t, at, files[0]))); return }
       // an empty post takes them in order; a post with slides asks which slide each one replaces
       if (trayRef.current.length === 0) setTray(t => files.reduce((acc, f) => addToPost(acc, f), t))
       else setPlacing(p => p ?? files[0] ?? null)
@@ -316,7 +324,12 @@ export default function MediaPicker({
     e.preventDefault()
     setOver(null)
     const payload = readDrag(e)
-    if (!payload) return
+    if (!payload) {
+      // files from the computer (Finder, the desktop): uploaded and put where they were dropped
+      const dropped = [...(e.dataTransfer.files ?? [])]
+      if (dropped.length) void takeFiles(inNameOrder(dropped), at)
+      return
+    }
     const { slide, from } = payload
     if (at === 'tray') {
       // from the library: add it at the end. From INSIDE the tray: move it
