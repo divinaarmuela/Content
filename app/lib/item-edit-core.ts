@@ -8,7 +8,7 @@
  */
 
 import type { Role } from './identity-core'
-import { schedulerIdsOf } from './workflow-core'
+import { schedulerIdsOf, taggedIdsOfItem } from './workflow-core'
 
 /** Every team role may CREATE work — never a client. Which kinds a role may
  *  create is still the shoot gate's business (canCreateItemsUnder). */
@@ -26,11 +26,12 @@ export function roleMayCreateItems(role: Role): boolean {
  */
 export function canEditItemFields(
   viewer: { id: string; role: Role },
-  item: { owner_id?: string | null; scheduler_ids?: unknown },
+  item: { owner_id?: string | null; scheduler_ids?: unknown; tagged_ids?: unknown },
 ): boolean {
   if (viewer.role === 'client') return false
   if (viewer.role === 'account_manager' || viewer.role === 'super_admin') return true
-  return item.owner_id === viewer.id || schedulerIdsOf(item).includes(viewer.id)
+  // …and everyone tagged on the card works it as its holder does (the owner, 3 Nov 2026)
+  return item.owner_id === viewer.id || schedulerIdsOf(item).includes(viewer.id) || taggedIdsOfItem(item).includes(viewer.id)
 }
 
 /**

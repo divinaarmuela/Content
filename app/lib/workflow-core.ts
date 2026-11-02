@@ -329,6 +329,13 @@ export function actingRoles(viewer: ActingViewer, item: ActingItem): Hat[] {
   // etc"): the maker's and the scheduler's, as whoever holds it — never a manager's (approving, sending to the client)
   const tagged = taggedIdsOfItem(item).includes(viewer.id)
   if (tagged) roles.push('editor')
+  // …AND A TAGGED ACCOUNT MANAGER WORKS EVERY STEP OF IT (the owner, 3 Nov 2026: "any other AM or super admin can —
+  // throughout the whole journey"): the quality checker's and the colourist's hats too, on this card only — passing the
+  // quality check, sending it to the client, approving it, finishing the grade. A super admin already does everything.
+  if (tagged && viewer.role === 'account_manager') {
+    if (!roles.includes(QUALITY_HAT)) roles.push(QUALITY_HAT)
+    if (!roles.includes(COLOURIST_HAT)) roles.push(COLOURIST_HAT)
+  }
 
   const ids = schedulerIdsOf(item)
   // handed the item = the hat, whatever the title; nobody handed it = the
