@@ -1196,6 +1196,16 @@ export default function PostWindow({
                 onChange={iso => { pickedTime.current = true; dispatch({ type: 'time', iso }) }}
                 now={{ ...now, onNow: pressNow }}
               />
+            ) : mayRecover && buttons.some(b => b.offered.action === 'change_time') ? (
+              // A BOOKED POST'S TIME: read only, and pressing it opens Change time — which asks for the new time and keeps it
+              // booked (the owner, 2 Nov 2026: 'make sure it tells her to pick time … like click change time')
+              <button type="button" data-time-change
+                onClick={() => { const b = buttons.find(x => x.offered.action === 'change_time'); if (b) press(b.offered) }}
+                title="Change the time — it stays booked"
+                className="flex min-h-11 items-center gap-1.5 rounded-full border border-border bg-paper px-3 text-[13px] font-semibold hover:bg-muted">
+                {whenWords(shown.scheduledFor)}
+                <span className="text-[12px] font-medium text-accent-blue-deep underline underline-offset-4">Change time</span>
+              </button>
             ) : (
               <span className="flex min-h-11 items-center rounded-full border border-border bg-paper px-3 text-[13px] font-semibold">
                 {whenWords(shown.scheduledFor)}
