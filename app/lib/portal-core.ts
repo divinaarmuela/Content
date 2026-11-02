@@ -772,6 +772,81 @@ export function instagramProfileGrid(
   return [...undated, ...dated, ...feed]
 }
 
+/** one entry of the post window's Feed preview tab: this post, another booked post on that account, or a live one */
+export type FeedPreviewTile = {
+  kind: 'this' | 'booked' | 'live'
+  id: string
+  at: string | null
+  /** the picture or video the network leads with; a live post's is the platform's own still */
+  cover: GridTile | null
+  /** the words that account posts — its own caption when it has one, else the post's */
+  caption: string
+  /** a live post opens where it really lives */
+  permalink: string | null
+}
+
+/** a live post as `feedFor` / portal_feeds hold it (`LiveTile`) — only what the Feed preview draws */
+type LiveFeedPost = { id: string; at: string | null; thumbnail: string | null; permalink: string | null; caption?: string | null; mediaType?: string | null }
+
+type FeedPost = GridPost & {
+  scheduled_for?: string | null
+  caption?: string | null
+  per_channel: Record<string, { slides?: readonly { url: string; type?: string | null }[] | null; caption?: string | null } | undefined>
+}
+
+/**
+ * THE FEED PREVIEW TAB (the owner, 2 Nov 2026: "make sure it shows how it sits on instagram facebook tiktok or
+ * linkedin feed preview tab … include scheduled ones too current updated"). For ONE account (a channel id), the
+ * client's other BOOKED posts going to that same account, with this post in its place, latest time first — the
+ * order every one of these feeds reads in — above what is already live there (`feedFor`, portal_feeds). A post
+ * with no time yet leads, where the next post goes. Booked posts are not on the platform yet, so nothing is drawn
+ * twice. `instagramProfileGrid` is the same order for the one Instagram grid; this one is any network.
+ */
+export function networkFeedPreview(
+  post: FeedPost,
+  others: readonly PostState[],
+  accountId: string,
+  live: readonly LiveFeedPost[],
+): FeedPreviewTile[] {
+  const coverOf = (p: FeedPost): GridTile | null => {
+    const own = p.per_channel[accountId]?.slides ?? []
+    const s = (own.length ? own : p.slides)[0]
+    return s ? { url: s.url, type: s.type === 'video' ? 'video' : 'image' } : null
+  }
+  const captionOf = (p: FeedPost) => String(p.per_channel[accountId]?.caption?.trim() || p.caption || '')
+  const planned: FeedPreviewTile[] = []
+  if (post.channels.includes(accountId)) {
+    planned.push({ kind: 'this', id: post.id, at: post.scheduled_for ?? null, cover: coverOf(post), caption: captionOf(post), permalink: null })
+  }
+  for (const p of others) {
+    if (p.id === post.id || p.stage !== 'booked' || !p.channels.includes(accountId)) continue
+    const fp = p as unknown as FeedPost
+    planned.push({ kind: 'booked', id: p.id, at: p.scheduled_for ?? null, cover: coverOf(fp), caption: captionOf(fp), permalink: null })
+  }
+  const time = (t: FeedPreviewTile) => Date.parse(String(t.at ?? ''))
+  const undated = planned.filter(t => !Number.isFinite(time(t)))
+  const dated = planned.filter(t => Number.isFinite(time(t))).sort((a, b) => time(b) - time(a))
+  const feed = live
+    .filter(t => t.id)
+    .map((t): FeedPreviewTile => ({
+      kind: 'live', id: t.id, at: t.at, permalink: t.permalink, caption: String(t.caption ?? ''),
+      cover: t.thumbnail ? { url: t.thumbnail, type: 'image' } : null,
+    }))
+    .sort((a, b) => (Date.parse(String(b.at ?? '')) || 0) - (Date.parse(String(a.at ?? '')) || 0))
+  return [...undated, ...dated, ...feed]
+}
+
+/** what the Feed preview says under a network's feed when its live posts are missing — never an empty box */
+export function feedPreviewNote(network: string, liveCount: number, state: 'reading' | 'read' | 'unreadable'): string | null {
+  const name = networkName(network)
+  if (state === 'reading') return `Reading ${name}’s recent posts…`
+  if (state === 'unreadable') return `${name}’s recent posts could not be read just now — showing only the booked ones.`
+  // LinkedIn: Zernio answers, but with no posts (live read, 2 Nov 2026, Justin Engelke's profile: `posts: []`)
+  if (liveCount === 0 && network === 'linkedin') return 'LinkedIn’s recent posts can’t be read — showing only the booked ones.'
+  if (liveCount === 0) return `Nothing is live on ${name} yet — showing only the booked ones.`
+  return null
+}
+
 /**
  * THE ONE LIST OF WHAT IS WAITING ON THE CLIENT (decision 15): every post
  * with them, sent, and still open — the one whose time runs out first on top.

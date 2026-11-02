@@ -1,6 +1,7 @@
 'use client'
 
 import PostLog from './PostLog'
+import PostFeedPreview from './PostFeedPreview'
 import PostVersions, { melb, type SavedVersion } from './PostVersions'
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { Clock, Eye, Pencil, Plus, Trash2, Wand2, X, Zap } from 'lucide-react'
@@ -542,20 +543,31 @@ export default function PostWindow({
       .catch(() => { if (alive) setLiveFeed([]) })
     return () => { alive = false }
   }, [igAccountId, showPreview])
+  // the client's posts, read once for the Instagram grid and the Feed preview tab
+  const clientStates = useMemo(() => clientPosts.rows
+    .filter(r => r.client_id === context.clientId)
+    .map(r => readPostState(r as unknown as Record<string, unknown>))
+    .filter((p): p is PostState => !!p), [clientPosts.rows, context.clientId])
   const grid = useMemo(() => {
     const all = context.allAccounts ?? accounts
     const platformOf = (acc: string) => all.find(a => a.id === acc)?.platform ?? null
     if (!igAccountId) return null
-    const others = clientPosts.rows
-      .filter(r => r.client_id === context.clientId)
-      .map(r => readPostState(r as unknown as Record<string, unknown>))
-      .filter((p): p is PostState => !!p)
+    const others = clientStates
     // this post among the client's BOOKED Instagram posts, latest top left, above what is already live
     return instagramProfileGrid(
       { id: id ?? '', channels: shown.channels, slides: shown.slides, per_channel: shown.perChannel, scheduled_for: shown.scheduledFor ?? null },
       others, platformOf, liveFeed ?? [],
     )
-  }, [context.allAccounts, context.clientId, accounts, igAccountId, shown.channels, shown.slides, shown.perChannel, shown.scheduledFor, clientPosts.rows, id, liveFeed])
+  }, [context.allAccounts, accounts, igAccountId, shown.channels, shown.slides, shown.perChannel, shown.scheduledFor, clientStates, id, liveFeed])
+  // the Feed preview tab's post: what is on screen, as `networkFeedPreview` reads it
+  const feedPost = useMemo(() => ({
+    id: id ?? '', channels: shown.channels, slides: shown.slides, caption: shown.caption,
+    per_channel: shown.perChannel as Parameters<typeof PostFeedPreview>[0]['post']['per_channel'], scheduled_for: shown.scheduledFor ?? null,
+  }), [id, shown.channels, shown.slides, shown.caption, shown.perChannel, shown.scheduledFor])
+  const feedAccounts = useMemo(() => (context.allAccounts ?? accounts).map(a => ({ id: a.id, platform: String(a.platform), username: a.username ?? null, name: a.name ?? null })),
+    [context.allAccounts, accounts])
+  const feedNetworks = useMemo(() => shown.channels.some(acc => ['instagram', 'facebook', 'tiktok', 'linkedin'].includes(String(feedAccounts.find(a => a.id === acc)?.platform ?? ''))),
+    [shown.channels, feedAccounts])
 
   /* ── what is wrong with the draft on screen — the same rule the server runs ── */
 
@@ -1500,6 +1512,8 @@ export default function PostWindow({
             // the comment-to-DM section draws nothing on a post that cannot change and has none set (live check, 27 Oct
             // 2026: MGMT's booked REEL 4 opened an empty Options tab)
             { key: 'options', label: 'Options', show: !!options || !!alsoPost || (!!automation && (editable || !!shown.automation)) },
+            // how it sits on each network's feed, booked posts and live ones (the owner, 2 Nov 2026)
+            { key: 'feed', label: 'Feed preview', show: feedNetworks },
             { key: 'notes', label: 'Notes', count: noteCount, show: !!notesBox },
             // who did what, and who was told (the owner, 2 Nov 2026)
             { key: 'versions', label: 'Versions', show: !!id && saved?.sent_version != null },
@@ -1581,6 +1595,15 @@ export default function PostWindow({
                       {options}
                       {automation}
                     </>
+                  )}
+                  {open === 'feed' && (
+                    <PostFeedPreview post={feedPost} others={clientStates} accounts={feedAccounts}
+                      known={igAccountId ? { [igAccountId]: liveFeed } : undefined}
+                      media={(g, label) => g.type === 'video'
+                        ? (videoView(g, label, 'h-full w-full', true)
+                          ?? <video src={playable(g.url)} muted playsInline preload="metadata" className="h-full w-full object-cover" />)
+                        // eslint-disable-next-line @next/next/no-img-element
+                        : <img src={g.url} alt={label} loading="lazy" className="h-full w-full object-cover" />} />
                   )}
                   {open === 'notes' && notesBox}
                   {open === 'log' && id && <PostLog postId={id} />}
@@ -1949,4 +1972,4 @@ function useWideWindow(): boolean {
 }
 
 /** the sections of the wide post window's right side, one open at a time */
-type WindowSection = 'caption' | 'channels' | 'media' | 'options' | 'notes' | 'versions' | 'log'
+type WindowSection = 'caption' | 'channels' | 'media' | 'options' | 'feed' | 'notes' | 'versions' | 'log'

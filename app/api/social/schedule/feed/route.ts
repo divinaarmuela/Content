@@ -6,8 +6,11 @@ import { assertClientAccess } from '@/app/lib/social-schedule'
 import { scheduleErrorResponse } from '@/app/lib/social-schedule'
 import { feedFor } from '@/app/lib/one-portal-schedule'
 
+const FEED_NETWORKS = new Set(['instagram', 'facebook', 'tiktok', 'linkedin'])
+
 /**
- * THE ACCOUNT'S OWN FEED, for the Preview and the post window's "How it sits on the client's Instagram" (the
+ * THE ACCOUNT'S OWN FEED, for the Preview, the post window's "How it sits on the client's Instagram" and its Feed
+ * preview tab (Instagram, Facebook, TikTok, LinkedIn) (the
  * owner, 24 Sep 2026, pointing at Later's visual planner). The 25 most recent posts that exist on the Instagram
  * account, including everything published outside this dashboard, so the planned posts can be judged against
  * the grid they will join.
@@ -30,7 +33,10 @@ export async function GET(req: Request) {
       const account = await table<SocialAccount>('social_accounts').get(accountId)
       if (!account || !account.client_id) return NextResponse.json({ error: 'Account not found' }, { status: 404 })
       await assertClientAccess(user, account.client_id)
-      if (account.platform !== 'instagram') return NextResponse.json({ tiles: [], reason: 'not_instagram' })
+      // THE FEED PREVIEW TAB (the owner, 2 Nov 2026: "instagram facebook tiktok or linkedin"): `feedFor` reads any
+      // account through Zernio's /accounts/{id}/posts — live read that day: Instagram 25, Facebook 25, TikTok 10,
+      // LinkedIn none (Zernio answers `posts: []` for a LinkedIn profile, so the tab says so)
+      if (!FEED_NETWORKS.has(String(account.platform))) return NextResponse.json({ tiles: [], reason: 'unsupported' })
 
       const providerId = String((account as { provider_account_id?: string }).provider_account_id ?? '')
       if (!providerId) return NextResponse.json({ tiles: [], reason: 'not_connected' })
