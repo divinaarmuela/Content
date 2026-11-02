@@ -24,7 +24,7 @@ import PlatformIcon from '../PlatformIcon'
  * not allow that is said plainly rather than shown as a black strip.
  */
 export default function CoverPicker({
-  videoUrl, playable, platforms, current, locked, onPick, channels, saveWords,
+  videoUrl, playable, platforms, current, locked, onPick, channels, saveWords, savedNote,
 }: {
   /** the master file in the post */
   videoUrl: string
@@ -42,6 +42,8 @@ export default function CoverPicker({
   channels?: readonly { id: string; platform: string; name: string | null }[]
   /** on a booked post: what saving does, said on the picker ('Saved and booked back in for its time') */
   saveWords?: string
+  /** said in green once a cover was chosen: saved (a booked post) or set until Save (a draft) — the owner, 2 Nov 2026 */
+  savedNote?: string | null
 }) {
   const takers = coverPlatforms(platforms)
   // WHICH CHANNELS GET IT: every channel that takes a cover, until the person unticks one
@@ -302,6 +304,7 @@ export default function CoverPicker({
         </div>
       )}
 
+      {savedNote && !busy && <p role="status" className="text-[12px] font-semibold text-accent-green-deep" data-cover-saved>✓ {savedNote}</p>}
       {busy && mode !== 'frames' && <p role="status" className="text-[12px] text-muted-foreground">{busy}…</p>}
       {/* the readable red, and said out loud: an upload that was refused has
           to reach somebody who is not looking at this corner of the panel */}

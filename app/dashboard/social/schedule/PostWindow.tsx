@@ -665,6 +665,9 @@ export default function PostWindow({
    * in for the SAME time on the SAME channels. Its approval stands. A step that is refused leaves the post as a draft
    * with the reason said here and in its Log — never silently off the schedule.
    */
+  const [coverNote, setCoverNote] = useState<string | null>(null)
+  // a draft's cover is kept once the draft is saved: the note says so then
+  useEffect(() => { if (!state.dirty && coverNote?.startsWith('Cover set')) setCoverNote('Cover saved') }, [state.dirty, coverNote])
   const mayRecover = !!saved && saved.stage === 'booked' && !!me && ['super_admin', 'account_manager', 'scheduler', 'tester'].includes(me.role)
   const changeBookedCover = async (url: string | null, ids: string[] | null) => {
     if (!saved || !id || busy) return
@@ -697,6 +700,7 @@ export default function PostWindow({
     }
     if (back.post) setAnswered(back.post)
     setReply({ action: 'save', tone: 'ok', text: 'Cover changed — booked back in for the same time', problems: [] })
+    setCoverNote(`Cover saved — booked back in for ${melb(at)}`)
   }
 
   /**
@@ -1261,9 +1265,11 @@ export default function PostWindow({
                     current={currentCover(shown.perChannel, chosen.map(a => ({ id: a.id, platform: String(a.platform) })), seed?.coverUrl ?? null)}
                     locked={locked && !mayRecover}
                     channels={chosen.map(a => ({ id: a.id, platform: String(a.platform), name: a.username ?? a.name ?? null }))}
+                    savedNote={coverNote}
                     saveWords={mayRecover ? 'Booked: a new cover is saved and the post is booked back in for the same time, on the same channels.' : undefined}
                     onPick={(url, ids) => {
                       if (mayRecover) { void changeBookedCover(url, ids); return }
+                      setCoverNote(url ? 'Cover set — it is kept when you press Save (or send / schedule)' : 'Cover removed — press Save to keep that')
                       for (const a of chosen.filter(x => !ids || ids.includes(x.id))) {
                         const patch = coverPatchFor(String(a.platform), url)
                         if (Object.keys(patch).length) dispatch({ type: 'extra', channel: a.id, patch })
