@@ -1773,14 +1773,19 @@ export default function PostWindow({
             {storyPlan?.ok && (
               <div className="flex flex-wrap items-center gap-2 rounded-inner border border-accent-blue/40 bg-tint-blue px-3 py-2 text-[12px]" data-story-split>
                 <span className="min-w-0 flex-1">
-                  <strong>{storyPlan.parts.length} files in a Story.</strong> Instagram takes one per Story, so this becomes {storyPlan.parts.length} Stories in this order
-                  .
-                  {post?.stage === 'ready' ? ' Each keeps this approval. Story 1 is booked in; each next one goes out the moment the one before it is live, so the order never swaps.' : ' Each then goes through the quality check and the client; once approved, each goes out right after the one before it is live.'}
+                  <strong>{storyPlan.parts.length} files in a Story.</strong> Instagram takes one per Story, so this goes out as {storyPlan.parts.length} Stories, in this order.
+                  {post?.stage === 'ready'
+                    ? ' Each keeps this approval. Story 1 is booked in; each next one goes out the moment the one before it is live, so the order never swaps.'
+                    // A DRAFT HAS NO SPLIT-ONLY BUTTON (2 Nov 2026: Renee pressed 'Make 2 Stories' twice, expecting it to book, and
+                    // was left with drafts): the footer's own buttons make the Stories
+                    : <> <strong>Press Schedule it</strong> (or Send for quality check) — it makes the {storyPlan.parts.length} Stories for you.</>}
                 </span>
-                <button type="button" disabled={busy} onClick={() => void splitStories()}
-                  className="min-h-9 shrink-0 rounded-full bg-foreground px-3 text-[12px] font-semibold text-background disabled:opacity-60">
-                  {busy ? 'Working…' : post?.stage === 'ready' ? `Make ${storyPlan.parts.length} Stories and book them` : `Make ${storyPlan.parts.length} Stories`}
-                </button>
+                {post?.stage === 'ready' && (
+                  <button type="button" disabled={busy} onClick={() => void splitStories()}
+                    className="min-h-9 shrink-0 rounded-full bg-foreground px-3 text-[12px] font-semibold text-background disabled:opacity-60">
+                    {busy ? 'Working…' : `Make ${storyPlan.parts.length} Stories and book them`}
+                  </button>
+                )}
               </div>
             )}
             {/* ON A LAPTOP THE BUTTONS SIT IN ONE LINE (the owner's screenshot, 27 Oct 2026: a reason under a button pushed it

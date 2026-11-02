@@ -1590,7 +1590,7 @@ export async function splitStoryPost(user: TeamUser, postId: string, expectRev: 
       ...(post.assigned_to ? { assigned_to: post.assigned_to } : {}),
       // its place in the order: Story 2 and on go only when the one before is live (advanceStoryChain)
       story_chain: { group: post.id, n: part.n, of: part.of },
-      ...(part.n > 1 ? { problem: `Story ${part.n} of ${part.of}: it goes out by itself the moment Story ${part.n - 1} is live.` } : {}),
+      ...(part.n > 1 && post.stage === 'ready' ? { problem: `Story ${part.n} of ${part.of}: it goes out by itself the moment Story ${part.n - 1} is live.` } : {}),
       created_by: post.created_by ?? actor.id,
       created_at: at,
       updated_at: at,
