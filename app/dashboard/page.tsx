@@ -43,10 +43,10 @@ import { SCHEDULE_PAGE } from '../lib/page-access-core'
 const PLATFORM_NAMES: Record<string, string> = { instagram: 'Instagram', tiktok: 'TikTok', linkedin: 'LinkedIn', facebook: 'Facebook', youtube: 'YouTube', twitter: 'X', threads: 'Threads', pinterest: 'Pinterest', bluesky: 'Bluesky', googlebusiness: 'Google Business' }
 import { boardHref, overviewTiles, type BoardViewCard, type OverviewTile } from '../lib/board-view-core'
 import {
-  CALENDAR_PAGE, EDITOR_BOARD, POST_APPROVAL_BOARD, SHOOTS_PAGE, actionFor, cardHref, chipCount, linkAllowed, overviewChips, shootHref,
+  CALENDAR_PAGE, EDITOR_BOARD, POST_APPROVAL_BOARD, SHOOTS_PAGE, actionFor, cardHref, shootHref,
 } from '../lib/overview-links-core'
 import { briefIsLate, footageFolderNeeded, type SopShoot } from '../lib/shoot-sop-core'
-import { BOARD_COLUMNS, boardColumn, columnOf, type BoardColumnKey } from '../lib/board-core'
+import { boardColumn, columnOf } from '../lib/board-core'
 import { STATUS_LABELS, type ItemStatus } from '../lib/workflow-core'
 import { itemStatusLabel } from '../lib/brief-task-core'
 import { compactCount } from '../lib/post-analytics-core'
@@ -475,36 +475,6 @@ function PostsThisMonth({ rows, month, thisMonth, onMonth }: { rows: MonthRow[] 
   )
 }
 
-/** The board at a glance — the same six columns, with the same words. */
-const COLUMN_TONE: Record<BoardColumnKey, ChipTone> = {
-  draft: 'muted', quality_check: 'amber', colour_grade: 'amber', with_client: 'blue', ready_to_post: 'green', booked: 'blue', posted: 'green', delivered: 'green',
-}
-
-/** "Where everything is right now" — the ROLE's own columns, each chip a way
- *  into that column of a board the role has (the owner, 13 Sep 2026: "this
- *  needs fixing for every role, the button pages are wrong"). */
-function Pipeline({ pipeline, role, plansInReview }: {
-  pipeline: Record<string, number> | undefined
-  role: Role | null | undefined
-  plansInReview: number
-}) {
-  const chips = overviewChips(role)
-  return (
-    <TintCard tone="paper" title="Where everything is right now">
-      <div className="flex flex-wrap gap-2">
-        {chips.map(c => {
-          const n = chipCount(c, pipeline, plansInReview)
-          const tone = COLUMN_TONE[c.columns[0] ?? 'draft'] ?? 'surface'
-          const chip = <Chip tone={tone}>{c.label} · <span className="tabular-nums">{n}</span></Chip>
-          return linkAllowed(role, c.href)
-            ? <Link key={c.key} href={c.href} className="rounded-full underline-offset-4 hover:underline">{chip}</Link>
-            : <span key={c.key}>{chip}</span>
-        })}
-      </div>
-    </TintCard>
-  )
-}
-
 /** Where this browser thinks it is. Null when it will not say. */
 function browserZone(): string | null {
   try {
@@ -778,16 +748,10 @@ export default function OverviewPage() {
     () => (live.batches as unknown as { id: string; title: string; clients?: { name: string } | null; review_asked_at?: string | null; plan_reviewed_at?: string | null }[])
       .filter(planInReview).slice(0, 8),
     [live.batches])
-  const plansInReview = plansToReview.length
   /** cards at Quality check, for the quality checker's own list */
   const qualityQueue = useMemo(
     () => (postCards as unknown as ItemLite[]).filter(c => c.status === 'quality_check').slice(0, 8),
     [postCards])
-  const postPipeline = useMemo(() => {
-    const out: Record<string, number> = {}
-    for (const c of postCards) out[String(c.status)] = (out[String(c.status)] ?? 0) + 1
-    return out
-  }, [postCards])
   const tiles = useMemo(() => {
     if (!viewer || live.loading || !todayKey) return null
     const cards = postCards
@@ -1187,11 +1151,7 @@ export default function OverviewPage() {
       </div>
 
       {/* ── the wide blocks, under both columns ── */}
-      {/* the SAME cards the tiles above count — posts, not shoot plans. The
-          strip used to read the API's pipeline (every item, shoot plans
-          included) while "The agency at a glance" left shoot plans out, so
-          one card said "0 draft" and the other "Draft · 4" (9 Sep 2026). */}
-      {!loading && role && <Pipeline pipeline={postPipeline} role={role as Role} plansInReview={plansInReview} />}
+      {/* "Where everything is right now" left the Overview (the owner, 2 Nov 2026: "remove this from overview page") */}
 
       {data?.manager && isManager && (
         <>
