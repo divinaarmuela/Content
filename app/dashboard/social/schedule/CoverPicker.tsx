@@ -283,23 +283,21 @@ export default function CoverPicker({
       )}
 
       {mode === 'frames' && duration > 0 && (
-        <div className="flex flex-col gap-2 rounded-inner border border-border p-2" data-cover-scrub>
-          <label className="flex flex-col gap-1">
-            <span className="text-[12px] font-semibold text-muted-foreground">Or scroll through the clip</span>
-            <input type="range" min={0} max={Math.max(0.1, Math.round(duration * 10) / 10)} step={0.1} value={scrub?.at ?? 0}
-              onChange={e => scrubTo(Number(e.target.value))} aria-label="Scroll through the clip" className="w-full accent-[var(--dbx-blue)]" />
-          </label>
-          <div className="flex items-center gap-3">
-              <video ref={live} src={playable(videoUrl)} muted playsInline preload="auto" aria-label="The frame at the slider"
-                className="h-[150px] w-auto rounded-tile border border-border bg-black" />
-          {scrub && (
-            <>
-              <button type="button" disabled={busy !== null && busy !== 'Reading the video'} onClick={() => void useFrame(scrub.at)}
-                className="min-h-11 rounded-full bg-foreground px-4 text-[12px] font-semibold text-background hover:bg-foreground/90 disabled:opacity-50">
-                Use this frame · {scrub.at.toFixed(1)}s
-              </button>
-            </>
-          )}
+        // BIG, WITH THE CONTROLS BESIDE IT (the owner, 2 Nov 2026: 'can the frame picker be bigger and next to it left … its so small')
+        <div className="flex flex-col gap-3 rounded-inner border border-border p-3 sm:flex-row sm:items-start" data-cover-scrub>
+          <video ref={live} src={playable(videoUrl)} muted playsInline preload="auto" aria-label="The frame at the slider"
+            className="mx-auto h-[420px] max-h-[60vh] w-auto shrink-0 rounded-inner border border-border bg-black sm:mx-0" />
+          <div className="flex min-w-0 flex-1 flex-col gap-3">
+            <label className="flex flex-col gap-1.5">
+              <span className="text-[13px] font-semibold">Scroll through the clip</span>
+              <input type="range" min={0} max={Math.max(0.1, Math.round(duration * 10) / 10)} step={0.1} value={scrub?.at ?? 0}
+                onChange={e => scrubTo(Number(e.target.value))} aria-label="Scroll through the clip" className="h-8 w-full accent-[var(--dbx-blue)]" />
+              <span className="text-[12px] tabular-nums text-muted-foreground">{(scrub?.at ?? 0).toFixed(1)}s of {duration.toFixed(1)}s</span>
+            </label>
+            <button type="button" disabled={!scrub || (busy !== null && busy !== 'Reading the video')} onClick={() => scrub && void useFrame(scrub.at)}
+              className="min-h-11 w-fit rounded-full bg-foreground px-5 text-[13px] font-semibold text-background hover:bg-foreground/90 disabled:opacity-50">
+              {scrub ? `Use this frame · ${scrub.at.toFixed(1)}s` : 'Move the slider to pick a frame'}
+            </button>
           </div>
         </div>
       )}
