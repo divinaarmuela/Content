@@ -788,6 +788,8 @@ export const POST_ACTIONS = [
   'edit', 'edit_booked', 'cancel', 'rebook', 'missing_networks', 'duplicate', 'delete_draft', 'set_steps',
   'booking_done', 'booking_failed', 'link_jobs', 'record_posted', 'record_partial', 'record_failed',
   'auto_book',
+  // the next Story of a split, posted the moment the one before it is live (Renee, 2 Nov 2026)
+  'chain_post',
   // ONE PORTAL (docs/ONE_PORTAL_SPEC.md) — refused unless the client is on it
   'client_ok', 'client_not_approved', 'client_ok_book', 'hold_for_client', 'set_if_no_answer',
 ] as const
@@ -878,6 +880,7 @@ export const POST_TRANSITIONS: readonly TransitionRow[] = [
   // APPROVED WITH A TIME BOOKS ITSELF (the owner, 30 Sep 2026: "if we move to approved and the time is there, make sure
   // it's auto scheduled, or if client approved") — Book in, made by the app straight after the approval (autoBookAfter)
   { action: 'auto_book', spec: 'owner 30 Sep', from: ['ready'], to: 'booked', who: ['system'], label: 'Booked in automatically' },
+  { action: 'chain_post', spec: 'Renee 2 Nov', from: ['ready'], to: 'booked', who: ['system'], label: 'Posted after the Story before it' },
   { action: 'booking_failed', spec: '§3.1', from: ['booked'], to: 'ready', who: ['system'], label: 'Booking failed' },
   { action: 'link_jobs', spec: '§5', from: ['booked', 'posted'], to: 'same', who: ['system'], label: 'Re-send linked' },
   // …and from posted: a re-send of the missing networks reports back on the same post
@@ -1205,6 +1208,13 @@ export function checkPostTransition(
       if (!accounts) break
       const problems = compositionProblems({ ...post, scheduled_for: when }, accounts, now)
       if (problems.length > 0) return refuse('invalid', problems[0], problems)
+      break
+    }
+
+    case 'chain_post': {
+      if (!approvedNow) return refuse('unapproved', 'This version is not approved yet.')
+      const cc = channelsProblem()
+      if (cc) return cc
       break
     }
 
@@ -1561,14 +1571,16 @@ export function planPostTransition(
       break
     case 'book':
     case 'auto_book':
+    case 'chain_post':
     case 'post_now': {
       // a pass inside the last 15 minutes books the next free slot instead of missing (R8, the one portal only)
-      const forTime = act === 'post_now' ? at : act === 'auto_book' && bumpPlanned ? bumpTime() : post.scheduled_for!
-      if (act === 'post_now') patch.scheduled_for = at
+      const nowish = act === 'post_now' || act === 'chain_post'
+      const forTime = nowish ? at : act === 'auto_book' && bumpPlanned ? bumpTime() : post.scheduled_for!
+      if (nowish) patch.scheduled_for = at
       patch.booking = { job_ids: [], pending: true, at, for_time: forTime }
       patch.problem = null
       patch.assigned_to = null
-      effects.push({ when: 'after', kind: 'queue_publish', for_time: forTime, now: act === 'post_now' })
+      effects.push({ when: 'after', kind: 'queue_publish', for_time: forTime, now: nowish })
       break
     }
     case 'schedule_direct': {

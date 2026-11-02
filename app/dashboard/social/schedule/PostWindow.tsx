@@ -598,15 +598,12 @@ export default function PostWindow({
     if (!made.ok) { setBusy(false); setReply({ action: 'save', tone: 'error', text: made.reason, problems: [] }); return }
     let words = made.words
     if (post.stage === 'ready') {
-      // booked one after another, in order; each is its own post, so one refusal does not stop the rest
-      const refused: string[] = []
-      for (const [i, sid] of made.postIds.entries()) {
-        const b = await api.act(sid, { action: 'book', expect_rev: 0, version: 1 })
-        if (!b.ok) refused.push(`Story ${i + 1}: ${b.reason}`)
-      }
-      words = refused.length
-        ? `${made.postIds.length} Stories made; ${made.postIds.length - refused.length} booked in. Not booked — ${refused.join(' · ')}`
-        : `${made.postIds.length} Stories made and booked in, in order`
+      // ONLY STORY 1 IS BOOKED. Each next one is posted by the app the moment the one before it is live, so the order
+      // can never swap (the owner, 2 Nov 2026) — advanceStoryChain on the server
+      const b = await api.act(made.postIds[0], { action: 'book', expect_rev: 0, version: 1 })
+      words = b.ok
+        ? `${made.postIds.length} Stories made. Story 1 is booked in; each next one goes out the moment the one before it is live`
+        : `${made.postIds.length} Stories made. Story 1 was not booked: ${b.reason} — book it, and the rest follow it in order`
     }
     setBusy(false)
     const outcome: PostWindowOutcome = {
@@ -1440,8 +1437,8 @@ export default function PostWindow({
               <div className="flex flex-wrap items-center gap-2 rounded-inner border border-accent-blue/40 bg-tint-blue px-3 py-2 text-[12px]" data-story-split>
                 <span className="min-w-0 flex-1">
                   <strong>{storyPlan.parts.length} pictures in a Story.</strong> Instagram takes one per Story, so this becomes {storyPlan.parts.length} Stories in this order
-                  {storyPlan.parts[0].scheduled_for ? `: ${storyPlan.parts.map(x => new Date(x.scheduled_for!).toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit' })).join(', ')}` : ''}.
-                  {post?.stage === 'ready' ? ' Each keeps this approval and is booked in.' : ' Each then goes through the quality check and the client as this one would.'}
+                  .
+                  {post?.stage === 'ready' ? ' Each keeps this approval. Story 1 is booked in; each next one goes out the moment the one before it is live, so the order never swaps.' : ' Each then goes through the quality check and the client; once approved, each goes out right after the one before it is live.'}
                 </span>
                 <button type="button" disabled={busy} onClick={() => void splitStories()}
                   className="min-h-9 shrink-0 rounded-full bg-foreground px-3 text-[12px] font-semibold text-background disabled:opacity-60">

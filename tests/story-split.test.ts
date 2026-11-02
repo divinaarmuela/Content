@@ -48,3 +48,28 @@ describe('the wait after each Story', () => {
     expect(p.ok && p.parts.map(x => x.scheduled_for)).toEqual(['2026-11-03T04:00:00.000Z', '2026-11-03T04:01:00.000Z', '2026-11-03T04:05:00.000Z'])
   })
 })
+
+import { readFileSync } from 'node:fs'
+import { ROW_OF } from '../app/lib/post-stage-core'
+
+// the owner, 2 Nov 2026: "find a way that the first story goes out then the second and third and fourth"
+describe('each Story goes only after the one before it is live', () => {
+  const src = readFileSync('app/lib/post-stage.ts', 'utf8')
+  it('the next Story is posted by the app, now, from Ready to post, and only by the app', () => {
+    expect(ROW_OF.chain_post.who).toEqual(['system'])
+    expect(ROW_OF.chain_post.from).toEqual(['ready'])
+  })
+  it('a person cannot book, post, schedule or retime a waiting Story ahead of the one before it', () => {
+    expect(src).toContain("const CHAIN_HELD: readonly PostAction[] = ['book', 'post_now', 'schedule_direct', 'change_time']")
+    expect(src).toContain('const waiting = await storyWaitingFor(')
+  })
+  it('a client approval never books Story 2 on for a time; every move checks whether the next Story may go', () => {
+    expect(src).toContain('if (later && later.n > 1) return')
+    expect(src).toContain("if (r.ok && action !== 'chain_post') void advanceStoryChain(postId)")
+  })
+  it('only Story 1 is booked from the window', () => {
+    const win = readFileSync('app/dashboard/social/schedule/PostWindow.tsx', 'utf8')
+    expect(win).toContain("api.act(made.postIds[0], { action: 'book'")
+    expect(win).not.toContain('for (const [i, sid] of made.postIds.entries())')
+  })
+})

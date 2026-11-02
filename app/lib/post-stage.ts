@@ -523,9 +523,15 @@ export async function performPostTransition(
   for (let attempt = 0; attempt < 3; attempt++) {
     const r = await attemptMove(postId, action, actor, input)
     if (r === 'again') continue
+    // A STORY OF A SPLIT moved: the next one may now go (this one live or cancelled), or this one may go (it has just
+    // been approved and the one before it is already live). Never on the move that posts a Story itself.
+    if (r.ok && action !== 'chain_post') void advanceStoryChain(postId).catch(e => console.error('[story chain]', postId, e instanceof Error ? e.message : e))
     // approved and it has a time: the app books it now (autoBookAfter). A refusal — the time too close, a channel
     // gone — leaves it on Ready to post with the reason in the answer, for a person to book.
     if (deps.autoBook && r.ok && autoBookAfter(String(action), r.post)) {
+      // Story 2 and on of a split are never booked for a time: the chain posts each after the one before is live
+      const later = chainOf((await posts().get(postId, { fresh: true }).catch(() => null)) as unknown as Record<string, unknown>)
+      if (later && later.n > 1) return { ...r, words: `${r.words.split(' — ')[0]} — it goes out right after Story ${later.n - 1} is live` }
       const b = await performSystemTransition(postId, 'auto_book')
       if (b.ok) return { ...b, words: `${r.words.split(' — ')[0]} — booked in automatically for its time` }
       return { ...r, words: `${r.words}. Not booked automatically: ${b.reason}` }
@@ -1178,6 +1184,11 @@ export async function actOnPost(user: TeamUser, postId: string, request: PostAct
   if (SYSTEM_ACTIONS.includes(request.action) || (CLIENT_ACTIONS.includes(request.action) && !teamMay)) {
     return refusal('not_allowed', `Only ${ROW_OF[request.action].who.includes('client') ? 'the client' : 'the app'} can do that.`, post)
   }
+  // a Story waiting its turn is posted by the app once the one before it is live — never booked ahead of it by hand
+  if (CHAIN_HELD.includes(request.action)) {
+    const waiting = await storyWaitingFor(row as unknown as Record<string, unknown>)
+    if (waiting) return refusal('wrong_stage', waiting, post)
+  }
   return performPostTransition(postId, request.action, teamActorFor(user, post), {
     expect_rev: request.expect_rev,
     version: request.version ?? null,
@@ -1576,6 +1587,9 @@ export async function splitStoryPost(user: TeamUser, postId: string, expectRev: 
       ...(post.approval_steps ? { approval_steps: post.approval_steps } : {}),
       ...(post.if_no_answer ? { if_no_answer: post.if_no_answer } : {}),
       ...(post.assigned_to ? { assigned_to: post.assigned_to } : {}),
+      // its place in the order: Story 2 and on go only when the one before is live (advanceStoryChain)
+      story_chain: { group: post.id, n: part.n, of: part.of },
+      ...(part.n > 1 ? { problem: `Story ${part.n} of ${part.of}: it goes out by itself the moment Story ${part.n - 1} is live.` } : {}),
       created_by: post.created_by ?? actor.id,
       created_at: at,
       updated_at: at,
@@ -1609,4 +1623,53 @@ export async function splitStoryPost(user: TeamUser, postId: string, expectRev: 
     ids.push(id)
   }
   return { ok: true, postIds: ids, words: `${plan.parts.length} Stories made, a minute apart` }
+}
+
+/* ── the Stories' order: each goes only when the one before it is live (the owner, 2 Nov 2026: "gotta make sure
+ * … the first story goes out then the second and third and fourth") ──
+ * A split's Stories carry `story_chain: { group, n, of }`. Story 1 is booked as any post. Every later one waits on
+ * Ready to post — it is NOT booked at a time — and the app posts it (chain_post, "now") the moment the Story before
+ * it is recorded live. Cancelled ones are stepped over; a Story that did not go out holds the rest until it does. */
+
+type StoryChain = { group: string; n: number; of: number }
+const CHAIN_HELD: readonly PostAction[] = ['book', 'post_now', 'schedule_direct', 'change_time']
+
+function chainOf(row: Record<string, unknown> | null | undefined): StoryChain | null {
+  const c = row?.story_chain as Record<string, unknown> | undefined
+  return c && typeof c.group === 'string' && typeof c.n === 'number' && typeof c.of === 'number' ? { group: c.group, n: c.n, of: c.of } : null
+}
+
+async function chainRows(group: string): Promise<Record<string, unknown>[]> {
+  const rows = await posts().list({ where: (r: SocialPost) => chainOf(r as unknown as Record<string, unknown>)?.group === group, fresh: true } as never)
+  return (rows as unknown as Record<string, unknown>[]).sort((a, b) => chainOf(a)!.n - chainOf(b)!.n)
+}
+
+/** done = live (posted) or cancelled; the stage a raw row is in */
+const stageOf = (r: Record<string, unknown>) => String(r.stage ?? '')
+const isDone = (r: Record<string, unknown>) => stageOf(r) === 'posted' || stageOf(r) === 'cancelled'
+
+/** why this Story must wait, or null: the nearest earlier Story of its split that is not yet live or cancelled */
+async function storyWaitingFor(row: Record<string, unknown>): Promise<string | null> {
+  const c = chainOf(row)
+  if (!c || c.n === 1) return null
+  const before = (await chainRows(c.group)).filter(r => chainOf(r)!.n < c.n && !isDone(r))
+  if (!before.length) return null
+  return `This is Story ${c.n} of ${c.of}. It goes out by itself the moment Story ${chainOf(before[before.length - 1])!.n} is live, so they keep their order.`
+}
+
+/** after a Story moves: post the first waiting Story whose earlier Stories are all live or cancelled */
+async function advanceStoryChain(postId: string): Promise<void> {
+  const row = (await posts().get(postId, { fresh: true }).catch(() => null)) as unknown as Record<string, unknown> | null
+  const c = chainOf(row)
+  if (!c) return
+  const rows = await chainRows(c.group)
+  for (const r of rows) {
+    if (isDone(r)) continue
+    // the first Story not yet live: it goes now if it is approved and waiting, otherwise everything after it waits
+    if (chainOf(r)!.n > 1 && stageOf(r) === 'ready') {
+      const res = await performSystemTransition(String(r.id), 'chain_post', { quiet: true })
+      console.info('[story chain]', c.group, `story ${chainOf(r)!.n}/${c.of}`, res.ok ? 'posted after the one before' : `not posted: ${res.reason}`)
+    }
+    return
+  }
 }
