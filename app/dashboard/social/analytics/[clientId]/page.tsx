@@ -79,7 +79,7 @@ function ClientAnalytics() {
         <LoadFailed what="this client’s numbers" detail={failed} onRetry={() => setAttempt(a => a + 1)} />
       ) : !data ? <LoadingBlock /> : (
         <>
-          <FreshnessCard range={range} asOf={data.asOf} syncing={data.syncing} followersReadAt={newest(data.channels.map(c => c.followersReadAt))} />
+          <FreshnessCard range={range} asOf={data.asOf} followersReadAt={newest(data.channels.map(c => c.followersReadAt))} />
           <TotalsRow followers={all.followers} posts={all.posts} totals={all.totals} />
           {!data.readable && <p className="text-secondary-13 text-muted-foreground">The platforms did not answer, so the post numbers are missing. Try again in a moment.</p>}
 

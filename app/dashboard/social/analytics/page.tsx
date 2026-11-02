@@ -91,7 +91,7 @@ function Clients() {
         <LoadFailed what="the numbers for these accounts" detail={failed} onRetry={() => setAttempt(a => a + 1)} />
       ) : !data ? <LoadingBlock /> : (
         <>
-          <FreshnessCard range={range} asOf={data.asOf} syncing={data.syncing} />
+          <FreshnessCard range={range} asOf={data.asOf} />
           <TotalsRow posts={all.posts} totals={all.totals} />
           {!data.readable && <p className="text-secondary-13 text-muted-foreground">The platforms did not answer, so the post numbers are missing. Try again in a moment.</p>}
           {data.readable && !data.complete && <p className="text-secondary-13 text-muted-foreground">Showing the first 3,000 posts of these days — pick fewer days to see them all.</p>}

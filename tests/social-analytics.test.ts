@@ -106,10 +106,9 @@ describe('dead TikTok pictures (2 Nov 2026)', () => {
 })
 
 describe('how up to date the numbers are (2 Nov 2026)', () => {
-  it('a range reaching yesterday is still filling in; an older one is complete; a re-read says so first', () => {
-    expect(freshnessFor({ from: '2026-10-26', to: '2026-11-01' }, '2026-11-02', false).tone).toBe('blue')
-    expect(freshnessFor({ from: '2026-10-19', to: '2026-10-25' }, '2026-11-02', false)).toMatchObject({ tone: 'green', title: 'These days are complete' })
-    expect(freshnessFor({ from: '2026-10-19', to: '2026-10-25' }, '2026-11-02', true).tone).toBe('amber')
+  it('a range reaching yesterday is still filling in; an older one is complete', () => {
+    expect(freshnessFor({ from: '2026-10-26', to: '2026-11-01' }, '2026-11-02').tone).toBe('blue')
+    expect(freshnessFor({ from: '2026-10-19', to: '2026-10-25' }, '2026-11-02')).toMatchObject({ tone: 'green', title: 'These days are complete' })
   })
   it('keeps when a post’s numbers were read', () => {
     expect(trimPost({ _id: 'a', analytics: { lastUpdated: '2026-11-02T09:40:06Z' } })?.updatedAt).toBe('2026-11-02T09:40:06Z')

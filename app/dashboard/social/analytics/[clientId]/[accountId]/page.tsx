@@ -90,7 +90,7 @@ function ChannelAnalytics() {
         <LoadFailed what="this channel’s posts" detail={failed} onRetry={() => setAttempt(a => a + 1)} />
       ) : !data ? <LoadingBlock /> : (
         <>
-          <FreshnessCard range={range} asOf={data.asOf} syncing={data.syncing} followersReadAt={data.channel.followersReadAt} />
+          <FreshnessCard range={range} asOf={data.asOf} followersReadAt={data.channel.followersReadAt} />
           <TotalsRow followers={data.channel.followers} followerNote={followerWords(data.channel.growth, data.channel.growthSince)} posts={data.posts.length} totals={totals} />
           {!data.readable && <p className="text-secondary-13 text-muted-foreground">The platforms did not answer, so the posts are missing. Try again in a moment.</p>}
           {data.readable && !data.complete && <p className="text-secondary-13 text-muted-foreground">Showing the first 3,000 posts — pick fewer days to see them all.</p>}

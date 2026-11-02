@@ -112,10 +112,10 @@ const when = (iso: string) => new Date(iso).toLocaleString('en-AU', { timeZone: 
  * when the data is"): whether the days picked are complete, when the numbers and the followers were last read, and
  * how often each kind of number is renewed.
  */
-export function FreshnessCard({ range, asOf, syncing, followersReadAt }: {
-  range: { from: string; to: string }; asOf: string | null; syncing: boolean; followersReadAt?: string | null
+export function FreshnessCard({ range, asOf, followersReadAt }: {
+  range: { from: string; to: string }; asOf: string | null; followersReadAt?: string | null
 }) {
-  const f = freshnessFor(range, todayHere(), syncing)
+  const f = freshnessFor(range, todayHere())
   return (
     <TintCard tone={f.tone} title={f.title}>
       <div className="flex flex-col gap-1 text-[14px]">

@@ -243,16 +243,17 @@ export const FRESHNESS_RULES: readonly { what: string; how: string }[] = [
   { what: 'Posts made on the apps directly', how: 'show here within about an hour and a half' },
 ]
 
-export type Freshness = { tone: 'green' | 'blue' | 'amber'; title: string; words: string }
+export type Freshness = { tone: 'green' | 'blue'; title: string; words: string }
 
-/** Whether the days picked are complete yet, from Melbourne's today: a range reaching yesterday or today is still filling in. */
-export function freshnessFor(range: { from: string; to: string }, today: string, syncing: boolean): Freshness {
+/**
+ * Whether the days picked are complete yet, from Melbourne's today: a range reaching yesterday or today is still
+ * filling in. Zernio's own "being re-read" flag (`dataStaleness`) is NOT used: it counts every account in the agency,
+ * not the client on screen — it read 5 stale accounts on every call on 2 Nov 2026, so it would have said "being read
+ * again" on every page, for good.
+ */
+export function freshnessFor(range: { from: string; to: string }, today: string): Freshness {
   const y = new Date(`${today}T00:00:00Z`); y.setUTCDate(y.getUTCDate() - 1)
   const yesterday = y.toISOString().slice(0, 10)
-  if (syncing) {
-    return { tone: 'amber', title: 'Some channels are being read again right now',
-      words: 'A few channels’ numbers were more than a day old, so they are being fetched again. Open this page again in a few minutes for the newest figures.' }
-  }
   if (range.to >= yesterday) {
     return { tone: 'blue', title: 'The newest days are still coming in',
       words: 'Posts from today and yesterday are still collecting their reach and views, so their numbers will grow. Everything older than that is in.' }
