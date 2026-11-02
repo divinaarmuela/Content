@@ -114,13 +114,15 @@ function Cover({ t, media, className }: { t: FeedPreviewTile; media: (tile: { ur
 
 function FeedGrid({ tiles, tall, media }: { tiles: FeedPreviewTile[]; tall: boolean; media: (tile: { url: string; type: 'image' | 'video' }, label: string) => ReactNode }) {
   return (
-    <ul className={cn('grid grid-cols-3 gap-0.5', tall ? 'max-w-[360px]' : 'max-w-[420px]')}>
+    // BIG ENOUGH TO READ (the owner, 2 Nov 2026: 'make sure feed preview is big enough … the time in the badge is cut off'):
+    // the grid takes the tab's width, and the badge wraps onto two lines instead of being cut
+    <ul className={cn('grid w-full grid-cols-3 gap-1', tall ? 'max-w-[640px]' : 'max-w-[760px]')}>
       {tiles.map((t, i) => {
         const inner = (
           <>
             <Cover t={t} media={media} className="h-full w-full" />
             {badge(t) && (
-              <span className={cn('absolute bottom-1 left-1 right-1 truncate rounded-full px-1.5 py-0.5 text-[10px] font-semibold',
+              <span className={cn('absolute bottom-1.5 left-1.5 right-1.5 rounded-lg px-2 py-1 text-center text-[11px] font-semibold leading-tight',
                 t.kind === 'this' ? 'bg-foreground text-background' : 'bg-ink/80 text-cream')}>{badge(t)}</span>
             )}
           </>
