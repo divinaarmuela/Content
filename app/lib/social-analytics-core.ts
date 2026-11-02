@@ -24,8 +24,6 @@ export type AnalyticsPost = {
   url: string | null
   thumbnail: string | null
   mediaType: string | null
-  /** made on the platform itself, not through the app */
-  external: boolean
   metrics: Metrics
   /** Zernio's engagement rate, a percentage — null when it gave none */
   engagementRate: number | null
@@ -59,7 +57,6 @@ export function trimPost(raw: unknown): AnalyticsPost | null {
     url: str(r.platformPostUrl) ?? str(first?.platformPostUrl),
     thumbnail: str(r.thumbnailUrl) ?? str(media?.thumbnail) ?? (media?.type === 'image' ? str(media?.url) : null),
     mediaType: str(r.mediaType),
-    external: r.isExternal === true,
     metrics,
     engagementRate: typeof a.engagementRate === 'number' ? a.engagementRate : null,
   }
@@ -93,11 +90,12 @@ const short = (day: string, withYear = false) => new Date(`${day}T00:00:00Z`)
 
 export type GroupBy = 'week' | 'month' | 'none'
 
-export const GROUP_WORDS: readonly { key: GroupBy; label: string }[] = [
-  { key: 'week', label: 'By week' },
-  { key: 'month', label: 'By month' },
-  { key: 'none', label: 'All together' },
-]
+/** The grouping follows the days picked — no second filter (the owner, 2 Nov 2026): a week is one list, a month
+ *  or 90 days goes week by week, twelve months month by month. */
+export function groupFor(period: string): GroupBy {
+  if (period === 'this_week' || period === 'last_week') return 'none'
+  return period === 'last_365' ? 'month' : 'week'
+}
 
 export type PostGroup = { key: string; label: string; posts: AnalyticsPost[]; totals: Metrics }
 
@@ -130,7 +128,7 @@ export const SORT_WORDS: readonly { key: PostSort; label: string }[] = [
   { key: 'newest', label: 'Newest first' },
   { key: 'views', label: 'Most views' },
   { key: 'reach', label: 'Most reach' },
-  { key: 'engagement', label: 'Most engagement' },
+  { key: 'engagement', label: 'Most engaged' },
 ]
 
 export function sortPosts(posts: readonly AnalyticsPost[], by: PostSort): AnalyticsPost[] {

@@ -4,17 +4,14 @@ import { Suspense, useEffect, useMemo, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { toast } from 'sonner'
 import { Clock } from 'lucide-react'
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select'
 import PlatformIcon, { brandFor } from '../../../PlatformIcon'
 import { LoadFailed } from '../../../../NotSetUp'
 import EmptyState from '../../../../EmptyState'
 import PageTitle from '../../../../ui/PageTitle'
 import { CAL_TZ } from '@/app/lib/gcal-core'
 import {
-  GROUP_WORDS, SORT_WORDS, engagement, groupPosts, sortPosts, sumMetrics,
-  type AnalyticsPost, type GroupBy, type PostSort,
+  SORT_WORDS, engagement, groupFor, groupPosts, sortPosts, sumMetrics,
+  type AnalyticsPost, type PostSort,
 } from '@/app/lib/social-analytics-core'
 import { Crumbs, LoadingBlock, PeriodPicker, PostRow, PostSheet, TotalsRow, n, usePeriod } from '../../shared'
 
@@ -42,7 +39,6 @@ function ChannelAnalytics() {
   const [data, setData] = useState<ChannelData | null>(null)
   const [failed, setFailed] = useState<string | null>(null)
   const [attempt, setAttempt] = useState(0)
-  const [groupBy, setGroupBy] = useState<GroupBy>('week')
   const [sort, setSort] = useState<PostSort>('newest')
   const [open, setOpen] = useState<AnalyticsPost | null>(null)
 
@@ -60,9 +56,11 @@ function ChannelAnalytics() {
     return () => { live = false }
   }, [accountId, range.from, range.to, attempt])
 
+  // ONE FILTER (the owner, 2 Nov 2026: "why are there two filters here, can be confusing"): the days picked decide
+  // the grouping — a week is one list, a month or 90 days goes by week, twelve months by month
   const groups = useMemo(
-    () => groupPosts(sortPosts(data?.posts ?? [], sort), groupBy, CAL_TZ),
-    [data, sort, groupBy])
+    () => groupPosts(sortPosts(data?.posts ?? [], sort), groupFor(period), CAL_TZ),
+    [data, sort, period])
   const totals = useMemo(() => sumMetrics(data?.posts ?? []), [data])
 
   const label = data ? brandFor(data.channel.platform).label : 'Channel'
@@ -94,16 +92,17 @@ function ChannelAnalytics() {
           {!data.readable && <p className="text-secondary-13 text-muted-foreground">Zernio did not answer, so the posts are missing. Try again in a moment.</p>}
           {data.readable && !data.complete && <p className="text-secondary-13 text-muted-foreground">Showing the first 3,000 posts — pick fewer days to see them all.</p>}
 
-          <div className="flex flex-wrap items-center gap-2">
-            <Select value={groupBy} onValueChange={v => setGroupBy(v as GroupBy)}>
-              <SelectTrigger className="w-40" aria-label="Group the posts"><SelectValue /></SelectTrigger>
-              <SelectContent>{GROUP_WORDS.map(g => <SelectItem key={g.key} value={g.key}>{g.label}</SelectItem>)}</SelectContent>
-            </Select>
-            <Select value={sort} onValueChange={v => setSort(v as PostSort)}>
-              <SelectTrigger className="w-44" aria-label="Order the posts"><SelectValue /></SelectTrigger>
-              <SelectContent>{SORT_WORDS.map(s => <SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>)}</SelectContent>
-            </Select>
-          </div>
+          {data.posts.length > 1 && (
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-secondary-13" role="group" aria-label="Order the posts">
+              <span className="text-muted-foreground">Order:</span>
+              {SORT_WORDS.map(o => (
+                <button key={o.key} type="button" onClick={() => setSort(o.key)} aria-pressed={sort === o.key}
+                  className={sort === o.key ? 'font-medium text-foreground underline underline-offset-4' : 'text-muted-foreground hover:text-foreground'}>
+                  {o.label}
+                </button>
+              ))}
+            </div>
+          )}
 
           {data.posts.length === 0 ? (
             <EmptyState icon={Clock} title="No posts in these days"

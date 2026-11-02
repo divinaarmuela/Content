@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  engagement, groupPosts, mondayOf, readTimeline, sortPosts, sumMetrics, summariseByAccount, trimPost,
+  engagement, groupFor, groupPosts, mondayOf, readTimeline, sortPosts, sumMetrics, summariseByAccount, trimPost,
 } from '../app/lib/social-analytics-core'
 
 const TZ = 'Australia/Melbourne'
@@ -15,7 +15,7 @@ const row = (id: string, publishedAt: string, a: Record<string, number>, account
 describe('analytics by client → channel → post (2 Nov 2026)', () => {
   it('reads a list row and a one-post answer the same way', () => {
     const p = trimPost(row('a', '2026-11-01T08:59:28.000Z', { impressions: 161, reach: 94, likes: 3, clicks: 22 }))!
-    expect(p).toMatchObject({ id: 'a', platform: 'facebook', accountId: 'acc1', url: 'https://fb/a', external: true, engagementRate: 1.86 })
+    expect(p).toMatchObject({ id: 'a', platform: 'facebook', accountId: 'acc1', url: 'https://fb/a', engagementRate: 1.86 })
     expect(p.metrics).toMatchObject({ impressions: 161, reach: 94, likes: 3, clicks: 22, views: 0 })
     const one = trimPost({ postId: 'a', publishedAt: '2026-11-01T08:59:28.000Z', analytics: { impressions: 161 },
       platformAnalytics: [{ platform: 'facebook', accountId: 'acc1' }] })!
@@ -37,6 +37,8 @@ describe('analytics by client → channel → post (2 Nov 2026)', () => {
     expect(weeks[1].label).toBe('Week of 26 Oct – 1 Nov 2026')
     expect(groupPosts(posts, 'month', TZ).map(g => g.label)).toEqual(['November 2026', 'October 2026'])
     expect(groupPosts(posts, 'none', TZ)[0].posts).toHaveLength(3)
+    // one filter: the days picked decide the grouping
+    expect([groupFor('last_week'), groupFor('this_month'), groupFor('last_90'), groupFor('last_365')]).toEqual(['none', 'week', 'week', 'month'])
   })
 
   it('sorts, sums and splits by channel', () => {

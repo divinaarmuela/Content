@@ -64,8 +64,7 @@ function Clients() {
         posts += s.posts
         for (const k of Object.keys(totals) as (keyof Metrics)[]) totals[k] += s.totals[k]
       }
-      const followers = channels.reduce((sum, ch) => sum + (ch.followers ?? 0), 0)
-      return { ...c, channels, posts, totals, followers }
+      return { ...c, channels, posts, totals }
     })
       .filter(r => r.channels.length > 0)
       .sort((a, b) => b.posts - a.posts || a.name.localeCompare(b.name))
@@ -75,7 +74,7 @@ function Clients() {
   const all = useMemo(() => {
     const totals = emptyMetrics()
     for (const r of rows) for (const k of Object.keys(totals) as (keyof Metrics)[]) totals[k] += r.totals[k]
-    return { totals, posts: rows.reduce((s, r) => s + r.posts, 0), followers: rows.reduce((s, r) => s + r.followers, 0) }
+    return { totals, posts: rows.reduce((s, r) => s + r.posts, 0) }
   }, [rows])
 
   return (
@@ -90,7 +89,7 @@ function Clients() {
         <LoadFailed what="the numbers for these accounts" detail={failed} onRetry={() => setAttempt(a => a + 1)} />
       ) : !data ? <LoadingBlock /> : (
         <>
-          <TotalsRow followers={all.followers} posts={all.posts} totals={all.totals} />
+          <TotalsRow posts={all.posts} totals={all.totals} />
           {!data.readable && <p className="text-secondary-13 text-muted-foreground">Zernio did not answer, so the post numbers are missing. Try again in a moment.</p>}
           {data.readable && !data.complete && <p className="text-secondary-13 text-muted-foreground">Showing the first 3,000 posts of these days — pick fewer days to see them all.</p>}
 
@@ -107,6 +106,8 @@ function Clients() {
               actionLabel="Open Social channels"
               actionHref="/dashboard/social"
             />
+          ) : shown.length === 0 ? (
+            <p className="text-secondary-13 text-muted-foreground">No client called “{find.trim()}” has a connected channel.</p>
           ) : (
             <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
               {shown.map(r => (
@@ -129,7 +130,7 @@ function Clients() {
                           ))}
                         </dl>
                         <p className="mt-auto text-secondary-13 text-muted-foreground">
-                          {r.channels.length} channel{r.channels.length === 1 ? '' : 's'} · {n(r.followers)} followers
+                          {r.channels.length} channel{r.channels.length === 1 ? '' : 's'}
                         </p>
                       </CardContent>
                     </Card>
@@ -138,7 +139,7 @@ function Clients() {
               ))}
             </ul>
           )}
-          <p className="text-[12px] text-muted-foreground">From the platforms, through Zernio — posts made on the platforms directly count too. Figures can lag by up to 48 hours; followers are today’s count.</p>
+          <p className="text-[12px] text-muted-foreground">From the platforms, through Zernio — posts made on the platforms directly count too. Figures can lag by up to 48 hours.</p>
         </>
       )}
     </div>

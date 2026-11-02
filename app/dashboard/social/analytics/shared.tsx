@@ -81,10 +81,12 @@ export function Stat({ label, value, hint }: { label: string; value: number | nu
 }
 
 /** Followers, posts, and the numbers that matter most, in one row. */
-export function TotalsRow({ followers, posts, totals }: { followers: number | null; posts: number; totals: Metrics }) {
+/** `followers` left out on the all-clients page — a sum of everyone's followers says nothing (the owner, 2 Nov 2026) */
+export function TotalsRow({ followers, posts, totals }: { followers?: number | null; posts: number; totals: Metrics }) {
+  const withFollowers = followers !== undefined
   return (
-    <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
-      <Stat label="Followers" value={followers} hint="today" />
+    <div className={`grid grid-cols-2 gap-3 ${withFollowers ? 'lg:grid-cols-5' : 'lg:grid-cols-4'}`}>
+      {withFollowers && <Stat label="Followers" value={followers} hint="today" />}
       <Stat label="Posts" value={posts} />
       <Stat label="Views" value={Math.max(totals.views, totals.impressions)} hint={totals.views ? 'plays and views' : 'times shown'} />
       <Stat label="Reach" value={totals.reach} hint="people" />
@@ -130,7 +132,7 @@ export function PostRow({ post, onOpen }: { post: AnalyticsPost; onOpen: (p: Ana
       <div className="min-w-0 flex-1">
         <p className="line-clamp-2 text-body-15">{post.content || '(no caption)'}</p>
         <p className="mt-0.5 text-secondary-13 text-muted-foreground">
-          {postedOn(post.publishedAt)}{post.mediaType ? ` · ${post.mediaType}` : ''}{post.external ? ' · posted outside the app' : ''}
+          {postedOn(post.publishedAt)}{post.mediaType ? ` · ${post.mediaType}` : ''}
         </p>
       </div>
       <dl className="hidden shrink-0 grid-cols-4 gap-4 text-right sm:grid">
