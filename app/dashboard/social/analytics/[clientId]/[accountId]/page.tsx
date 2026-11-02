@@ -13,6 +13,9 @@ import {
   SORT_WORDS, engagement, groupFor, groupPosts, sortPosts, sumMetrics,
   type AnalyticsPost, type PostSort,
 } from '@/app/lib/social-analytics-core'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { sectionsFor, type SectionKey } from '@/app/lib/channel-insights-core'
+import { ChannelSection } from './Sections'
 import { Crumbs, FreshnessCard, LoadingBlock, PeriodPicker, PostRow, PostSheet, TotalsRow, followerWords, n, usePeriod } from '../../shared'
 
 type ChannelData = {
@@ -43,6 +46,8 @@ function ChannelAnalytics() {
   const [attempt, setAttempt] = useState(0)
   const [sort, setSort] = useState<PostSort>('newest')
   const [open, setOpen] = useState<AnalyticsPost | null>(null)
+  // Posts, then what only this network gives — Account, Followers, Audience, Stories, Tagged, Page (2 Nov 2026)
+  const [tab, setTab] = useState<'posts' | SectionKey>('posts')
 
   useEffect(() => {
     let live = true
@@ -95,6 +100,17 @@ function ChannelAnalytics() {
           {!data.readable && <p className="text-secondary-13 text-muted-foreground">The platforms did not answer, so the posts are missing. Try again in a moment.</p>}
           {data.readable && !data.complete && <p className="text-secondary-13 text-muted-foreground">Showing the first 3,000 posts — pick fewer days to see them all.</p>}
 
+          <Tabs value={tab} onValueChange={v => setTab(v as 'posts' | SectionKey)}>
+            <TabsList className="h-auto flex-wrap">
+              <TabsTrigger value="posts">Posts</TabsTrigger>
+              {sectionsFor(data.channel.platform).map(sct => <TabsTrigger key={sct.key} value={sct.key}>{sct.label}</TabsTrigger>)}
+            </TabsList>
+            {sectionsFor(data.channel.platform).map(sct => (
+              <TabsContent key={sct.key} value={sct.key} className="mt-4">
+                {tab === sct.key && <ChannelSection accountId={data.channel.id} section={sct.key} range={range} />}
+              </TabsContent>
+            ))}
+            <TabsContent value="posts" className="mt-4 flex flex-col gap-4">
           {data.posts.length > 1 && (
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-secondary-13" role="group" aria-label="Order the posts">
               <span className="text-muted-foreground">Order:</span>
@@ -127,6 +143,8 @@ function ChannelAnalytics() {
               ))}
             </div>
           )}
+            </TabsContent>
+          </Tabs>
         </>
       )}
       <PostSheet post={open} onClose={() => setOpen(null)} />

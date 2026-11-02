@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/select'
 import PlatformIcon, { brandFor } from '../PlatformIcon'
 import TintCard from '../../ui/TintCard'
+import { PostExtras, type PostExtrasData } from './PostExtras'
 import { CAL_TZ } from '@/app/lib/gcal-core'
 import { ANALYTICS_PERIODS, customRange, isPeriod, periodRange, rangeWords, type AnalyticsPeriod } from '@/app/lib/analytics-period-core'
 import {
@@ -247,13 +248,18 @@ export function PostRow({ post, onOpen }: { post: AnalyticsPost; onOpen: (p: Ana
 export function PostSheet({ post, onClose }: { post: AnalyticsPost | null; onClose: () => void }) {
   const [timeline, setTimeline] = useState<TimelineDay[] | null>(null)
   const [fresh, setFresh] = useState<AnalyticsPost | null>(null)
+  const [extras, setExtras] = useState<PostExtrasData | null>(null)
   useEffect(() => {
-    setTimeline(null); setFresh(null)
+    setTimeline(null); setFresh(null); setExtras(null)
     if (!post) return
     let live = true
     fetch(`/api/social/analytics/post?id=${encodeURIComponent(post.id)}`)
       .then(r => (r.ok ? r.json() : null))
-      .then(j => { if (live) { setTimeline(j?.timeline ?? []); setFresh(j?.post ?? null) } })
+      .then(j => {
+        if (!live) return
+        setTimeline(j?.timeline ?? []); setFresh(j?.post ?? null)
+        if (j) setExtras({ deep: j.deep ?? null, collaborators: j.collaborators ?? null, collaboratorsProblem: j.collaboratorsProblem ?? null, linkedin: j.linkedin ?? null })
+      })
       .catch(() => { if (live) setTimeline([]) })
     return () => { live = false }
   }, [post])
@@ -297,6 +303,8 @@ export function PostSheet({ post, onClose }: { post: AnalyticsPost | null; onClo
                 <p className="font-mono text-lg tabular-nums">{p.engagementRate === null ? '—' : `${p.engagementRate}%`}</p>
               </div>
             </div>
+
+            {extras && <PostExtras data={extras} platform={p.platform} />}
 
             <div>
               <h3 className="mb-2 text-card-title">Day by day</h3>

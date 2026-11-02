@@ -70,6 +70,12 @@ export interface Publisher {
   markConversationRead(conversationId: string, accountId: string): Promise<unknown>
   /** Best posting slots from historical engagement. */
   bestTimes(providerAccountId?: string): Promise<unknown>
+  /**
+   * ONE READ OF A ZERNIO ANALYTICS ADDRESS, ITS REFUSAL INCLUDED (2 Nov 2026, the channel's deep analytics): the
+   * status and body either way, so a page can say WHY — e.g. `instagram_tagged_media_requires_facebook_login` —
+   * instead of drawing nothing. GET only. Null when no provider is set up.
+   */
+  readAnalytics(path: string, params?: Record<string, string | undefined>): Promise<{ status: number; body: unknown } | null>
   /** Comment→DM automations: list / detail / create / update / delete. */
   listAutomations(): Promise<unknown>
   getAutomation(id: string): Promise<unknown>
@@ -689,7 +695,24 @@ class ZernioPublisher implements Publisher {
 
   /** Best posting slots from historical engagement — the Later signature. */
   bestTimes(accountId?: string) {
-    return this.getJson(`/analytics/best-time-to-post${accountId ? `?accountId=${encodeURIComponent(accountId)}` : ''}`)
+    // `/analytics/best-time` — `best-time-to-post` is a 404 (`endpoint_not_found`, read live 2 Nov 2026), which is why
+    // the old page's "Best times to post" never showed
+    return this.getJson(`/analytics/best-time${accountId ? `?accountId=${encodeURIComponent(accountId)}` : ''}`)
+  }
+
+  async readAnalytics(path: string, params: Record<string, string | undefined> = {}) {
+    const qs = new URLSearchParams()
+    for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== '') qs.set(k, v)
+    try {
+      const q = qs.toString()
+      const res = await fetch(`${BASE}${path}${q ? `?${q}` : ''}`, { headers: this.headers() })
+      const text = await res.text()
+      let body: unknown = null
+      try { body = JSON.parse(text) } catch { body = { error: text.slice(0, 300) } }
+      return { status: res.status, body }
+    } catch (e) {
+      return { status: 0, body: { error: e instanceof Error ? e.message : 'network' } }
+    }
   }
 
   /** POST returning parsed JSON, throwing with the provider's own message so
@@ -1065,6 +1088,7 @@ class UnconfiguredPublisher implements Publisher {
   async sendConversationMessage() { return this.fail() }
   async markConversationRead() { return null }
   async bestTimes() { return null }
+  async readAnalytics() { return null }
   async listAutomations() { return null }
   async getAutomation() { return null }
   async automationLogs() { return null }
