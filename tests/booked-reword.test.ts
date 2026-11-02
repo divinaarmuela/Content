@@ -18,6 +18,10 @@ describe('a booked post is not reworded in place', () => {
     const d = readFileSync('app/dashboard/social/schedule/PostWindow.tsx', 'utf8')
     expect(d).toContain('readOnly={!editable}')
     expect(d).not.toContain('bookedWords')
-    expect(d).toContain('locked={locked}')
+    // the one exception (the owner, 2 Nov 2026): a booked post's COVER may be changed — through the same moves, off the
+    // schedule and booked back in for the same time (changeBookedCover), never written in place
+    expect(d).toContain('locked={locked && !mayRecover}')
+    expect(d).toContain("api.act(id, { action: 'edit_booked'")
+    expect(d).toContain("action: 'schedule_direct', expect_rev: rev, scheduled_for: at")
   })
 })
