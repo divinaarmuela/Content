@@ -325,7 +325,8 @@ const PROMPT: Partial<Record<PostAction, { prompt: string; go: string; stay?: st
   change_time: { prompt: 'Pick the new posting time.', go: 'Move it' },
   schedule_direct: { prompt: 'Pick the posting time. It is booked in for that time without the quality check, and the record says so.', go: 'Schedule it' },
   post_now: { prompt: 'This goes out on the client\'s accounts now.', go: 'Post now', stay: 'Not yet' },
-  edit_booked: { prompt: 'This takes it off the schedule. It needs checking again after the change.', go: 'Take it off and edit', stay: 'Keep it booked' },
+  // said in full where it is pressed (the owner, 2 Nov 2026): what Edit does to a booked post, and the ways that keep it booked
+  edit_booked: { prompt: 'This takes it off the schedule — it will NOT go out until it is booked again (Schedule it or Book in). Use this to change the video or pictures. Only changing the caption, the time or the cover? Use Edit caption, Change time or the Cover instead — those keep it booked.', go: 'Take it off and edit', stay: 'Keep it booked' },
   // said plainly (the owner, 2 Nov 2026): Manal read 'Cancel post' as 'cancel my edit' and a booked post stopped going out
   cancel: { prompt: 'Cancel the WHOLE post? It will not go out at all. To stop editing instead, just close this window — your changes are kept as a draft.', go: 'Yes, cancel the post', stay: 'Keep the post' },
   delete_draft: { prompt: 'Delete this draft? It has never been sent, so nothing else changes.', go: 'Delete draft', stay: 'Keep it' },

@@ -693,7 +693,10 @@ export default function PostWindow({
   const [coverNote, setCoverNote] = useState<string | null>(null)
   // a draft's cover is kept once the draft is saved: the note says so then
   useEffect(() => { if (!state.dirty && coverNote?.startsWith('Cover set')) setCoverNote('Cover saved') }, [state.dirty, coverNote])
-  const mayRecover = !!saved && saved.stage === 'booked' && !!me && ['super_admin', 'account_manager', 'scheduler', 'tester'].includes(me.role)
+  // THE LAST 15 MINUTES: the files are being prepared, nothing on a booked post changes (said on the window, 2 Nov 2026)
+  const lockedSoon = !!saved && saved.stage === 'booked' && !!saved.scheduled_for && Date.parse(saved.scheduled_for) - nowMs < 15 * 60_000
+  const editsUntil = saved?.scheduled_for ? new Date(Date.parse(saved.scheduled_for) - 15 * 60_000).toISOString() : null
+  const mayRecover = !!saved && saved.stage === 'booked' && !lockedSoon && !!me && ['super_admin', 'account_manager', 'scheduler', 'tester'].includes(me.role)
   /** a booked post's CAPTION changed the same way (Renee, 2 Nov 2026: 'edit time and caption without making a new version' —
    *  Manal: 'version tracked'): it stays booked for the same time, and the change is a saved version and a Log line */
   const [quickCaption, setQuickCaption] = useState<{ caption: string; per: Record<string, string> } | null>(null)
@@ -1730,6 +1733,14 @@ export default function PostWindow({
              (decision 2; audit W8). ── */}
         <div className="sticky bottom-0 z-20 mt-auto flex flex-col gap-2 border-t border-border bg-popover p-3.5 lg:flex-row lg:items-center lg:gap-4 lg:px-4 lg:py-2">
           <div ref={messagesRef} className="flex flex-col gap-2 scroll-mt-4 lg:min-w-0 lg:max-w-[560px] lg:flex-1 lg:gap-1.5">
+            {/* WHAT CAN CHANGE ON A BOOKED POST, AND UNTIL WHEN (the owner, 2 Nov 2026) */}
+            {saved?.stage === 'booked' && editsUntil && (
+              <p className={cn('rounded-inner border px-3 py-1.5 text-[12px] leading-snug', lockedSoon ? 'border-accent-amber/50 bg-tint-amber' : 'border-border bg-muted/40')} data-booked-edits>
+                {lockedSoon
+                  ? <><strong>Locked — it goes out at {melb(saved.scheduled_for)}.</strong> Nothing can be changed in the last 15 minutes while its files are prepared.</>
+                  : <><strong>Caption, cover and time can be changed until {melb(editsUntil)}</strong> (15 minutes before it goes out) and it stays booked. Changing the video or pictures means Edit, which takes it off the schedule until it is booked again.</>}
+              </p>
+            )}
             {/* TAKEN OFF THE SCHEDULE, NOT BOOKED BACK (2 Nov 2026, Manal's two posts): one press restores it */}
             {wasBooked && (
               <div className="flex flex-wrap items-center gap-2 rounded-inner border border-accent-amber/50 bg-tint-amber px-3 py-2 text-[12px]" data-was-booked>
