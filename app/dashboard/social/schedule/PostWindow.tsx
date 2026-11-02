@@ -1275,6 +1275,10 @@ export default function PostWindow({
                     locked={locked && !mayRecover}
                     channels={chosen.map(a => ({ id: a.id, platform: String(a.platform), name: a.username ?? a.name ?? null }))}
                     savedNote={coverNote}
+                    perChannel={chosen.filter(a => ['instagram', 'tiktok', 'facebook', 'youtube'].includes(String(a.platform))).map(a => {
+                      const x = shown.perChannel[a.id] as { thumbnailUrl?: string; videoCoverImageUrl?: string } | undefined
+                      return { id: a.id, platform: String(a.platform), name: a.username ?? a.name ?? null, url: (String(a.platform) === 'tiktok' ? x?.videoCoverImageUrl : x?.thumbnailUrl)?.trim() || null }
+                    })}
                     saveWords={mayRecover ? 'Booked: a new cover is saved and the post is booked back in for the same time, on the same channels.' : undefined}
                     onPick={(url, ids) => {
                       if (mayRecover) { void changeBookedCover(url, ids); return }

@@ -809,6 +809,11 @@ export function networkFeedPreview(
   live: readonly LiveFeedPost[],
 ): FeedPreviewTile[] {
   const coverOf = (p: FeedPost): GridTile | null => {
+    // a video's CHOSEN COVER for this channel is what its feed shows (the owner, 2 Nov 2026) — Instagram/Facebook/YouTube
+    // keep it as thumbnailUrl, TikTok as videoCoverImageUrl; otherwise the first file
+    const extras = (p.per_channel[accountId] ?? {}) as { thumbnailUrl?: string; videoCoverImageUrl?: string }
+    const chosen = (extras.videoCoverImageUrl ?? extras.thumbnailUrl ?? '').trim()
+    if (chosen) return { url: chosen, type: 'image' }
     const own = p.per_channel[accountId]?.slides ?? []
     const s = (own.length ? own : p.slides)[0]
     return s ? { url: s.url, type: s.type === 'video' ? 'video' : 'image' } : null

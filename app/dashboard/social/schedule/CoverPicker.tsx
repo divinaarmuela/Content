@@ -24,7 +24,7 @@ import PlatformIcon from '../PlatformIcon'
  * not allow that is said plainly rather than shown as a black strip.
  */
 export default function CoverPicker({
-  videoUrl, playable, platforms, current, locked, onPick, channels, saveWords, savedNote,
+  videoUrl, playable, platforms, current, locked, onPick, channels, saveWords, savedNote, perChannel,
 }: {
   /** the master file in the post */
   videoUrl: string
@@ -44,6 +44,8 @@ export default function CoverPicker({
   saveWords?: string
   /** said in green once a cover was chosen: saved (a booked post) or set until Save (a draft) — the owner, 2 Nov 2026 */
   savedNote?: string | null
+  /** the cover each channel gets now, to show side by side (the owner, 2 Nov 2026: 'we can see the cover it shows for each platform') */
+  perChannel?: readonly { id: string; platform: string; name: string | null; url: string | null }[]
 }) {
   const takers = coverPlatforms(platforms)
   // WHICH CHANNELS GET IT: every channel that takes a cover, until the person unticks one
@@ -199,6 +201,19 @@ export default function CoverPicker({
         </span>
       </div>
 
+      {perChannel && perChannel.length > 0 && (
+        <ul className="flex flex-wrap gap-3" data-cover-per-channel aria-label="The cover each channel shows">
+          {perChannel.map(c => (
+            <li key={c.id} className="flex flex-col items-center gap-1">
+              {c.url
+                // eslint-disable-next-line @next/next/no-img-element
+                ? <img src={c.url} alt={`${c.platform} cover`} className="h-[96px] w-[54px] rounded-tile border border-border object-cover" />
+                : <span className="flex h-[96px] w-[54px] items-center justify-center rounded-tile border border-dashed border-border px-1 text-center text-[10px] leading-tight text-muted-foreground">its own frame</span>}
+              <span className="flex items-center gap-1 text-[11px] font-semibold"><PlatformIcon platform={c.platform} size={12} className="rounded-full" />{c.name ?? c.platform}</span>
+            </li>
+          ))}
+        </ul>
+      )}
       {!locked && coverChannels.length > 1 && (
         <div className="flex flex-wrap items-center gap-1.5" data-cover-targets>
           <span className="text-[12px] font-semibold text-muted-foreground">Apply to</span>
