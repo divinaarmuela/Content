@@ -326,7 +326,8 @@ const PROMPT: Partial<Record<PostAction, { prompt: string; go: string; stay?: st
   schedule_direct: { prompt: 'Pick the posting time. It is booked in for that time without the quality check, and the record says so.', go: 'Schedule it' },
   post_now: { prompt: 'This goes out on the client\'s accounts now.', go: 'Post now', stay: 'Not yet' },
   edit_booked: { prompt: 'This takes it off the schedule. It needs checking again after the change.', go: 'Take it off and edit', stay: 'Keep it booked' },
-  cancel: { prompt: 'Cancel this post? It will not go out. You can Re-book it later.', go: 'Cancel post', stay: 'Keep it' },
+  // said plainly (the owner, 2 Nov 2026): Manal read 'Cancel post' as 'cancel my edit' and a booked post stopped going out
+  cancel: { prompt: 'Cancel the WHOLE post? It will not go out at all. To stop editing instead, just close this window — your changes are kept as a draft.', go: 'Yes, cancel the post', stay: 'Keep the post' },
   delete_draft: { prompt: 'Delete this draft? It has never been sent, so nothing else changes.', go: 'Delete draft', stay: 'Keep it' },
   set_steps: { prompt: 'Who approves this post?', go: 'Save' },
 }

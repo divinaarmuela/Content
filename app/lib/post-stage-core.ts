@@ -870,7 +870,7 @@ export const POST_TRANSITIONS: readonly TransitionRow[] = [
   { action: 'unbook', spec: 'T14', from: ['booked'], to: 'ready', who: BOOKERS, label: 'Take off the schedule' },
   { action: 'edit', spec: 'T19', from: ['quality_check', 'with_client', 'ready'], to: 'draft', who: TEAM_BUILD, label: 'Edit' },
   { action: 'edit_booked', spec: 'T19b', from: ['booked'], to: 'draft', who: BOOKERS, label: 'Edit', needs: ['confirm'], confirm: 'This takes it off the schedule.' },
-  { action: 'cancel', spec: 'T20', from: PRE_POST, to: 'cancelled', who: TEAM_BUILD, label: 'Cancel post', needs: ['confirm'], confirm: 'Cancel this post? It will not go out.' },
+  { action: 'cancel', spec: 'T20', from: PRE_POST, to: 'cancelled', who: TEAM_BUILD, label: 'Cancel the post', needs: ['confirm'], confirm: 'Cancel the whole post? It will not go out at all.' },
   { action: 'rebook', spec: 'T22', from: ['cancelled'], to: 'draft', who: TEAM_BUILD, label: 'Re-book' },
   { action: 'missing_networks', spec: 'T21', from: ['posted'], to: 'same', who: BOOKERS, label: 'Post the missing networks' },
   { action: 'duplicate', spec: 'T21', from: ['posted', 'cancelled'], to: 'same', who: TEAM_BUILD, label: 'Duplicate' },

@@ -196,6 +196,9 @@ export type ComposerState = {
   /** the instant it goes out, or null while nobody has picked one */
   scheduledFor: string | null
   perChannel: Record<string, ChannelExtras>
+  /** a channel unticked in this sitting keeps its own caption etc. here, to come back if it is ticked again — never
+   *  saved, never posted (the owner, 2 Nov 2026: Manal's TikTok and LinkedIn captions were lost that way) */
+  parked?: Record<string, ChannelExtras>
   /** the comment-to-DM automation, set up while scheduling (comment-automation-core) */
   automation?: PostAutomation | null
   /** has anything changed since the last save */
@@ -505,12 +508,19 @@ export function composerReducer(state: ComposerState, action: ComposerAction): C
       const channels = action.on
         ? [...state.channels, action.id]
         : state.channels.filter(c => c !== action.id)
-      // a channel that is gone takes its own caption and its own first comment
-      // with it: leaving them behind would post them again the moment somebody
-      // turned the channel back on, which nobody asked for
+      // a channel that is unticked takes its own caption and first comment OUT of the post (nothing of it is saved or
+      // posted) but they are kept aside for this sitting: ticked again, the channel gets them back — unticking and
+      // re-ticking lost Manal's TikTok and LinkedIn captions (2 Nov 2026)
       const perChannel = { ...state.perChannel }
-      if (!action.on) delete perChannel[action.id]
-      return { ...state, channels, perChannel, dirty: true }
+      const parked = { ...(state.parked ?? {}) }
+      if (!action.on) {
+        if (perChannel[action.id]) parked[action.id] = perChannel[action.id]
+        delete perChannel[action.id]
+      } else if (parked[action.id] && !perChannel[action.id]) {
+        perChannel[action.id] = parked[action.id]
+        delete parked[action.id]
+      }
+      return { ...state, channels, perChannel, parked, dirty: true }
     }
     case 'time':
       return state.scheduledFor === action.iso

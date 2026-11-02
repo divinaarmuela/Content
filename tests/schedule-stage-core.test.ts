@@ -167,7 +167,7 @@ describe('the bin is postActions’ danger action (audit S1)', () => {
 
   it('"Cancel post" everywhere else — a draft that was sent before, Ready, Booked (T20)', () => {
     expect(binAction(post({ stage: 'draft', sent_version: 1 }), ['creator'], NOW)?.action).toBe('cancel')
-    expect(binAction(post(), ['scheduler'], NOW)).toMatchObject({ action: 'cancel', label: 'Cancel post', blocked: null })
+    expect(binAction(post(), ['scheduler'], NOW)).toMatchObject({ action: 'cancel', label: 'Cancel the post', blocked: null })
     expect(binAction(post({ stage: 'booked' }), ['scheduler'], NOW)?.action).toBe('cancel')
     // a scheduler may cancel ANY post, not only their own (the owner's decision 4)
     expect(binAction(post({ created_by: 'someone-else' }), ['scheduler'], NOW)?.action).toBe('cancel')

@@ -1,6 +1,7 @@
 'use client'
 
 import PostLog from './PostLog'
+import PostVersions, { melb, type SavedVersion } from './PostVersions'
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { Clock, Eye, Pencil, Plus, Trash2, Wand2, X, Zap } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -666,6 +667,73 @@ export default function PostWindow({
     if (back.post) setAnswered(back.post)
     setReply({ action: 'save', tone: 'ok', text: 'Cover changed — booked back in for the same time', problems: [] })
   }
+
+  /**
+   * BRING A SAVED VERSION BACK (the owner, 2 Nov 2026): the post becomes a draft holding that version — through the moves
+   * a person would make (Re-book a cancelled post, Edit a booked or sent one), then the version written in as the
+   * working copy. With `book`, it is then booked for that version's own time, as it was. Every step is in the Log.
+   */
+  const bringBack = async (v: SavedVersion, book: boolean) => {
+    if (!saved || !id || busy) return
+    setBusy(true); setReply(null); savingRef.current = true
+    const fail = (why: string) => { setBusy(false); savingRef.current = false; setReply({ action: 'save', tone: 'error', text: why, problems: [] }) }
+    let p: PostState = saved
+    const step = async (action: PostAction, extra: Record<string, unknown> = {}) => {
+      const r = await api.act(id, { action, expect_rev: p.rev, ...extra } as never)
+      if (!r.ok || !r.post) return r.ok ? 'It did not answer' : r.reason
+      p = r.post
+      return null
+    }
+    const why = p.stage === 'cancelled' ? await step('rebook')
+      : p.stage === 'booked' ? await step('edit_booked', { confirm: true, note: `Bringing back version ${v.n}` })
+      : p.stage === 'draft' ? null
+      : ['quality_check', 'with_client', 'ready'].includes(p.stage) ? await step('edit', { note: `Bringing back version ${v.n}` })
+      : `A post that is ${p.stage} cannot be changed.`
+    if (why) return fail(why)
+    const s = await api.save(id, {
+      slides: v.slides, caption: v.caption ?? '', channels: v.channels, per_channel: v.per_channel,
+      scheduled_for: book ? v.scheduled_for : (p.scheduled_for ?? v.scheduled_for), timezone: v.timezone,
+      ...(v.automation ? { automation: v.automation } : {}), expect_rev: p.rev,
+    } as never)
+    if (!s.ok) return fail(`Version ${v.n} could not be written in: ${s.reason}`)
+    const rev = readPostState(s.row)?.rev
+    if (book && rev != null) {
+      if (!v.scheduled_for || Date.parse(v.scheduled_for) - Date.now() < 15 * 60_000) return fail(`Version ${v.n} is back as a draft, but its time (${melb(v.scheduled_for)}) is too close or past — pick a new time and schedule it.`)
+      const b = await api.act(id, { action: 'schedule_direct', expect_rev: rev, scheduled_for: v.scheduled_for, note: `Version ${v.n} booked back in for its own time` })
+      if (!b.ok) return fail(`Version ${v.n} is back as a draft, but it could not be booked: ${b.reason}`)
+      if (b.post) { loadedKey.current = null; setAnswered(b.post) }
+    } else {
+      const fresh = readPostState(s.row)
+      if (fresh) { loadedKey.current = null; setAnswered(fresh) }
+    }
+    setBusy(false); savingRef.current = false; setWasBooked(null)
+    setReply({ action: 'save', tone: 'ok', text: book ? `Version ${v.n} is booked back in for ${melb(v.scheduled_for)}` : `Version ${v.n} is back as the draft — edit it, then send or schedule it`, problems: [] })
+  }
+
+  /** a new post (a draft, no time) made from a saved version — its media, channels and captions */
+  const newPostFrom = async (v: SavedVersion) => {
+    if (!saved || busy) return
+    setBusy(true)
+    const made = await api.create({ slides: v.slides, caption: v.caption ?? '', channels: v.channels, per_channel: v.per_channel, scheduled_for: null, timezone: v.timezone, item_id: saved.source_item_id ?? itemId ?? '' } as never)
+    setBusy(false)
+    if (!made.ok) { setReply({ action: 'save', tone: 'error', text: made.reason, problems: [] }); return }
+    const nid = String(made.row.id ?? '')
+    setReply({ action: 'save', tone: 'ok', text: `A new draft was made from version ${v.n}`, problems: [] })
+    if (nid) onOpenPost?.(nid)
+  }
+
+  /** TAKEN OFF THE SCHEDULE AND NOT BOOKED BACK: said at the top of the window, with one press to restore it */
+  const [wasBooked, setWasBooked] = useState<{ n: number; at: string | null; offBy: string | null; version: SavedVersion } | null>(null)
+  useEffect(() => {
+    if (!id || !saved || !['draft', 'ready', 'cancelled'].includes(saved.stage) || saved.sent_version == null) { setWasBooked(null); return }
+    let live = true
+    fetch(`/api/posts/${encodeURIComponent(id)}/versions`, { cache: 'no-store' }).then(r => r.json()).then(j => {
+      if (!live || !j?.wasBooked) return
+      const version = (j.versions as SavedVersion[]).find(x => x.n === j.wasBooked.n)
+      if (version && j.wasBooked.at && Date.parse(j.wasBooked.at) > Date.now()) setWasBooked({ ...j.wasBooked, version })
+    }).catch(() => undefined)
+    return () => { live = false }
+  }, [id, saved?.stage, saved?.sent_version]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const go = async (action: PostAction, answers: Answers): Promise<boolean> => {
     if (!post || busy) return false
@@ -1402,6 +1470,7 @@ export default function PostWindow({
             { key: 'options', label: 'Options', show: !!options || !!alsoPost || (!!automation && (editable || !!shown.automation)) },
             { key: 'notes', label: 'Notes', count: noteCount, show: !!notesBox },
             // who did what, and who was told (the owner, 2 Nov 2026)
+            { key: 'versions', label: 'Versions', show: !!id && saved?.sent_version != null },
             { key: 'log', label: 'Log', count: saved && logSeen != null && saved.rev > logSeen ? saved.rev - logSeen : undefined, show: !!id },
           ]
           const visible = tabs.filter(t => t.show)
@@ -1483,6 +1552,12 @@ export default function PostWindow({
                   )}
                   {open === 'notes' && notesBox}
                   {open === 'log' && id && <PostLog postId={id} />}
+                  {open === 'versions' && id && (
+                    <PostVersions postId={id} busy={busy}
+                      accounts={(context.allAccounts ?? accounts).map(a => ({ id: a.id, platform: String(a.platform), name: a.username ?? a.name ?? null }))}
+                      now={{ slides: working.slides as never, caption: working.caption, channels: working.channels, per_channel: working.perChannel as never, scheduled_for: working.scheduledFor }}
+                      onBringBack={(v, book) => void bringBack(v, book)} onNewPost={v => void newPostFrom(v)} />
+                  )}
                 </div>
               </div>
             </div>
@@ -1497,6 +1572,16 @@ export default function PostWindow({
              (decision 2; audit W8). ── */}
         <div className="sticky bottom-0 z-20 mt-auto flex flex-col gap-2 border-t border-border bg-popover p-3.5 lg:flex-row lg:items-center lg:gap-4 lg:px-4 lg:py-2">
           <div ref={messagesRef} className="flex flex-col gap-2 scroll-mt-4 lg:min-w-0 lg:max-w-[560px] lg:flex-1 lg:gap-1.5">
+            {/* TAKEN OFF THE SCHEDULE, NOT BOOKED BACK (2 Nov 2026, Manal's two posts): one press restores it */}
+            {wasBooked && (
+              <div className="flex flex-wrap items-center gap-2 rounded-inner border border-accent-amber/50 bg-tint-amber px-3 py-2 text-[12px]" data-was-booked>
+                <span className="min-w-0 flex-1"><strong>Version {wasBooked.n} was booked for {melb(wasBooked.at)}</strong>{wasBooked.offBy ? ` — ${wasBooked.offBy} took it off the schedule` : ''}. It will not go out unless it is booked again.</span>
+                <button type="button" disabled={busy} onClick={() => void bringBack(wasBooked.version, true)}
+                  className="min-h-9 shrink-0 rounded-full bg-foreground px-3 text-[12px] font-semibold text-background disabled:opacity-60">
+                  Book it back for {melb(wasBooked.at)}
+                </button>
+              </div>
+            )}
             {/* SEVERAL VIDEOS IN ONE POST: who takes them, said before anyone presses anything (the owner, 2 Nov 2026) */}
             {beforeBooking && !storyPlan?.ok && shown.slides.filter(s => s.type === 'video').length > 1 && (
               <p className="rounded-inner border border-border bg-muted/40 px-3 py-1.5 text-[12px] leading-snug" data-many-videos>
@@ -1832,4 +1917,4 @@ function useWideWindow(): boolean {
 }
 
 /** the sections of the wide post window's right side, one open at a time */
-type WindowSection = 'caption' | 'channels' | 'media' | 'options' | 'notes' | 'log'
+type WindowSection = 'caption' | 'channels' | 'media' | 'options' | 'notes' | 'versions' | 'log'
