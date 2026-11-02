@@ -6,6 +6,7 @@ import { table, withRequestCache } from '@/lib/db'
 import { attachOne } from '@/lib/db-join'
 import type { Batch, Client, ContentItem, ShootProposal, TeamUser } from '@/lib/db-types'
 import { requireRole, authzErrorResponse } from '../../../../lib/authz'
+import { autoShareIfReady } from '../../../../lib/shoot-auto-share'
 import { canOpenBatch, shootManager } from '../../../../lib/production-access'
 import { logActivity } from '../../../../lib/workflow'
 import { announceBatchChange, announceItemChange } from '../../../../lib/production-live'
@@ -241,6 +242,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       patch.plan_review_skipped_by = on ? user.id : null
       patch.plan_review_skipped_at = on ? new Date().toISOString() : null
     }
+    // THE CLIENT APPROVES IT FIRST (2 Nov 2026): holds the plan's automatic share until the client approves
+    if ('client_approval_needed' in body) patch.client_approval_needed = body.client_approval_needed === true
     if ('edit_deadline' in body) {
       const d = body.edit_deadline ? String(body.edit_deadline).slice(0, 10) : ''
       if (d && Number.isNaN(new Date(`${d}T00:00:00`).getTime())) {
@@ -379,6 +382,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     // 2026): the editor is told, nobody has to press anything
     if ('footage_url' in patch && patch.footage_url && footageReadyToHand(data, melbourneToday())) {
       try { await handOverFootageNow(user, data) } catch (e) { console.error('handover on footage link:', e) }
+    }
+    // the save that finishes the plan shares it with the team (the owner, 2 Nov 2026) — shoot-auto-share.ts
+    if (!data.brief_shared_at && await autoShareIfReady(user, id)) {
+      return NextResponse.json((await table<Batch>('batches').get(id, { fresh: true })) ?? data)
     }
     return NextResponse.json(data)
   } catch (e) {

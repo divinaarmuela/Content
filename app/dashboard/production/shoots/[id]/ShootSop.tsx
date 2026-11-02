@@ -213,7 +213,7 @@ export function PlanParts({ batch, itemCount, booked, onPatch, onShots, team }: 
           <Chip tone={list.complete ? 'green' : 'amber'} className="ml-auto"><span role="status">{list.words}</span></Chip>
         </div>
         <p className="-mt-2 text-[13px] text-muted-foreground">
-          {list.total} {list.total === 1 ? 'part' : 'parts'}{skipped.length > 0 ? `, ${skipped.length} marked not needed` : ''}. The plan is shared with the team 7 days before the shoot, and nothing moves forward until every part is filled in. A part this shoot does not need can be taken off with “Not needed”.
+          {list.total} {list.total === 1 ? 'part' : 'parts'}{skipped.length > 0 ? `, ${skipped.length} marked not needed` : ''}. Once every part is filled in and the editor or crew are named{batch.plan_review_skipped === true ? '' : ' (and quality has passed it, where it needs a check)'}, it goes to the team by itself — unless “The client approves this plan first” is ticked, then it goes when they approve. A part this shoot does not need can be taken off with “Not needed”.
         </p>
 
         {row('objective', area('objective', 'What this shoot is meant to achieve, and which pillar or campaign it serves'))}
@@ -929,10 +929,19 @@ export function ClientBlock({ batch, portalToken, busy, shareReady, clientLine, 
       <p className="text-[12px] text-muted-foreground">{forWho ? 'This plan lands on that person’s own portal, not the business’s.' : 'This plan lands on the business’s portal.'}</p>
     </div>
   )
+  // THE CLIENT APPROVES IT FIRST (the owner, 2 Nov 2026): a finished plan with its people named goes to the team by
+  // itself; ticked, it waits for the client's approval on their portal
+  const approvalTick = !batch.brief_shared_at && (
+    <label className="flex min-h-11 cursor-pointer items-start gap-3 text-[14px]" data-client-approval-needed>
+      <TickBox className="mt-0.5" checked={batch.client_approval_needed === true} disabled={busy} onChange={on => void onPatch('client_approval_needed', on)} />
+      <span><span className="font-semibold">The client approves this plan first</span> — it goes to the team once they approve it on their portal</span>
+    </label>
+  )
   if (!onPortal) {
     return (
       <div className="flex flex-col gap-2 border-t border-border pt-3">
         {forBlock}
+        {approvalTick}
         <p className="text-[12px] font-semibold">The client</p>
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" className={outlineBtn} disabled={busy || !shareReady.ok} onClick={() => void onShareClient()}>
@@ -950,6 +959,7 @@ export function ClientBlock({ batch, portalToken, busy, shareReady, clientLine, 
     <div className="flex flex-col gap-2 border-t border-border pt-3" data-client-on-portal>
       {forBlock}
       <p className="text-[14px] font-semibold" role="status">{clientLine ?? 'On the client portal'}</p>
+      {approvalTick}
       <div className="flex flex-wrap gap-2">
         {portalToken && (
           <Button variant="outline" className={outlineBtn}

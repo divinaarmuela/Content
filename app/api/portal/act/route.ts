@@ -14,6 +14,7 @@ import { announceBatchChange, announceItemChange } from '../../../lib/production
 import { AuthzError, requireRole, type TeamUser } from '../../../lib/authz'
 import { clientDecisionOpen, clientDecisionPatch } from '../../../lib/shoot-sop-core'
 import { notifyClientPlanDecision } from '../../../lib/shoot-sop-notify'
+import { autoShareIfReady } from '../../../lib/shoot-auto-share'
 import { DASHBOARD_URL } from '../../../lib/app-url'
 import { portalOwnerByToken } from '../../../lib/portal-owner'
 import { belongsToPortal, type PortalScope } from '../../../lib/portal-owner-core'
@@ -330,6 +331,8 @@ export async function POST(req: Request) {
       }
       await notifyClientPlanDecision(done.row, decision, noteText || null, who).catch(e => console.error('client plan answer notify:', e))
       announceBatchChange({ batch_id: shootId, client_id: client.id, status: done.row.status ?? 'brief', kind: 'updated' })
+      // the client's approval was the last thing the plan waited on: it goes to the team now (2 Nov 2026)
+      if (decision === 'approved') await autoShareIfReady(actorRow, shootId)
       return NextResponse.json({ ok: true, decision })
     }
 

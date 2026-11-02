@@ -8,6 +8,7 @@ import { logActivity } from '../../../../../lib/workflow'
 import { announceBatchChange } from '../../../../../lib/production-live'
 import { notifyPlanReviewed } from '../../../../../lib/shoot-sop-notify'
 import { planReviewPatch, planSendBackPatch } from '../../../../../lib/shoot-sop-core'
+import { autoShareIfReady } from '../../../../../lib/shoot-auto-share'
 
 /**
  * THE QUALITY CHECKER'S ANSWER ON A PLAN (the owner, 13 Sep 2026: "shoot
@@ -57,6 +58,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const commentId: string | null = null
     const told = await notifyPlanReviewed(user, done.row, pass, note || null, toIds).catch(e => { console.error('plan review notify:', e); return 0 })
     announceBatchChange({ batch_id: id, client_id: batch.client_id, status: batch.status ?? 'brief', kind: 'updated' })
+    // a pass on a finished plan with its people named shares it with the team by itself (2 Nov 2026)
+    if (pass) await autoShareIfReady(user, id)
     // the people rows are read only to name the stand-in in the answer
     void table<TeamUserRow>('team_users')
     return NextResponse.json({ ...done.row, passed: pass, told, comment_id: commentId, stand_in: standIn })

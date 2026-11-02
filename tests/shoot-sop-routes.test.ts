@@ -117,11 +117,12 @@ describe('sharing the brief', () => {
     expect(no.body.error).toMatch(/script or talking points, talent or presenter still to fill in/)
     expect(batch().brief_shared_at).toBeUndefined()
 
-    await edit({ talent: 'Sam', script: 'Three points' })
-    const yes = await move('shared')
+    // THE SAVE THAT FINISHES IT SHARES IT (the owner, 2 Nov 2026) — no press; the same emails and card as Share
+    const yes = await edit({ talent: 'Sam', script: 'Three points' })
     expect(yes.status).toBe(200)
-    expect(yes.body.stage).toBe('shared')
+    expect(batch().brief_shared_at).toBeTruthy()
     expect(batch().brief_shared_by).toBe(AM)
+    expect((await move('shared')).body.error).toMatch(/Already in Shared with team/)
     // everyone on the shoot is asked to read it — never the AM who wrote it
     expect(emails.map(e => e.recipientEmail).sort()).toEqual(['sam@zz.invalid', 'vik@zz.invalid'])
     expect(emails[0].subject).toBe('Read the plan: Golf Day')
@@ -153,8 +154,15 @@ describe('sharing the brief', () => {
     as(VG, 'general')
     expect((await move('shared')).status).toBe(200)
   })
+  it('a plan the client approves first is not shared by the save that finishes it', async () => {
+    fake.restore(); fake = seed({ talent: null, client_approval_needed: true })
+    expect((await edit({ talent: 'Sam' })).status).toBe(200)
+    expect(batch().brief_shared_at).toBeUndefined()
+    expect(emails).toHaveLength(0)
+  })
   it('the creator of a shoot works its page whatever their role', async () => {
-    fake.restore(); fake = seed({ owner_id: OUT, created_by: ED })
+    // held for the client's approval, so the creator's own Share is what sends it
+    fake.restore(); fake = seed({ owner_id: OUT, created_by: ED, client_approval_needed: true })
     as(ED, 'editor', 'Sam Editor')
     expect((await open()).status).toBe(200)
     expect((await edit({ objective: 'Changed by the creator' })).status).toBe(200)

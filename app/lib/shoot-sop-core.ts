@@ -53,6 +53,8 @@ export type SopShoot = {
   plan_review_skipped?: boolean | null
   plan_review_skipped_by?: string | null
   plan_review_skipped_at?: string | null
+  /** the client approves the plan before it goes to the team by itself (2 Nov 2026) */
+  client_approval_needed?: boolean | null
   /** the script blocks (app/lib/script-core.ts), beside the plain `script` */
   scripts?: unknown
   /** the parts of the plan this shoot does not need (21 Sep 2026) */
@@ -859,6 +861,24 @@ export function clientSharePatch(now: string, actorId: string): Record<string, u
     client_decision: null, client_decided_at: null, client_decision_note: null,
   }
 }
+
+/**
+ * SHARED WITH THE TEAM BY ITSELF (the owner, 2 Nov 2026: "an automatic move to share to team involved after all
+ * steps are done and names of teams are added (and if no need for client approval)"). Every condition the Share
+ * button has — the quality pass where the gate applies, the editor or crew named, every part filled — plus the
+ * client's side settled: a plan ticked "the client approves it first", or out with the client, waits for their
+ * approval; any other goes now.
+ */
+export function autoShareReady(b: SopShoot, input: { today: string; itemCount: number; planReview: boolean }): boolean {
+  if (b.brief_shared_at || b.status === 'wrapped' || b.footage_handed_at) return false
+  if (input.planReview && !planReviewPassed(b)) return false
+  if (peopleOnShoot(b).length === 0) return false
+  if (!briefChecklist(b, { itemCount: input.itemCount }).complete) return false
+  if (b.client_approval_needed === true && b.client_decision !== 'approved') return false
+  return !clientDecisionOpen(b)
+}
+
+export const AUTO_SHARE_WORDS = 'Plan shared with the team by itself — every part filled in and the people named'
 
 /** The client's answer from the portal, on the shoot. */
 export function clientDecisionPatch(decision: ClientDecision, note: string | null, now: string): Record<string, unknown> {
