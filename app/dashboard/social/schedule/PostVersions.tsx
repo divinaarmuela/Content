@@ -54,6 +54,16 @@ export function changesSince(v: SavedVersion, now: Pick<SavedVersion, 'slides' |
   return out
 }
 
+/** what a slide looks like, small or large: a still from a video (its first frame), or the picture itself */
+function Preview({ s, className, play = false }: { s: SavedVersion['slides'][number]; className: string; play?: boolean }) {
+  if (s.type === 'video') {
+    // #t=0.1 asks the browser for a frame just in, so a video shows a picture instead of a black box
+    return <video src={s.thumbnail ? undefined : `${s.url}#t=0.1`} poster={s.thumbnail} className={className} muted playsInline preload="metadata" controls={play} aria-label={s.name ?? 'Video'} />
+  }
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img src={s.thumbnail ?? s.url} alt={s.name ?? 'Picture'} title={s.name} className={className} />
+}
+
 export default function PostVersions({ postId, accounts, now, busy, onBringBack, onNewPost }: {
   postId: string
   accounts: readonly { id: string; platform: string; name: string | null }[]
@@ -91,8 +101,7 @@ export default function PostVersions({ postId, accounts, now, busy, onBringBack,
           <li key={v.n} className="rounded-inner border border-border bg-surface">
             <button type="button" onClick={() => setOpen(isOpen ? null : v.n)} aria-expanded={isOpen}
               className="flex w-full items-center gap-3 px-3 py-2 text-left">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              {v.slides[0] && <img src={v.slides[0].thumbnail ?? v.slides[0].url} alt="" className="h-12 w-10 shrink-0 rounded object-cover bg-muted" onError={e => { (e.target as HTMLImageElement).style.visibility = 'hidden' }} />}
+              {v.slides[0] && <Preview s={v.slides[0]} className="h-16 w-12 shrink-0 rounded object-cover bg-muted" />}
               <span className="min-w-0 flex-1">
                 <span className="block text-[13px] font-semibold">
                   Version {v.n}{v.n === data.current ? ' · the one sent' : ''}
@@ -101,16 +110,14 @@ export default function PostVersions({ postId, accounts, now, busy, onBringBack,
                   {FOR_WORDS[v.frozen_for] ? `${FOR_WORDS[v.frozen_for][0].toUpperCase()}${FOR_WORDS[v.frozen_for].slice(1)}` : 'Saved'}{v.frozen_by ? ` by ${v.frozen_by}` : ''} · {melb(v.frozen_at)}
                   {changes.length ? ` · since then: ${changes.join(', ')}` : ' · same as now'}
                 </span>
+                {(() => { const first = v.channels.map(c => captionOn(v, c)).find(Boolean); return first ? <span className="mt-0.5 block truncate text-[12px]">“{first.split(/\n/)[0]}”</span> : null })()}
               </span>
             </button>
             {isOpen && (
               <div className="flex flex-col gap-3 border-t border-border px-3 py-3">
                 <p className="text-[12px] text-muted-foreground">Goes out: <strong className="text-foreground">{melb(v.scheduled_for)}</strong> · {v.slides.length} {v.slides.length === 1 ? 'file' : 'files'}</p>
                 <div className="flex gap-1.5 overflow-x-auto">
-                  {v.slides.map((s, i) => (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img key={i} src={s.thumbnail ?? s.url} alt={s.name ?? `File ${i + 1}`} title={s.name} className="h-20 w-16 shrink-0 rounded object-cover bg-muted" onError={e => { (e.target as HTMLImageElement).style.visibility = 'hidden' }} />
-                  ))}
+                  {v.slides.map((s, i) => <Preview key={i} s={s} play className="h-56 w-auto max-w-[180px] shrink-0 rounded-inner bg-black object-contain" />)}
                 </div>
                 <ul className="flex flex-col gap-2">
                   {v.channels.map(ch => {
