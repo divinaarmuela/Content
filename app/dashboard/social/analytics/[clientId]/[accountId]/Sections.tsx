@@ -18,15 +18,17 @@ export function ChannelSection({ accountId, section, range }: {
   accountId: string; section: SectionKey; range: { from: string; to: string }
 }) {
   const [data, setData] = useState<SectionResult | null>(null)
+  // Instagram's audience takes no dates — only its own "this week" or "this month"
+  const [timeframe, setTimeframe] = useState<'this_week' | 'this_month'>('this_month')
   useEffect(() => {
     let live = true
     setData(null)
-    fetch(`/api/social/analytics/channel?account=${encodeURIComponent(accountId)}&section=${section}&from=${range.from}&to=${range.to}`)
+    fetch(`/api/social/analytics/channel?account=${encodeURIComponent(accountId)}&section=${section}&from=${range.from}&to=${range.to}&timeframe=${timeframe}`)
       .then(async r => { const j = await r.json(); return r.ok ? j : { problem: j.error ?? 'These numbers could not be read.' } })
       .then(j => { if (live) setData(j) })
       .catch(() => { if (live) setData({ problem: 'These numbers could not be read. Try again in a moment.' }) })
     return () => { live = false }
-  }, [accountId, section, range.from, range.to])
+  }, [accountId, section, range.from, range.to, timeframe])
 
   if (!data) return <div className="flex flex-col gap-3"><Skeleton className="h-24 w-full" /><Skeleton className="h-40 w-full" /></div>
   if ('problem' in data) return <Note>{data.problem}</Note>
@@ -74,13 +76,25 @@ export function ChannelSection({ accountId, section, range }: {
       const none = Object.keys(data.followers).length === 0
       return (
         <Stack>
+          <NotTheDates>Instagram doesn’t let anyone pick dates for its audience — it only gives its own “this week” or “this month”.</NotTheDates>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-secondary-13" role="group" aria-label="Instagram's window">
+            <span className="text-muted-foreground">Instagram’s window:</span>
+            {(['this_week', 'this_month'] as const).map(t => (
+              <button key={t} type="button" onClick={() => setTimeframe(t)} aria-pressed={timeframe === t}
+                className={timeframe === t ? 'font-medium text-foreground underline underline-offset-4' : 'text-muted-foreground hover:text-foreground'}>
+                {t === 'this_week' ? '“This week”' : '“This month”'}
+              </button>
+            ))}
+          </div>
           {none ? (
             <Note>Instagram shares who the followers are only for accounts with 100 or more followers.</Note>
           ) : (
             <>
-              <Note>This month, from Instagram. Each list shows its top entries, so they need not add up to the follower count.</Note>
+              <Note>Each list shows Instagram’s top entries, so they need not add up to the follower count.</Note>
               <Demographics title="Who follows" demo={data.followers} />
-              {Object.keys(data.engaged).length > 0 && <Demographics title="Who engaged this month" demo={data.engaged} />}
+              {Object.keys(data.engaged).length > 0 && (
+                <Demographics title={`Who liked, commented, saved or shared — Instagram’s “${data.timeframe === 'this_week' ? 'this week' : 'this month'}”`} demo={data.engaged} />
+              )}
             </>
           )}
         </Stack>
@@ -89,7 +103,8 @@ export function ChannelSection({ accountId, section, range }: {
 
     case 'stories': return (
       <Stack>
-        <Note>Instagram gives Story numbers only while a Story is up (24 hours), so these are the Stories live right now. Counts under 5 can show as 0 — Instagram hides small numbers.</Note>
+        <NotTheDates>Instagram gives Story numbers only while a Story is up (24 hours), so these are the Stories live right now.</NotTheDates>
+        <Note>Counts under 5 can show as 0 — Instagram hides small numbers.</Note>
         {data.stories.length === 0 ? <Note>No Stories are up right now.</Note> : (
           <ul className="grid gap-3 sm:grid-cols-2">
             {data.stories.map(s => (
@@ -116,7 +131,7 @@ export function ChannelSection({ accountId, section, range }: {
 
     case 'tagged': return (
       <Stack>
-        <Note>Posts by other accounts that tag this one — creators, customers, partners. Newest first.</Note>
+        <NotTheDates>These are the latest posts that tag this account, newest first, whatever their date.</NotTheDates>
         {data.posts.length === 0 ? <Note>Nobody has tagged this account recently.</Note> : (
           <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
             {data.posts.map(p => (
@@ -168,7 +183,8 @@ export function ChannelSection({ accountId, section, range }: {
 
     case 'fb_audience': return (
       <Stack>
-        <Note>Who follows the Page, by country and city{data.snapshotDate ? `, as of ${dayWords(data.snapshotDate)}` : ''}. Meta stopped giving age and gender in November 2025.</Note>
+        <NotTheDates>Facebook gives who follows the Page as one snapshot{data.snapshotDate ? `, taken ${dayWords(data.snapshotDate)}` : ''}, not for chosen dates.</NotTheDates>
+        <Note>By country and city. Meta stopped giving age and gender in November 2025.</Note>
         {Object.keys(data.demographics).length === 0 ? <Note>Facebook gave no audience for this Page.</Note> : <Demographics title="Who follows" demo={data.demographics} />}
       </Stack>
     )
@@ -202,7 +218,8 @@ export function ChannelSection({ accountId, section, range }: {
 
     case 'li_audience': return (
       <Stack>
-        <Note>Who follows the page, all time. LinkedIn lists its top entries in each, so they need not add up to the follower count.</Note>
+        <NotTheDates>LinkedIn gives who follows the page across all time, not for chosen dates.</NotTheDates>
+        <Note>LinkedIn lists its top entries in each, so they need not add up to the follower count.</Note>
         {Object.keys(data.demographics).length === 0 ? <Note>LinkedIn gave no follower make-up for this page.</Note> : <Demographics title="Who follows" demo={data.demographics} />}
       </Stack>
     )
@@ -237,6 +254,16 @@ const when = (iso: string) => new Date(iso).toLocaleString('en-AU', { timeZone: 
 const dayWords = (d: string) => new Date(`${d}T00:00:00Z`).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })
 
 function Stack({ children }: { children: React.ReactNode }) { return <div className="flex flex-col gap-4">{children}</div> }
+
+/** Said first on a tab whose numbers ignore the dates picked at the top (the owner, 3 Nov 2026: "this month is
+ *  November, what do you mean by this month from Instagram") */
+function NotTheDates({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="rounded-inner border border-border bg-tint-amber px-3 py-2 text-[14px]">
+      <strong>These don’t follow the dates at the top.</strong> {children}
+    </p>
+  )
+}
 
 function Note({ children }: { children: React.ReactNode }) {
   return <p className="text-secondary-13 text-muted-foreground">{children}</p>

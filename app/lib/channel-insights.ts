@@ -28,7 +28,7 @@ export type SectionResult =
   | { problem: string }
   | { kind: 'ig_account'; range: Range; clamped: boolean; totals: Record<string, number>; follows: number | null; unfollows: number | null; reach: Point[]; viewsByFormat: Slice[]; delay: string | null }
   | { kind: 'followers'; range: Range; clamped: boolean; current: number; gained: number; lost: number; count: Point[]; gainedByDay: Point[]; lostByDay: Point[]; delay: string | null }
-  | { kind: 'ig_audience'; followers: Record<string, Slice[]>; engaged: Record<string, Slice[]> }
+  | { kind: 'ig_audience'; timeframe: 'this_week' | 'this_month'; followers: Record<string, Slice[]>; engaged: Record<string, Slice[]> }
   | { kind: 'stories'; stories: { id: string; mediaType: string | null; permalink: string | null; thumbnail: string | null; at: string | null; source: string; metrics: Record<string, number> }[] }
   | { kind: 'tagged'; posts: { id: string; username: string | null; caption: string; permalink: string | null; thumbnail: string | null; at: string | null; likes: number | null; comments: number | null; mediaType: string | null }[] }
   | { kind: 'tt_account'; range: Range; clamped: boolean; totals: Record<string, number>; followers: Point[]; delay: string | null }
@@ -38,7 +38,11 @@ export type SectionResult =
   | { kind: 'li_personal'; range: Range; totals: Record<string, number> }
   | { kind: 'li_audience'; demographics: Record<string, Slice[]> }
 
-export async function loadSection(account: SocialAccount, section: SectionKey, asked: Range): Promise<SectionResult> {
+export async function loadSection(
+  account: SocialAccount, section: SectionKey, asked: Range,
+  /** Instagram's audience window — its own "this week" / "this month"; it takes no dates (2 Nov 2026) */
+  timeframe: 'this_week' | 'this_month' = 'this_month',
+): Promise<SectionResult> {
   const id = account.provider_account_id
   const platform = account.platform
   const words = (r: Read) => ({ problem: refusalWords(r.status, r.body, platform) })
@@ -85,11 +89,11 @@ export async function loadSection(account: SocialAccount, section: SectionKey, a
     if (section === 'audience') {
       const path = '/analytics/instagram/demographics'
       const [fol, eng] = await Promise.all([
-        read(path, { accountId: id, metric: 'follower_demographics', breakdown: 'age,gender,country,city', timeframe: 'this_month' }),
-        read(path, { accountId: id, metric: 'engaged_audience_demographics', breakdown: 'age,gender,country,city', timeframe: 'this_month' }),
+        read(path, { accountId: id, metric: 'follower_demographics', breakdown: 'age,gender,country,city', timeframe }),
+        read(path, { accountId: id, metric: 'engaged_audience_demographics', breakdown: 'age,gender,country,city', timeframe }),
       ])
       if (!ok(fol)) return words(fol)
-      return { kind: 'ig_audience', followers: readDemographics(fol.body), engaged: ok(eng) ? readDemographics(eng.body) : {} }
+      return { kind: 'ig_audience', timeframe, followers: readDemographics(fol.body), engaged: ok(eng) ? readDemographics(eng.body) : {} }
     }
     if (section === 'stories') {
       const list = await read(`/accounts/${encodeURIComponent(id)}/instagram/stories`, {})

@@ -26,7 +26,8 @@ export async function GET(req: Request) {
       if (!sectionsFor(account.platform).some(s => s.key === section)) {
         return NextResponse.json({ error: 'This channel has no such tab' }, { status: 400 })
       }
-      return NextResponse.json(await loadSection(account, section, { from, to }))
+      const tf = url.searchParams.get('timeframe') === 'this_week' ? 'this_week' : 'this_month'
+      return NextResponse.json(await loadSection(account, section, { from, to }, tf))
     } catch (e) {
       const { error, status } = authzErrorResponse(e)
       return NextResponse.json({ error }, { status })
