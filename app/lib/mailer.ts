@@ -42,7 +42,12 @@ function assertTestSafeRecipients(to: string | string[]): void {
   }
 }
 
-type Smtp2goAttachment = { filename: string; content: Buffer; contentType?: string }
+/** Addresses that can actually receive mail: never a `.invalid` test address. */
+export function deliverable(list: string[]): string[] {
+  return list.filter(a => !/\.invalid>?\s*$/i.test(a.trim()))
+}
+
+type Smtp2goAttachment ={ filename: string; content: Buffer; contentType?: string }
 
 /** The one send path. Throws on any failure — callers decide what a failure
  *  means (notify() records it; direct senders surface it). */
@@ -79,6 +84,14 @@ async function smtp2goSend(input: {
   /** Resend-safe key so a retried request cannot double-send at the provider */
   idempotencyKey?: string
 }): Promise<void> {
+  // `.invalid` is the test accounts' domain: it can never receive mail, so
+  // handing it to SMTP2GO only earns a bounce (the owner, 4 Nov 2026: 205
+  // bounces, 13% bounce rate, nearly all test-*@mdmedia-test.invalid).
+  // Those addresses are dropped here, before a byte leaves the process.
+  // Under EMAIL_TEST_ONLY (the test suite, the E2E harness) they are the ONLY
+  // allowed recipients and the provider is faked, so they pass through.
+  if (process.env.EMAIL_TEST_ONLY !== '1') input = { ...input, to: deliverable(input.to), cc: input.cc && deliverable(input.cc) }
+  if (input.to.length === 0) return
   const apiKey = process.env.SMTP2GO_API_KEY
   if (!apiKey) throw new Error('SMTP2GO_API_KEY is not set — email is not configured')
   const res = await fetch('https://api.smtp2go.com/v3/email/send', {
