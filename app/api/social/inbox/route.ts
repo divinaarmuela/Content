@@ -33,6 +33,8 @@ export async function inBatches<T, R>(items: readonly T[], size: number, fn: (t:
 /** One client's posts that have comments, EVERY PAGE of each of its accounts (30 Sep 2026: the list was one page of
  *  50 across all 26 accounts, reaching back four days, so a client's older posts never showed). `?clientId=` is
  *  required; `all` walks every account the person may see. */
+export const maxDuration = 60
+
 export async function GET(req: Request) {
  return withRequestCache(async () => {
   try {
@@ -54,7 +56,8 @@ export async function GET(req: Request) {
     // account by account was past 40 s however it was batched (read live 3 Nov 2026). Scoped to this person below.
     // …AND A TIME LIMIT: Zernio can take over 40 s to answer across every account, and a page that spins forever reads
     // as broken (3 Nov 2026). Whatever has arrived by the deadline is shown, marked `partial`.
-    const deadline = Date.now() + 12_000
+    // 30 s, not 12 (3 Nov 2026): Zernio's first cross-account answer took 17 s cold (0.9 s warm), so 12 s showed nothing
+    const deadline = Date.now() + 30_000
     const rows = clientId === 'all'
       ? await acrossAccounts(publisher, new Set(scope.map(a => String(a.provider_account_id))), deadline)
       : (await inBatches(scope, 4, a => allPosts(publisher, String(a.provider_account_id), 5, deadline))).flat()
