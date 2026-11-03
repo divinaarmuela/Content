@@ -1,9 +1,9 @@
-import { NextResponse } from 'next/server'
+import { NextResponse, after } from 'next/server'
 import { table, withRequestCache } from '@/lib/db'
 import type { SocialAccount } from '@/lib/db-types'
 import { requireRole, authzErrorResponse } from '@/app/lib/authz'
 import { byLatestComment, FIRST_VISIT_WINDOW_MS } from '@/app/lib/inbox-clients-core'
-import type { InboxTouch, InboxView } from '@/lib/db-types'
+import type { InboxTouch, InboxView, InboxPostCache } from '@/lib/db-types'
 import { assertClientAccess } from '@/app/lib/social-schedule'
 import { accessibleClientIds } from '@/app/lib/production-access'
 import { nextCursor } from '@/app/lib/inbox-core'
@@ -60,11 +60,11 @@ export async function GET(req: Request) {
     // as broken (3 Nov 2026). Whatever has arrived by the deadline is shown, marked `partial`.
     // 30 s, not 12 (3 Nov 2026): Zernio's first cross-account answer took 17 s cold (0.9 s warm), so 12 s showed nothing
     const deadline = Date.now() + 30_000
-    const rows = clientId === 'all'
-      ? await acrossAccounts(publisher, new Set(scope.map(a => String(a.provider_account_id))), deadline)
-      // ONE page per account, all accounts at once (3 Nov 2026: "why is it so slow"): five pages went back to 2023 at
-      // ~1 s a page, one after another — Anthony Chimirri's took ~15 s. The newest 100 posts reach back ~6 months.
-      : (await inBatches(scope, 8, a => allPosts(publisher, String(a.provider_account_id), 1, deadline))).flat()
+    // OUR COPY FIRST (3 Nov 2026: "why is it so slow"): each account's newest 100 posts as Zernio last gave them,
+    // shown at once and refreshed in the background once over a minute old. Zernio's own answer is ~1 s warm but up
+    // to 23 s cold per account (all 48 timed live: 4 s warm, 25 s cold). Which posts were commented on, and when,
+    // comes from our webhook notes below — so a new comment moves its post up even before the copy refreshes.
+    const rows = (await Promise.all(scope.map(a => cachedPosts(publisher, String(a.provider_account_id), deadline)))).flat()
     const partial = Date.now() >= deadline
     const connectedIds = new Set(accounts.map(a => a.provider_account_id))
     const seen = new Set<string>()
@@ -96,18 +96,28 @@ function beforeDeadline<T>(p: Promise<T>, deadline: number): Promise<T | null> {
   ])
 }
 
-/** Every connected account's commented posts in Zernio's one cross-account list, kept to the accounts in scope. */
-async function acrossAccounts(publisher: ReturnType<typeof getPublisher>, scope: Set<string>, deadline: number): Promise<PostRow[]> {
-  const out: PostRow[] = []
-  let cursor: string | null = null
-  for (let i = 0; i < 5 && Date.now() < deadline; i++) {
-    const page = await beforeDeadline(publisher.listComments({ limit: 100, cursor }), deadline) as { data?: PostRow[] } | null
-    if (!page) break
-    out.push(...(page.data ?? []).filter(r => !r.accountId || scope.has(r.accountId)))
-    cursor = nextCursor(page)
-    if (!cursor) break
+const FRESH_MS = 60_000
+const postCache = () => table<InboxPostCache>('inbox_post_cache')
+
+/** One account's newest posts: our copy at once (refreshed after the answer when over a minute old), or — when there
+ *  is no copy yet — Zernio live, within the deadline, and saved for next time. */
+async function cachedPosts(publisher: ReturnType<typeof getPublisher>, accountId: string, deadline: number): Promise<PostRow[]> {
+  const copy = await postCache().get(accountId).catch(() => null)
+  const rows = Array.isArray(copy?.rows) ? copy.rows as PostRow[] : null
+  if (rows) {
+    if (Date.now() - (Date.parse(copy?.fetched_at ?? '') || 0) > FRESH_MS) after(() => refreshPosts(publisher, accountId, Date.now() + 60_000))
+    return rows
   }
-  return out
+  return (await refreshPosts(publisher, accountId, deadline)) ?? []
+}
+
+/** Read Zernio's newest page for one account and keep it; null when Zernio did not answer in time (the copy stays). */
+async function refreshPosts(publisher: ReturnType<typeof getPublisher>, accountId: string, deadline: number): Promise<PostRow[] | null> {
+  const page = await beforeDeadline(publisher.listComments({ accountId, limit: 100 }), deadline) as { data?: PostRow[] } | null
+  if (!page) return null
+  const rows = page.data ?? []
+  await postCache().upsert({ id: accountId, rows, fetched_at: new Date().toISOString() }).catch(() => {})
+  return rows
 }
 
 /** Every page of one account's commented posts, 100 at a time — capped, so a runaway cursor cannot hang the page. */

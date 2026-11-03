@@ -64,7 +64,8 @@ export async function GET(req: Request) {
         table<InboxTouch>('inbox_touches').list({ fresh: true }).catch(() => [] as InboxTouch[]),
         table<InboxView>('inbox_views').list({ fresh: true, where: v => v.user_id === user.id }).catch(() => [] as InboxView[]),
       ])
-      return NextResponse.json({ clients: rankClients([...byClient.values()], touches, views) })
+      // an account manager sees only their own clients, so their "all" is "My clients" (3 Nov 2026)
+      return NextResponse.json({ clients: rankClients([...byClient.values()], touches, views), allLabel: mine === null ? 'All clients' : 'My clients' })
     }
     if (conversationId) {
       if (!accountId) {
@@ -94,7 +95,9 @@ export async function GET(req: Request) {
       const mine = await accessibleClientIds(user)
       if (mine !== null) scope = scope.filter(a => mine.includes(String(a.client_id)))
     }
-    const pages = (await Promise.all(scope.map(a => allPages(publisher, String(a.provider_account_id))))).flat()
+    // ALL CLIENTS opens by default now (3 Nov 2026) — the newest 100 conversations per account there, every page for one client
+    const allView = (params.get('clientId') ?? 'all') === 'all'
+    const pages = (await Promise.all(scope.map(a => allPages(publisher, String(a.provider_account_id), allView ? 1 : 10)))).flat()
     const conversations = { data: mergeConversations(pages) }
     const connectedAt = new Map(
       accounts
@@ -149,10 +152,10 @@ export async function POST(req: Request) {
 }
 
 /** Every page of one account's conversations, 100 at a time — capped, so a runaway cursor cannot hang the page. */
-async function allPages(publisher: ReturnType<typeof getPublisher>, accountId: string): Promise<unknown[]> {
+async function allPages(publisher: ReturnType<typeof getPublisher>, accountId: string, maxPages = 10): Promise<unknown[]> {
   const pages: unknown[] = []
   let cursor: string | null = null
-  for (let i = 0; i < 10; i++) {
+  for (let i = 0; i < maxPages; i++) {
     const page = await publisher.listConversations({ accountId, limit: 100, cursor }).catch(() => null)
     if (!page) break
     pages.push(page)

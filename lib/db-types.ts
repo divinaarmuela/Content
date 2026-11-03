@@ -52,6 +52,7 @@ export type TableName =
   | 'drive_uploads'
   | 'email_ingest_log'
   | 'encode_jobs'
+  | 'inbox_post_cache'
   | 'inbox_touches'
   | 'inbox_views'
   | 'instagram_videos'
@@ -970,6 +971,12 @@ export interface EncodeJob {
   error: string | null
   created_at: string
   updated_at: string
+}
+
+export interface InboxPostCache {
+  id: string
+  rows: unknown
+  fetched_at: string
 }
 
 export interface InboxTouch {
@@ -1946,6 +1953,7 @@ export const TABLE_COLUMNS = {
   drive_uploads: ['id', 'upload_uri', 'name', 'parent_id', 'mime_type', 'size', 'received', 'client_id', 'status', 'drive_file_id', 'created_by', 'created_at', 'updated_at', 'purpose', 'item_id', 'version', 'copied_at', 'final_file_id', 'error', 'replaces'],
   email_ingest_log: ['id', 'created_at', 'gmail_message_id', 'mailbox', 'from_email', 'subject', 'received_at', 'status', 'is_lead', 'confidence', 'reasoning', 'lead_id', 'error'],
   encode_jobs: ['id', 'source_url', 'platform', 'kind', 'asset_id', 'version_id', 'slide_index', 'status', 'attempts', 'output_key', 'target_source', 'bytes', 'width', 'height', 'duration_sec', 'video_kbps', 'error', 'created_at', 'updated_at'],
+  inbox_post_cache: ['id', 'rows', 'fetched_at'],
   inbox_touches: ['id', 'account_id', 'client_id', 'username', 'name', 'kind', 'first_at', 'last_at', 'conversation_id', 'post_id', 'updated_at'],
   inbox_views: ['id', 'user_id', 'client_id', 'seen_at'],
   instagram_videos: ['id', 'video', 'audio', 'audio_known', 'poster', 'caption', 'author', 'duration', 'fetched_at', 'expires_at', 'fail_count', 'last_error', 'updated_at'],
@@ -2057,6 +2065,7 @@ export const NULLABLE_COLUMNS = {
   drive_uploads: ['mime_type', 'size', 'client_id', 'drive_file_id', 'created_by', 'purpose', 'item_id', 'version', 'copied_at', 'final_file_id', 'error', 'replaces'],
   email_ingest_log: ['from_email', 'subject', 'received_at', 'is_lead', 'confidence', 'reasoning', 'lead_id', 'error'],
   encode_jobs: ['kind', 'asset_id', 'version_id', 'slide_index', 'output_key', 'bytes', 'width', 'height', 'duration_sec', 'video_kbps', 'error'],
+  inbox_post_cache: [],
   inbox_touches: ['client_id', 'name', 'conversation_id', 'post_id'],
   inbox_views: [],
   instagram_videos: ['video', 'audio', 'poster', 'caption', 'author', 'duration', 'expires_at', 'last_error'],
@@ -2175,6 +2184,7 @@ export const JSON_COLUMNS = {
   drive_uploads: [],
   email_ingest_log: [],
   encode_jobs: [],
+  inbox_post_cache: ['rows'],
   inbox_touches: [],
   inbox_views: [],
   instagram_videos: [],
@@ -2292,6 +2302,7 @@ export const JSON_ARRAY_COLUMNS = {
   drive_uploads: [],
   email_ingest_log: [],
   encode_jobs: [],
+  inbox_post_cache: ['rows'],
   inbox_touches: [],
   inbox_views: [],
   instagram_videos: [],

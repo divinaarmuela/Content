@@ -9,9 +9,6 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
 import { Input } from '@/components/ui/input'
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select'
-import {
   ArrowLeft, ExternalLink, EyeOff, Loader2, MessageSquare,
   Reply, Send, Trash2,
 } from 'lucide-react'
@@ -104,6 +101,17 @@ const whenWords = (iso?: string | null): string => {
   return new Date(t).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', timeZone: 'Australia/Melbourne' })
 }
 const CLIENT_KEY = 'inbox.client'
+/** A person's picture, or their first letter when there is none OR Instagram's link has expired (3 Nov 2026:
+ *  Prowall's and kode_finance's showed the browser's broken-image icon). */
+function Avatar({ src, letter, size }: { src?: string | null; letter: string; size: string }) {
+  const [dead, setDead] = useState(false)
+  useEffect(() => { setDead(false) }, [src])
+  if (src && !dead) {
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img src={src} alt="" onError={() => setDead(true)} className={`${size} shrink-0 rounded-full bg-foreground/[0.08] object-cover`} />
+  }
+  return <span className={`flex ${size} shrink-0 items-center justify-center rounded-full bg-foreground/[0.08] font-semibold uppercase`}>{letter}</span>
+}
 /** Instagram's picture links expire — a dead one shows as a plain grey circle, not a broken-image icon (3 Nov 2026) */
 const hideBroken = (e: React.SyntheticEvent<HTMLImageElement>) => { const img = e.currentTarget; img.removeAttribute('src'); img.alt = '' }
 const FILTERS: { key: InboxFilter; label: string }[] = [
@@ -118,6 +126,7 @@ export default function InboxPage() {
   const [tab, setTab] = useState<'comments' | 'messages'>('messages')
   const [clients, setClients] = useState<ClientChoice[] | null>(null)
   const [clientId, setClientId] = useState<string>('')
+  const [allLabel, setAllLabel] = useState('All clients')
   const [filter, setFilter] = useState<InboxFilter>('all')
   const [search, setSearch] = useState('')
   // the commenter whose name was clicked, for the About panel on the Comments tab
@@ -139,8 +148,12 @@ export default function InboxPage() {
         const wantedAccount = params.get('account')
         let remembered = ''
         try { remembered = window.localStorage.getItem(CLIENT_KEY) ?? '' } catch { /* private window */ }
+        // opens on EVERYONE's newest (the owner, 3 Nov 2026: a super admin sees the latest across all clients, an
+        // account manager all of theirs) — a link to one person, account or client still opens that one
+        void remembered
+        if (json.allLabel) setAllLabel(json.allLabel)
         const pick = (wantedAccount && list.find(c => c.accounts.some(a => a.id === wantedAccount))?.id)
-          || params.get('client') || (list.some(c => c.id === remembered) ? remembered : '') || list[0]?.id || 'all'
+          || params.get('client') || 'all'
         setClientId(pick)
       } catch (e) {
         toast.error(e instanceof Error ? e.message : 'Could not load your clients')
@@ -483,7 +496,6 @@ export default function InboxPage() {
   // the counts shown on the tabs and beside the filter, so nothing new hides inside a closed dropdown
   const unreadConvos = (convos ?? []).filter(c => (c.unreadCount ?? 0) > 0).length
   const newPosts = (posts ?? []).filter(p => (p.new_comments ?? 0) > 0).length
-  const otherNew = (clients ?? []).filter(c => c.id !== clientId && c.new_count > 0).length
 
   return (
     <div className="flex flex-col gap-4">
@@ -500,26 +512,6 @@ export default function InboxPage() {
         actions={
           <div className="flex flex-wrap items-center gap-2">
             {/* THE CLIENT FILTER (the owner, 3 Nov 2026): clients with the newest activity first, each saying what is new */}
-            {otherNew > 0 && (
-              <span className="inline-flex items-center gap-1.5 text-secondary-13 font-medium text-primary">
-                <span className="h-2 w-2 rounded-full bg-primary" aria-hidden />
-                {otherNew} other client{otherNew === 1 ? ' has' : 's have'} new
-              </span>
-            )}
-            <Select value={clientId || undefined} onValueChange={chooseClient} disabled={clients === null}>
-              <SelectTrigger className="w-72" aria-label="Client"><SelectValue placeholder={clients === null ? 'Loading…' : 'Choose a client'} /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All clients</SelectItem>
-                {(clients ?? []).map(c => {
-                  const fresh = c.id === clientId ? '' : newWords(c)
-                  return (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.name}{fresh ? <span className="ml-2 text-primary">● {fresh} new</span> : null}
-                    </SelectItem>
-                  )
-                })}
-              </SelectContent>
-            </Select>
             <div className="flex items-center gap-1 rounded-inner bg-foreground/[0.06] p-1">
               {(['messages', 'comments'] as const).map(t => (
                 <button
@@ -544,6 +536,34 @@ export default function InboxPage() {
         }
       />
 
+
+      {/* THE CLIENT ROW (the owner, 3 Nov 2026: "horizontal"): everyone first, then each client with the newest comment
+          or DM first, saying what is new — live, a new one moves its client to the front. Scrolls sideways. */}
+      <nav aria-label="Clients" className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-2 [scrollbar-width:thin] [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-foreground/20">
+        {clients === null
+          ? Array.from({ length: 6 }, (_, i) => <Skeleton key={i} className="h-14 w-44 shrink-0 rounded-tile" />)
+          : [{ id: 'all', name: allLabel, fresh: '', when: '' }, ...clients.map(c => ({
+              id: c.id, name: c.name, fresh: c.id === clientId ? '' : newWords(c), when: c.last_at ? agoLabel(c.last_at) : 'No activity yet',
+            }))].map(c => {
+              const on = c.id === clientId
+              return (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => { if (!on) chooseClient(c.id) }}
+                  aria-current={on ? 'true' : undefined}
+                  className={`flex min-h-11 shrink-0 flex-col items-start justify-center rounded-tile border px-3 py-2 text-left transition-colors ${
+                    on ? 'border-foreground bg-surface shadow-sm' : 'border-border bg-foreground/[0.03] hover:bg-foreground/[0.06]'
+                  }`}
+                >
+                  <span className={`text-body-15 text-foreground ${c.fresh ? 'font-semibold' : 'font-medium'}`}>{c.name}</span>
+                  {c.fresh
+                    ? <span className="flex items-center gap-1.5 text-secondary-13 font-medium text-primary"><span className="h-2 w-2 rounded-full bg-primary" aria-hidden />{c.fresh} · {c.when}</span>
+                    : c.when ? <span className="text-secondary-13 text-muted-foreground">{c.when}</span> : null}
+                </button>
+              )
+            })}
+      </nav>
 
       {tab === 'messages' ? (
       <div className="grid gap-4 lg:grid-cols-[minmax(0,320px)_minmax(0,1fr)] xl:grid-cols-[minmax(0,320px)_minmax(0,1fr)_280px]">
@@ -585,10 +605,7 @@ export default function InboxPage() {
                         activeConvo?.id === c.id ? 'bg-foreground/[0.06]' : 'hover:bg-foreground/[0.04]'
                       }`}
                     >
-                      {c.participantPicture
-                        // eslint-disable-next-line @next/next/no-img-element
-                        ? <img src={c.participantPicture} alt="" onError={hideBroken} className="h-10 w-10 shrink-0 rounded-full bg-foreground/[0.08] object-cover" />
-                        : <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-foreground/[0.08] text-[14px] font-semibold uppercase">{convName(c).slice(0, 1)}</span>}
+                      <Avatar src={c.participantPicture} letter={convName(c).slice(0, 1)} size="h-10 w-10 text-[14px]" />
                       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                         <span className="flex items-center gap-1.5">
                           <span className={`truncate text-body-15 ${(c.unreadCount ?? 0) > 0 ? 'font-semibold' : 'font-medium'}`}>{convName(c)}</span>
@@ -661,10 +678,7 @@ export default function InboxPage() {
                             {!mine && (
                               sameSideAsPrev
                                 ? <span className="w-7 shrink-0" />
-                                : activeConvo.participantPicture
-                                  // eslint-disable-next-line @next/next/no-img-element
-                                  ? <img src={activeConvo.participantPicture} alt="" onError={hideBroken} className="h-7 w-7 shrink-0 rounded-full bg-foreground/[0.08] object-cover" />
-                                  : <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-foreground/[0.08] text-[12px] font-semibold uppercase">{convName(activeConvo).slice(0, 1)}</span>
+                                : <Avatar src={activeConvo.participantPicture} letter={convName(activeConvo).slice(0, 1)} size="h-7 w-7 text-[12px]" />
                             )}
                             <div className={`flex max-w-[78%] flex-col ${mine ? 'items-end' : 'items-start'}`}>
                               {auto && !sameSideAsPrev && <span className="mb-0.5 text-[11px] font-medium text-muted-foreground">Sent by automation</span>}

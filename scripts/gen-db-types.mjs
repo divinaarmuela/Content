@@ -813,6 +813,14 @@ const GHOST_TABLES = {
   //   client … whichever has the latest notification will go up"). One row per person per client, id
   //   `<user id>__<client id>`, stamped when they pick the client. Its "new" count is the people who commented or
   //   messaged (inbox_touches) after it.
+  // inbox_post_cache — OUR COPY OF EACH ACCOUNT'S POST LIST for the Inbox's Comments tab (the owner, 3 Nov 2026: "why
+  //   is it so slow"). Zernio answers one account's page in ~1 s warm but up to 23 s cold, so the page shows this copy
+  //   at once and refreshes it in the background. One row per provider account id: the newest page as Zernio gave it.
+  inbox_post_cache: [
+    ['id', col('string', false)],
+    ['rows', col('unknown', false, true, true)],
+    ['fetched_at', col('string', false)],
+  ],
   inbox_views: [
     ['id', col('string', false)],
     ['user_id', col('string', false)],
