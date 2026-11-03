@@ -52,15 +52,19 @@ export async function GET(req: Request) {
     // ONE client: every page of each of its accounts, four accounts at a time. ALL clients: Zernio's own cross-account
     // list (one request covers every connected account — 48 on 3 Nov 2026), five pages of 100, newest first; asking
     // account by account was past 40 s however it was batched (read live 3 Nov 2026). Scoped to this person below.
+    // …AND A TIME LIMIT: Zernio can take over 40 s to answer across every account, and a page that spins forever reads
+    // as broken (3 Nov 2026). Whatever has arrived by the deadline is shown, marked `partial`.
+    const deadline = Date.now() + 12_000
     const rows = clientId === 'all'
-      ? await acrossAccounts(publisher, new Set(scope.map(a => String(a.provider_account_id))))
-      : (await inBatches(scope, 4, a => allPosts(publisher, String(a.provider_account_id), 5))).flat()
+      ? await acrossAccounts(publisher, new Set(scope.map(a => String(a.provider_account_id))), deadline)
+      : (await inBatches(scope, 4, a => allPosts(publisher, String(a.provider_account_id), 5, deadline))).flat()
+    const partial = Date.now() >= deadline
     const connectedIds = new Set(accounts.map(a => a.provider_account_id))
     const seen = new Set<string>()
     const data = withComments(onlyConnected(rows, connectedIds))
       .filter(p => { const k = `${p.accountId ?? ''}:${p.id}`; if (seen.has(k)) return false; seen.add(k); return true })
       .sort((x, y) => (Date.parse(y.createdTime ?? '') || 0) - (Date.parse(x.createdTime ?? '') || 0))
-    return NextResponse.json({ data, configured: true })
+    return NextResponse.json({ data, configured: true, partial })
   } catch (e) {
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })
@@ -70,12 +74,20 @@ export async function GET(req: Request) {
 
 type PostRow = { id: string; accountId?: string; createdTime?: string; commentCount?: number }
 
+/** The answer, or null once the deadline passes — a slow Zernio page is given up on, not waited for. */
+function beforeDeadline<T>(p: Promise<T>, deadline: number): Promise<T | null> {
+  return Promise.race([
+    p.catch(() => null),
+    new Promise<null>(resolve => setTimeout(() => resolve(null), Math.max(0, deadline - Date.now()))),
+  ])
+}
+
 /** Every connected account's commented posts in Zernio's one cross-account list, kept to the accounts in scope. */
-async function acrossAccounts(publisher: ReturnType<typeof getPublisher>, scope: Set<string>): Promise<PostRow[]> {
+async function acrossAccounts(publisher: ReturnType<typeof getPublisher>, scope: Set<string>, deadline: number): Promise<PostRow[]> {
   const out: PostRow[] = []
   let cursor: string | null = null
-  for (let i = 0; i < 5; i++) {
-    const page = await publisher.listComments({ limit: 100, cursor }).catch(() => null) as { data?: PostRow[] } | null
+  for (let i = 0; i < 5 && Date.now() < deadline; i++) {
+    const page = await beforeDeadline(publisher.listComments({ limit: 100, cursor }), deadline) as { data?: PostRow[] } | null
     if (!page) break
     out.push(...(page.data ?? []).filter(r => !r.accountId || scope.has(r.accountId)))
     cursor = nextCursor(page)
@@ -85,11 +97,11 @@ async function acrossAccounts(publisher: ReturnType<typeof getPublisher>, scope:
 }
 
 /** Every page of one account's commented posts, 100 at a time — capped, so a runaway cursor cannot hang the page. */
-async function allPosts(publisher: ReturnType<typeof getPublisher>, accountId: string, maxPages: number): Promise<PostRow[]> {
+async function allPosts(publisher: ReturnType<typeof getPublisher>, accountId: string, maxPages: number, deadline: number): Promise<PostRow[]> {
   const out: PostRow[] = []
   let cursor: string | null = null
-  for (let i = 0; i < maxPages; i++) {
-    const page = await publisher.listComments({ accountId, limit: 100, cursor }).catch(() => null) as { data?: PostRow[] } | null
+  for (let i = 0; i < maxPages && Date.now() < deadline; i++) {
+    const page = await beforeDeadline(publisher.listComments({ accountId, limit: 100, cursor }), deadline) as { data?: PostRow[] } | null
     if (!page) break
     out.push(...(page.data ?? []))
     cursor = nextCursor(page)

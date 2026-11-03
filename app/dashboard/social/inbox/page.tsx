@@ -104,6 +104,8 @@ const FILTERS: { key: InboxFilter; label: string }[] = [
 
 export default function InboxPage() {
   const [posts, setPosts] = useState<PostRow[] | null>(null)
+  // the posting service did not finish answering in time — the list may be short (3 Nov 2026)
+  const [partial, setPartial] = useState(false)
   // comments | messages — comments are post threads, messages are DMs
   const [tab, setTab] = useState<'comments' | 'messages'>('messages')
   const [clients, setClients] = useState<ClientChoice[] | null>(null)
@@ -263,6 +265,7 @@ export default function InboxPage() {
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? 'Could not load inbox')
       setPosts(json.data ?? [])
+      setPartial(json.partial === true)
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Could not load inbox')
       setPosts([])
@@ -637,6 +640,11 @@ export default function InboxPage() {
         {/* ── posts ─────────────────────────────────────────────────── */}
         <Card className={`h-fit ${listPane(active !== null)}`}>
           <CardContent className="p-2">
+            {partial && visiblePosts !== null && (
+              <p className="px-2 pb-2 pt-1 text-[12px] text-muted-foreground">
+                Not every account answered in time, so some posts may be missing.{clientId === 'all' ? ' Pick one client to see all of theirs.' : ' Reload to try again.'}
+              </p>
+            )}
             {visiblePosts === null ? (
               <div className="flex flex-col gap-2 p-2">
                 {[0, 1, 2].map(i => <Skeleton key={i} className="h-16 w-full" />)}
