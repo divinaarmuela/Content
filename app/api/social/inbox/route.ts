@@ -49,7 +49,10 @@ export async function GET(req: Request) {
       const mine = await accessibleClientIds(user)
       if (mine !== null) scope = scope.filter(a => mine.includes(String(a.client_id)))
     }
-    const rows = (await inBatches(scope, 4, a => allPosts(publisher, String(a.provider_account_id)))).flat()
+    // ONE client: every page of its accounts. ALL clients (~45 accounts): each one's newest 100, six at a time — five
+    // pages each, four at a time, was still past 40 s (read live 3 Nov 2026)
+    const all = clientId === 'all'
+    const rows = (await inBatches(scope, all ? 6 : 4, a => allPosts(publisher, String(a.provider_account_id), all ? 1 : 5))).flat()
     const connectedIds = new Set(accounts.map(a => a.provider_account_id))
     const seen = new Set<string>()
     const data = withComments(onlyConnected(rows, connectedIds))
@@ -66,10 +69,10 @@ export async function GET(req: Request) {
 type PostRow = { id: string; accountId?: string; createdTime?: string; commentCount?: number }
 
 /** Every page of one account's commented posts, 100 at a time — capped, so a runaway cursor cannot hang the page. */
-async function allPosts(publisher: ReturnType<typeof getPublisher>, accountId: string): Promise<PostRow[]> {
+async function allPosts(publisher: ReturnType<typeof getPublisher>, accountId: string, maxPages: number): Promise<PostRow[]> {
   const out: PostRow[] = []
   let cursor: string | null = null
-  for (let i = 0; i < 5; i++) {
+  for (let i = 0; i < maxPages; i++) {
     const page = await publisher.listComments({ accountId, limit: 100, cursor }).catch(() => null) as { data?: PostRow[] } | null
     if (!page) break
     out.push(...(page.data ?? []))
