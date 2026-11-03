@@ -62,7 +62,9 @@ export async function GET(req: Request) {
     const deadline = Date.now() + 30_000
     const rows = clientId === 'all'
       ? await acrossAccounts(publisher, new Set(scope.map(a => String(a.provider_account_id))), deadline)
-      : (await inBatches(scope, 4, a => allPosts(publisher, String(a.provider_account_id), 5, deadline))).flat()
+      // ONE page per account, all accounts at once (3 Nov 2026: "why is it so slow"): five pages went back to 2023 at
+      // ~1 s a page, one after another — Anthony Chimirri's took ~15 s. The newest 100 posts reach back ~6 months.
+      : (await inBatches(scope, 8, a => allPosts(publisher, String(a.provider_account_id), 1, deadline))).flat()
     const partial = Date.now() >= deadline
     const connectedIds = new Set(accounts.map(a => a.provider_account_id))
     const seen = new Set<string>()

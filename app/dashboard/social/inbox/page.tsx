@@ -208,7 +208,8 @@ export default function InboxPage() {
       setConvos([])
     }
   }, [clientId])
-  useEffect(() => { if (tab === 'messages' && convos === null && clientId) void loadConvos() }, [tab, convos, clientId, loadConvos])
+  // both lists load for the client on screen, whichever tab is open, so each tab's count is right (3 Nov 2026)
+  useEffect(() => { if (convos === null && clientId) void loadConvos() }, [convos, clientId, loadConvos])
 
   // who they are — their automation trip, for the clients it covers
   useEffect(() => {
@@ -479,6 +480,11 @@ export default function InboxPage() {
   }
   const commenter = aboutHandle && people ? people.find(p => p.username.toLowerCase() === aboutHandle.toLowerCase()) ?? null : null
 
+  // the counts shown on the tabs and beside the filter, so nothing new hides inside a closed dropdown
+  const unreadConvos = (convos ?? []).filter(c => (c.unreadCount ?? 0) > 0).length
+  const newPosts = (posts ?? []).filter(p => (p.new_comments ?? 0) > 0).length
+  const otherNew = (clients ?? []).filter(c => c.id !== clientId && c.new_count > 0).length
+
   return (
     <div className="flex flex-col gap-4">
       <Link
@@ -494,6 +500,12 @@ export default function InboxPage() {
         actions={
           <div className="flex flex-wrap items-center gap-2">
             {/* THE CLIENT FILTER (the owner, 3 Nov 2026): clients with the newest activity first, each saying what is new */}
+            {otherNew > 0 && (
+              <span className="inline-flex items-center gap-1.5 text-secondary-13 font-medium text-primary">
+                <span className="h-2 w-2 rounded-full bg-primary" aria-hidden />
+                {otherNew} other client{otherNew === 1 ? ' has' : 's have'} new
+              </span>
+            )}
             <Select value={clientId || undefined} onValueChange={chooseClient} disabled={clients === null}>
               <SelectTrigger className="w-72" aria-label="Client"><SelectValue placeholder={clients === null ? 'Loading…' : 'Choose a client'} /></SelectTrigger>
               <SelectContent>
@@ -519,6 +531,12 @@ export default function InboxPage() {
                   }`}
                 >
                   {t === 'comments' ? 'Comments' : 'Direct messages'}
+                  {/* what is new for the client on screen, visible without opening anything (3 Nov 2026) */}
+                  {(t === 'comments' ? newPosts : unreadConvos) > 0 && (
+                    <span className="ml-1.5 rounded-full bg-primary px-1.5 py-0.5 text-secondary-13 font-medium text-primary-foreground">
+                      {t === 'comments' ? newPosts : unreadConvos}
+                    </span>
+                  )}
                 </button>
               ))}
             </div>
