@@ -23,7 +23,9 @@ export default function ContentVisibilityPage() {
   return (
     <ServicePage
       current="content"
-      hero={{ video: `${V}/hero`, label: 'Behind the scenes on an MD Media shoot' }}
+      // Death & Co, not Quarterhouse (Divina, 2 Nov 2026: "please use this video not the quarterhouse"); the Quarterhouse
+      // clip stays at `${V}/hero` for its own card on the Work page
+      hero={{ video: `${V}/hero-death-co`, label: 'Death & Co — content by MD Media' }}
       lead="Visibility is the foundation. Content is how people find you, understand you and start to trust you before they ever reach out."
       body="Photo, video, and social content that makes you look established and keeps you in front of the right audience, plus full campaign shoots from concept to delivery."
       covered={[
