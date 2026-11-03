@@ -9,9 +9,6 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
 import { Input } from '@/components/ui/input'
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select'
-import {
   ArrowLeft, ExternalLink, EyeOff, Loader2, MessageSquare,
   Reply, Send, Trash2,
 } from 'lucide-react'
@@ -23,6 +20,9 @@ import {
   attachmentView, byAutomation, clockWords, dayLabel, deliveryWords, filterConversations, isMine, messageAt, messageButtons, previewWords, type InboxConversation, type InboxFilter, type InboxMessage,
 } from '@/app/lib/inbox-core'
 import { AUTO_PREFIX, PEOPLE_CRM_CLIENTS } from '@/app/lib/people-crm-core'
+import { agoLabel, type RankedClient } from '@/app/lib/inbox-clients-core'
+import { useNewest } from '@/lib/db-client'
+import type { InboxTouch } from '@/lib/db-types'
 
 /**
  * Master/detail on a phone.
@@ -80,7 +80,7 @@ function ago(iso?: string): string {
  * columns: the conversations (who, to which account, when, unread), the chat with Meta's reply window above the box,
  * and who the person is (their trip through the comment-to-DM automations). Comments keep their own tab.
  */
-type ClientChoice = { id: string; name: string; accounts: { id: string; platform: string; username: string | null }[] }
+type ClientChoice = RankedClient
 type Window = { state: 'open' | 'human' | 'closed'; words: string }
 type PersonRow = {
   username: string; status: string; auto_dms: number; auto_clicks: number
@@ -141,6 +141,38 @@ export default function InboxPage() {
     })()
   }, [])
 
+  // THE CLIENT LIST RE-READS EVERY 30 SECONDS (3 Nov 2026): it comes from our own webhook notes, so it is one cheap
+  // database read — a client someone just commented on or messaged floats to the top without a refresh
+  useEffect(() => {
+    let stopped = false
+    const refresh = async () => {
+      try {
+        const res = await fetch('/api/social/messages?clients=1')
+        if (!res.ok || stopped) return
+        const json = await res.json() as { clients?: ClientChoice[] }
+        if (!stopped && json.clients) setClients(json.clients)
+      } catch { /* offline — keep the last list */ }
+    }
+    refreshClients.current = refresh
+    // a slow safety net only — the live listener below is what makes it immediate
+    const timer = setInterval(refresh, 120_000)
+    return () => { stopped = true; clearInterval(timer); refreshClients.current = null }
+  }, [])
+  const refreshClients = useRef<null | (() => Promise<void>)>(null)
+  // IMMEDIATE (3 Nov 2026: "why not immediate update?"): the moment Zernio's webhook notes a new comment or DM, the
+  // client list re-sorts, and the open client's list reloads if it was theirs
+  const lastTouch = useRef<string | null>(null)
+  const openClient = useRef(clientId); openClient.current = clientId
+  const reloadOpen = useRef<null | ((kind: string | null) => void)>(null)
+  useNewest<InboxTouch>('inbox_touches', 'last_at', row => {
+    const at = row?.last_at ?? null
+    const first = lastTouch.current === null
+    lastTouch.current = at
+    if (first || !at) return
+    void refreshClients.current?.()
+    if (row?.client_id && row.client_id === openClient.current) reloadOpen.current?.(row.kind ?? null)
+  })
+
   const [convos, setConvos] = useState<InboxConversation[] | null>(null)
   const [activeConvo, setActiveConvo] = useState<InboxConversation | null>(null)
   const [messages, setMessages] = useState<InboxMessage[] | null>(null)
@@ -196,6 +228,11 @@ export default function InboxPage() {
 
   const chooseClient = (id: string) => {
     setClientId(id)
+    // opened = seen, for this person only: the "new" count clears here and on the server
+    if (id !== 'all') {
+      setClients(list => list?.map(c => c.id === id ? { ...c, new_count: 0 } : c) ?? list)
+      void fetch('/api/social/inbox/seen', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clientId: id }) }).catch(() => {})
+    }
     try { window.localStorage.setItem(CLIENT_KEY, id) } catch { /* private window */ }
     setConvos(null); setActiveConvo(null); setMessages(null); setWindowState(null); setPeople(null)
     setActive(null); setComments(null); setAboutHandle(null); setPosts(null)
@@ -305,6 +342,7 @@ export default function InboxPage() {
         if (advanced) void (tab === 'messages' ? loadConvos() : loadPosts())
       } catch { /* offline, or the log table is not migrated — stay quiet */ }
     }
+    reloadOpen.current = kind => { void (kind === 'message' ? loadConvos() : loadPosts()) }
     void tick()
     const timer = setInterval(tick, 30_000)
     return () => { stopped = true; clearInterval(timer) }
@@ -433,13 +471,6 @@ export default function InboxPage() {
         summary="One client's direct messages and comments, answered from one place."
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            <Select value={clientId || undefined} onValueChange={chooseClient} disabled={clients === null}>
-              <SelectTrigger className="w-60" aria-label="Client"><SelectValue placeholder={clients === null ? 'Loading…' : 'Choose a client'} /></SelectTrigger>
-              <SelectContent>
-                {(clients ?? []).map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                <SelectItem value="all">All clients</SelectItem>
-              </SelectContent>
-            </Select>
             <div className="flex items-center gap-1 rounded-inner bg-foreground/[0.06] p-1">
               {(['messages', 'comments'] as const).map(t => (
                 <button
@@ -457,6 +488,39 @@ export default function InboxPage() {
           </div>
         }
       />
+
+      {/* THE CLIENTS, NEWEST ACTIVITY FIRST (the owner, 3 Nov 2026): whoever was last commented on or messaged sits
+          first, with how many people wrote since you last opened them */}
+      <nav aria-label="Clients" className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+        {clients === null
+          ? Array.from({ length: 5 }, (_, i) => <Skeleton key={i} className="h-14 w-44 shrink-0 rounded-tile" />)
+          : clients.map(c => {
+              const on = c.id === clientId
+              return (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => { if (!on) chooseClient(c.id) }}
+                  aria-current={on ? 'true' : undefined}
+                  className={`flex min-h-11 shrink-0 flex-col items-start rounded-tile border px-3 py-2 text-left transition-colors ${
+                    on ? 'border-foreground bg-surface shadow-sm' : 'border-border bg-foreground/[0.03] hover:bg-foreground/[0.06]'
+                  }`}
+                >
+                  <span className="flex items-center gap-2 text-body-15 font-medium text-foreground">
+                    {c.name}
+                    {c.new_count > 0 && !on && (
+                      <span className="rounded-full bg-primary px-1.5 text-secondary-13 font-medium text-primary-foreground">
+                        {c.new_count} new
+                      </span>
+                    )}
+                  </span>
+                  <span className="text-secondary-13 text-muted-foreground">
+                    {c.last_kind === 'message' ? 'Message' : c.last_kind === 'comment' ? 'Comment' : ''}{c.last_kind ? ' · ' : ''}{agoLabel(c.last_at)}
+                  </span>
+                </button>
+              )
+            })}
+      </nav>
 
       {tab === 'messages' ? (
       <div className="grid gap-4 lg:grid-cols-[minmax(0,320px)_minmax(0,1fr)] xl:grid-cols-[minmax(0,320px)_minmax(0,1fr)_280px]">

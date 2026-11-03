@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { getApp, getApps, initializeApp } from 'firebase/app'
-import { getDatabase, ref, query, orderByChild, equalTo, onValue, type Query } from 'firebase/database'
+import { getDatabase, ref, query, orderByChild, equalTo, onValue, limitToLast, type Query } from 'firebase/database'
 import { firebaseConfig } from './firebase-config'
 import { JSON_ARRAY_COLUMNS, JSON_COLUMNS, NULLABLE_COLUMNS, type Row, type TableName } from './db-types'
 import { pickPushdown } from './db-indexes'
@@ -182,4 +182,18 @@ export function useLive(channel: LiveChannel, onChange: (hint: Record<string, un
     document.addEventListener('visibilitychange', tick)
     return () => { window.clearInterval(id); document.removeEventListener('visibilitychange', tick) }
   }, [onChange, opts?.pollMs])
+}
+
+/**
+ * Calls `onNewest` with the newest row of a table by one column, live, the moment it changes — one row on the wire,
+ * not the table. The Inbox uses it on `inbox_touches.last_at` (3 Nov 2026: "why not immediate update?"): Zernio's
+ * webhook notes a comment or DM there, and the client list re-sorts within a second or two instead of on a timer.
+ */
+export function useNewest<T extends Row>(name: TableName, column: keyof T & string, onNewest: (row: T | null) => void) {
+  const cb = useRef(onNewest)
+  cb.current = onNewest
+  useEffect(() => {
+    const q = query(ref(db(), `/mdm/tables/${name}`), orderByChild(column), limitToLast(1))
+    return onValue(q, snap => { cb.current(snapshotToRows<T>(name, snap.val())[0] ?? null) }, () => { /* offline — the timer still covers it */ })
+  }, [name, column])
 }

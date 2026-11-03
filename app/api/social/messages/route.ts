@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { table, withRequestCache } from '@/lib/db'
-import type { Client, SocialAccount } from '@/lib/db-types'
+import type { Client, SocialAccount, InboxTouch, InboxView } from '@/lib/db-types'
+import { rankClients } from '@/app/lib/inbox-clients-core'
 import { requireRole, authzErrorResponse } from '@/app/lib/authz'
 import { getPublisher } from '@/app/lib/publisher'
 import { noteConversations, noteThread } from '@/app/lib/inbox-people'
@@ -58,7 +59,12 @@ export async function GET(req: Request) {
         c.accounts.push({ id: String(a.provider_account_id), platform: String(a.platform), username: a.username ?? a.name ?? null })
         byClient.set(a.client_id, c)
       }
-      return NextResponse.json({ clients: [...byClient.values()].sort((x, y) => x.name.localeCompare(y.name)) })
+      // newest activity first, with a per-person "new" count (3 Nov 2026) — from our own webhook notes, not Zernio
+      const [touches, views] = await Promise.all([
+        table<InboxTouch>('inbox_touches').list({ fresh: true }).catch(() => [] as InboxTouch[]),
+        table<InboxView>('inbox_views').list({ fresh: true, where: v => v.user_id === user.id }).catch(() => [] as InboxView[]),
+      ])
+      return NextResponse.json({ clients: rankClients([...byClient.values()], touches, views) })
     }
     if (conversationId) {
       if (!accountId) {

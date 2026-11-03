@@ -809,6 +809,16 @@ const GHOST_TABLES = {
   //   "add a filter in the list as last edited and last viewed"). One row per
   //   person per card, id `<user id>__<card id>`, stamped when the card sheet
   //   or the card page opens. Read by the board's "Last viewed" order.
+  // inbox_views — WHEN A PERSON LAST OPENED A CLIENT IN THE INBOX (the owner, 3 Nov 2026: "make it easy per
+  //   client … whichever has the latest notification will go up"). One row per person per client, id
+  //   `<user id>__<client id>`, stamped when they pick the client. Its "new" count is the people who commented or
+  //   messaged (inbox_touches) after it.
+  inbox_views: [
+    ['id', col('string', false)],
+    ['user_id', col('string', false)],
+    ['client_id', col('string', false)],
+    ['seen_at', col('string', false)],
+  ],
   card_views: [
     ['id', col('string', false)],
     ['user_id', col('string', false)],
