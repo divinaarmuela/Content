@@ -9,6 +9,9 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
 import { Input } from '@/components/ui/input'
 import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
+import {
   ArrowLeft, ExternalLink, EyeOff, Loader2, MessageSquare,
   Reply, Send, Trash2,
 } from 'lucide-react'
@@ -20,7 +23,7 @@ import {
   attachmentView, byAutomation, clockWords, dayLabel, deliveryWords, filterConversations, isMine, messageAt, messageButtons, previewWords, type InboxConversation, type InboxFilter, type InboxMessage,
 } from '@/app/lib/inbox-core'
 import { AUTO_PREFIX, PEOPLE_CRM_CLIENTS } from '@/app/lib/people-crm-core'
-import { agoLabel, type RankedClient } from '@/app/lib/inbox-clients-core'
+import { agoLabel, newWords, type RankedClient } from '@/app/lib/inbox-clients-core'
 import { useNewest } from '@/lib/db-client'
 import type { InboxTouch } from '@/lib/db-types'
 
@@ -38,6 +41,9 @@ const threadPane = (picked: boolean) => (picked ? '' : 'hidden lg:block')
 
 type PostRow = {
   id: string
+  /** the newest comment we were told about, and how many came since you last opened this client (3 Nov 2026) */
+  last_comment_at?: string | null
+  new_comments?: number
   accountId: string
   accountUsername: string
   platform: string
@@ -98,6 +104,8 @@ const whenWords = (iso?: string | null): string => {
   return new Date(t).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', timeZone: 'Australia/Melbourne' })
 }
 const CLIENT_KEY = 'inbox.client'
+/** Instagram's picture links expire — a dead one shows as a plain grey circle, not a broken-image icon (3 Nov 2026) */
+const hideBroken = (e: React.SyntheticEvent<HTMLImageElement>) => { const img = e.currentTarget; img.removeAttribute('src'); img.alt = '' }
 const FILTERS: { key: InboxFilter; label: string }[] = [
   { key: 'all', label: 'All' }, { key: 'unread', label: 'Unread' }, { key: 'automation', label: 'From automations' },
 ]
@@ -162,6 +170,8 @@ export default function InboxPage() {
   // IMMEDIATE (3 Nov 2026: "why not immediate update?"): the moment Zernio's webhook notes a new comment or DM, the
   // client list re-sorts, and the open client's list reloads if it was theirs
   const lastTouch = useRef<string | null>(null)
+  const liveConvo = useRef<InboxConversation | null>(null)
+  const livePost = useRef<PostRow | null>(null)
   const openClient = useRef(clientId); openClient.current = clientId
   const reloadOpen = useRef<null | ((kind: string | null) => void)>(null)
   useNewest<InboxTouch>('inbox_touches', 'last_at', row => {
@@ -238,8 +248,9 @@ export default function InboxPage() {
     setActive(null); setComments(null); setAboutHandle(null); setPosts(null)
   }
 
-  const openConvo = async (c: InboxConversation) => {
-    setActiveConvo(c); setMessages(null); setWindowState(null)
+  // `quiet`: a live refresh of the thread already open — no skeleton flash, nothing reset (3 Nov 2026)
+  const openConvo = async (c: InboxConversation, quiet = false) => {
+    if (!quiet) { setActiveConvo(c); setMessages(null); setWindowState(null) }
     // opening = seeing: clear the badge here and tell the provider, so the
     // list agrees no matter which page it is loaded from next
     if (typeof c.unreadCount === 'number' && c.unreadCount > 0 && c.accountId) {
@@ -261,6 +272,7 @@ export default function InboxPage() {
         return cur
       })
     } catch (e) {
+      if (quiet) return
       toast.error(e instanceof Error ? e.message : 'Could not load the conversation')
       setMessages([])
     }
@@ -287,6 +299,8 @@ export default function InboxPage() {
     }
   }
   const [active, setActive] = useState<PostRow | null>(null)
+  // the open thread and post, for the live refresh above
+  liveConvo.current = activeConvo; livePost.current = active
   const [comments, setComments] = useState<Comment[] | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
@@ -342,14 +356,21 @@ export default function InboxPage() {
         if (advanced) void (tab === 'messages' ? loadConvos() : loadPosts())
       } catch { /* offline, or the log table is not migrated — stay quiet */ }
     }
-    reloadOpen.current = kind => { void (kind === 'message' ? loadConvos() : loadPosts()) }
+    // a new comment or DM for the client on screen: both lists reload, and whatever thread or post is open
+    // refreshes in place — so a reply lands in front of you without clicking away and back (3 Nov 2026)
+    reloadOpen.current = () => {
+      void loadConvos(); void loadPosts()
+      if (liveConvo.current) void openConvo(liveConvo.current, true)
+      if (livePost.current) void openPost(livePost.current, true)
+    }
     void tick()
     const timer = setInterval(tick, 30_000)
     return () => { stopped = true; clearInterval(timer) }
   }, [tab, loadConvos, loadPosts])
 
-  const openPost = async (p: PostRow) => {
-    setActive(p); setComments(null); setReplyTo(null); setDmTo(null); setAboutHandle(null)
+  const openPost = async (p: PostRow, quiet = false) => {
+    // quiet: a live refresh of the post already open — keeps a half-written reply and the open panel
+    if (!quiet) { setActive(p); setComments(null); setReplyTo(null); setDmTo(null); setAboutHandle(null) }
     try {
       const res = await fetch(
         `/api/social/comments?postId=${encodeURIComponent(p.id)}&accountId=${encodeURIComponent(p.accountId ?? '')}`)
@@ -359,6 +380,7 @@ export default function InboxPage() {
       const list: Comment[] = raw?.data ?? raw?.comments ?? (Array.isArray(raw) ? raw : [])
       setActive(cur => { if (cur?.id === p.id) setComments(list); return cur })
     } catch (e) {
+      if (quiet) return
       toast.error(e instanceof Error ? e.message : 'Could not load comments')
       setComments([])
     }
@@ -471,6 +493,21 @@ export default function InboxPage() {
         summary="One client's direct messages and comments, answered from one place."
         actions={
           <div className="flex flex-wrap items-center gap-2">
+            {/* THE CLIENT FILTER (the owner, 3 Nov 2026): clients with the newest activity first, each saying what is new */}
+            <Select value={clientId || undefined} onValueChange={chooseClient} disabled={clients === null}>
+              <SelectTrigger className="w-72" aria-label="Client"><SelectValue placeholder={clients === null ? 'Loading…' : 'Choose a client'} /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All clients</SelectItem>
+                {(clients ?? []).map(c => {
+                  const fresh = c.id === clientId ? '' : newWords(c)
+                  return (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.name}{fresh ? <span className="ml-2 text-primary">● {fresh} new</span> : null}
+                    </SelectItem>
+                  )
+                })}
+              </SelectContent>
+            </Select>
             <div className="flex items-center gap-1 rounded-inner bg-foreground/[0.06] p-1">
               {(['messages', 'comments'] as const).map(t => (
                 <button
@@ -489,38 +526,6 @@ export default function InboxPage() {
         }
       />
 
-      {/* THE CLIENTS, NEWEST ACTIVITY FIRST (the owner, 3 Nov 2026): whoever was last commented on or messaged sits
-          first, with how many people wrote since you last opened them */}
-      <nav aria-label="Clients" className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
-        {clients === null
-          ? Array.from({ length: 5 }, (_, i) => <Skeleton key={i} className="h-14 w-44 shrink-0 rounded-tile" />)
-          : clients.map(c => {
-              const on = c.id === clientId
-              return (
-                <button
-                  key={c.id}
-                  type="button"
-                  onClick={() => { if (!on) chooseClient(c.id) }}
-                  aria-current={on ? 'true' : undefined}
-                  className={`flex min-h-11 shrink-0 flex-col items-start rounded-tile border px-3 py-2 text-left transition-colors ${
-                    on ? 'border-foreground bg-surface shadow-sm' : 'border-border bg-foreground/[0.03] hover:bg-foreground/[0.06]'
-                  }`}
-                >
-                  <span className="flex items-center gap-2 text-body-15 font-medium text-foreground">
-                    {c.name}
-                    {c.new_count > 0 && !on && (
-                      <span className="rounded-full bg-primary px-1.5 text-secondary-13 font-medium text-primary-foreground">
-                        {c.new_count} new
-                      </span>
-                    )}
-                  </span>
-                  <span className="text-secondary-13 text-muted-foreground">
-                    {c.last_kind === 'message' ? 'Message' : c.last_kind === 'comment' ? 'Comment' : ''}{c.last_kind ? ' · ' : ''}{agoLabel(c.last_at)}
-                  </span>
-                </button>
-              )
-            })}
-      </nav>
 
       {tab === 'messages' ? (
       <div className="grid gap-4 lg:grid-cols-[minmax(0,320px)_minmax(0,1fr)] xl:grid-cols-[minmax(0,320px)_minmax(0,1fr)_280px]">
@@ -564,7 +569,7 @@ export default function InboxPage() {
                     >
                       {c.participantPicture
                         // eslint-disable-next-line @next/next/no-img-element
-                        ? <img src={c.participantPicture} alt="" className="h-10 w-10 shrink-0 rounded-full object-cover" />
+                        ? <img src={c.participantPicture} alt="" onError={hideBroken} className="h-10 w-10 shrink-0 rounded-full bg-foreground/[0.08] object-cover" />
                         : <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-foreground/[0.08] text-[14px] font-semibold uppercase">{convName(c).slice(0, 1)}</span>}
                       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                         <span className="flex items-center gap-1.5">
@@ -640,7 +645,7 @@ export default function InboxPage() {
                                 ? <span className="w-7 shrink-0" />
                                 : activeConvo.participantPicture
                                   // eslint-disable-next-line @next/next/no-img-element
-                                  ? <img src={activeConvo.participantPicture} alt="" className="h-7 w-7 shrink-0 rounded-full object-cover" />
+                                  ? <img src={activeConvo.participantPicture} alt="" onError={hideBroken} className="h-7 w-7 shrink-0 rounded-full bg-foreground/[0.08] object-cover" />
                                   : <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-foreground/[0.08] text-[12px] font-semibold uppercase">{convName(activeConvo).slice(0, 1)}</span>
                             )}
                             <div className={`flex max-w-[78%] flex-col ${mine ? 'items-end' : 'items-start'}`}>
@@ -735,7 +740,7 @@ export default function InboxPage() {
                     >
                       {p.picture
                         // eslint-disable-next-line @next/next/no-img-element
-                        ? <img src={p.picture} alt="" className="h-12 w-12 shrink-0 rounded object-cover" />
+                        ? <img src={p.picture} alt="" onError={hideBroken} className="h-12 w-12 shrink-0 rounded bg-foreground/[0.08] object-cover" />
                         // LinkedIn posts come back with no picture from Zernio — its logo, not an empty box
                         : <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded bg-foreground/[0.06]"><PlatformIcon platform={p.platform} size={20} /></div>}
                       <div className="min-w-0 flex-1">
@@ -747,9 +752,14 @@ export default function InboxPage() {
                         </div>
                         <p className="truncate text-body-15">{p.content || '(no caption)'}</p>
                         <p className="text-secondary-13 text-muted-foreground">
-                          {ago(p.createdTime)}
+                          {p.last_comment_at ? `Last comment ${ago(p.last_comment_at)}` : `Posted ${ago(p.createdTime)}`}
                           {typeof p.commentCount === 'number' && ` · ${p.commentCount} comment${p.commentCount === 1 ? '' : 's'}`}
                         </p>
+                        {(p.new_comments ?? 0) > 0 && (
+                          <span className="mt-0.5 inline-flex items-center gap-1.5 text-secondary-13 font-medium text-primary">
+                            <span className="h-2 w-2 rounded-full bg-primary" aria-hidden />{p.new_comments} new comment{p.new_comments === 1 ? '' : 's'}
+                          </span>
+                        )}
                       </div>
                     </button>
                   </li>

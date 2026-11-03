@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import { table, withRequestCache } from '@/lib/db'
 import type { SocialAccount } from '@/lib/db-types'
 import { requireRole, authzErrorResponse } from '@/app/lib/authz'
+import { byLatestComment, FIRST_VISIT_WINDOW_MS } from '@/app/lib/inbox-clients-core'
+import type { InboxTouch, InboxView } from '@/lib/db-types'
 import { assertClientAccess } from '@/app/lib/social-schedule'
 import { accessibleClientIds } from '@/app/lib/production-access'
 import { nextCursor } from '@/app/lib/inbox-core'
@@ -64,9 +66,16 @@ export async function GET(req: Request) {
     const partial = Date.now() >= deadline
     const connectedIds = new Set(accounts.map(a => a.provider_account_id))
     const seen = new Set<string>()
-    const data = withComments(onlyConnected(rows, connectedIds))
+    const unique = withComments(onlyConnected(rows, connectedIds))
       .filter(p => { const k = `${p.accountId ?? ''}:${p.id}`; if (seen.has(k)) return false; seen.add(k); return true })
-      .sort((x, y) => (Date.parse(y.createdTime ?? '') || 0) - (Date.parse(x.createdTime ?? '') || 0))
+    // BY LATEST COMMENT, with "N new" per person (3 Nov 2026) — from our own webhook notes
+    const [touches, views] = await Promise.all([
+      table<InboxTouch>('inbox_touches').list({ fresh: true }).catch(() => [] as InboxTouch[]),
+      table<InboxView>('inbox_views').list({ fresh: true, where: v => v.user_id === user.id }).catch(() => [] as InboxView[]),
+    ])
+    const seenFor = new Map(views.map(v => [v.client_id, v.seen_at]))
+    const dayAgo = new Date(Date.now() - FIRST_VISIT_WINDOW_MS).toISOString()
+    const data = byLatestComment(unique, touches, c => (c && seenFor.get(c)) || dayAgo)
     return NextResponse.json({ data, configured: true, partial })
   } catch (e) {
     const { error, status } = authzErrorResponse(e)
