@@ -18,6 +18,7 @@ import {
   AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { uploadMedia } from '../uploadMedia'
+import { contentBox, keepInView } from '../../lib/canvas-keep-in-view-core'
 import { useIsMobile } from '../useIsMobile'
 import { useRole } from '../useRole'
 import {
@@ -104,6 +105,16 @@ export default function BoardCanvas({ boardId, backHref, embedded = false }: {
     return { w: el?.clientWidth ?? 1000, h: el?.clientHeight ?? 700 }
   }
 
+  /* ── never lose the board: some of it always stays on screen ────────────
+   * A Magic Mouse or trackpad scrolls on the lightest touch and macOS keeps
+   * scrolling after the finger lifts, so the board glided away; the saved
+   * view then reopened it empty (the owner, 4 Nov 2026). Every view — panned,
+   * scrolled, zoomed or restored — is pulled back to keep content in sight. */
+  useEffect(() => {
+    const kept = keepInView({ x: view.panX, y: view.panY, s: view.zoom }, contentBox(items), viewportSize())
+    if (kept.x !== view.panX || kept.y !== view.panY) setView(v => ({ ...v, panX: kept.x, panY: kept.y }))
+  }, [view, items])
+
   /* ── the pointer ─────────────────────────────────────────────────────── */
   const itemById = useCallback((id: string) => items.find(i => i.id === id) ?? null, [items])
 
@@ -139,6 +150,9 @@ export default function BoardCanvas({ boardId, backHref, embedded = false }: {
   const onPointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
     const g = gesture.current
     if (!g) return
+    // the button is up but no pointerup arrived (released over another window,
+    // the dock, a dialog): end the gesture instead of panning with a bare cursor
+    if (e.pointerType === 'mouse' && e.buttons === 0) { onPointerUp(e); return }
     const dx = e.clientX - g.start.x
     const dy = e.clientY - g.start.y
     if (!g.moved && Math.hypot(dx, dy) < 4) return
@@ -371,6 +385,7 @@ export default function BoardCanvas({ boardId, backHref, embedded = false }: {
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerUp}
+          onLostPointerCapture={e => { if (gesture.current) onPointerUp(e) }}
           onKeyDown={onKeyDown}
           onDragOver={e => e.preventDefault()}
           onDrop={onDrop}

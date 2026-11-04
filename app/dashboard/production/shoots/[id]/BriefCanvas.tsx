@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { contentBox, keepInView } from '@/app/lib/canvas-keep-in-view-core'
 import { useCanvasComments } from '../../../../components/canvas/CanvasComments'
 import { useGesture } from '@use-gesture/react'
 import { toast } from 'sonner'
@@ -234,6 +235,15 @@ export default function BriefCanvas({
   }, [])
 
   const paint = useCallback(() => {
+    // never lose the board (the owner, 4 Nov 2026): a Magic Mouse or trackpad
+    // scrolls on the lightest touch and keeps going after the finger lifts, so
+    // the brief glided off screen. Some of the cards always stay in sight.
+    const vp = viewportRef.current
+    if (vp) {
+      const kept = keepInView(camRef.current, contentBox(cardsRef.current), { w: vp.clientWidth, h: vp.clientHeight })
+      camRef.current.x = kept.x
+      camRef.current.y = kept.y
+    }
     const { x, y, s } = camRef.current
     if (worldRef.current) worldRef.current.style.transform = `translate(${x}px, ${y}px) scale(${s})`
     keepToolbarInView()
