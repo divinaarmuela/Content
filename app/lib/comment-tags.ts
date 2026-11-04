@@ -54,11 +54,15 @@ export async function notifyTagged(input: {
 }): Promise<void> {
   const { actor, tagged, text, target, commentId } = input
   const who = actor.name || actor.email
+  // where the card is now decides which board opens it
+  const status = target.kind === 'item'
+    ? ((await table('content_items').get(target.id).catch(() => null)) as { status?: string } | null)?.status ?? null
+    : null
   for (const t of tagged) {
     // a card opens on the board this person has (13 Sep 2026) — the old
     // link was the retired full-card page
     const href = target.kind === 'item'
-      ? `${DASHBOARD_URL}${cardPathForRole(t.role, target.id)}`
+      ? `${DASHBOARD_URL}${cardPathForRole(t.role, target.id, status)}`
       : target.kind === 'board' || target.kind === 'post'
         ? `${DASHBOARD_URL}${target.path ?? `/dashboard/team-boards/${target.id}`}`
         : `${DASHBOARD_URL}/dashboard/production/shoots/${target.id}`

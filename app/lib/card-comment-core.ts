@@ -3,14 +3,23 @@
  * Pure: no I/O. The old link opened the retired full-card page; every
  * role now opens the card ON THE BOARD they have, with `?card=` as the
  * boards read it (useCardSheet).
- */import { reviewPath } from './video-review-core'
+ */
+import { reviewPath } from './video-review-core'
+import { SCHEDULER_STATUSES } from './workflow-core'
 
 
 export type CommentRole = 'super_admin' | 'account_manager' | 'general' | 'editor' | 'scheduler' | 'quality_checker' | 'client' | string
 
 /** The path (no host) that opens this card for a person of this role. */
-export function cardPathForRole(role: CommentRole | null | undefined, itemId: string): string {
+export function cardPathForRole(role: CommentRole | null | undefined, itemId: string, status?: string | null): string {
   if (role === 'editor') return `/dashboard/editor?card=${itemId}`
+  // A card still being made lives on the Editor board, not Post approval, so
+  // `?card=` there opened nothing (Divina, 4 Nov 2026: a tag on Cecconi's
+  // vibe check, still at "draft uploaded", landed on an empty Post approval).
+  // Everyone but a scheduler can open the Editor board.
+  if (role !== 'scheduler' && status && !(SCHEDULER_STATUSES as readonly string[]).includes(status)) {
+    return `/dashboard/editor?card=${itemId}`
+  }
   // schedulers, quality checkers, managers, general: the Post approval board
   return `/dashboard/scheduler?card=${itemId}`
 }
