@@ -32,10 +32,10 @@ describe('marking a card done', () => {
     const prod = groupByLane(pageLanes('production'), cards)
     expect(prod.some(g => g.cards.some((c: { id: string }) => c.id === 'a') && g.lane.key !== 'done')).toBe(true)
   })
-  it('wired: the route checks the role, both card menus and the card panel offer it', () => {
+  it('wired: the route checks the role, both card menus offer it, the card panel does not (4 Nov 2026)', () => {
     expect(readFileSync('app/api/production/items/[id]/done/route.ts', 'utf8')).toContain('if (!mayMarkDone(user)) return NextResponse.json(')
     expect(readFileSync('app/dashboard/editor/EditorBoardCard.tsx', 'utf8')).toContain('Mark done')
     expect(readFileSync('app/dashboard/board/BoardCard.tsx', 'utf8')).toContain('Mark done')
-    expect(readFileSync('app/dashboard/board/EditorCardDrawer.tsx', 'utf8')).toContain('data-mark-done="do"')
+    expect(readFileSync('app/dashboard/board/EditorCardDrawer.tsx', 'utf8')).not.toContain('data-mark-done="do"')
   })
 })
