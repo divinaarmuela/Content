@@ -160,6 +160,32 @@ export const REVIEW_CHECKS: { key: string; words: string }[] = [
   { key: 'own', words: 'Our own analysis, pillars and next month’s focus are added' },
 ]
 
+/** one earlier version of the written report, kept when it is rebuilt or edited */
+export type ReportVersion = {
+  body: string; objective: string | null; notes: string | null
+  written_at: string | null; written_by: string | null
+  edited_at: string | null; edited_by: string | null
+  replaced_at: string; replaced_by: string
+}
+export const HISTORY_KEEP = 30
+
+/** the history with the CURRENT body added on top — called before anything replaces it; nothing to keep, unchanged */
+export function keepVersion(cur: { body?: string | null; objective?: string | null; notes?: string | null; generated_at?: string | null; generated_by?: string | null; updated_at?: string | null; updated_by?: string | null; history?: unknown } | null | undefined, by: string, now: string): ReportVersion[] {
+  const before = Array.isArray(cur?.history) ? (cur!.history as ReportVersion[]) : []
+  if (!cur?.body || !cur.body.trim()) return before
+  const v: ReportVersion = {
+    body: cur.body, objective: cur.objective ?? null, notes: cur.notes ?? null,
+    written_at: cur.generated_at ?? null, written_by: cur.generated_by ?? null,
+    edited_at: cur.updated_at ?? null, edited_by: cur.updated_by ?? null,
+    replaced_at: now, replaced_by: by,
+  }
+  return [v, ...before].slice(0, HISTORY_KEEP)
+}
+
+export function readHistory(raw: unknown): ReportVersion[] {
+  return Array.isArray(raw) ? raw.filter((v): v is ReportVersion => !!v && typeof (v as ReportVersion).body === 'string') : []
+}
+
 export function allChecked(checks: ReportChecks | null | undefined): boolean {
   return REVIEW_CHECKS.every(c => checks?.[c.key] === true)
 }

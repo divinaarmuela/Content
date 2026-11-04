@@ -21,9 +21,11 @@ const VERDICT_TONE: Record<Factor['verdict'], string> = {
   strong: 'border-accent-green/50 bg-tint-green', likely: 'border-accent-amber/50 bg-tint-amber', 'not supported': 'border-border bg-surface',
 }
 
-export default function PostBreakdowns({ raw, clientId, month, onChange, noButton = false }: {
+export default function PostBreakdowns({ raw, clientId, month, onChange, noButton = false, explainedBy = null }: {
   /** Build report fills it; the section shows the answers without its own button */
   noButton?: boolean
+  /** who last explained them */
+  explainedBy?: string | null
   raw: unknown
   clientId: string
   month: MonthKey
@@ -52,7 +54,7 @@ export default function PostBreakdowns({ raw, clientId, month, onChange, noButto
           <h2 className="text-[20px] font-semibold">Why the posts worked</h2>
           <p className="text-[13px] text-muted-foreground">Each post scored against this account’s usual: 50 is a normal post, 75 about twice it, 25 about half.</p>
         </div>
-        {explained?.at && <span className="text-[13px] text-muted-foreground">Explained {new Date(explained.at).toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}</span>}
+        {explained?.at && <span className="text-[13px] text-muted-foreground">Last explained{explainedBy ? ` by ${explainedBy}` : ''} · {new Date(explained.at).toLocaleString('en-AU', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' })}</span>}
         {!noButton && <Button onClick={() => void explain()} disabled={busy} className="h-10 gap-2 rounded-full">
           <Sparkles className={`h-4 w-4 ${busy ? 'animate-pulse' : ''}`} aria-hidden />
           {busy ? 'Reading 90 days of posts…' : explained ? 'Explain again' : 'Explain the posts'}

@@ -3,8 +3,7 @@ import { table } from '@/lib/db'
 import type { AudienceSnapshot, Client, ClientReport } from '@/lib/db-types'
 import {
   monthRange, previousMonth, readReportData, reportId, reportPrompt, toBreakdown,
-  type Audience, type MonthKey, type PlatformFigures, type ReportData, type TopPost,
-} from './client-report-core'
+  type Audience, type MonthKey, type PlatformFigures, type ReportData, type TopPost, keepVersion } from './client-report-core'
 import { breakdownLines, readPostsExplained } from './post-breakdown-core'
 import { keepPictures } from './report-pictures'
 import { aiClient, aiError, viaGateway, writerModel } from './ai-gateway'
@@ -287,6 +286,8 @@ export async function generateReport(clientId: string, m: MonthKey, by: string, 
   const now = new Date().toISOString()
   await table<ClientReport>('client_reports').claim(id, cur => ({
     ...(cur ?? { id, client_id: clientId, month: m, created_at: now }),
+    // the report it replaces is kept, never lost (4 Nov 2026)
+    history: keepVersion(cur, by, now) as never,
     body, objective: opts.objective || null, notes: opts.notes || null, checks: {} as never,
     generated_at: now, generated_by: by, updated_by: by, updated_at: now,
   } as ClientReport))

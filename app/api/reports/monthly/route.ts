@@ -3,7 +3,7 @@ import { table, withRequestCache } from '@/lib/db'
 import type { Client, ClientReport } from '@/lib/db-types'
 import { AuthzError, authzErrorResponse, requireRole, type TeamUser } from '@/app/lib/authz'
 import { accessibleClientIds } from '@/app/lib/production-access'
-import { isMonthKey, mayDeleteReport, mayOpenReports, reportId, REVIEW_CHECKS, type MonthKey } from '@/app/lib/client-report-core'
+import { isMonthKey, mayDeleteReport, mayOpenReports, reportId, REVIEW_CHECKS, type MonthKey, keepVersion} from '@/app/lib/client-report-core'
 import { generateReport, loadReportData } from '@/app/lib/client-report'
 import { explainMonth } from '@/app/lib/post-breakdown'
 import { logActivity } from '@/app/lib/workflow'
@@ -56,7 +56,10 @@ export async function GET(req: Request) {
         await loadReportData(clientId, month)
         report = await table<ClientReport>('client_reports').get(reportId(clientId, month))
       }
-      return NextResponse.json({ clients, mayDelete: mayDeleteReport(user.role), report })
+      // names for "written by", "edited by", "explained by" and the earlier versions
+      const team = await table<TeamUser>('team_users').list()
+      const people = Object.fromEntries(team.map(u => [u.id, String(u.name || u.email || 'Someone')]))
+      return NextResponse.json({ clients, mayDelete: mayDeleteReport(user.role), report, people })
     } catch (e) {
       const { error, status } = authzErrorResponse(e)
       return NextResponse.json({ error }, { status })
@@ -76,7 +79,9 @@ export async function POST(req: Request) {
         const report = await table<ClientReport>('client_reports').get(reportId(body.client_id, body.month))
         if (!x.ok) return NextResponse.json({ error: x.error, report }, { status: 502 })
         await logActivity({ actor: user, clientId: body.client_id, entityType: 'client_report', entityId: reportId(body.client_id, body.month), action: 'report_posts_explained', newValue: body.month }).catch(() => undefined)
-        return NextResponse.json({ ok: true, report })
+        // who explained them, beside the when the explanation carries
+        await table<ClientReport>('client_reports').update(reportId(body.client_id, body.month), { explained_by: user.id } as never).catch(() => undefined)
+        return NextResponse.json({ ok: true, report: await table<ClientReport>('client_reports').get(reportId(body.client_id, body.month)) })
       }
       const r = await generateReport(body.client_id, body.month, user.id, { objective: String(body.objective ?? '').slice(0, 300), notes: String(body.notes ?? '').slice(0, 6000) })
       if (!r.ok) return NextResponse.json({ error: r.error }, { status: 502 })
@@ -102,6 +107,8 @@ export async function PATCH(req: Request) {
         ? Object.fromEntries(REVIEW_CHECKS.map(c => [c.key, (body.checks as Record<string, unknown>)[c.key] === true])) : undefined
       const put = await table<ClientReport>('client_reports').claim(id, cur => (cur ? {
         ...cur,
+        // an edit to the text keeps what it replaced (4 Nov 2026: "don't overwrite current reports")
+        ...(typeof body.body === 'string' && body.body !== (cur.body ?? '') ? { history: keepVersion(cur, user.id, now) as never } : {}),
         ...(typeof body.body === 'string' ? { body: body.body.slice(0, 200000) } : {}),
         ...(typeof body.notes === 'string' ? { notes: body.notes.slice(0, 6000) } : {}),
         ...(typeof body.objective === 'string' ? { objective: body.objective.slice(0, 300) } : {}),

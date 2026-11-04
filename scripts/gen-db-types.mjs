@@ -1075,6 +1075,11 @@ const GHOST_TABLES = {
     ['checks', col('unknown', true, true)],
     // the post breakdowns, UNLK.AI's way (27 Oct 2026; post-breakdown-core.ts): scores, ranked reasons, Claude's teardowns
     ['posts_explained', col('unknown', true, true)],
+    // who last explained the posts (4 Nov 2026) — the when is posts_explained.at
+    ['explained_by', col('string', true)],
+    // EVERY EARLIER VERSION, never overwritten (the owner, 4 Nov 2026: "please don't overwrite current reports"):
+    // { body, objective, notes, written_at, written_by, edited_at, edited_by, replaced_at, replaced_by }[], newest first
+    ['history', col('unknown', true, true)],
     ['generated_at', col('string', true)],
     ['generated_by', col('string', true)],
     ['updated_by', col('string', true)],

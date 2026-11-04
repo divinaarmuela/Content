@@ -17,8 +17,7 @@ import PostBreakdowns from './PostBreakdowns'
 import { readPostsExplained } from '../../lib/post-breakdown-core'
 import {
   FRESHNESS, REVIEW_CHECKS, allChecked, change, fmt, melbourneDay, monthLabel, monthRange, monthState, readReportData, recentMonths, reportHtml,
-  type Breakdown, type MonthKey, type MonthState, type PlatformFigures, type ReportData, type TopPost,
-} from '../../lib/client-report-core'
+  type Breakdown, type MonthKey, type MonthState, type PlatformFigures, type ReportData, type TopPost, readHistory, type ReportVersion} from '../../lib/client-report-core'
 
 /**
  * REPORTS — THE MONTHLY CLIENT REPORT (the owner, 26 Oct 2026: "we need to build a client reporting page … we should view
@@ -30,6 +29,7 @@ import {
 type Saved = {
   id: string; month: MonthKey; data: ReportData | null; body: string | null; objective: string | null; notes: string | null
   checks: Record<string, boolean> | null; generated_at: string | null; updated_at: string
+  generated_by?: string | null; updated_by?: string | null; explained_by?: string | null; history?: unknown
   /** the post breakdowns (PostBreakdowns.tsx), as saved */
   posts_explained?: unknown
 }
@@ -43,6 +43,8 @@ export default function ReportsPage() {
   const [clientId, setClientId] = useState('')
   const [month, setMonth] = useState<MonthKey>(() => months[1] ?? months[0])
   const [report, setReport] = useState<Saved | null>(null)
+  /** id → name, for who wrote, edited and explained */
+  const [people, setPeople] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -64,6 +66,7 @@ export default function ReportsPage() {
       const j = await r.json().catch(() => ({}))
       if (!r.ok) throw new Error(j.error ?? 'Could not read the figures')
       setReport(j.report ?? null)
+      if (j.people) setPeople(j.people)
       if (refresh) toast.success('Figures read again from the accounts')
     } catch (e) { setError(e instanceof Error ? e.message : 'Could not read the figures'); setReport(null) } finally { setLoading(false) }
   }, [clientId, month])
@@ -130,10 +133,11 @@ export default function ReportsPage() {
           {/* WHY THE POSTS WORKED, RIGHT ABOVE THE REPORT (the owner, 4 Nov 2026: "one button … make sure explain the
               posts is shown as well near the report so it's nice and clear") — filled by Build report, no button of its own */}
           {data.platforms.some(p => p.platform === 'instagram') && (
-            <PostBreakdowns raw={report?.posts_explained} clientId={clientId} month={month} onChange={r => setReport(r as Saved)} noButton />
+            <PostBreakdowns raw={report?.posts_explained} clientId={clientId} month={month} onChange={r => setReport(r as Saved)} noButton
+              explainedBy={report?.explained_by ? people[String(report.explained_by)] ?? null : null} />
           )}
           {report && <Writer report={report} clientId={clientId} month={month} mayDelete={mayDelete} onChange={setReport} onDeleted={() => void load()}
-            settled={state.kind === 'final'} settlesOn={state.settlesOn} />}
+            settled={state.kind === 'final'} settlesOn={state.settlesOn} people={people} />}
           <PrintReport data={data} report={report} clientName={clientName} />
         </>
       )}
@@ -319,10 +323,11 @@ function AudienceSection({ a }: { a: NonNullable<ReportData['audience']> }) {
 
 /* ── the written report ──────────────────────────────────────────────────── */
 
-function Writer({ report, clientId, month, mayDelete, onChange, onDeleted, settled, settlesOn }: {
+function Writer({ report, clientId, month, mayDelete, onChange, onDeleted, settled, settlesOn, people }: {
   report: Saved; clientId: string; month: MonthKey; mayDelete: boolean; onChange: (r: Saved) => void; onDeleted: () => void
   /** the month's numbers are complete (2 days after it ends) — building before that is allowed, but said */
   settled: boolean; settlesOn: string
+  people: Record<string, string>
 }) {
   const [objective, setObjective] = useState(report.objective || 'Growth')
   const [notes, setNotes] = useState(report.notes ?? '')
@@ -406,7 +411,7 @@ function Writer({ report, clientId, month, mayDelete, onChange, onDeleted, settl
     <section className="no-print flex flex-col gap-4 rounded-card border border-border bg-surface p-5">
       <header className="flex flex-wrap items-center gap-2">
         <h2 className="mr-auto text-[20px] font-semibold">The report</h2>
-        {report.body && <span className="text-[13px] text-muted-foreground">Written {report.generated_at ? new Date(report.generated_at).toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }) : ''}</span>}
+        {report.body && <span className="text-[13px] text-muted-foreground">{stampLine(report, people)}</span>}
         {mayDelete && report.body && (
           <Button variant="ghost" onClick={() => setAsking('delete')} className="h-10 gap-1.5 rounded-full text-destructive"><Trash2 className="h-4 w-4" aria-hidden /> Delete</Button>
         )}
@@ -451,6 +456,7 @@ function Writer({ report, clientId, month, mayDelete, onChange, onDeleted, settl
           {editing
             ? <Textarea value={body} onChange={e => setBody(e.target.value)} rows={28} className="rounded-[18px] font-mono text-[13px]" aria-label="The report" />
             : <article className="report-prose rounded-inner border border-border bg-background p-6" dangerouslySetInnerHTML={{ __html: reportHtml(report.body) }} />}
+          <EarlierVersions history={readHistory(report.history)} people={people} />
 
           <div className="flex flex-col gap-2 rounded-inner bg-muted/40 p-4">
             <p className="text-[14px] font-semibold">Before it goes to the client</p>
@@ -605,3 +611,43 @@ const PRINT_CSS = `
   .pr-small{font-size:11px;color:#555}
 }
 `
+
+/** when and who: "Written by Manal · 4 Nov, 6:10 pm · last edited by Karly · 4 Nov, 6:40 pm" */
+const when = (iso: string | null | undefined) => iso ? new Date(iso).toLocaleString('en-AU', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : ''
+function stampLine(r: Saved, people: Record<string, string>): string {
+  const name = (id: unknown) => (id ? people[String(id)] ?? 'someone' : 'someone')
+  const written = r.generated_at ? `Written by ${name(r.generated_by)} · ${when(r.generated_at)}` : ''
+  const edited = r.updated_at && r.generated_at && r.updated_at > r.generated_at && r.updated_by ? ` · last edited by ${name(r.updated_by)} · ${when(r.updated_at)}` : ''
+  return written + edited
+}
+
+/** EVERY EARLIER VERSION, kept and readable (the owner, 4 Nov 2026: "please don't overwrite current reports") */
+function EarlierVersions({ history, people }: { history: ReportVersion[]; people: Record<string, string> }) {
+  if (history.length === 0) return null
+  const name = (id: string | null) => (id ? people[id] ?? 'someone' : 'someone')
+  return (
+    <details className="rounded-inner border border-border bg-surface p-3">
+      <summary className="cursor-pointer text-[14px] font-semibold">Earlier versions ({history.length})</summary>
+      <ol className="mt-3 flex flex-col gap-2">
+        {history.map((v, i) => (
+          <li key={`${v.replaced_at}-${i}`}>
+            <details className="rounded-inner border border-border p-3">
+              <summary className="cursor-pointer text-[13px]">
+                Written by {name(v.written_by)} · {when(v.written_at)}
+                {v.edited_at && v.edited_by && v.written_at && v.edited_at > v.written_at ? ` · edited by ${name(v.edited_by)} · ${when(v.edited_at)}` : ''}
+                <span className="text-muted-foreground"> — replaced by {name(v.replaced_by)} · {when(v.replaced_at)}</span>
+              </summary>
+              <div className="mt-2 flex justify-end">
+                <Button variant="outline" size="sm" className="h-8 rounded-full text-[12px]"
+                  onClick={() => { void navigator.clipboard.writeText(v.body).then(() => toast.success('Copied')).catch(() => toast.error('Could not copy')) }}>
+                  Copy this version
+                </Button>
+              </div>
+              <article className="report-prose mt-2 max-h-[480px] overflow-y-auto rounded-inner border border-border bg-background p-4" dangerouslySetInnerHTML={{ __html: reportHtml(v.body) }} />
+            </details>
+          </li>
+        ))}
+      </ol>
+    </details>
+  )
+}
