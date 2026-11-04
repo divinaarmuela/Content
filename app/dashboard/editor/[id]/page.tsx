@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowLeft, Check, ChevronDown, ExternalLink, Film, FolderOpen, Hourglass, Link2, Lock, Plus, Search, Send, Sparkles, X } from 'lucide-react'
 import { toast } from 'sonner'
+import { mayMarkDone } from '../../../lib/done-core'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
@@ -123,6 +124,7 @@ export default function EditorCard() {
     }>
       <Link href="/dashboard/editor" className="mb-4 inline-flex items-center gap-1.5 text-[14px] font-semibold text-muted-foreground hover:text-foreground"><ArrowLeft className="h-4 w-4" aria-hidden /> Editor</Link>
       <Stepper status={item.status} />
+      {me && mayMarkDone(me) && <MarkDoneBar id={id} doneAt={(item as { done_at?: string | null }).done_at ?? null} />}
       {/* THE CARD'S BUTTONS, AT THE TOP (the owner, 22 Oct 2026: "the actions should be there and not in the bottom") —
           the same ones the classic card had, so the process does not change */}
       <div className="mt-4 overflow-hidden rounded-card border border-border bg-card">
@@ -1023,5 +1025,39 @@ function Sources({ item, rows, now }: { item: ContentItem; rows: DriveSource[]; 
         <Button onClick={add} disabled={busy || !link.trim()}>Add</Button>
       </div>
     </aside>
+  )
+}
+
+/**
+ * MARK DONE, ON THE CARD ITSELF (the owner, 4 Nov 2026: "mark done in editor should be in the card — it's outside of
+ * it"). The same stamp as the board's menu: the card goes to Done for a week and a half, sends nothing more, and
+ * "Not done" puts it back.
+ */
+function MarkDoneBar({ id, doneAt }: { id: string; doneAt: string | null }) {
+  const [busy, setBusy] = useState(false)
+  const done = !!doneAt
+  const press = async () => {
+    setBusy(true)
+    try {
+      const r = await fetch(`/api/production/items/${id}/done`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ done: !done }) })
+      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error ?? 'Could not do that')
+      toast.success(done ? 'Back where it was' : 'Marked done — no more notifications. It leaves the board after a week and a half.')
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not do that')
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <div className={`mt-4 flex flex-wrap items-center gap-3 rounded-inner border px-4 py-3 ${done ? 'border-accent-green/40 bg-tint-green' : 'border-border bg-surface'}`}>
+      <span className="mr-auto text-[14px]">
+        {done
+          ? <><span className="font-semibold">Done</span> <span className="text-muted-foreground">· {new Date(doneAt!).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })} · no notifications</span></>
+          : <span className="text-muted-foreground">Finished with this card? Mark it done — it stops all notifications.</span>}
+      </span>
+      <Button variant={done ? 'outline' : 'default'} disabled={busy} onClick={() => void press()} className="h-10 rounded-full px-4">
+        {busy ? 'Saving…' : done ? 'Not done' : 'Mark done'}
+      </Button>
+    </div>
   )
 }
