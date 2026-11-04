@@ -45,3 +45,28 @@ export function keepInView(cam: Cam, box: Box | null, viewport: { w: number; h: 
   const y = clamp(cam.y, my - (box.y + box.h) * cam.s, viewport.h - my - box.y * cam.s)
   return x === cam.x && y === cam.y ? cam : { ...cam, x, y }
 }
+
+/** every card's own world box */
+export function cardBoxes(cards: readonly { x: number; y: number; w?: number | null; h?: number | null }[]): Box[] {
+  return cards.map(c => contentBox([c])).filter((b): b is Box => b !== null)
+}
+
+/**
+ * At least one CARD stays on screen — not the box around all of them. One
+ * card lost at -20000 (Copy of Abbotsford Convent, 4 Nov 2026) made that box
+ * 20,000 px wide, so "some of the content" could still be a screen of nothing.
+ * When no card is in sight, the camera moves the least it can to bring the
+ * nearest one back.
+ */
+export function keepAnyInView(cam: Cam, boxes: readonly Box[], viewport: { w: number; h: number }, margin = 160): Cam {
+  if (boxes.length === 0 || viewport.w <= 0 || viewport.h <= 0) return cam
+  let best: Cam | null = null
+  let bestD = Infinity
+  for (const b of boxes) {
+    const k = keepInView(cam, b, viewport, margin)
+    if (k === cam) return cam
+    const d = Math.hypot(k.x - cam.x, k.y - cam.y)
+    if (d < bestD) { bestD = d; best = k }
+  }
+  return best ?? cam
+}

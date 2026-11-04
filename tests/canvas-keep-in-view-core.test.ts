@@ -26,3 +26,18 @@ describe('a board can never be pushed out of sight (4 Nov 2026)', () => {
     expect(keepInView(cam, contentBox([]), vp)).toBe(cam)
   })
 })
+
+import { cardBoxes, keepAnyInView } from '../app/lib/canvas-keep-in-view-core'
+describe('one stray card cannot stretch the board', () => {
+  const boxes = cardBoxes([{ x: 0, y: 0, w: 300, h: 100 }, { x: -20000, y: -6647, w: 208, h: 52 }])
+  it('a camera between the two (nothing on screen) is pulled back to the nearest card', () => {
+    const out = keepAnyInView({ x: 3000, y: 1000, s: 1 }, boxes, vp)
+    const seen = boxes.some(b => out.x + (b.x + b.w) * out.s >= 100 && out.x + b.x * out.s <= 900)
+    expect(seen).toBe(true)
+    expect(Math.abs(out.x)).toBeLessThan(5000)
+  })
+  it('a camera already showing a card is left alone', () => {
+    const cam = { x: 100, y: 100, s: 1 }
+    expect(keepAnyInView(cam, boxes, vp)).toBe(cam)
+  })
+})

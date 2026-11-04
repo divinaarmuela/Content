@@ -18,7 +18,7 @@ import {
   AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { uploadMedia } from '../uploadMedia'
-import { contentBox, keepInView } from '../../lib/canvas-keep-in-view-core'
+import { cardBoxes, keepAnyInView } from '../../lib/canvas-keep-in-view-core'
 import { useIsMobile } from '../useIsMobile'
 import { useRole } from '../useRole'
 import {
@@ -111,7 +111,7 @@ export default function BoardCanvas({ boardId, backHref, embedded = false }: {
    * view then reopened it empty (the owner, 4 Nov 2026). Every view — panned,
    * scrolled, zoomed or restored — is pulled back to keep content in sight. */
   useEffect(() => {
-    const kept = keepInView({ x: view.panX, y: view.panY, s: view.zoom }, contentBox(items), viewportSize())
+    const kept = keepAnyInView({ x: view.panX, y: view.panY, s: view.zoom }, cardBoxes(items), viewportSize())
     if (kept.x !== view.panX || kept.y !== view.panY) setView(v => ({ ...v, panX: kept.x, panY: kept.y }))
   }, [view, items])
 

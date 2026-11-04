@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { contentBox, keepInView } from '@/app/lib/canvas-keep-in-view-core'
+import { cardBoxes, keepAnyInView } from '@/app/lib/canvas-keep-in-view-core'
 import { useCanvasComments } from '../../../../components/canvas/CanvasComments'
 import { useGesture } from '@use-gesture/react'
 import { toast } from 'sonner'
@@ -240,7 +240,7 @@ export default function BriefCanvas({
     // the brief glided off screen. Some of the cards always stay in sight.
     const vp = viewportRef.current
     if (vp) {
-      const kept = keepInView(camRef.current, contentBox(cardsRef.current), { w: vp.clientWidth, h: vp.clientHeight })
+      const kept = keepAnyInView(camRef.current, cardBoxes(cardsRef.current), { w: vp.clientWidth, h: vp.clientHeight })
       camRef.current.x = kept.x
       camRef.current.y = kept.y
     }
