@@ -1185,6 +1185,9 @@ const GHOST_COLUMNS = {
   //   team_users.colourist — THE COLOURIST (docs/COLOUR_GRADE_SPLIT_SPEC.md C3, Martin): a tick on the Team page like
   //     quality_reviewer; told when a video edit reaches colour grade, and may hand in the graded cut there.
   team_users: [['colourist', col('boolean', true)]],
+  //   team_invites.quality_reviewer — an invite for "Super admin + quality checker" (5 Nov 2026) carries the
+  //     quality check onto the person when they first sign in.
+  team_invites: [['quality_reviewer', col('boolean', true)]],
   content_items: [
     //   content_items.portal_hidden — TAKEN OFF THE CLIENT'S PORTAL (the owner, 2 Oct 2026: "we can have the option to
     //     tick take it off their portal… it will not show it there"). An edit or a design reaches the one portal on

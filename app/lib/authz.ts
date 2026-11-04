@@ -84,6 +84,7 @@ export async function resolveRealTeamUser(): Promise<TeamUser> {
   let invite: {
     id: string; role: Role; employment_type: string; timezone: string
     client_id: string | null; assigned_client_ids: string[]
+    quality_reviewer?: boolean
   } | null = null
 
   // A person added by an admin exists BEFORE they ever sign in — with no
@@ -108,6 +109,7 @@ export async function resolveRealTeamUser(): Promise<TeamUser> {
         id: claimed.id,
         role: claimed.role as Role,
         employment_type: claimed.employment_type,
+        quality_reviewer: (claimed as { quality_reviewer?: boolean | null }).quality_reviewer === true,
         timezone: claimed.timezone,
         client_id: claimed.client_id,
         assigned_client_ids: Array.isArray(claimed.assigned_client_ids)
@@ -135,6 +137,7 @@ export async function resolveRealTeamUser(): Promise<TeamUser> {
         role,
         employment_type: invite?.employment_type ?? waiting?.employment_type ?? 'employee',
         timezone: invite?.timezone ?? waiting?.timezone ?? 'Australia/Melbourne',
+        ...(invite?.quality_reviewer ? { quality_reviewer: true } : {}),
         client_id: invite?.client_id ?? waiting?.client_id ?? null,
       },
       { onConflict: 'email' }

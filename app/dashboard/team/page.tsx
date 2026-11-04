@@ -179,6 +179,9 @@ export default function TeamPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...invite,
+          // "Super admin + quality checker" is the super admin role with the quality check on (5 Nov 2026)
+          role: invite.role === 'super_admin_qc' ? 'super_admin' : invite.role,
+          quality_reviewer: invite.role === 'super_admin_qc',
           client_id: invite.role === 'client' ? invite.client_id || null : null,
         }),
       })
@@ -349,9 +352,9 @@ export default function TeamPage() {
                   </TableCell>
                   <TableCell>
                     <div className="flex flex-wrap items-center gap-1">
-                      <Badge variant="outline" className={ROLE_STYLE[m.role] ?? ''}>{roleLabel(m.role)}</Badge>
+                      <Badge variant="outline" className={ROLE_STYLE[m.role] ?? ''}>{m.role === 'super_admin' && m.quality_reviewer ? 'Super admin + quality checker' : roleLabel(m.role)}</Badge>
                       {/* the two playbook hats sit beside the role, never inside it */}
-                      {m.quality_reviewer && <Badge variant="outline" className="bg-tint-green text-foreground border-accent-green/30">Quality reviewer</Badge>}
+                      {m.quality_reviewer && m.role !== 'super_admin' && <Badge variant="outline" className="bg-tint-green text-foreground border-accent-green/30">Quality reviewer</Badge>}
                       {m.ops_contact && <Badge variant="outline" className="bg-tint-amber text-foreground border-accent-amber/35">Ops contact</Badge>}
                       {m.colourist && <Badge variant="outline" className="bg-tint-amber text-foreground border-accent-amber/35">Colourist</Badge>}
                       {m.editors_lead && <Badge variant="outline" className="bg-tint-blue text-foreground border-accent-blue/25">Editors’ lead</Badge>}
@@ -473,6 +476,7 @@ export default function TeamPage() {
                   <SelectItem value="scheduler">Scheduler</SelectItem>
                   <SelectItem value="client">Client user</SelectItem>
                   <SelectItem value="super_admin">Super admin</SelectItem>
+                  <SelectItem value="super_admin_qc">Super admin + quality checker — full admin, and checks work</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -557,10 +561,14 @@ export default function TeamPage() {
             </div>
             <div className="grid gap-1.5">
               <Label>Role</Label>
-              <Select value={editDraft.role} onValueChange={v => v && setEditDraft(d => ({ ...d, role: v }))}>
+              <Select value={editDraft.role === 'super_admin' && editDraft.quality_reviewer ? 'super_admin_qc' : editDraft.role}
+                onValueChange={v => v && setEditDraft(d => (v === 'super_admin_qc'
+                  ? { ...d, role: 'super_admin', quality_reviewer: true }
+                  : { ...d, role: v, ...(d.role === 'super_admin' && d.quality_reviewer && v === 'super_admin' ? { quality_reviewer: false } : {}) }))}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="super_admin">Super admin</SelectItem>
+                  <SelectItem value="super_admin_qc">Super admin + quality checker — full admin, and checks work</SelectItem>
                   <SelectItem value="account_manager">Account manager</SelectItem>
                   <SelectItem value="quality_checker">Quality checker — passes work out of the quality check</SelectItem>
                   <SelectItem value="editor">Editor or designer</SelectItem>

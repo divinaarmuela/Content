@@ -1082,7 +1082,7 @@ export default function OverviewPage() {
           {/* THE QUALITY CHECKER'S DESK (13 Sep 2026): what waits on them —
               cards at Quality check, and plans asked of them — nothing
               about deciding, booking or leads */}
-          {!loading && role === 'quality_checker' && (
+          {!loading && (role === 'quality_checker' || (role === 'super_admin' && me?.quality_reviewer === true)) && (
             <>
               <Section title="Waiting on your quality check" action={actionFor(role as Role | null, 'Open the board', `${POST_APPROVAL_BOARD}?column=quality_check`)}>
                 <ItemRows items={qualityQueue} todayKey={todayKey} role={role as Role | null}

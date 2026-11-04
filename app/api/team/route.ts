@@ -177,6 +177,8 @@ export async function POST(req: Request) {
           client_id: body.client_id ?? null,
           assigned_client_ids: Array.isArray(body.assigned_client_ids) ? body.assigned_client_ids : [],
           invited_by: inviter.id,
+          // "Super admin + quality checker" (5 Nov 2026): the quality check comes with them
+          quality_reviewer: body.quality_reviewer === true && role !== 'client',
           status: 'pending',
         }) as unknown as TeamInvite
       } catch (e) {
