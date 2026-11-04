@@ -258,11 +258,11 @@ async function archivedSubject(input: Pick<NotifyInput, 'entityType' | 'entityId
   for (const at of rowsOfEmail(input.entityType, input.entityId)) {
     const row = await table<{ id: string } & Record<string, unknown>>(at.table as never).get(at.id).catch(() => null)
     if (!row) continue
-    rows.push(row)
+    rows.push({ ...row, __table: at.table })
     const itemId = at.table === 'content_items' ? null : (row.content_item_id ?? row.item_id ?? row.source_item_id)
     if (typeof itemId === 'string' && itemId) {
       const item = await table<{ id: string } & Record<string, unknown>>('content_items' as never).get(itemId).catch(() => null)
-      if (item) rows.push(item)
+      if (item) rows.push({ ...item, __table: 'content_items' })
     }
   }
   const client = clientId ? await table<{ id: string; status?: unknown }>('clients' as never).get(clientId).catch(() => null) : null

@@ -76,6 +76,10 @@ export function archivedReason(rows: readonly (Record<string, unknown> | null | 
   for (const r of rows) {
     if (r && r.archived_at) return 'archived'
     if (r && r.status === 'archived') return 'archived'
+    // DONE IS DONE (the owner, 4 Nov 2026: "if done editor no more notifications. strictly … same for shoots"):
+    // a card marked done, or a shoot closed, sends nothing more until someone takes it back
+    if (r && r.__table === 'content_items' && typeof r.done_at === 'string' && r.done_at) return 'card marked done'
+    if (r && r.__table === 'batches' && r.status === 'wrapped') return 'shoot done'
   }
   if (client?.status === 'archived') return 'client archived'
   return null
