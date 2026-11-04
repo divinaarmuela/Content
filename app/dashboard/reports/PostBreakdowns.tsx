@@ -21,7 +21,9 @@ const VERDICT_TONE: Record<Factor['verdict'], string> = {
   strong: 'border-accent-green/50 bg-tint-green', likely: 'border-accent-amber/50 bg-tint-amber', 'not supported': 'border-border bg-surface',
 }
 
-export default function PostBreakdowns({ raw, clientId, month, onChange }: {
+export default function PostBreakdowns({ raw, clientId, month, onChange, noButton = false }: {
+  /** Build report fills it; the section shows the answers without its own button */
+  noButton?: boolean
   raw: unknown
   clientId: string
   month: MonthKey
@@ -51,15 +53,15 @@ export default function PostBreakdowns({ raw, clientId, month, onChange }: {
           <p className="text-[13px] text-muted-foreground">Each post scored against this account’s usual: 50 is a normal post, 75 about twice it, 25 about half.</p>
         </div>
         {explained?.at && <span className="text-[13px] text-muted-foreground">Explained {new Date(explained.at).toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}</span>}
-        <Button onClick={() => void explain()} disabled={busy} className="h-10 gap-2 rounded-full">
+        {!noButton && <Button onClick={() => void explain()} disabled={busy} className="h-10 gap-2 rounded-full">
           <Sparkles className={`h-4 w-4 ${busy ? 'animate-pulse' : ''}`} aria-hidden />
           {busy ? 'Reading 90 days of posts…' : explained ? 'Explain again' : 'Explain the posts'}
-        </Button>
+        </Button>}
       </header>
 
       {!explained && !busy && (
         <p className="rounded-card border border-dashed border-border p-6 text-center text-[14px] text-muted-foreground">
-          Not explained yet. It reads the last 90 days of posts, so each one is compared with the account’s own normal.
+          {noButton ? 'Not explained yet. Build report explains the posts first: each one compared with the last 90 days of this account.' : 'Not explained yet. It reads the last 90 days of posts, so each one is compared with the account’s own normal.'}
         </p>
       )}
 

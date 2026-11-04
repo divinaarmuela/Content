@@ -124,13 +124,16 @@ export default function ReportsPage() {
           {data.platforms.map(p => (
             <div key={p.platform} className="flex flex-col gap-6">
               <PlatformSection p={p} month={data.month} running={state.kind === 'running'} />
-              {p.platform === 'instagram' && (
-                <PostBreakdowns raw={report?.posts_explained} clientId={clientId} month={month} onChange={r => setReport(r as Saved)} />
-              )}
             </div>
           ))}
           {data.audience && <AudienceSection a={data.audience} />}
-          {report && <Writer report={report} clientId={clientId} month={month} mayDelete={mayDelete} onChange={setReport} onDeleted={() => void load()} />}
+          {/* WHY THE POSTS WORKED, RIGHT ABOVE THE REPORT (the owner, 4 Nov 2026: "one button … make sure explain the
+              posts is shown as well near the report so it's nice and clear") — filled by Build report, no button of its own */}
+          {data.platforms.some(p => p.platform === 'instagram') && (
+            <PostBreakdowns raw={report?.posts_explained} clientId={clientId} month={month} onChange={r => setReport(r as Saved)} noButton />
+          )}
+          {report && <Writer report={report} clientId={clientId} month={month} mayDelete={mayDelete} onChange={setReport} onDeleted={() => void load()}
+            settled={state.kind === 'final'} settlesOn={state.settlesOn} />}
           <PrintReport data={data} report={report} clientName={clientName} />
         </>
       )}
@@ -316,8 +319,10 @@ function AudienceSection({ a }: { a: NonNullable<ReportData['audience']> }) {
 
 /* ── the written report ──────────────────────────────────────────────────── */
 
-function Writer({ report, clientId, month, mayDelete, onChange, onDeleted }: {
+function Writer({ report, clientId, month, mayDelete, onChange, onDeleted, settled, settlesOn }: {
   report: Saved; clientId: string; month: MonthKey; mayDelete: boolean; onChange: (r: Saved) => void; onDeleted: () => void
+  /** the month's numbers are complete (2 days after it ends) — building before that is allowed, but said */
+  settled: boolean; settlesOn: string
 }) {
   const [objective, setObjective] = useState(report.objective || 'Growth')
   const [notes, setNotes] = useState(report.notes ?? '')
@@ -345,6 +350,44 @@ function Writer({ report, clientId, month, mayDelete, onChange, onDeleted }: {
       onChange(j.report); setEditing(false)
       toast.success('Report written — read it through, edit, and tick the checks')
     } catch (e) { toast.error(e instanceof Error ? e.message : 'Could not write the report') } finally { setWriting(false) }
+  }
+  /**
+   * BUILD REPORT, ONE PRESS (the owner, 4 Nov 2026: "how to build a better system" — option 1). The three steps that
+   * had to be pressed in the right order, by hand: read the figures fresh, explain the posts, write the report. Each
+   * step's answer is kept as it lands; a step that fails is said and the rest still run where they can — the posts
+   * not explained (no Instagram, too few posts) still leaves a report written from the figures.
+   */
+  const [building, setBuilding] = useState<string | null>(null)
+  const build = async () => {
+    setAsking(null)
+    const call = async (url: string, init?: RequestInit) => {
+      const r = await fetch(url, init)
+      const j = await r.json().catch(() => ({}))
+      return { ok: r.ok, j }
+    }
+    const notesText = notes
+    const problems: string[] = []
+    try {
+      setBuilding('Reading the figures fresh…')
+      const fresh = await call(`/api/reports/monthly?client_id=${encodeURIComponent(clientId)}&month=${month}&refresh=1`)
+      if (!fresh.ok) throw new Error(fresh.j.error ?? 'Could not read the figures')
+      if (fresh.j.report) onChange(fresh.j.report)
+
+      setBuilding('Explaining the posts — reading 90 days of Instagram…')
+      const post = (body: Record<string, unknown>) => call('/api/reports/monthly', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ client_id: clientId, month, ...body }) })
+      const ex = await post({ action: 'explain' })
+      if (ex.ok) { if (ex.j.report) onChange(ex.j.report) } else problems.push(`posts not explained (${ex.j.error ?? 'failed'})`)
+
+      setBuilding('Writing the report — a minute or two…')
+      const gen = await post({ action: 'generate', objective, notes: notesText })
+      if (!gen.ok) throw new Error(gen.j.error ?? 'Could not write the report')
+      onChange(gen.j.report); setEditing(false)
+      toast.success(problems.length ? `Report built — ${problems.join('; ')}. Read it through and tick the checks.` : 'Report built — figures fresh, posts explained, report written. Read it through and tick the checks.')
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not build the report')
+    } finally {
+      setBuilding(null)
+    }
   }
   const saveBody = async () => {
     setSaving(true)
@@ -382,10 +425,15 @@ function Writer({ report, clientId, month, mayDelete, onChange, onDeleted }: {
         </label>
       </div>
       <div className="flex flex-wrap items-center gap-3">
-        <Button onClick={() => (report.body ? setAsking('regen') : void generate())} disabled={writing} className="h-11 gap-2 rounded-full px-5">
-          <Sparkles className={`h-4 w-4 ${writing ? 'animate-pulse' : ''}`} aria-hidden /> {writing ? 'Writing the report…' : report.body ? 'Generate again' : 'Generate report'}
+        <Button onClick={() => (report.body ? setAsking('regen') : void build())} disabled={writing || !!building} className="h-11 gap-2 rounded-full px-5">
+          <Sparkles className={`h-4 w-4 ${building ? 'animate-pulse' : ''}`} aria-hidden /> {building ? 'Building…' : report.body ? 'Build again' : 'Build report'}
         </Button>
-        {writing && <span className="text-[13px] text-muted-foreground">The AI is reading the month — this takes a minute or two.</span>}
+        {building && <span className="text-[13px] text-muted-foreground" role="status">{building}</span>}
+        {!building && !settled && (
+          <span className="text-[13px] text-muted-foreground">
+            This month’s numbers are not final until {new Date(`${settlesOn}T00:00:00`).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })} — build again then for the final report.
+          </span>
+        )}
       </div>
 
       {report.body ? (
@@ -434,7 +482,7 @@ function Writer({ report, clientId, month, mayDelete, onChange, onDeleted }: {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Keep it</AlertDialogCancel>
-            <AlertDialogAction onClick={() => void (asking === 'delete' ? remove() : generate())}>{asking === 'delete' ? 'Delete' : 'Write again'}</AlertDialogAction>
+            <AlertDialogAction onClick={() => void (asking === 'delete' ? remove() : build())}>{asking === 'delete' ? 'Delete' : 'Build again'}</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
