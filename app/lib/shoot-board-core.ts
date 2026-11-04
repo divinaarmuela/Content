@@ -164,3 +164,28 @@ export function freeSpot(want: { x: number; y: number }, size: { w: number; h: n
   }
   return start
 }
+
+/**
+ * DROP CARDS INTO A BOARD (Jasmine's request, 4 Nov 2026: "drag-and-drop
+ * notes into folders on the board, and select multiple at once").
+ *
+ * The cards keep their layout relative to each other and land to the right of
+ * whatever the board already holds, so nothing inside is covered. Null when
+ * the move is impossible: a board dropped into itself or into one of its own
+ * boards would make a loop and vanish from every view.
+ */
+export function moveIntoBoard<T extends BoardCard & { x: number; y: number; w: number; h?: number }>(
+  cards: readonly T[], ids: readonly string[], boardId: string, gap = 48,
+): T[] | null {
+  const moving = cards.filter(c => ids.includes(c.id) && c.id !== boardId)
+  if (moving.length === 0) return null
+  for (const m of moving) {
+    if (m.kind === 'board' && (m.id === boardId || descendantsOf(cards, m.id).includes(boardId))) return null
+  }
+  const inside = childrenOf(cards, boardId).filter(c => !ids.includes(c.id) && c.kind !== 'arrow')
+  const gx = Math.min(...moving.map(c => c.x))
+  const gy = Math.min(...moving.map(c => c.y))
+  const ox = inside.length ? Math.max(...inside.map(c => c.x + (c.w || 200))) + gap : 0
+  const oy = inside.length ? Math.min(...inside.map(c => c.y)) : 0
+  return moving.map(c => ({ ...c, parent: boardId, x: Math.round(ox + (c.x - gx)), y: Math.round(oy + (c.y - gy)) }))
+}

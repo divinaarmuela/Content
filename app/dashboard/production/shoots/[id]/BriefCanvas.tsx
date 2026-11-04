@@ -37,7 +37,7 @@ import { cardLinkOf, opensOnClick } from '../../../../lib/canvas-link-open-core'
 import { toggleBullets, toggleHighlight } from '../../../../lib/note-format-core'
 import { COLUMN_COLOURS, NEW_COLUMN, columnAt, dropIndex, fitsInColumn, placeInColumn, takeOutOfColumn, type ColumnBox } from '../../../../lib/canvas-column-core'
 import {
-  boardTrail, childrenOf, deleteWarning, descendantsOf, freeSpot, insideLabel, stillThere, type Box,
+  boardTrail, childrenOf, deleteWarning, descendantsOf, freeSpot, insideLabel, moveIntoBoard, stillThere, type Box,
 } from '../../../../lib/shoot-board-core'
 
 type Camera = { x: number; y: number; s: number }
@@ -153,6 +153,8 @@ export default function BriefCanvas({
   const [, forceRender] = useState(0)
   const [scalePct, setScalePct] = useState(100)
   const [selected, setSelected] = useState<string | null>(null)
+  /** MORE THAN ONE CARD (4 Nov 2026): Shift- or Cmd-click adds a card; dragging any of them moves them all */
+  const [picked, setPicked] = useState<ReadonlySet<string>>(() => new Set())
   /** The one card allowed to be a live player.
    *
    *  One, deliberately. A board of ten embedded Reels is ten players, and the
@@ -432,6 +434,11 @@ export default function BriefCanvas({
     columns: ColumnBox[]
     /** the column the card is over now, outlined while it is */
     over: HTMLElement | null
+    /** the other picked cards, moving with this one */
+    group: { id: string; el: HTMLElement; ox: number; oy: number }[]
+    /** every board tile it could be dropped into, and the one under the pointer now */
+    boards: ColumnBox[]
+    overBoard: { id: string; el: HTMLElement } | null
   } | null>(null)
   /* ── corner resize: both axes. `oh` is the height MEASURED at pointerdown
    *  (a card without an h of its own is as tall as its content), so a drag
@@ -529,13 +536,24 @@ export default function BriefCanvas({
       dragState.current = {
         id: child.id, host: card.id, startX: e.clientX, startY: e.clientY,
         ox: at.x, oy: at.y, moved: false, el: childEl, half: { w: 0, h: 0 }, ends: [], raf: 0, nx: at.x, ny: at.y,
-        columns, over: null,
+        columns, over: null, group: [], boards: [], overBoard: null,
       }
     } else {
+      const group = picked.has(card.id) && picked.size > 1
+        ? visible.filter(c => picked.has(c.id) && c.id !== card.id).flatMap(c => {
+            const other = viewportRef.current?.querySelector<HTMLElement>(`[data-cid="${c.id}"]`)
+            return other ? [{ id: c.id, el: other, ox: c.x, oy: c.y }] : []
+          })
+        : []
+      const moving = new Set([card.id, ...group.map(g => g.id)])
+      const boards: ColumnBox[] = visible.filter(c => c.kind === 'board' && !moving.has(c.id)).map(c => {
+        const box = viewportRef.current?.querySelector<HTMLElement>(`[data-cid="${c.id}"]`)
+        return { id: c.id, x: c.x, y: c.y, w: box?.offsetWidth || c.w, h: box?.offsetHeight || 120, z: c.z }
+      })
       dragState.current = {
         id: card.id, startX: e.clientX, startY: e.clientY,
         ox: card.x, oy: card.y, moved: false, el, half, ends, raf: 0, nx: card.x, ny: card.y,
-        columns, over: null,
+        columns, over: null, group, boards, overBoard: null,
       }
     }
     try { el.setPointerCapture(e.pointerId) } catch { /* see startResize */ }
@@ -563,6 +581,7 @@ export default function BriefCanvas({
     if (!d) return
     d.raf = 0
     if (d.el) d.el.style.transform = dragTransform(d)
+    for (const g of d.group) g.el.style.transform = `translate(${g.ox + d.nx - d.ox}px, ${g.oy + d.ny - d.oy}px)`
     const cx = d.nx + d.half.w
     const cy = d.ny + d.half.h
     for (const { line, end } of d.ends) {
@@ -607,6 +626,15 @@ export default function BriefCanvas({
     d.nx = d.ox + dx / s
     d.ny = d.oy + dy / s
     if (d.columns.length) markColumn(d, e.clientX, e.clientY)
+    if (d.boards.length) {
+      const id = columnAt(toWorld(e.clientX, e.clientY), d.boards, d.id)
+      if (id !== (d.overBoard?.id ?? null)) {
+        if (d.overBoard) { d.overBoard.el.style.outline = ''; d.overBoard.el.style.outlineOffset = '' }
+        const el = id ? viewportRef.current?.querySelector<HTMLElement>(`[data-cid="${id}"]`) ?? null : null
+        if (el) { el.style.outline = '3px solid rgb(59 130 246 / 0.8)'; el.style.outlineOffset = '4px' }
+        d.overBoard = id && el ? { id, el } : null
+      }
+    }
     if (!d.raf) d.raf = requestAnimationFrame(paintDrag)
   }
 
@@ -619,6 +647,8 @@ export default function BriefCanvas({
       if (d.raf) cancelAnimationFrame(d.raf)
       if (d.el) { d.el.style.willChange = ''; d.el.style.zIndex = ''; d.el.style.transform = d.host ? '' : `translate(${d.ox}px, ${d.oy}px)` }
       if (d.over) d.over.style.outline = ''
+      if (d.overBoard) d.overBoard.el.style.outline = ''
+      for (const g of d.group) g.el.style.transform = `translate(${g.ox}px, ${g.oy}px)`
       const bar = d.el?.querySelector<HTMLElement>('[data-card-toolbar]')
       if (bar) bar.style.display = ''
     }
@@ -651,6 +681,7 @@ export default function BriefCanvas({
     dragState.current = null
     if (d.raf) cancelAnimationFrame(d.raf)
     if (d.over) d.over.style.outline = ''
+    if (d.overBoard) { d.overBoard.el.style.outline = ''; d.overBoard.el.style.outlineOffset = '' }
     // a plain press KEEPS the lift: clearing it here and waiting for the
     // selection render to put it back left the card behind its neighbours
     // whenever it was already the selected one (no render came) — the owner
@@ -683,14 +714,31 @@ export default function BriefCanvas({
       upsertLocal(out); persist([out]); setSelected(out.id)
       return
     }
-    const next: CanvasCard = {
-      ...card,
-      x: snap(d.ox + (e.clientX - d.startX) / s),
-      y: snap(d.oy + (e.clientY - d.startY) / s),
-      z: Math.max(0, ...cards.map(c => c.z)) + 1,
+    // INTO A BOARD (4 Nov 2026): dropped on a board tile, the card and every card picked with it go inside
+    const intoBoard = d.overBoard?.id ?? null
+    if (intoBoard) {
+      const ids = [card.id, ...d.group.map(g => g.id)]
+      const moved = moveIntoBoard(cards, ids, intoBoard)
+      if (moved) {
+        for (const c of moved) upsertLocal(c)
+        persist(moved)
+        setPicked(new Set()); setSelected(null)
+        const name = cards.find(c => c.id === intoBoard)?.name || 'the board'
+        toast(`${moved.length === 1 ? '1 card' : `${moved.length} cards`} moved into ${name}`)
+        return
+      }
+      toast.error('A board cannot go inside itself')
     }
-    upsertLocal(next)
-    persist([next])
+    const ddx = snap(d.ox + (e.clientX - d.startX) / s) - card.x
+    const ddy = snap(d.oy + (e.clientY - d.startY) / s) - card.y
+    const top = Math.max(0, ...cards.map(c => c.z)) + 1
+    const next: CanvasCard = { ...card, x: card.x + ddx, y: card.y + ddy, z: top }
+    const others = d.group.flatMap((g, i) => {
+      const c = cards.find(x => x.id === g.id)
+      return c ? [{ ...c, x: c.x + ddx, y: c.y + ddy, z: top + 1 + i }] : []
+    })
+    for (const c of [next, ...others]) upsertLocal(c)
+    persist([next, ...others])
   }
 
   /* ── resizing: the same three handlers behind every handle ── */
@@ -1222,6 +1270,7 @@ export default function BriefCanvas({
       if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable) return
       if (e.key === 'Escape') {
         if (connectFrom) setConnectFrom(null)
+        else if (picked.size) setPicked(new Set())
         else if (editing) setEditing(null)
         else if (selected) setSelected(null)
         else if (board) openBoard(trail[trail.length - 2]?.id ?? null) // one board up
@@ -1846,7 +1895,8 @@ export default function BriefCanvas({
               tabIndex={0}
               aria-label={card.kind === 'board' ? `Board: ${card.name ?? 'Board'}` : `${card.kind}${card.text ? `: ${card.text.slice(0, 40)}` : ''}`}
               className={`absolute left-0 top-0 outline-none ${fontOf(card) ? FONT_CLASS : ''} ${viewOnly ? '' : 'cursor-grab active:cursor-grabbing'} ${
-                selected === card.id ? 'rounded-inner ring-2 ring-accent-blue/25 ring-offset-2 ring-offset-background' : ''
+                picked.has(card.id) ? 'rounded-inner ring-2 ring-accent-blue ring-offset-2 ring-offset-background'
+                : selected === card.id ? 'rounded-inner ring-2 ring-accent-blue/25 ring-offset-2 ring-offset-background' : ''
               }`}
               style={{ transform: `translate(${card.x}px, ${card.y}px)`, ...fontVars(card) }}
               onPointerDown={e => viewOnly ? undefined : onCardPointerDown(e, card)}
@@ -1868,6 +1918,16 @@ export default function BriefCanvas({
                   return
                 }
                 if (connectFrom === '') { setConnectFrom(card.id); return }
+                if ((e.shiftKey || e.metaKey || e.ctrlKey) && connectFrom === null) {
+                  setPicked(prev => {
+                    const next = new Set(prev)
+                    if (selected && next.size === 0) next.add(selected)
+                    if (next.has(card.id)) next.delete(card.id); else next.add(card.id)
+                    return next
+                  })
+                  return
+                }
+                if (picked.size && !picked.has(card.id)) setPicked(new Set())
                 if (connectFrom && connectFrom !== card.id) {
                   connectCards(connectFrom, card.id)
                   setConnectFrom(null)
