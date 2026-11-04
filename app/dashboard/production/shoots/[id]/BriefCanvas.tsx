@@ -498,6 +498,8 @@ export default function BriefCanvas({
     if (viewOnly || editing === card.id) return
     if (e.button !== 0) return
     e.stopPropagation()
+    // Shift/Cmd-click picks cards; without this the browser also selects the page's text
+    if (e.shiftKey || e.metaKey || e.ctrlKey) e.preventDefault()
     const el = (e.currentTarget as HTMLElement)
     // the pressed card goes on top NOW, in the press — the layout effect
     // that lifts the selected card runs a render later, and for that moment
@@ -1921,7 +1923,9 @@ export default function BriefCanvas({
                 if ((e.shiftKey || e.metaKey || e.ctrlKey) && connectFrom === null) {
                   setPicked(prev => {
                     const next = new Set(prev)
-                    if (selected && next.size === 0) next.add(selected)
+                    // the card selected before this Shift-click joins the pick — never this card itself, which the
+                    // press has just selected and the toggle below would at once take back out (live test, 4 Nov 2026)
+                    if (selected && selected !== card.id && next.size === 0) next.add(selected)
                     if (next.has(card.id)) next.delete(card.id); else next.add(card.id)
                     return next
                   })
