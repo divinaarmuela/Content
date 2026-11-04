@@ -119,6 +119,9 @@ export default function BriefCanvas({
   const [dropping, setDropping] = useState(false)
   const dragHasFiles = (e: React.DragEvent) => Array.from(e.dataTransfer?.types ?? []).includes('Files')
   const visible = useMemo(() => childrenOf(cards, board), [cards, board])
+  // what is drawn right now — the cards on THIS board, not its sub-boards (the keep-in-view rule reads it)
+  const visibleRef = useRef(visible)
+  visibleRef.current = visible
   const trail = useMemo(() => boardTrail(cards, board), [cards, board])
   /** the new-board / rename dialog: the tile it is for, or null for a new one */
   const [boardDialog, setBoardDialog] = useState<{ card: CanvasCard | null } | null>(null)
@@ -240,7 +243,7 @@ export default function BriefCanvas({
     // the brief glided off screen. Some of the cards always stay in sight.
     const vp = viewportRef.current
     if (vp) {
-      const kept = keepAnyInView(camRef.current, cardBoxes(cardsRef.current), { w: vp.clientWidth, h: vp.clientHeight })
+      const kept = keepAnyInView(camRef.current, cardBoxes(visibleRef.current), { w: vp.clientWidth, h: vp.clientHeight })
       camRef.current.x = kept.x
       camRef.current.y = kept.y
     }

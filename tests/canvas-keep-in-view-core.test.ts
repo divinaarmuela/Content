@@ -41,3 +41,9 @@ describe('one stray card cannot stretch the board', () => {
     expect(keepAnyInView(cam, boxes, vp)).toBe(cam)
   })
 })
+
+describe('arrows do not count as something on screen', () => {
+  it('an arrow alone in view is not enough', () => {
+    expect(cardBoxes([{ x: 0, y: 0, w: 3000, h: 10, kind: 'arrow' }, { x: 0, y: 0, w: 100, h: 100, kind: 'note' }])).toEqual([{ x: 0, y: 0, w: 100, h: 100 }])
+  })
+})

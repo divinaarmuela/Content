@@ -47,8 +47,10 @@ export function keepInView(cam: Cam, box: Box | null, viewport: { w: number; h: 
 }
 
 /** every card's own world box */
-export function cardBoxes(cards: readonly { x: number; y: number; w?: number | null; h?: number | null }[]): Box[] {
-  return cards.map(c => contentBox([c])).filter((b): b is Box => b !== null)
+export function cardBoxes(cards: readonly { x: number; y: number; w?: number | null; h?: number | null; kind?: string }[]): Box[] {
+  // an arrow is a line, not a card: its box is mostly empty space, and keeping
+  // it "in view" parked the brief on a screen of nothing (4 Nov 2026, live)
+  return cards.filter(c => c.kind !== 'arrow').map(c => contentBox([c])).filter((b): b is Box => b !== null)
 }
 
 /**
