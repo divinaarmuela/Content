@@ -564,7 +564,14 @@ export type MoveInput = {
   clientIds?: readonly string[]
   /** the mover is a quality checker (role or hat) — may take a plan out of Quality review */
   reviewer?: boolean
+  /** WE DECIDE (Manal, 4 Nov 2026: "confirmed and share with team buttons so we can manually just send it off if
+   *  we are the ones in charge"): an account manager or super admin shares or confirms without the checks —
+   *  no editor named yet, a part left blank, the client not answering. Who and when is still stamped. */
+  force?: boolean
 }
+
+/** Who may share or confirm a shoot past the checks, and press Done. */
+export const mayDecideShoot = (role: string | null | undefined) => role === 'super_admin' || role === 'account_manager'
 
 export type MoveResult =
   | { ok: true; patch: Record<string, unknown>; label: string; askReview?: true }
@@ -632,6 +639,9 @@ export function stageMove(b: SopShoot, to: ShootStage, input: MoveInput, now: st
 
   switch (to) {
     case 'shared': {
+      if (input.force && mayDecideShoot(input.role)) {
+        return { ok: true, patch: { brief_shared_at: now, brief_shared_by: actorId }, label: 'Plan shared with the team — sent off by hand' }
+      }
       // A GATED PLAN IS SHARED ONLY ONCE THE QUALITY CHECKER PASSED IT (the
       // owner, 13 Sep 2026: "share plan with team only available once the
       // quality checker has passed it — make sure it's that way")
@@ -645,6 +655,17 @@ export function stageMove(b: SopShoot, to: ShootStage, input: MoveInput, now: st
       return { ok: true, patch: { brief_shared_at: now, brief_shared_by: actorId }, label: 'Plan shared with the team' }
     }
     case 'confirmed': {
+      if (input.force && mayDecideShoot(input.role)) {
+        return {
+          ok: true,
+          patch: {
+            go_at: now, go_by: actorId,
+            ...(b.brief_shared_at ? {} : { brief_shared_at: now, brief_shared_by: actorId }),
+            ...bookingPatch(b, now, actorId),
+          },
+          label: 'Shoot confirmed by hand — we decided',
+        }
+      }
       if (from === 'drafting' || (from === 'quality_review' && !b.brief_shared_at)) return { ok: false, reason: 'Share the plan with the team first' }
       const go = goReady(b, { ...input.checklist, role: input.role, overrideReason: input.overrideReason, planReview: input.planReview })
       if (!go.ok) return { ok: false, reason: go.reasons[0], needsOverride: go.needsOverride }

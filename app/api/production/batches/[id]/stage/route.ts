@@ -62,7 +62,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     // checker passed a plan written or held by anyone but a super admin
     const roleOf = async (uid: string | null | undefined) => uid ? (await table<TeamUserRow>('team_users').get(uid))?.role ?? null : null
     const planReview = { required: planReviewRequired(batch, { createdByRole: await roleOf(batch.created_by), ownerRole: await roleOf(batch.owner_id) }) }
-    const move = stageMove(batch, to, { role: user.role, today, checklist: { itemCount }, overrideReason, clientIds: me.clientIds, planReview, reviewer: isQualityReviewer(user) }, now, user.id)
+    const force = body.force === true
+    const move = stageMove(batch, to, { role: user.role, today, checklist: { itemCount }, overrideReason, clientIds: me.clientIds, planReview, reviewer: isQualityReviewer(user), force }, now, user.id)
     // NO BRIEF, NO SHOOT: a plan shared late is refused; the sentence says a
     // super admin can go ahead with a reason, and this is the request that
     // was missing one — a 400, not a rule they can never satisfy

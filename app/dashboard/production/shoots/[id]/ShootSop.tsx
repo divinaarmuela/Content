@@ -359,7 +359,7 @@ export function PlanParts({ batch, itemCount, booked, onPatch, onShots, team }: 
 
 /* ── where it is, and the one next move ────────────────────────────────── */
 
-export function WherePanel({ batch, role, viewerId, today, itemCount, busy, nameOf, clientEmail, onPatch, onMove, onShareClient, onAskReview, team, planReviewRequired, viewerIsReviewer, onPlanReview, portalToken = null }: {
+export function WherePanel({ batch, role, viewerId, today, itemCount, busy, nameOf, clientEmail, onPatch, onMove, onDecide, onShareClient, onAskReview, team, planReviewRequired, viewerIsReviewer, onPlanReview, portalToken = null }: {
   batch: ShootSopBatch
   /** the client's portal token — the links to copy once the plan is on it */
   portalToken?: string | null
@@ -372,7 +372,8 @@ export function WherePanel({ batch, role, viewerId, today, itemCount, busy, name
   /** the client's email on file — null means the share cannot email anyone */
   clientEmail: string | null
   onPatch: (field: string, value: unknown) => Promise<boolean>
-  onMove: (to: ShootStage, opts?: { reason?: string }) => Promise<void>
+  onMove: (to: ShootStage, opts?: { reason?: string; force?: boolean }) => Promise<void>
+  onDecide?: (action: 'client_approved' | 'done' | 'reopen') => Promise<void>
   onShareClient: () => Promise<void>
   /** "Ask for a review": the ids to ask, or [] for the account managers on the client */
   onAskReview?: (to: string[]) => Promise<void>
@@ -587,6 +588,45 @@ export function WherePanel({ batch, role, viewerId, today, itemCount, busy, name
             </Button>
             {!check.ok && <p className="text-[12px] text-muted-foreground" role="status">{check.reason}</p>}
             {check.ok && stage === 'shared' && !go.ok && <p className="text-[12px] text-muted-foreground">{go.reasons[0]}</p>}
+          </div>
+        )}
+        {/* WE DECIDE (Manal, 4 Nov 2026: "some clients approve but don't tick it off", "some clients want us to
+            decide", "press done and it disappears as completed"). The checks above stay for everyone else; an
+            account manager or super admin can send it off by hand. Every press is stamped with who and when. */}
+        {onDecide && (role === 'account_manager' || role === 'super_admin') && !footageOnly && (
+          <div className="flex flex-col gap-2 rounded-inner border border-border bg-surface p-3" data-we-decide>
+            <p className="text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">We decide</p>
+            {batch.status === 'wrapped' ? (
+              <Button variant="outline" className="h-11 rounded-full" disabled={busy} onClick={() => void onDecide('reopen')}>
+                Open this shoot again
+              </Button>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {(batch.client_approval_needed === true || batch.shared_with_client === true) && batch.client_decision !== 'approved' && (
+                  <Button variant="outline" className="h-11 rounded-full" disabled={busy} onClick={() => void onDecide('client_approved')}>
+                    Client approved — mark it ourselves
+                  </Button>
+                )}
+                {!batch.brief_shared_at && (
+                  <Button variant="outline" className="h-11 rounded-full" disabled={busy} onClick={() => void onMove('shared', { force: true })}>
+                    Share with the team now
+                  </Button>
+                )}
+                {!batch.go_at && (
+                  <Button variant="outline" className="h-11 rounded-full" disabled={busy} onClick={() => void onMove('confirmed', { force: true })}>
+                    Confirm now — we decided
+                  </Button>
+                )}
+                <Button className="h-11 rounded-full" disabled={busy} onClick={() => void onDecide('done')}>
+                  Done — close and archive
+                </Button>
+              </div>
+            )}
+            <p className="text-[12px] text-muted-foreground">
+              {batch.status === 'wrapped'
+                ? 'This shoot is done and archived. Opening it again puts it back on the Shoots page.'
+                : 'Skips the checks. Done takes it off the Shoots page into Archive and stops every reminder.'}
+            </p>
           </div>
         )}
         {stage === 'footage_handed' && !footageOnly && (

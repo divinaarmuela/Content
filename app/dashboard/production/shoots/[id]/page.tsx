@@ -199,12 +199,31 @@ export default function ShootPage({ params }: { params: Promise<{ id: string }> 
   }
 
   /** a move along the playbook's timeline — Share, Go, Reminder, Footage is in */
-  const moveStage = async (to: ShootStage, opts?: { reason?: string }) => {
+  /** WE DECIDE (Manal, 4 Nov 2026): tick the client's approval for them, or close the shoot as done */
+  const decide = async (action: 'client_approved' | 'done' | 'reopen') => {
+    setBusy(`decide:${action}`)
+    try {
+      const res = await fetch(`/api/production/batches/${id}/decide`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json.error ?? 'Could not do that')
+      toast.success(action === 'client_approved'
+        ? (json.shared ? 'Marked approved — the plan went to the team' : 'Marked approved for the client')
+        : action === 'done' ? 'Done — closed and moved to Archive. No more reminders.' : 'Opened again')
+      void load()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not do that')
+    } finally {
+      setBusy(null)
+    }
+  }
+  const moveStage = async (to: ShootStage, opts?: { reason?: string; force?: boolean }) => {
     setBusy(`stage:${to}`)
     try {
       const res = await fetch(`/api/production/batches/${id}/stage`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to, ...(opts?.reason ? { reason: opts.reason } : {}) }),
+        body: JSON.stringify({ to, ...(opts?.reason ? { reason: opts.reason } : {}), ...(opts?.force ? { force: true } : {}) }),
       })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(json.error ?? 'Could not move it')
@@ -502,7 +521,7 @@ export default function ShootPage({ params }: { params: Promise<{ id: string }> 
           {today && (
             <WherePanel batch={batch} role={role as never} viewerId={viewerId} today={today}
               itemCount={deliverableItems.length} busy={busy !== null} nameOf={nameOf} clientEmail={clientEmail}
-              onPatch={patchThenLoad} onMove={moveStage} onShareClient={shareWithClient} onAskReview={askReview} team={team}
+              onPatch={patchThenLoad} onMove={moveStage} onDecide={decide} onShareClient={shareWithClient} onAskReview={askReview} team={team}
               planReviewRequired={planReviewRequired} viewerIsReviewer={viewerIsReviewer} onPlanReview={planReview}
               portalToken={portalToken} />
           )}
