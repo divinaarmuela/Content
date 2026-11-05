@@ -252,7 +252,12 @@ function Writer({ report, clientId, month, mayDelete, onChange, onDeleted, settl
    * not explained (no Instagram, too few posts) still leaves a report written from the figures.
    */
   const [building, setBuilding] = useState<string | null>(null)
+  /** THE BUILD, STEP BY STEP (the owner, 5 Nov 2026: "make sure the loading shows nicely the status when generating") */
+  const [steps, setSteps] = useState<BuildStep[] | null>(null)
+  const mark = (i: number, state: BuildStep['state'], note?: string) =>
+    setSteps(cur => cur && cur.map((s, k) => (k === i ? { ...s, state, note: note ?? s.note, ...(state === 'run' ? { from: Date.now() } : { to: Date.now() }) } : s)))
   const build = async () => {
+    setSteps(BUILD_STEPS.map(s => ({ ...s, state: 'wait' as const })))
     setAsking(null)
     const call = async (url: string, init?: RequestInit) => {
       const r = await fetch(url, init)
@@ -262,23 +267,27 @@ function Writer({ report, clientId, month, mayDelete, onChange, onDeleted, settl
     const notesText = notes
     const problems: string[] = []
     try {
-      setBuilding('Reading the figures fresh…')
+      setBuilding('Reading the figures fresh…'); mark(0, 'run')
       const fresh = await call(`/api/reports/monthly?client_id=${encodeURIComponent(clientId)}&month=${month}&refresh=1`)
       if (!fresh.ok) throw new Error(fresh.j.error ?? 'Could not read the figures')
       if (fresh.j.report) onChange(fresh.j.report)
+      mark(0, 'done')
 
-      setBuilding('Explaining the posts — reading 90 days of Instagram…')
+      setBuilding('Explaining the posts — reading 90 days of Instagram…'); mark(1, 'run')
       const post = (body: Record<string, unknown>) => call('/api/reports/monthly', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ client_id: clientId, month, ...body }) })
       const ex = await post({ action: 'explain' })
-      if (ex.ok) { if (ex.j.report) onChange(ex.j.report) } else problems.push(`posts not explained (${ex.j.error ?? 'failed'})`)
+      if (ex.ok) { if (ex.j.report) onChange(ex.j.report); mark(1, 'done') } else { problems.push(`posts not explained (${ex.j.error ?? 'failed'})`); mark(1, 'skip', ex.j.error ?? 'Could not explain them — the report is still written') }
 
-      setBuilding('Writing the report — a minute or two…')
+      setBuilding('Writing the report — a minute or two…'); mark(2, 'run')
       const gen = await post({ action: 'generate', objective, notes: notesText })
       if (!gen.ok) throw new Error(gen.j.error ?? 'Could not write the report')
+      mark(2, 'done')
       onChange(gen.j.report); setEditing(false)
+      setTimeout(() => setSteps(null), 8000)
       toast.success(problems.length ? `Report built — ${problems.join('; ')}. Read it through and tick the checks.` : 'Report built — figures fresh, posts explained, report written. Read it through and tick the checks.')
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Could not build the report')
+      setSteps(cur => cur && cur.map(s => (s.state === 'run' ? { ...s, state: 'fail' as const, to: Date.now(), note: e instanceof Error ? e.message : 'Failed' } : s)))
     } finally {
       setBuilding(null)
     }
@@ -322,13 +331,14 @@ function Writer({ report, clientId, month, mayDelete, onChange, onDeleted, settl
         <Button onClick={() => (candidates.length ? setPicking(true) : report.body ? setAsking('regen') : void build())} disabled={writing || !!building} className="h-11 gap-2 rounded-full px-5">
           <Sparkles className={`h-4 w-4 ${building ? 'animate-pulse' : ''}`} aria-hidden /> {building ? 'Building…' : report.body ? 'Build again' : 'Build report'}
         </Button>
-        {building && <span className="text-[13px] text-muted-foreground" role="status">{building}</span>}
         {!building && !settled && (
           <span className="text-[13px] text-muted-foreground">
             This month’s numbers are not final until {new Date(`${settlesOn}T00:00:00`).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })} — build again then for the final report.
           </span>
         )}
       </div>
+
+      {steps && <BuildProgress steps={steps} />}
 
       {report.body ? (
         <>
@@ -631,5 +641,58 @@ function HowItWorks() {
       </DialogContent>
     </Dialog>
     </>
+  )
+}
+
+/* ── BUILD REPORT, STEP BY STEP ─────────────────────────────────────────── */
+type BuildStep = { label: string; detail: string; state: 'wait' | 'run' | 'done' | 'skip' | 'fail'; from?: number; to?: number; note?: string }
+const BUILD_STEPS: Omit<BuildStep, 'state'>[] = [
+  { label: 'Read the figures fresh', detail: 'Followers, views, reach and every post, from the client’s accounts' },
+  { label: 'Explain the posts', detail: 'Each ticked post compared with the last 90 days — about a minute' },
+  { label: 'Write the report', detail: 'The AI writes it from all of the above — a minute or two' },
+]
+
+function BuildProgress({ steps }: { steps: BuildStep[] }) {
+  // a clock, so a long step is seen to be moving
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t) }, [])
+  const secs = (s: BuildStep) => (s.from ? Math.max(0, Math.round(((s.to ?? now) - s.from) / 1000)) : null)
+  const clock = (n: number | null) => (n == null ? '' : n < 60 ? `${n}s` : `${Math.floor(n / 60)}m ${String(n % 60).padStart(2, '0')}s`)
+  const at = (ms?: number) => (ms ? new Date(ms).toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit' }) : '')
+  const done = steps.filter(s => s.state === 'done' || s.state === 'skip').length
+  const failed = steps.some(s => s.state === 'fail')
+  const finished = done === steps.length
+  return (
+    <div className="flex flex-col gap-3 rounded-inner border border-border bg-background p-4" role="status" aria-live="polite">
+      <div className="flex items-center gap-3">
+        <p className="text-[15px] font-semibold">{failed ? 'The build stopped' : finished ? 'Report built' : 'Building the report…'}</p>
+        <span className="ml-auto text-[13px] tabular-nums text-muted-foreground">{done} of {steps.length} done</span>
+      </div>
+      <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+        <div className={`h-full rounded-full transition-all duration-700 ${failed ? 'bg-accent-red' : 'bg-foreground'}`}
+          style={{ width: `${Math.max(4, ((done + (steps.some(s => s.state === 'run') ? 0.5 : 0)) / steps.length) * 100)}%` }} />
+      </div>
+      <ol className="flex flex-col gap-1">
+        {steps.map((s, i) => (
+          <li key={s.label} className={`flex items-start gap-3 rounded-inner px-2 py-2 ${s.state === 'run' ? 'bg-muted/60' : ''}`}>
+            <span className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[12px] font-bold ${
+              s.state === 'done' ? 'bg-accent-green text-white'
+                : s.state === 'fail' ? 'bg-accent-red text-white'
+                : s.state === 'skip' ? 'bg-tint-amber text-foreground'
+                : s.state === 'run' ? 'border-2 border-foreground border-t-transparent animate-spin'
+                : 'border border-border text-muted-foreground'}`} aria-hidden>
+              {s.state === 'done' ? <Check className="h-3.5 w-3.5" /> : s.state === 'fail' ? '!' : s.state === 'skip' ? '–' : s.state === 'run' ? '' : i + 1}
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className={`text-[14px] ${s.state === 'wait' ? 'text-muted-foreground' : 'font-semibold'}`}>{s.label}</p>
+              <p className="text-[12px] text-muted-foreground">{s.note ?? s.detail}</p>
+            </div>
+            <span className="shrink-0 text-right text-[12px] tabular-nums text-muted-foreground">
+              {s.state === 'run' ? clock(secs(s)) : s.state === 'wait' ? 'waiting' : `${at(s.to)} · ${clock(secs(s))}`}
+            </span>
+          </li>
+        ))}
+      </ol>
+    </div>
   )
 }
