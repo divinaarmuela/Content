@@ -34,10 +34,13 @@ describe('report v2 filters', () => {
     const all = await posts()
     for (const p of ['instagram', 'facebook', 'tiktok', 'linkedin']) {
       const ids = shownIds(renderToStaticMarkup(<PostsGrid posts={all} view={{ ...base, account: p }} />))
-      expect(ids.length).toBe(all.filter(x => x.platform === p).length)
+      // nine at a time, then Show more (5 Nov 2026)
+      expect(ids.length).toBe(Math.min(9, all.filter(x => x.platform === p).length))
       expect(ids.length).toBeGreaterThan(0)
     }
-    expect(shownIds(renderToStaticMarkup(<PostsGrid posts={all} view={base} />))).toHaveLength(all.length)
+    const html = renderToStaticMarkup(<PostsGrid posts={all} view={base} />)
+    expect(shownIds(html)).toHaveLength(Math.min(9, all.length))
+    if (all.length > 9) expect(html).toContain(`Showing 9 of ${all.length} posts`)
   })
   it('type', async () => {
     const all = await posts()

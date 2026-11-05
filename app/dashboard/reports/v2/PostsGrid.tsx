@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { platformLabel } from '../../../lib/client-report-core'
 import { figureWords, hasValue, POST_EXTRAS, POST_STATS } from '../../../lib/report-v2/definitions'
 import { filterPosts, type V2View } from '../../../lib/report-v2/filters'
@@ -35,9 +36,15 @@ export function PostDetail({ post }: { post: V2Post }) {
 }
 
 export default function PostsGrid({ posts, view, onOpen }: { posts: readonly V2Post[]; view: Pick<V2View, 'account' | 'type' | 'by' | 'sort'>; onOpen?: (p: V2Post) => void }) {
-  const shown = filterPosts(posts, view)
-  if (!shown.length) return <p className="text-[14px] text-muted-foreground" data-testid="no-posts">No posts match these filters.</p>
+  const all = filterPosts(posts, view)
+  // NINE AT A TIME (the owner, 5 Nov 2026: "too many when scrolling, put show more"); a filter change starts again at nine
+  const [count, setCount] = useState(PAGE)
+  const key = `${view.account}|${view.type}|${view.by}|${view.sort}`
+  useEffect(() => { setCount(PAGE) }, [key])
+  const shown = all.slice(0, count)
+  if (!all.length) return <p className="text-[14px] text-muted-foreground" data-testid="no-posts">No posts match these filters.</p>
   return (
+    <div className="flex flex-col gap-3">
     <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3" data-testid="posts">
       {shown.map(p => {
         const name = platformLabel(p.platform)
@@ -64,5 +71,17 @@ export default function PostsGrid({ posts, view, onOpen }: { posts: readonly V2P
         )
       })}
     </ul>
+    <div className="flex items-center justify-between text-[13px] text-muted-foreground">
+      <span>Showing {shown.length} of {all.length} posts</span>
+      {shown.length < all.length && (
+        <button type="button" onClick={() => setCount(c => c + PAGE)} data-testid="show-more"
+          className="h-10 rounded-full border border-border bg-surface px-4 font-semibold text-foreground hover:bg-muted">
+          Show {Math.min(PAGE, all.length - shown.length)} more
+        </button>
+      )}
+    </div>
+    </div>
   )
 }
+
+const PAGE = 9
