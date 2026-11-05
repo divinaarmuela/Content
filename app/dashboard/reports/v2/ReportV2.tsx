@@ -1,4 +1,5 @@
 'use client'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
@@ -20,7 +21,6 @@ import ChecksPanel, { ShareBox } from './ChecksPanel'
  * read only. `ReportV2Body` is what the Reports page shows; the default export is the stand-alone view.
  */
 const thisMonth = () => new Date().toISOString().slice(0, 7)
-const select = 'h-9 rounded-md border border-border bg-background px-2 text-[14px]'
 
 export default function ReportV2() {
   const router = useRouter()
@@ -41,13 +41,12 @@ export default function ReportV2() {
       <PageTitle title="Report" summary="The monthly report, read live from each account. Every number says where it came from, or why there is none." />
       <div className="flex flex-wrap items-end gap-3">
         <label className="flex flex-col gap-1 text-[12px] text-muted-foreground">Client
-          <select className={select} value={view.client ?? ''} onChange={e => setView({ client: e.target.value || null, account: 'all', type: 'all' })} aria-label="Client">
-            <option value="">Pick a client…</option>
-            {(clients ?? []).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
+          <Pick label="Client" value={view.client ?? ''} placeholder="Pick a client…" onChange={v => setView({ client: v || null, account: 'all', type: 'all' })}
+            options={(clients ?? []).map(c => ({ value: c.id, label: c.name }))} wide />
         </label>
         <label className="flex flex-col gap-1 text-[12px] text-muted-foreground">Month
-          <input type="month" className={select} value={month} max={thisMonth()} onChange={e => e.target.value && setView({ month: e.target.value })} aria-label="Month" />
+          <Pick label="Month" value={month} onChange={v => setView({ month: v })}
+            options={Array.from({ length: 18 }, (_, i) => { const d = new Date(`${thisMonth()}-01T00:00:00Z`); d.setUTCMonth(d.getUTCMonth() - i); const k = d.toISOString().slice(0, 7); return { value: k, label: monthLabel(k as never) } })} />
         </label>
       </div>
       {!view.client && <p className="text-[14px] text-muted-foreground">Pick a client to read their {monthLabel(month)}.</p>}
@@ -129,20 +128,16 @@ export function ReportV2Body({ clientId, month, showShareBox = false, onChecks }
             <h2 className="text-[20px] font-semibold">Posts in {monthLabel(month)}</h2>
             <div className="flex flex-wrap gap-3">
               <label className="flex flex-col gap-1 text-[12px] text-muted-foreground">Type
-                <select className={select} value={view.type} onChange={e => setView({ type: e.target.value as V2View['type'] })} aria-label="Type">
-                  <option value="all">All types ({allPosts.length})</option>
-                  {typesPresent(allPosts).map(t => <option key={t.type} value={t.type}>{t.type} ({t.count})</option>)}
-                </select>
+                <Pick label="Type" value={view.type} onChange={v => setView({ type: v as V2View['type'] })}
+                  options={[{ value: 'all', label: `All types (${allPosts.length})` }, ...typesPresent(allPosts).map(t => ({ value: t.type, label: `${t.type[0].toUpperCase()}${t.type.slice(1)}s (${t.count})` }))]} />
               </label>
               <label className="flex flex-col gap-1 text-[12px] text-muted-foreground">Posted by
-                <select className={select} value={view.by} onChange={e => setView({ by: e.target.value as V2View['by'] })} aria-label="Posted by">
-                  <option value="all">Anyone</option><option value="mdm">MD Media</option><option value="other">Not MD Media</option>
-                </select>
+                <Pick label="Posted by" value={view.by} onChange={v => setView({ by: v as V2View['by'] })}
+                  options={[{ value: 'all', label: 'Anyone' }, { value: 'mdm', label: 'MD Media' }, { value: 'other', label: 'Not MD Media' }]} />
               </label>
               <label className="flex flex-col gap-1 text-[12px] text-muted-foreground">Sort
-                <select className={select} value={view.sort} onChange={e => setView({ sort: e.target.value as V2View['sort'] })} aria-label="Sort">
-                  <option value="views">Most views</option><option value="reach">Most reach</option><option value="likes">Most likes</option><option value="date">Newest</option>
-                </select>
+                <Pick label="Sort" value={view.sort} onChange={v => setView({ sort: v as V2View['sort'] })}
+                  options={[{ value: 'views', label: 'Most views' }, { value: 'reach', label: 'Most reach' }, { value: 'likes', label: 'Most likes' }, { value: 'date', label: 'Newest' }]} />
               </label>
             </div>
             <PostsGrid posts={allPosts} view={view} onOpen={setOpen} />
@@ -159,5 +154,21 @@ export function ReportV2Body({ clientId, month, showShareBox = false, onChecks }
         </DialogContent>
       </Dialog>
     </div>
+  )
+}
+
+/** the app's own dropdown (shadcn Select), not the browser's plain one (the owner, 5 Nov 2026: "why is the dropdown so ugly") */
+function Pick({ label, value, options, onChange, placeholder, wide = false }: {
+  label: string; value: string; options: { value: string; label: string }[]; onChange: (v: string) => void; placeholder?: string; wide?: boolean
+}) {
+  return (
+    <Select value={value || undefined} onValueChange={onChange}>
+      <SelectTrigger aria-label={label} className={`h-10 ${wide ? 'w-64' : 'w-44'} rounded-full border-border bg-surface px-4 text-[14px] font-medium`}>
+        <SelectValue placeholder={placeholder ?? label} />
+      </SelectTrigger>
+      <SelectContent className="bg-popover">
+        {options.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+      </SelectContent>
+    </Select>
   )
 }
