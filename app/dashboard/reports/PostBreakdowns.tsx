@@ -47,6 +47,8 @@ export default function PostBreakdowns({ raw, clientId, month, onChange, noButto
     } catch (e) { toast.error(e instanceof Error ? e.message : 'Could not explain the posts') } finally { setBusy(false) }
   }
 
+  // under Build report there is nothing to show until it has run (5 Nov 2026: an empty heading confused the team)
+  if (noButton && !explained && !busy) return null
   return (
     <section className="no-print flex flex-col gap-4">
       <header className="flex flex-wrap items-center gap-2">
@@ -61,7 +63,7 @@ export default function PostBreakdowns({ raw, clientId, month, onChange, noButto
         </Button>}
       </header>
 
-      {!explained && !busy && (
+      {!explained && !busy && !noButton && (
         <p className="rounded-card border border-dashed border-border p-6 text-center text-[14px] text-muted-foreground">
           {noButton ? 'Not explained yet. Build report explains the posts first: each one compared with the last 90 days of this account.' : 'Not explained yet. It reads the last 90 days of posts, so each one is compared with the account’s own normal.'}
         </p>

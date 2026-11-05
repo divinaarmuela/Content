@@ -423,7 +423,7 @@ function Writer({ report, clientId, month, mayDelete, onChange, onDeleted, settl
   return (
     <section className="no-print flex flex-col gap-4 rounded-card border border-border bg-surface p-5">
       <header className="flex flex-wrap items-center gap-2">
-        <h2 className="mr-auto text-[20px] font-semibold">The report</h2>
+        <h2 className="mr-auto text-[20px] font-semibold"><span className="text-muted-foreground">Step 2 · </span>Build the report</h2>
         {report.body && <span className="text-[13px] text-muted-foreground">{stampLine(report, people)}</span>}
         {mayDelete && report.body && (
           <Button variant="ghost" onClick={() => setAsking('delete')} className="h-10 gap-1.5 rounded-full text-destructive"><Trash2 className="h-4 w-4" aria-hidden /> Delete</Button>
@@ -488,7 +488,7 @@ function Writer({ report, clientId, month, mayDelete, onChange, onDeleted, settl
           </div>
         </>
       ) : !writing && (
-        <p className="text-[14px] text-muted-foreground">No report yet. Add your notes if you have any, then press Generate report — every figure above goes in, exactly as read.</p>
+        <p className="text-[14px] text-muted-foreground">When the ticked posts above look right, press Build report. That one button does everything: it reads the figures fresh, explains the ticked posts, and writes the report. Notes are optional.</p>
       )}
 
       <AlertDialog open={asking !== null} onOpenChange={o => { if (!o) setAsking(null) }}>

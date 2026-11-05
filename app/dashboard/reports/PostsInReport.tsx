@@ -55,15 +55,15 @@ export default function PostsInReport({ candidates, saved, clientId, month, onCh
   return (
     <section className="no-print flex flex-col gap-3 rounded-card border border-border bg-surface p-4">
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <h2 className="text-[20px] font-semibold">Posts in this report</h2>
+        <h2 className="text-[20px] font-semibold"><span className="text-muted-foreground">Step 1 · </span>Pick the posts</h2>
         <span className="text-[14px] text-muted-foreground">
           <strong className="text-foreground">{picked.size}</strong> of {candidates.length} included
         </span>
       </div>
       <p className="text-[14px] text-muted-foreground">
         {ours > 0
-          ? <>The {ours} post{ours === 1 ? '' : 's'} MD Media published {ours === 1 ? 'is' : 'are'} ticked to start. Tick any other post to add it to the report. Build report explains and writes about the ticked posts.</>
-          : <>No post this month went out through MD Media, so every post is ticked. Untick any you want left out.</>}
+          ? <>The {ours} post{ours === 1 ? '' : 's'} MD Media published {ours === 1 ? 'is' : 'are'} already ticked. Click a post to add it or take it out. Then go to Step 2 below.</>
+          : <>No post this month went out through MD Media, so every post is ticked. Click a post to take it out. Then go to Step 2 below.</>}
       </p>
 
       {shown.length === 0 ? (

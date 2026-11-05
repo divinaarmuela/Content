@@ -58,7 +58,8 @@ function toTopPost(p: Record<string, unknown>, platform: Account['platform']): T
     url: String(p.platformPostUrl ?? plat.platformPostUrl ?? '') || null,
     thumbnail: String(p.thumbnailUrl ?? items[0]?.url ?? '') || null,
     caption: String(p.content ?? p.caption ?? '').slice(0, 600),
-    format: String(p.mediaType ?? items[0]?.type ?? '') || null,
+    // a STORY is said as one (5 Nov 2026): it is gone after 24 hours, and with it its picture and its numbers
+    format: String(p.mediaProductType ?? '').toUpperCase() === 'STORY' ? 'story' : String(p.mediaType ?? items[0]?.type ?? '') || null,
     views: num(a.views) ?? num(a.impressions) ?? 0,
     reach: num(a.reach) ?? 0,
     likes: num(a.likes) ?? 0,
@@ -177,13 +178,14 @@ async function figuresOf(acc: Account, profileId: string | null, m: MonthKey, ga
     candidates.push(...posts.map(p => ({ id: p.id, platform: acc.platform, publishedAt: p.publishedAt, url: p.url, thumbnail: p.thumbnail,
       caption: p.caption.slice(0, 300), format: p.format, views: p.views, byMdm: ours.has(p.id) })))
   }
-  fig.topPosts = [...posts].sort((a, b) => b.views - a.views).slice(0, 5)
-  // A PAGE THAT GAVE NO NUMBERS (5 Nov 2026, Shan's Facebook: ten posts, every one 0 views, 0 likes, no caption —
-  // Facebook gave the page's posts but none of their figures). Five blank cards read as "nobody watched"; say what it
-  // is instead, and keep the zeros away from the report and the writer.
-  if (posts.length > 0 && posts.every(p => !p.views && !p.reach && !p.likes && !p.comments && !p.shares)) {
-    gaps.push(`${label}: the ${posts.length} posts came through with no views, likes or comments at all — Facebook is not giving this page's figures. Reconnect the page (with its insights allowed) and read the figures again.`)
-    fig.topPosts = []
+  // stories are not ranked with the posts: Facebook and Instagram drop a story's picture and figures once it expires,
+  // so it showed as a blank 0-view card at the top (Shan, 5 Nov 2026)
+  fig.topPosts = [...posts].filter(p => p.format !== 'story').sort((a, b) => b.views - a.views).slice(0, 5)
+  // NO VIEWS AT ALL on a page's posts (5 Nov 2026, Capila Finance's Facebook): said, so a row of zeros is not read
+  // as nobody watching
+  const feed = posts.filter(p => p.format !== 'story')
+  if (feed.length > 0 && feed.every(p => !p.views && !p.reach)) {
+    gaps.push(`${label}: no views came through for any of the ${feed.length} posts this month, so they are not ranked by views.`)
   }
   if (!posts.length) {
     // the dashboard's own top posts, when the post list gave nothing
