@@ -90,10 +90,15 @@ export default function PostsInReport({ candidates, saved, clientId, month, onCh
                       {c.byMdm ? 'MD Media' : on ? 'Added' : 'Not ours'}
                     </span>
                   </div>
-                  <div className="flex flex-col gap-0.5 p-2">
+                  <div className="flex flex-col gap-1 p-2">
+                    {/* WHERE AND WHAT (5 Nov 2026: "show the platform and the medium, story etc") */}
+                    <span className="flex flex-wrap gap-1">
+                      <span className="rounded-full border border-border px-2 py-0.5 text-[11px] font-semibold">{platformName(c.platform)}</span>
+                      <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${c.format === 'story' ? 'bg-tint-amber' : 'bg-muted'}`}>{mediumName(c.format)}</span>
+                    </span>
                     <span className="text-[12px] text-muted-foreground">
                       {c.publishedAt ? new Date(c.publishedAt).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' }) : ''}
-                      {c.format ? ` · ${c.format}` : ''}{` · ${c.views.toLocaleString('en-AU')} views`}
+                      {c.format === 'story' && !c.views ? ' · story, numbers gone after 24 h' : ` · ${c.views.toLocaleString('en-AU')} views`}
                     </span>
                     <span className="line-clamp-2 text-[12px]">{c.caption || 'No caption'}</span>
                   </div>
@@ -118,4 +123,18 @@ export default function PostsInReport({ candidates, saved, clientId, month, onCh
       )}
     </section>
   )
+}
+
+const platformName = (p: string) => (p === 'instagram' ? 'Instagram' : p === 'facebook' ? 'Facebook' : p ? p[0].toUpperCase() + p.slice(1) : 'Post')
+
+/** the medium in the team's words: Reel, Carousel, Image, Story */
+function mediumName(f: string | null): string {
+  switch ((f ?? '').toLowerCase()) {
+    case 'story': return 'Story'
+    case 'video': case 'reel': case 'reels': return 'Reel'
+    case 'carousel': case 'carousel_album': case 'album': return 'Carousel'
+    case 'image': case 'photo': return 'Image'
+    case 'text': case 'status': return 'Text post'
+    default: return f ? f[0].toUpperCase() + f.slice(1) : 'Post'
+  }
 }
