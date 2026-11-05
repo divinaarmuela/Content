@@ -3,7 +3,7 @@ import { table } from '@/lib/db'
 import type { AudienceSnapshot, Client, ClientReport } from '@/lib/db-types'
 import {
   monthRange, previousMonth, readReportData, reportId, reportPrompt, toBreakdown,
-  type Audience, type MonthKey, type PlatformFigures, type ReportData, type TopPost, keepVersion } from './client-report-core'
+  type Audience, type MonthKey, type PlatformFigures, type ReportData, type TopPost, keepVersion, includedIds, type CandidatePost } from './client-report-core'
 import { breakdownLines, readPostsExplained } from './post-breakdown-core'
 import { keepPictures } from './report-pictures'
 import { aiClient, aiError, viaGateway, writerModel } from './ai-gateway'
@@ -80,10 +80,10 @@ function toTopPost(p: Record<string, unknown>, platform: Account['platform']): T
 }
 
 /** every post on one account between two dates, page by page (at most `pages` pages of 100) */
-export async function postsBetween(acc: Account, from: string, to: string, pages = 5): Promise<TopPost[]> {
+export async function postsBetween(acc: Account, from: string, to: string, pages = 5, source: 'all' | 'late' = 'all'): Promise<TopPost[]> {
   const out: TopPost[] = []
   for (let page = 1; page <= pages; page++) {
-    const r = await zernio<{ posts?: unknown; pagination?: { pages?: number } }>('/analytics', { platform: acc.platform, accountId: acc.id, fromDate: from, toDate: to, limit: 100, page, source: 'all' })
+    const r = await zernio<{ posts?: unknown; pagination?: { pages?: number } }>('/analytics', { platform: acc.platform, accountId: acc.id, fromDate: from, toDate: to, limit: 100, page, source })
     if (!r.ok) break
     out.push(...arr(r.data.posts).map(p => toTopPost(p, acc.platform)).filter(p => p.id))
     if (!(Number(r.data.pagination?.pages) > page)) break
@@ -138,7 +138,7 @@ export async function snapshotAudience(accountId: string, clientId: string | nul
   return audience
 }
 
-async function figuresOf(acc: Account, profileId: string | null, m: MonthKey, gaps: string[]): Promise<PlatformFigures | null> {
+async function figuresOf(acc: Account, profileId: string | null, m: MonthKey, gaps: string[], candidates: CandidatePost[] = []): Promise<PlatformFigures | null> {
   const { from, to } = monthRange(m)
   const label = acc.platform === 'instagram' ? 'Instagram' : 'Facebook'
   const dash = await zernio<Record<string, unknown>>('/analytics/dashboard', {
@@ -169,6 +169,14 @@ async function figuresOf(acc: Account, profileId: string | null, m: MonthKey, ga
   // the month's posts — captions, pictures and links, ranked by views (the guide: "we primarily report on views")
   const posts = await postsOf(acc, m)
   fig.posts = posts.length
+  // which of them MD Media published: Zernio's `source=late` is exactly the posts sent through the app (checked
+  // against our own post_analytics on 5 Nov 2026)
+  if (posts.length) {
+    const { from, to } = monthRange(m)
+    const ours = new Set((await postsBetween(acc, from, to, 1, 'late')).map(p => p.id))
+    candidates.push(...posts.map(p => ({ id: p.id, platform: acc.platform, publishedAt: p.publishedAt, url: p.url, thumbnail: p.thumbnail,
+      caption: p.caption.slice(0, 300), format: p.format, views: p.views, byMdm: ours.has(p.id) })))
+  }
   fig.topPosts = [...posts].sort((a, b) => b.views - a.views).slice(0, 5)
   if (!posts.length) {
     // the dashboard's own top posts, when the post list gave nothing
@@ -216,7 +224,8 @@ export async function loadReportData(clientId: string, m: MonthKey): Promise<Rep
   if (!accounts.length) gaps.push('This client has no Instagram or Facebook account connected in Zernio')
   const now = new Date()
   const profileId = String((client as { social_profile_id?: string | null }).social_profile_id ?? '') || null
-  const read = (await Promise.all(accounts.map(a => figuresOf(a, profileId, m, gaps)))).filter((p): p is PlatformFigures => !!p)
+  const candidates: CandidatePost[] = []
+  const read = (await Promise.all(accounts.map(a => figuresOf(a, profileId, m, gaps, candidates)))).filter((p): p is PlatformFigures => !!p)
   // Instagram's own picture addresses expire within days: the top posts keep our own copies (report-pictures.ts)
   const platforms = await Promise.all(read.map(async p => ({ ...p, topPosts: await keepPictures(p.topPosts) })))
   const ig = accounts.find(a => a.platform === 'instagram')
@@ -225,6 +234,7 @@ export async function loadReportData(clientId: string, m: MonthKey): Promise<Rep
   const data: ReportData = {
     clientId, clientName: client.name, industry: (client as { industry?: string | null }).industry ?? null,
     month: m, fetchedAt: now.toISOString(), platforms, audience, gaps,
+    candidates: candidates.sort((a, b) => String(b.publishedAt ?? '').localeCompare(String(a.publishedAt ?? ''))),
   }
   const id = reportId(clientId, m)
   const stamp = now.toISOString()
@@ -258,7 +268,7 @@ export async function generateReport(clientId: string, m: MonthKey, by: string, 
   const saved = await table<ClientReport>('client_reports').get(id)
   const data = readReportData(saved?.data) ?? await loadReportData(clientId, m)
   const before = await table<ClientReport>('client_reports').get(reportId(clientId, previousMonth(m))).catch(() => null)
-  const { system, user } = reportPrompt({ data, objective: opts.objective, notes: opts.notes, shootConcepts: await nextShootConcepts(clientId, m), previousReport: before?.body ?? null, breakdowns: (() => { const x = readPostsExplained(saved?.posts_explained); return x ? breakdownLines(x.items, x.posts) : [] })() })
+  const { system, user } = reportPrompt({ data, objective: opts.objective, notes: opts.notes, shootConcepts: await nextShootConcepts(clientId, m), previousReport: before?.body ?? null, included: includedIds(saved?.included_post_ids, data.candidates ?? []), breakdowns: (() => { const x = readPostsExplained(saved?.posts_explained); return x ? breakdownLines(x.items, x.posts) : [] })() })
   let msg: { stop_reason: string; content: { type: string; text?: string }[] }
   try {
     // Anthropic's own extras (effort, its server-side fallback) only where Anthropic is called directly; the

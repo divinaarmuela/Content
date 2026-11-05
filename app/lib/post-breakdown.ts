@@ -1,7 +1,7 @@
 import 'server-only'
 import { table } from '@/lib/db'
 import type { ClientReport } from '@/lib/db-types'
-import { monthRange, readReportData, reportId, type MonthKey, type TopPost } from './client-report-core'
+import { monthRange, readReportData, reportId, type MonthKey, type TopPost, includedIds } from './client-report-core'
 import { accountsOf, postsBetween } from './client-report'
 import { keepPictures } from './report-pictures'
 import { aiClient, aiError, inlinePicture, postsModel } from './ai-gateway'
@@ -62,8 +62,10 @@ export async function explainMonth(clientId: string, m: MonthKey): Promise<{ ok:
   const { from, to } = monthRange(m)
   const history = await postsBetween(ig, minusDays(from, HISTORY_DAYS), to)
   const inMonth = (p: TopPost) => { const d = (p.publishedAt ?? '').slice(0, 10); return d >= from && d <= to }
-  const month = history.filter(inMonth)
-  if (!month.length) return { ok: false, error: 'No Instagram posts this month to explain' }
+  // only the posts in this report (5 Nov 2026), compared, still, with the whole account's usual
+  const picked = data?.candidates?.length ? includedIds(saved?.included_post_ids, data.candidates) : null
+  const month = history.filter(inMonth).filter(p => !picked || picked.has(p.id))
+  if (!month.length) return { ok: false, error: picked ? 'None of the posts in this report is on Instagram to explain' : 'No Instagram posts this month to explain' }
   const index = indexPosts(history)
   const chosen = postsToExplain(month, index)
   if (!chosen.length) return { ok: false, error: 'Not enough posts yet to compare them with the account’s usual' }

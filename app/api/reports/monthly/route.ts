@@ -98,7 +98,7 @@ export async function PATCH(req: Request) {
   return withRequestCache(async () => {
     try {
       const user = await who()
-      const body = await req.json().catch(() => ({})) as { client_id?: string; month?: string; body?: unknown; notes?: unknown; objective?: unknown; checks?: unknown }
+      const body = await req.json().catch(() => ({})) as { client_id?: string; month?: string; body?: unknown; notes?: unknown; objective?: unknown; checks?: unknown; included_post_ids?: unknown }
       if (!body.client_id || !isMonthKey(body.month)) return NextResponse.json({ error: 'Pick a client and a month' }, { status: 400 })
       await mayReportOn(user, body.client_id)
       const id = reportId(body.client_id, body.month)
@@ -113,6 +113,8 @@ export async function PATCH(req: Request) {
         ...(typeof body.notes === 'string' ? { notes: body.notes.slice(0, 6000) } : {}),
         ...(typeof body.objective === 'string' ? { objective: body.objective.slice(0, 300) } : {}),
         ...(checks ? { checks: checks as never } : {}),
+        // the posts in this report: the team's ticks (5 Nov 2026)
+        ...(Array.isArray(body.included_post_ids) ? { included_post_ids: body.included_post_ids.map(String).slice(0, 500) as never } : {}),
         updated_by: user.id, updated_at: now,
       } : null))
       if (!put.claimed) return NextResponse.json({ error: 'Load the month first' }, { status: 404 })

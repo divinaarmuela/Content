@@ -113,7 +113,14 @@ export type Audience = {
   /** WHO ENGAGED THIS MONTH, not just who follows (the owner, 26 Oct 2026) — Instagram's engaged-audience breakdown */
   engaged?: { age: Breakdown[]; cities: Breakdown[]; countries: Breakdown[] } | null
 }
+/** one of the month's posts, for the "Posts in this report" picker; `byMdm` = published through our app */
+export type CandidatePost = {
+  id: string; platform: string; publishedAt: string | null; url: string | null; thumbnail: string | null
+  caption: string; format: string | null; views: number; byMdm: boolean
+}
 export type ReportData = {
+  /** every post of the month on each account, marked when MD Media published it (5 Nov 2026) */
+  candidates?: CandidatePost[]
   clientId: string
   clientName: string
   industry: string | null
@@ -203,6 +210,8 @@ export function reportPrompt(input: {
   previousReport: string | null
   /** the month's post breakdowns, as lines (post-breakdown-core.ts breakdownLines) */
   breakdowns?: string[]
+  /** the posts the team picked for this report (5 Nov 2026); unset = every post */
+  included?: ReadonlySet<string> | null
 }): { system: string; user: string } {
   const { data } = input
   const platforms = data.platforms.map(p => p.platform === 'instagram' ? 'Instagram' : 'Facebook').join(' and ') || 'Instagram'
@@ -245,6 +254,7 @@ export function reportPrompt(input: {
     ...(input.notes.trim() ? ['', 'Notes from the team (take these into account):', input.notes.trim()] : []),
     ...(input.previousReport ? ['', 'Last month’s report for this client, for continuity of structure and to compare against:', input.previousReport.slice(0, 20000)] : []),
     ...(input.breakdowns ?? []),
+    ...includedLines(data, input.included ?? null),
     '',
     'With the following analytics below:',
     // an older month's audience may still carry a gender split — it is never sent
@@ -318,6 +328,7 @@ export function readReportData(raw: unknown): ReportData | null {
     clientId: String(d.clientId ?? ''), clientName: String(d.clientName ?? ''), industry: d.industry ?? null,
     month: String(d.month ?? ''), fetchedAt: String(d.fetchedAt ?? ''),
     gaps: list<string>(d.gaps),
+    candidates: list<CandidatePost>(d.candidates),
     audience: a ? {
       asOf: a.asOf ?? null, age: list(a.age), cities: list(a.cities), countries: list(a.countries),
       engaged: a.engaged ? { age: list(a.engaged.age), cities: list(a.engaged.cities), countries: list(a.engaged.countries) } : null,
@@ -372,4 +383,28 @@ export function monthState(m: MonthKey, today: string, fetchedAt?: string | null
 /** a moment as its Melbourne calendar day, YYYY-MM-DD */
 export function melbourneDay(d: Date): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Melbourne', year: 'numeric', month: '2-digit', day: '2-digit' }).format(d)
+}
+
+/* THE POSTS IN THIS REPORT (the owner, 5 Nov 2026: "showcase these posts are included, add any more, and then it
+ * will do it"). The report is about the posts MD Media made: those published through the app start ticked, and the
+ * team may tick any other post of the month to add it. The account's own totals stay as context. */
+
+/** the ticked ids: what the team saved, else MD Media's own posts, else (none published through us) every post */
+export function includedIds(saved: unknown, candidates: readonly CandidatePost[]): Set<string> {
+  if (Array.isArray(saved)) return new Set(saved.map(String))
+  const ours = candidates.filter(c => c.byMdm)
+  return new Set((ours.length ? ours : candidates).map(c => c.id))
+}
+
+/** the picked posts, for the writer: which they are, and what to do with them */
+export function includedLines(data: ReportData, included: ReadonlySet<string> | null): string[] {
+  const all = data.candidates ?? []
+  if (!included || !all.length) return []
+  const picked = all.filter(c => included.has(c.id))
+  if (!picked.length) return []
+  return [
+    '',
+    `The posts this report is about (${picked.length} of the month's ${all.length}): the content MD Media made for the client, plus any the team added. Base Top performing content, What underperformed, Content themes and formats and the strategy on THESE posts. The account totals in the data are the whole account, for context only; never present them as these posts' results.`,
+    ...picked.map(c => `- ${c.platform} ${(c.publishedAt ?? '').slice(0, 10)} ${c.format ?? ''} | ${c.views} views${c.byMdm ? '' : ' | added by the team'}${c.url ? ` | ${c.url}` : ''} | "${c.caption.slice(0, 140).replace(/\s+/g, ' ')}"`),
+  ]
 }

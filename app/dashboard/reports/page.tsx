@@ -14,6 +14,7 @@ import {
 import PageTitle from '../ui/PageTitle'
 import TintCard from '../ui/TintCard'
 import PostBreakdowns from './PostBreakdowns'
+import PostsInReport from './PostsInReport'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { readPostsExplained } from '../../lib/post-breakdown-core'
 import {
@@ -33,6 +34,8 @@ type Saved = {
   generated_by?: string | null; updated_by?: string | null; explained_by?: string | null; history?: unknown
   /** the post breakdowns (PostBreakdowns.tsx), as saved */
   posts_explained?: unknown
+  /** the posts the team ticked for this report (PostsInReport.tsx) */
+  included_post_ids?: unknown
 }
 const OBJECTIVES = ['Growth', 'Engagement', 'Leads', 'Positioning']
 const PREF_KEY = 'reports:last'
@@ -138,6 +141,10 @@ export default function ReportsPage() {
           {data.audience && <AudienceSection a={data.audience} />}
           {/* WHY THE POSTS WORKED, RIGHT ABOVE THE REPORT (the owner, 4 Nov 2026: "one button … make sure explain the
               posts is shown as well near the report so it's nice and clear") — filled by Build report, no button of its own */}
+          {/* THE POSTS IN THIS REPORT (5 Nov 2026): MD Media's own posts ticked, any other addable */}
+          {(data.candidates?.length ?? 0) > 0 && (
+            <PostsInReport candidates={data.candidates!} saved={report?.included_post_ids} clientId={clientId} month={month} onChange={r => setReport(r as Saved)} />
+          )}
           {data.platforms.some(p => p.platform === 'instagram') && (
             <PostBreakdowns raw={report?.posts_explained} clientId={clientId} month={month} onChange={r => setReport(r as Saved)} noButton
               explainedBy={report?.explained_by ? people[String(report.explained_by)] ?? null : null} />
@@ -669,6 +676,8 @@ function HowItWorks() {
       body: 'Every number comes from the client’s connected Instagram and Facebook. Nothing is typed in by hand and nothing is posted or changed — it only reads. “Read the figures again” fetches them fresh.' },
     { title: '2. The month is not final straight away',
       body: 'Instagram keeps counting views and reach for a couple of days after a post goes out, so a month’s numbers settle 2 days after it ends. Build it before then and the report says so — build it again after for the final numbers.' },
+    { title: 'Which posts the report is about',
+      body: 'Under “Posts in this report”, the posts MD Media published are ticked to start. Tick any other post from the month to add it, or untick one to leave it out. The explanations and the written report are about the ticked posts; the account totals stay as context.' },
     { title: '3. The posts are explained',
       body: 'Every Instagram post of the month is compared with the account’s own last 90 days — not other accounts. The 5 best and up to 3 that fell behind are picked, and the AI looks at each one (the picture, the caption and the numbers) and says why it did well or fell behind.' },
     { title: '4. The report is written',

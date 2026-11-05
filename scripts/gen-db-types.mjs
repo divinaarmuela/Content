@@ -1073,6 +1073,9 @@ const GHOST_TABLES = {
     ['objective', col('string', true)],
     ['notes', col('string', true)],
     ['checks', col('unknown', true, true)],
+    // THE POSTS IN THIS REPORT (the owner, 5 Nov 2026: "showcase these posts are included, add any more"): the post
+    // ids the team ticked. Unset = the default, the posts MD Media published through the app (includedIds).
+    ['included_post_ids', col('unknown', true, true)],
     // the post breakdowns, UNLK.AI's way (27 Oct 2026; post-breakdown-core.ts): scores, ranked reasons, Claude's teardowns
     ['posts_explained', col('unknown', true, true)],
     // who last explained the posts (4 Nov 2026) — the when is posts_explained.at
