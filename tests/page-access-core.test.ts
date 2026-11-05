@@ -73,8 +73,10 @@ describe('defaultAllows — one page per role', () => {
   it('keeps an editor on the Editor page and nothing beside it', () => {
     expect(defaultAllows('editor', '/dashboard')).toBe(true)
     expect(defaultAllows('editor', '/dashboard/editor')).toBe(true)
+    // the owner, 5 Nov 2026: editors and schedulers are on the Shoots page too
+    expect(defaultAllows('editor', '/dashboard/production')).toBe(true)
     for (const href of [
-      '/dashboard/production', '/dashboard/scheduler', '/dashboard/files',
+      '/dashboard/scheduler', '/dashboard/files',
       '/dashboard/leads', '/dashboard/clients', '/dashboard/calendar', '/dashboard/social',
       SCHEDULE_PAGE,
     ]) {
@@ -86,13 +88,15 @@ describe('defaultAllows — one page per role', () => {
     expect(defaultAllows('scheduler', '/dashboard')).toBe(true)
     expect(defaultAllows('scheduler', '/dashboard/scheduler')).toBe(true)
     expect(defaultAllows('scheduler', SCHEDULE_PAGE)).toBe(true)
+    // the owner, 5 Nov 2026: Shoots too
+    expect(defaultAllows('scheduler', '/dashboard/production')).toBe(true)
     // the owner, 11 Sep 2026: "so they can know what's posted and what's not"
     expect(defaultAllows('scheduler', POSTS_PAGE)).toBe(true)
     expect(defaultAllows('general', POSTS_PAGE)).toBe(true)
     expect(canSeePage('scheduler', POSTS_PAGE, [])).toBe(true)
     expect(defaultAllows('editor', POSTS_PAGE)).toBe(false)
     for (const href of [
-      '/dashboard/editor', '/dashboard/production', '/dashboard/calendar', '/dashboard/social',
+      '/dashboard/editor', '/dashboard/calendar', '/dashboard/social',
       '/dashboard/files', '/dashboard/clients', '/dashboard/social/inbox',
     ]) {
       expect(defaultAllows('scheduler', href), href).toBe(false)
@@ -198,14 +202,16 @@ describe('canSeePage — a grant is per person and only ever adds', () => {
 describe('visiblePages', () => {
   it('filters to what the person may see and preserves nav order', () => {
     const seen = visiblePages('editor', NAV, ['/dashboard/leads'])
+    // Shoots is an editor default since 5 Nov 2026
     expect(seen.map(s => s.href)).toEqual([
-      '/dashboard', '/dashboard/leads', '/dashboard/editor', '/dashboard/settings',
+      '/dashboard', '/dashboard/leads', '/dashboard/production', '/dashboard/editor', '/dashboard/settings',
     ])
   })
 
   it('an editor with no grants sees only their own pages and the Editor page', () => {
+    // + Shoots (5 Nov 2026)
     expect(visiblePages('editor', NAV, []).map(s => s.href)).toEqual([
-      '/dashboard', '/dashboard/editor', '/dashboard/settings',
+      '/dashboard', '/dashboard/production', '/dashboard/editor', '/dashboard/settings',
     ])
   })
 
@@ -216,8 +222,8 @@ describe('visiblePages', () => {
   it('two people with the same role can differ', () => {
     const manal = visiblePages('editor', NAV, ['/dashboard/leads'])
     const other = visiblePages('editor', NAV, [])
-    expect(manal.length).toBe(4)
-    expect(other.length).toBe(3)
+    expect(manal.length).toBe(other.length + 1) // 5 Nov 2026: Shoots joined the editor's defaults
+    expect(manal.map(p => p.href)).toContain('/dashboard/leads')
   })
 })
 
@@ -245,9 +251,9 @@ describe('normaliseGrantedPages', () => {
 
   it('drops pages the person already has by default', () => {
     // storing these would let a later role change silently keep access
-    // Production is no longer an editor default, so that grant now survives
+    // Production is an editor default again (5 Nov 2026), so granting it stores nothing
     expect(normaliseGrantedPages(['/dashboard/production', '/dashboard/leads'], 'editor'))
-      .toEqual(['/dashboard/production', '/dashboard/leads'])
+      .toEqual(['/dashboard/leads'])
     // the editor board is an editor default — granting it stores nothing
     expect(normaliseGrantedPages(['/dashboard/editor', '/dashboard/leads'], 'editor'))
       .toEqual(['/dashboard/leads'])

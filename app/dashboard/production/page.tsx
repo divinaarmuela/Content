@@ -293,6 +293,12 @@ export default function ProductionPage() {
           // whoever runs a shoot may archive it — the server checks the same (canManageBatch)
           onArchive={shoot => { void setArchived('shoot', shoot.id, true) }}
           mayArchive={s => mayArchiveShoot(s as never)}
+          // Done from the card (5 Nov 2026) — the same We decide route the shoot page uses; managers only
+          onDone={viewer.role === 'account_manager' || viewer.role === 'super_admin' ? (async shoot => {
+            const res = await fetch(`/api/production/batches/${shoot.id}/decide`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'done' }) })
+            const j = await res.json().catch(() => ({}))
+            if (!res.ok) toast.error(j.error ?? 'Could not close this shoot'); else toast.success('Done — closed and archived. Find it under Archived.')
+          }) : undefined}
           busyId={stageBusy}
           laneEmpty={label => filteredEmpty(label, chosen, filterNames)}
         />

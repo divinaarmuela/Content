@@ -263,7 +263,10 @@ export async function batchClientIds(user: TeamUser): Promise<string[] | null> {
   // "shouldn't it be the ones they've tagged")
   // …and a quality checker: the gate opens every card in it for them
   // whoever's client it is; shoots only where they are named
-  if (user.role === 'editor' || user.role === 'scheduler' || user.role === 'quality_checker') return []
+  // EDITORS AND SCHEDULERS: EVERY CLIENT'S SHOOTS (the owner, 5 Nov 2026: "view everything, edit" — every client),
+  // replacing the 12 Sep "only the ones they're tagged on"
+  if (user.role === 'editor' || user.role === 'scheduler') return null
+  if (user.role === 'quality_checker') return []
   const rows = await table<TeamUserClient>('team_user_clients')
     .list({ by: { team_user_id: user.id } })
   return rows.map(r => r.client_id)

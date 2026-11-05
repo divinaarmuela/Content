@@ -156,18 +156,19 @@ describe('passing and sending back', () => {
     expect(edit.status).toBe(403)
     expect(batch().objective).not.toBe('Joy wrote this')
   })
-  it('the editor and the crew on the shoot can OPEN the plan to read it — read-only, no edits (13 Sep 2026)', async () => {
+  // 5 Nov 2026: editors and schedulers now WORK every shoot page (the owner: "view everything, edit"), not read-only
+  it('the editor and the crew on the shoot open the plan and may edit it (5 Nov 2026; read-only since 13 Sep until then)', async () => {
     fake.restore(); fake = seed({ editor_id: 'u-ed', crew_ids: ['u-vik'] }, [joy,
       { id: 'u-ed', name: 'Eden', email: 'ed@zz.invalid', role: 'editor', active_status: true } as unknown as Row,
       { id: 'u-vik', name: 'Vik', email: 'vik@zz.invalid', role: 'scheduler', active_status: true } as unknown as Row])
     as('u-ed', 'editor', 'Eden')
     const r = await open()
     expect(r.status).toBe(200)
-    expect(r.body.read_only).toBe(true)
+    expect(r.body.read_only).toBe(false)
     as('u-vik', 'scheduler', 'Vik')
-    expect((await open()).body.read_only).toBe(true)
+    expect((await open()).body.read_only).toBe(false)
     const edit = await json(detail.PATCH(new Request('https://x.test/b', { method: 'PATCH', body: JSON.stringify({ objective: 'Vik wrote this' }) }), P('b-1')))
-    expect(edit.status).toBe(403)
+    expect(edit.status).toBe(200)
     // the manager's answer says the page is theirs to work
     as(AM, 'account_manager', 'Karly')
     expect((await open()).body.read_only).toBe(false)

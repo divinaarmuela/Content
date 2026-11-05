@@ -142,7 +142,8 @@ export function defaultAllows(role: Role | null, href: string): boolean {
   // the monthly client report: a super admin's and an account manager's, nobody else's by default
   if (href === '/dashboard/reports') return role === 'super_admin' || role === 'account_manager'
   if (role === 'editor') {
-    return [...PERSONAL_PAGES, '/dashboard/editor', '/dashboard/designer'].includes(href)
+    // + Shoots (the owner, 5 Nov 2026: "allow schedulers and editors to be on the shoots page and view everything, edit")
+    return [...PERSONAL_PAGES, '/dashboard/production', '/dashboard/editor', '/dashboard/designer'].includes(href)
   }
   if (role === 'quality_checker') {
     // the owner, 13 Sep 2026: "quality check is a role" — the Quality check
@@ -156,7 +157,7 @@ export function defaultAllows(role: Role | null, href: string): boolean {
     // all three: the Scheduler board is their own five columns ("where is
     // my page, the columns one"), Schedule is where they upload and send,
     // Posts is where they see what went out
-    return [...PERSONAL_PAGES, '/dashboard/scheduler', ...SCHEDULER_SOCIAL_PAGES].includes(href)
+    return [...PERSONAL_PAGES, '/dashboard/production', '/dashboard/scheduler', ...SCHEDULER_SOCIAL_PAGES].includes(href)
   }
   if (role === 'general') {
     // the owner, 9 Sep 2026: "Overview, Clients, Production, Editor, Post

@@ -38,7 +38,8 @@ export function portalTeamBoardLink(origin: string, token: string, boardId: stri
  * team's own board has no client to show it to.
  */
 export function mayShareTeamBoard(viewer: TeamBoardViewer, board: { client_id?: string | null } | null | undefined): boolean {
-  return mayManageTeamBoards(viewer) && !!board?.client_id
+  // sharing with the client stays with the managers, as on shoots (5 Nov 2026: editors and schedulers manage boards)
+  return (viewer?.role === 'account_manager' || viewer?.role === 'super_admin') && !!board?.client_id
 }
 
 /** what the client can open: their own board, and only once it was shared — an unshared board is simply not there;

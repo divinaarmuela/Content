@@ -38,7 +38,10 @@ async function loadBatch(user: Awaited<ReturnType<typeof requireRole>>, id: stri
   // person is the quality checker and he couldn't go to review the shoot
   // page"): the review buttons live on this page, so a reviewer opens it —
   // to read, and to pass or send back; every other button is still refused
-  const manages = canManageShoot(me, batch)
+  // EDITORS AND SCHEDULERS EDIT EVERY SHOOT PAGE (the owner, 5 Nov 2026: "view everything, edit etc", every client).
+  // Only the page's contents: moving a shoot between stages, signing it off and sharing it stay with its managers
+  // (the stage, decide, review and share routes keep canManageShoot)
+  const manages = canManageShoot(me, batch) || user.role === 'editor' || user.role === 'scheduler'
   // …and so does EVERYONE ON THE SHOOT (13 Sep 2026: "whoever receives the
   // brief has a dedicated page to see the plan"): the crew and the editor
   // read the plan here, on a page that writes nothing

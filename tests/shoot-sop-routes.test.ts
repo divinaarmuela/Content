@@ -181,15 +181,16 @@ describe('acknowledging', () => {
     const r = await acknowledge()
     expect(r.status).toBe(403)
   })
-  it('the editor on the shoot reads the plan here (read-only); a stranger is refused; the manager opens it with who has read it, and every name', async () => {
+  // 5 Nov 2026: every editor and scheduler works the shoot page; a stranger (an account manager not on the client) is still refused
+  it('the editor works the plan here; a stranger is refused; the manager opens it with who has read it, and every name', async () => {
     as(VG, 'general', 'Vik Camera')
     await acknowledge()
     as(ED, 'editor', 'Sam Editor')
     const r = await open()
     // THE PLAN PAGE FOR THE PEOPLE ON THE SHOOT (13 Sep 2026): read, never work
     expect(r.status).toBe(200)
-    expect(r.body.read_only).toBe(true)
-    as(OUT, 'editor', 'Kit Outsider')
+    expect(r.body.read_only).toBe(false)
+    as(OUT, 'account_manager', 'Kit Outsider')
     expect((await open()).status).toBe(403)
     expect((await open()).body.redirect).toBeUndefined()
     as(AM, 'account_manager')
@@ -269,8 +270,9 @@ describe('go', () => {
     expect(String(reminders[0].bodyHtml)).toMatch(/Call time:<\/strong> 7:30 am/)
     expect(String(reminders[0].bodyHtml)).toMatch(/Location:<\/strong> Royal Melbourne/)
   })
-  it('the ticks and the people are the manager’s — the AM, the creator, a super admin, a general user; and each tick says who', async () => {
-    as(ED, 'editor')
+  it('the ticks and the people are the manager’s — the AM, the creator, a super admin, a general user (and since 5 Nov 2026 editors and schedulers); and each tick says who', async () => {
+    // 5 Nov 2026: an editor works the shoot page too; a stranger AM is still refused
+    as(OUT, 'account_manager')
     expect((await edit({ aligned: true })).status).toBe(403)
     expect((await edit({ crew_ids: [OUT] })).status).toBe(403)
     // a general user raises shoots for any client and must be able to work them
@@ -502,10 +504,11 @@ describe('the footage folder', () => {
     expect((await edit({ footage_url: 'not a link' })).status).toBe(422)
     expect((await edit({ footage_url: 'https://www.dropbox.com/scl/fo/golf-day' })).status).toBe(200)
     expect(batch().footage_url).toBe('https://www.dropbox.com/scl/fo/golf-day')
+    // 5 Nov 2026: schedulers and editors edit the shoot page; a stranger AM still cannot
     as(SC, 'scheduler', 'Cath Crew')
-    expect((await edit({ footage_url: 'https://drive.google.com/drive/folders/abc' })).status).toBe(403)
-    expect(batch().footage_url).toBe('https://www.dropbox.com/scl/fo/golf-day')
-    as(OUT, 'editor')
+    expect((await edit({ footage_url: 'https://drive.google.com/drive/folders/abc' })).status).toBe(200)
+    expect(batch().footage_url).toBe('https://drive.google.com/drive/folders/abc')
+    as(OUT, 'account_manager')
     expect((await edit({ footage_url: 'https://drive.google.com/x' })).status).toBe(403)
   })
   it('reaches every card as Files to work from when the footage is handed over, and the editor\u2019s email carries it', async () => {

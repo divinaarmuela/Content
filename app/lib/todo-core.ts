@@ -119,7 +119,10 @@ export function sanitiseTodoPatch(raw: unknown): { ok: true; patch: Partial<Todo
   if ('title' in p) {
     const t = clean(p.title)
     if (!t) return { ok: false, reason: 'Say what the to-do is' }
-    patch.title = t.slice(0, 200)
+    // KEPT WHOLE (the owner, 5 Nov 2026: Sarina's Senorita to-do lost the end of its link — cut at 200 characters, and
+    // the cut version came back over what was typed, so the title looked unsaved). 2,000 is room for any link.
+    if (t.length > 2000) return { ok: false, reason: 'That title is too long — put the detail in the description' }
+    patch.title = t
   }
   if ('note' in p) patch.note = clean(p.note)?.slice(0, 4000) ?? null
   if ('status' in p) {

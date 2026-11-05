@@ -211,7 +211,13 @@ async function figuresOf(acc: Account, profileId: string | null, m: MonthKey, ga
       const end = next <= today ? lastBefore(next) : (num(arr(fs.data.accounts).find(a => String(a._id) === acc.id)?.currentFollowers) ?? lastBefore(next))
       const prevFirst = firstFrom(prevStart, `${m}-01`)
       const startDay = points.find(p => p.d >= `${m}-01` && p.d < next)?.d ?? null
-      fig.followers = { ...followerMonth(start, end, prevFirst), trackedFrom: startDay }
+      // TRACKED FOR TOO LITTLE OF THE MONTH TO SAY (5 Nov 2026, Basfoods September: tracked from the 30th, "0 gained"):
+      // a gain needs at least a week of the month, else it is "not available", never 0
+      const daysIn = startDay ? (Date.parse(`${next}T00:00:00Z`) - Date.parse(`${startDay}T00:00:00Z`)) / 864e5 : 0
+      const enough = daysIn >= 7
+      const prevDays = points.find(p => p.d >= prevStart && p.d < `${m}-01`)?.d
+      const prevEnough = !!prevDays && (Date.parse(`${m}-01T00:00:00Z`) - Date.parse(`${prevDays}T00:00:00Z`)) / 864e5 >= 7
+      fig.followers = { ...followerMonth(enough ? start : null, end, prevEnough ? prevFirst : null), trackedFrom: startDay }
     } else {
       gaps.push(`${label}: the follower counts could not be read (${fs.error})`)
       fig.followers = { start: null, end: null, previousEnd: null, gained: null, previousGained: null }

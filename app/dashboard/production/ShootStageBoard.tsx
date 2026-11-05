@@ -2,7 +2,7 @@
 
 import { useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Archive, CalendarDays, ChevronDown, Clapperboard, Copy } from 'lucide-react'
+import { Archive, CheckCircle2, CalendarDays, ChevronDown, Clapperboard, Copy } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
@@ -53,10 +53,12 @@ function whenShort(iso: string | null | undefined) {
 }
 
 export function ShootStageBoard({
-  shoots, itemCounts, names, roles, role, viewerId, today, onMove, busyId, laneEmpty, reviewer = false, onDuplicate, onArchive, mayArchive,
+  shoots, itemCounts, names, roles, role, viewerId, today, onMove, busyId, laneEmpty, reviewer = false, onDuplicate, onArchive, onDone, mayArchive,
 }: {
   /** "Archive" on a card (20 Oct 2026) — absent for someone who may not run that shoot */
   onArchive?: (shoot: StageShoot) => void
+  /** Done — close and archive (We decide, 4 Nov 2026), on the card too (5 Nov 2026): managers only */
+  onDone?: (s: StageShoot) => void
   /** whether this viewer may archive this one */
   mayArchive?: (shoot: StageShoot) => boolean
   /** "Duplicate brief" on a card (20 Oct 2026) — absent for someone who cannot plan shoots */
@@ -194,7 +196,7 @@ export function ShootStageBoard({
             })()}
           </>}
           note={<>{who}{note ? <><br />{note}</> : null}</>}
-          actions={moves.length > 0 || onDuplicate || (onArchive && (mayArchive?.(s) ?? true)) ? (
+          actions={moves.length > 0 || onDuplicate || onDone || (onArchive && (mayArchive?.(s) ?? true)) ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" disabled={busyId === s.id}
@@ -213,6 +215,14 @@ export function ShootStageBoard({
                     {moves.length > 0 && <DropdownMenuSeparator />}
                     <DropdownMenuItem className="min-h-11" onClick={() => onDuplicate(s)}>
                       <Copy className="h-4 w-4" aria-hidden /> Duplicate shoot plan
+                    </DropdownMenuItem>
+                  </>
+                )}
+                {onDone && (
+                  <>
+                    {(moves.length > 0 || onDuplicate) && <DropdownMenuSeparator />}
+                    <DropdownMenuItem className="min-h-11" onClick={() => onDone(s)}>
+                      <CheckCircle2 className="h-4 w-4" aria-hidden /> Done — close and archive
                     </DropdownMenuItem>
                   </>
                 )}

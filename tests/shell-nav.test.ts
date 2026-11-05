@@ -106,6 +106,7 @@ describe('resolveNav by role', () => {
       '/dashboard/settings',
       '/dashboard/todos', // everyone's own list (17 Sep 2026)
       '/dashboard/team-boards', // the team's own canvases (21 Sep 2026)
+      '/dashboard/production', // Shoots, every client's (5 Nov 2026)
     ].sort())
   })
 
@@ -117,6 +118,7 @@ describe('resolveNav by role', () => {
     expect(seen('scheduler').sort()).toEqual([
       '/dashboard',
       '/dashboard/notifications',
+      '/dashboard/production', // Shoots (5 Nov 2026)
       '/dashboard/scheduler',
       '/dashboard/settings',
       '/dashboard/team-boards',
@@ -136,7 +138,8 @@ describe('resolveNav by role', () => {
   it('keeps a scheduler off the pages that are not theirs to act on', () => {
     const list = seen('scheduler')
     for (const h of [
-      '/dashboard/social', '/dashboard/editor', '/dashboard/production',
+      // Shoots is theirs since 5 Nov 2026
+      '/dashboard/social', '/dashboard/editor',
       '/dashboard/clients', '/dashboard/team', '/dashboard/calendar', '/dashboard/files',
     ]) {
       expect(list, h).not.toContain(h)
@@ -225,10 +228,9 @@ describe('activeNavHref', () => {
     // hold is the Overview — the rail falls back to it rather than going blank
     expect(resolveNav('editor', [], [], '/dashboard/clients/abc-123').current)
       .toBe('/dashboard')
-    // an editor sent a link to a card lands on it, and the rail says Overview
-    // rather than a Production entry they do not hold
+    // an editor holds Shoots since 5 Nov 2026, so a shoot's page lights Shoots
     expect(resolveNav('editor', [], [], '/dashboard/production/abc-123').current)
-      .toBe('/dashboard')
+      .toBe('/dashboard/production')
   })
 })
 

@@ -27,7 +27,8 @@ export function teamBoardLink(origin: string, id: string): string {
 
 /** making, renaming, deleting a board — and saying which client it is for — is a manager's: an account manager or a super admin */
 export function mayManageTeamBoards(viewer: TeamBoardViewer): boolean {
-  return viewer?.role === 'account_manager' || viewer?.role === 'super_admin'
+  // + editors and schedulers (the owner, 5 Nov 2026: "same with boards")
+  return ['account_manager', 'super_admin', 'editor', 'scheduler'].includes(String(viewer?.role))
 }
 
 /** working on a board — adding, moving, deleting cards — is anyone's on the team, never a client's */

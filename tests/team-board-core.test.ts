@@ -11,7 +11,9 @@ describe('team boards (21 Sep 2026)', () => {
   it('a manager makes, renames and deletes; anyone on the team works on one; a client neither', () => {
     expect(mayManageTeamBoards({ id: 'a', role: 'account_manager' })).toBe(true)
     expect(mayManageTeamBoards({ id: 'a', role: 'super_admin' })).toBe(true)
-    for (const role of ['editor', 'scheduler', 'general', 'quality_checker', 'client']) expect(mayManageTeamBoards({ id: 'a', role })).toBe(false)
+    // 5 Nov 2026 ("same with boards"): editors and schedulers manage boards too
+    for (const role of ['editor', 'scheduler']) expect(mayManageTeamBoards({ id: 'a', role })).toBe(true)
+    for (const role of ['general', 'quality_checker', 'client']) expect(mayManageTeamBoards({ id: 'a', role })).toBe(false)
     for (const role of ['editor', 'scheduler', 'general', 'quality_checker', 'account_manager', 'super_admin']) expect(mayEditTeamBoard({ id: 'a', role })).toBe(true)
     expect(mayEditTeamBoard({ id: 'a', role: 'client' })).toBe(false)
     expect(mayEditTeamBoard(null)).toBe(false)
