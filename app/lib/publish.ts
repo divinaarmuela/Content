@@ -1260,7 +1260,10 @@ export async function syncSocialAccounts(
   const before = new Set((await table<SocialAccount>('social_accounts').list({ by: { client_id: clientId } })).map(r => r.provider_account_id))
 
   const current = new Set(accounts.map(a => a.providerAccountId))
+  // TAKEN OFF THIS CLIENT ON THE DASHBOARD (5 Nov 2026): never put back by a sync
+  const detached = new Set((await table<SocialAccount>('social_accounts').list({ where: r => r.detached_from === clientId })).map(r => String(r.provider_account_id)))
   for (const a of accounts) {
+    if (detached.has(String(a.providerAccountId))) continue
     const isNew = !before.has(a.providerAccountId)
     // A RECONNECT KEEPS ITS ROW (the owner, 26 Sep 2026: "make sure it doesn't override data we have — like the
     // followers data"). The provider may give a reconnected account a new id; matched by that id alone, Jordan

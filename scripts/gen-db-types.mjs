@@ -1181,7 +1181,12 @@ const GHOST_COLUMNS = {
   //     business page; a client_contacts id when it is that person's own
   //     account (app/lib/account-owner-core.ts). A label on our row only —
   //     nothing at the posting provider changes.
-  social_accounts: [['health', col('unknown', true, true)], ['contact_id', col('string', true)]],
+  social_accounts: [['health', col('unknown', true, true)], ['contact_id', col('string', true)],
+    //   social_accounts.detached_from — the client this account was taken off on the dashboard (the owner, 5 Nov 2026:
+    //     "just move the connection on the dashboard … make sure the connection doesn't reset"). One login connected
+    //     in a client's Zernio group brings every page it manages (TMS Logistics' pages came into Cubiic's group);
+    //     the sync then skips this account for that client, so it is never put back. Nothing in Zernio is touched.
+    ['detached_from', col('string', true)]],
   //   content_items.link_url / link_kind — A CARD CARRIES A LINK (the three
   //     pages reset, 6 Sep 2026). Where the work lives: a Google Drive or
   //     Dropbox URL somebody pasted, labelled by host ('drive' | 'dropbox' |
@@ -1339,6 +1344,9 @@ const GHOST_COLUMNS = {
     //     the booked-first posting order with the client's answer after. Unset/false = today's portal and
     //     posting order, untouched. On for the test clients during the build; for everyone at launch.
     ['portal_one', col('boolean', true)],
+    //   clients.hide_from_social — leave this client off the Social page (the owner, 5 Nov 2026: "remove TMS
+    //     Packaging" from Social only). Unset/false = listed, as always; the client stays active everywhere else.
+    ['hide_from_social', col('boolean', true)],
     ['instagram_locations', col('unknown', false, true, true)],
     //   clients.instagram_via_meta — post THIS client's Instagram through the agency's own Meta app
     //     instead of Zernio (1 Oct 2026, for Meta App Review; testing). Super admin switch on the client's

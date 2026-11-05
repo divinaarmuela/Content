@@ -22,6 +22,8 @@ type Client = {
   status: 'prospect' | 'active' | 'paused' | 'archived'
   /** the portal token — only a manager receives it (the clients API) */
   share_token?: string | null
+  /** left off the Social page, still active everywhere else (5 Nov 2026) */
+  hide_from_social?: boolean | null
 }
 
 type Account = {
@@ -81,7 +83,7 @@ export default function SocialPage() {
   }, [clients])
 
   const visible = (clients ?? [])
-    .filter(c => c.status !== 'archived')
+    .filter(c => c.status !== 'archived' && !c.hide_from_social)
     .filter(c => !search || c.name.toLowerCase().includes(search.toLowerCase()))
 
   const clientName = (id: string | null) =>
@@ -167,10 +169,18 @@ export default function SocialPage() {
         <div className="flex items-start gap-2 rounded-inner border border-accent-amber/35 bg-tint-amber px-3 py-2 text-secondary-13 text-foreground">
           <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           <div>
-            <strong>
-              {expiring.length} channel{expiring.length > 1 ? 's need' : ' needs'} reconnecting.
-            </strong>{' '}
-            Until they are, scheduled posts for them will not go out.
+            {/* TWO DIFFERENT THINGS (the owner, 5 Nov 2026: "why is it showing disconnection?"): a channel that is
+                disconnected now, and one still connected whose login runs out soon. Only the first stops posts today. */}
+            {(() => {
+              const down = expiring.filter(e => e.notice.level === 'act').length
+              const soon = expiring.length - down
+              return (
+                <>
+                  {down > 0 && <><strong>{down} channel{down > 1 ? 's are' : ' is'} disconnected.</strong>{' '}Scheduled posts for {down > 1 ? 'them' : 'it'} will not go out until {down > 1 ? 'they are' : 'it is'} reconnected.{' '}</>}
+                  {soon > 0 && <><strong>{soon} channel{soon > 1 ? 's' : ''} still connected, but {soon > 1 ? 'their logins expire' : 'its login expires'} soon.</strong>{' '}{soon > 1 ? 'They post' : 'It posts'} as normal until then. Reconnect before the date to avoid a gap.</>}
+                </>
+              )
+            })()}
             <ul className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5">
               {expiring.map(({ row: account, notice }) => (
                 <li key={account.id}>
@@ -178,7 +188,7 @@ export default function SocialPage() {
                     {clientName(account.client_id)} · {account.platform}
                   </Link>
                   {' — '}
-                  {notice.level === 'act' ? 'disconnected' : timeLeftWords(notice.daysLeft)}
+                  {notice.level === 'act' ? 'disconnected' : `login expires in ${timeLeftWords(notice.daysLeft).replace(' left', '')}`}
                 </li>
               ))}
             </ul>
@@ -264,7 +274,7 @@ export default function SocialPage() {
       <ComposeDialog
         open={composeFor !== null}
         onOpenChange={o => setComposeFor(o ? (composeFor ?? '') : null)}
-        clients={(clients ?? []).filter(c => c.status !== 'archived')}
+        clients={(clients ?? []).filter(c => c.status !== 'archived' && !c.hide_from_social)}
         accounts={accounts}
         defaultClientId={composeFor ?? undefined}
         onPublished={load}
