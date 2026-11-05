@@ -501,6 +501,10 @@ export function availableStats(posts: readonly StatPost[]): Map<string, Set<Stat
     // A 0 IS NOT "NOT GIVEN" (5 Nov 2026, Anthony: "carousels … not given: saves" — Instagram gives saves, none of
     // his October carousels got one). Instagram gives every one of these for every post but an expired story.
     if (p.platform === 'instagram' && postKindOf(p.format) !== 'story') for (const s of STATS) set.add(s)
+    // TikTok gives all six on every video; LinkedIn gives reach, likes, comments and shares on every post (views only on
+    // text posts and personal-profile videos, so those still come from the posts; no saves at all)
+    if (p.platform === 'tiktok') for (const s of STATS) set.add(s)
+    if (p.platform === 'linkedin') for (const s of ['reach', 'likes', 'comments', 'shares'] as const) set.add(s)
     for (const s of STATS) if ((p[s] ?? 0) > 0) set.add(s)
     out.set(k, set)
   }

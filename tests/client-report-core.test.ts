@@ -85,3 +85,10 @@ it2('Instagram carousels give saves even when none got one (5 Nov 2026)', () => 
   const f = av([{ platform: 'facebook', format: 'carousel', reach: 5, likes: 0 }])
   ex2(f.get('facebook:carousel')?.has('views')).toBe(false)
 })
+it2('TikTok and LinkedIn: a 0 is not "not given" (5 Nov 2026)', () => {
+  const t = av([{ platform: 'tiktok', format: 'video', views: 10, shares: 0, saves: 0 }])
+  ex2(t.get('tiktok:reel')?.has('shares')).toBe(true)
+  const l = av([{ platform: 'linkedin', format: 'image', reach: 5, shares: 0 }])
+  ex2(l.get('linkedin:image')?.has('shares')).toBe(true)
+  ex2(l.get('linkedin:image')?.has('saves')).toBe(false)
+})

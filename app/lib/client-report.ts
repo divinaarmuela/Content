@@ -242,7 +242,13 @@ async function figuresOf(acc: Account, profileId: string | null, m: MonthKey, ga
   const onPlatform = arr(obj(d.followers).byAccount).filter(a => String(a.platform ?? acc.platform) === acc.platform)
   const oneAccount = onPlatform.length <= 1 && (!onPlatform.length || String(onPlatform[0].accountId) === acc.id)
   fig.countedAs = 'month'
-  if ((acc.platform === 'tiktok' || acc.platform === 'linkedin') && !oneAccount) {
+  // CONNECTED AFTER THE MONTH (5 Nov 2026, Basfoods' Facebook, connected that day): Zernio's day-by-day starts when an
+  // account is connected, so October came back all 0 while its posts carried Facebook's own 7,438 views. Empty month
+  // totals beside posts with numbers = the posts' own numbers, said as such — never a row of 0s.
+  const monthEmpty = !(num(totals.views) || num(totals.impressions) || num(totals.reach) || num(totals.likes))
+  const postsHave = posts.some(p => p.views > 0 || p.reach > 0 || p.likes > 0)
+  if (monthEmpty && postsHave) gaps.push(`${label}: Zernio has no day-by-day figures for this month (the account was connected later), so the totals are this month's posts' own numbers`)
+  if (((acc.platform === 'tiktok' || acc.platform === 'linkedin') && !oneAccount) || (monthEmpty && postsHave)) {
     // not one account's: the month's own posts, added up, said as such (no day-by-day, no last month)
     fig.countedAs = 'posts'
     const sum = (k: 'views' | 'reach' | 'likes' | 'comments' | 'shares' | 'saves') => posts.reduce((n, p) => n + (p[k] || 0), 0)
