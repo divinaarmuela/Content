@@ -3,7 +3,7 @@ import { table } from '@/lib/db'
 import type { AudienceSnapshot, Client, ClientReport } from '@/lib/db-types'
 import {
   monthRange, previousMonth, readReportData, reportId, reportPrompt, toBreakdown,
-  type Audience, type MonthKey, type PlatformFigures, type ReportData, type TopPost, keepVersion, includedIds, type CandidatePost, REPORT_DATA_VERSION, REPORT_PLATFORMS, platformLabel, includedPlatforms, scopeData, type ReportPlatform } from './client-report-core'
+  type Audience, type MonthKey, type PlatformFigures, type ReportData, type TopPost, keepVersion, includedIds, type CandidatePost, REPORT_DATA_VERSION, REPORT_PLATFORMS, platformLabel, includedPlatforms, scopeData, type ReportPlatform, nextMonthStart, followerMonth } from './client-report-core'
 import { breakdownLines, readPostsExplained } from './post-breakdown-core'
 import { keepPictures } from './report-pictures'
 import { aiClient, aiError, viaGateway, writerModel } from './ai-gateway'
@@ -179,29 +179,26 @@ async function figuresOf(acc: Account, profileId: string | null, m: MonthKey, ga
     topPosts: [],
     posts: 0,
   }
-  // FOLLOWERS: ONLY WHAT ZERNIO GIVES (the owner, 5 Nov 2026: "only use data what you have"). The count today, from a
-  // request that runs to today (on Facebook `current` is the count at the end of the dates asked, on Instagram it is
-  // today's), and what the month gained. Nothing worked out: no month-end count, no comparison built from one.
+  // FOLLOWERS: ZERNIO'S MONTHLY COUNT (the owner, 5 Nov 2026: "yes, follower count"). /accounts/follower-stats with
+  // granularity=monthly gives the account's follower count on the 1st of each month, from Zernio's daily snapshot,
+  // the same for Instagram, Facebook, TikTok and LinkedIn. The month = the count on its 1st and on the next month's
+  // 1st (today's count while the month is running); last month = its own two counts. A count Zernio does not have
+  // (its snapshots began 1 Oct 2026) is left empty, never filled in.
   {
+    const next = nextMonthStart(m)
+    const prevStart = `${previousMonth(m)}-01`
     const today = new Date().toISOString().slice(0, 10)
-    let now: number | null = null
-    const live = await zernio<Record<string, unknown>>('/analytics/dashboard', {
-      ...(profileId ? { profileId } : {}), platform: acc.platform, fromDate: today, toDate: today, topPosts: 0, recentPosts: 0,
+    const fs = await zernio<{ accounts?: unknown; stats?: Record<string, unknown> }>('/accounts/follower-stats', {
+      accountIds: acc.id, fromDate: prevStart, toDate: next <= today ? next : today, granularity: 'monthly',
     })
-    if (live.ok) now = num(mine(live.data.followers).current)
-    else gaps.push(`${label}: today's follower count could not be read (${live.error})`)
-    // the month before's gain, the same way (its own request: `previousFollowers.gained` read 0 where it was not)
-    const pr = monthRange(previousMonth(m))
-    const prev = await zernio<Record<string, unknown>>('/analytics/dashboard', {
-      ...(profileId ? { profileId } : {}), platform: acc.platform, fromDate: pr.from, toDate: pr.to, topPosts: 0, recentPosts: 0,
-    })
-    // a month with no follower movement on ANY day is a month Zernio did not track (every account read 0 for
-    // September 2026), not a month of no change: "not available", never a 0
-    const tracked = (d: Record<string, unknown>) => arr(d.daily).some(x => (num(x.followersGained) ?? 0) !== 0)
-    fig.followers = {
-      start: null, end: now, previousEnd: null,
-      gained: tracked(d) || (num(fNow.gained) ?? 0) !== 0 ? num(fNow.gained) : null,
-      previousGained: prev.ok && (tracked(prev.data) || (num(mine(prev.data.followers).gained) ?? 0) !== 0) ? num(mine(prev.data.followers).gained) : null,
+    if (fs.ok) {
+      const points = arr(obj(fs.data.stats)[acc.id])
+      const at = (d: string) => num(points.find(p => String(p.date).slice(0, 10) === d)?.followers)
+      const nowCount = num(arr(fs.data.accounts).find(a => String(a._id) === acc.id)?.currentFollowers)
+      fig.followers = followerMonth(at(`${m}-01`), next <= today ? at(next) : nowCount, at(prevStart))
+    } else {
+      gaps.push(`${label}: the follower counts could not be read (${fs.error})`)
+      fig.followers = { start: null, end: null, previousEnd: null, gained: null, previousGained: null }
     }
   }
   // the month's posts — captions, pictures and links, ranked by views (the guide: "we primarily report on views")

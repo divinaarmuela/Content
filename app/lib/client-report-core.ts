@@ -124,7 +124,7 @@ export type CandidatePost = {
 }
 /** RAISE WHEN HOW THE FIGURES ARE READ CHANGES: a month saved under an older one is read again on its next open
  *  (5 Nov 2026: stories were saved as "video" and ranked as blank top posts until someone pressed Read again) */
-export const REPORT_DATA_VERSION = 8
+export const REPORT_DATA_VERSION = 9
 export type ReportData = {
   /** REPORT_DATA_VERSION the figures were read under; unset = before 5 Nov 2026 */
   v?: number
@@ -225,7 +225,7 @@ export function reportPrompt(input: {
   const { data } = input
   const platforms = data.platforms.map(p => platformLabel(p.platform)).join(' and ') || 'Instagram'
   // only what was read: today's count and the month's gain (5 Nov 2026)
-  const followers = data.platforms.map(p => `${platformLabel(p.platform)}: ${p.followers.gained == null ? 'gain not available' : `${p.followers.gained >= 0 ? '+' : ''}${fmt(p.followers.gained)} gained in ${monthLabel(data.month)}`}${p.followers.previousGained != null ? ` (the month before: ${p.followers.previousGained >= 0 ? '+' : ''}${fmt(p.followers.previousGained)})` : ''}`).join('; ')
+  const followers = data.platforms.map(p => `${platformLabel(p.platform)}: ${p.followers.start != null && p.followers.end != null ? `${fmt(p.followers.start)} at the start of the month, ${fmt(p.followers.end)} at the end, ` : ''}${p.followers.gained == null ? 'gain not available' : `${p.followers.gained >= 0 ? '+' : ''}${fmt(p.followers.gained)} gained in ${monthLabel(data.month)}`}${p.followers.previousGained != null ? ` (the month before: ${p.followers.previousGained >= 0 ? '+' : ''}${fmt(p.followers.previousGained)})` : ''}`).join('; ')
   const { from, to } = monthRange(data.month)
   const system = [
     'You write monthly social media reports for MD Media, a Melbourne content agency, for its clients.',
@@ -498,4 +498,19 @@ export function availableStats(posts: readonly StatPost[]): Map<string, Set<Stat
 export function statsFor(post: StatPost, avail: Map<string, Set<Stat>> | null): Stat[] {
   const set = avail?.get(statKey(post))
   return STATS.filter(s => (set ? set.has(s) : (post[s] ?? 0) > 0))
+}
+
+/** the 1st of the month after (YYYY-MM-DD) */
+export function nextMonthStart(m: MonthKey): string {
+  const [y, mo] = m.split('-').map(Number)
+  return mo === 12 ? `${y + 1}-01-01` : `${y}-${String(mo + 1).padStart(2, '0')}-01`
+}
+
+/** a month's followers from Zernio's counts on the 1sts: nothing worked out beyond the two differences */
+export function followerMonth(start: number | null, end: number | null, prevStart: number | null): PlatformFigures['followers'] {
+  return {
+    start, end, previousEnd: start,
+    gained: start != null && end != null ? end - start : null,
+    previousGained: prevStart != null && start != null ? start - prevStart : null,
+  }
 }

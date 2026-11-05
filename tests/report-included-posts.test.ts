@@ -49,3 +49,14 @@ describe('followers at the month end (5 Nov 2026, Kode Finance)', async () => {
     expect(monthFollowers(2414, 5, 43)).toEqual({ start: 2366, end: 2409, previousEnd: 2366, gained: 43 })
   })
 })
+
+describe('followers from Zernio’s monthly counts (5 Nov 2026)', async () => {
+  const { followerMonth, nextMonthStart } = await import('../app/lib/client-report-core')
+  it('Kode Instagram, October: 2,390 on 1 Oct, 2,414 on 1 Nov', () => {
+    expect(followerMonth(2390, 2414, null)).toEqual({ start: 2390, end: 2414, previousEnd: 2390, gained: 24, previousGained: null })
+  })
+  it('a count Zernio does not have stays empty', () => {
+    expect(followerMonth(null, 2414, null).gained).toBeNull()
+    expect(nextMonthStart('2026-12')).toBe('2027-01-01')
+  })
+})

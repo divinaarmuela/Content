@@ -48,7 +48,8 @@ export function PlatformSection({ p, month, running, avail = null }: { p: Platfo
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {/* only what the platform gives: the gain in the month, and the count today (5 Nov 2026) */}
         {p.followers.gained != null && <Kpi label="Followers gained this month" value={p.followers.gained} prefix={p.followers.gained > 0 ? '+' : ''} compare={false}
-          note={p.followers.previousGained != null ? `last month: ${p.followers.previousGained > 0 ? '+' : ''}${fmt(p.followers.previousGained)}` : undefined} hint="New followers less unfollows, over the month." />}
+          note={`${fmt(p.followers.start)} on the 1st → ${fmt(p.followers.end)}${running ? ' now' : ' at the month’s end'} · last month: ${p.followers.previousGained == null ? 'not available' : `${p.followers.previousGained > 0 ? '+' : ''}${fmt(p.followers.previousGained)}`}`}
+          hint="Zernio’s follower count on the 1st of each month." />}
         {/* the month picker shows THAT month (the owner, 5 Nov 2026): today's count is not a past month's number */}
         {running && p.followers.end != null && <Kpi label="Followers now" value={p.followers.end} compare={false} hint="People following the account today." />}
         {has(p.views, p.previous.views) && <Kpi label="Views" value={p.views} was={p.previous.views} compare={!running} note={soFar} hint="How many times the posts were seen, repeat views included." />}
