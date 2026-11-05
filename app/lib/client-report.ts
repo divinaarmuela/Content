@@ -178,6 +178,13 @@ async function figuresOf(acc: Account, profileId: string | null, m: MonthKey, ga
       caption: p.caption.slice(0, 300), format: p.format, views: p.views, byMdm: ours.has(p.id) })))
   }
   fig.topPosts = [...posts].sort((a, b) => b.views - a.views).slice(0, 5)
+  // A PAGE THAT GAVE NO NUMBERS (5 Nov 2026, Shan's Facebook: ten posts, every one 0 views, 0 likes, no caption —
+  // Facebook gave the page's posts but none of their figures). Five blank cards read as "nobody watched"; say what it
+  // is instead, and keep the zeros away from the report and the writer.
+  if (posts.length > 0 && posts.every(p => !p.views && !p.reach && !p.likes && !p.comments && !p.shares)) {
+    gaps.push(`${label}: the ${posts.length} posts came through with no views, likes or comments at all — Facebook is not giving this page's figures. Reconnect the page (with its insights allowed) and read the figures again.`)
+    fig.topPosts = []
+  }
   if (!posts.length) {
     // the dashboard's own top posts, when the post list gave nothing
     fig.topPosts = arr(d.topPosts).slice(0, 5).map(t => {
