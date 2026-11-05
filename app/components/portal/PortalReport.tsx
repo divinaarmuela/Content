@@ -49,6 +49,7 @@ export default function PortalReport({ report }: { report: Report }) {
   const [sort, setSort] = useState<'views' | 'newest'>('views')
   const [open, setOpen] = useState<CandidatePost | null>(null)
   const kinds = [...new Set(report.posts.map(c => mediumName(c.format)))]
+  const postPlatforms = [...new Set(report.posts.map(c => c.platform))]
   const posts = report.posts
     .filter(c => (where === 'all' || c.platform === where) && (kind === 'all' || mediumName(c.format) === kind))
     .sort((a, b) => (sort === 'views' ? (b.views || b.reach || 0) - (a.views || a.reach || 0) : String(b.publishedAt).localeCompare(String(a.publishedAt))))
@@ -96,9 +97,14 @@ export default function PortalReport({ report }: { report: Report }) {
         <section className="flex flex-col gap-4">
           <h2 className="text-[22px] font-semibold tracking-tight">Your posts this month <span className="text-muted-foreground">({report.posts.length})</span></h2>
           <div className="flex flex-wrap items-center gap-2">
-            <button type="button" className={chip(where === 'all')} onClick={() => setWhere('all')}>All accounts</button>
-            {accounts.map(a => <button key={a.platform} type="button" className={chip(where === a.platform)} onClick={() => setWhere(a.platform)}>{platformName(a.platform)}</button>)}
-            <span className="mx-1 h-6 w-px bg-border" aria-hidden />
+            {/* the accounts the POSTS are on (5 Nov 2026: a lone "Instagram" chip filtered nothing) — shown only when there are two */}
+            {postPlatforms.length > 1 && (
+              <>
+                <button type="button" className={chip(where === 'all')} onClick={() => setWhere('all')}>All accounts</button>
+                {postPlatforms.map(pl => <button key={pl} type="button" className={chip(where === pl)} onClick={() => setWhere(pl)}>{platformName(pl)} ({report.posts.filter(c => c.platform === pl).length})</button>)}
+                <span className="mx-1 h-6 w-px bg-border" aria-hidden />
+              </>
+            )}
             <button type="button" className={chip(kind === 'all')} onClick={() => setKind('all')}>Every type</button>
             {kinds.map(k => <button key={k} type="button" className={chip(kind === k)} onClick={() => setKind(k)}>{k}s</button>)}
             <span className="mx-1 h-6 w-px bg-border" aria-hidden />
