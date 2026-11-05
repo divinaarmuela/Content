@@ -667,21 +667,28 @@ function EarlierVersions({ history, people }: { history: ReportVersion[]; people
  */
 function HowItWorks() {
   const [open, setOpen] = useState(false)
+  // brought up to date with the rebuilt report (5 Nov 2026)
   const steps: { title: string; body: string }[] = [
     { title: '1. The figures are read from the client’s own accounts',
-      body: 'Every number comes from the client’s connected Instagram and Facebook. Nothing is typed in by hand and nothing is posted or changed — it only reads. “Read the figures again” fetches them fresh.' },
-    { title: '2. The month is not final straight away',
-      body: 'Instagram keeps counting views and reach for a couple of days after a post goes out, so a month’s numbers settle 2 days after it ends. Build it before then and the report says so — build it again after for the final numbers.' },
-    { title: 'Which posts the report is about',
-      body: 'Under “Posts in this report”, the posts MD Media published are ticked to start. Tick any other post from the month to add it, or untick one to leave it out. The explanations and the written report are about the ticked posts; the account totals stay as context.' },
+      body: 'Every number comes from the client’s connected Instagram, Facebook, TikTok and LinkedIn, through Zernio. Nothing is typed in by hand and nothing is posted or changed. “Read the figures again” fetches them fresh.' },
+    { title: 'Followers',
+      body: 'Instagram: its own follows minus unfollows for the month, the same number as Instagram’s app (e.g. 82 follows − 38 unfollows = +44). Facebook, TikTok and LinkedIn: Zernio’s daily follower count, first day of the month to the last. Zernio only has counts from the day an account was connected, so the card says “first day tracked” when that was mid-month, and “not available” when it was less than a week.' },
+    { title: 'Views, reach and interactions',
+      body: 'What happened during the month, on any post, including older posts and stories. “Last month” is the calendar month before. Views count every time something was seen; reach counts different people. Interactions are broken into likes, comments, shares, saves and anything else the platform counted.' },
+    { title: 'Every number says what it is',
+      body: 'A number, “not tracked yet” (before the account was connected), “not given by this platform” (e.g. Facebook gives no views on images), or “couldn’t read, try again” (Zernio didn’t answer). A missing number is never shown as 0, and there is no % change against a month with no figure.' },
+    { title: '2. Which posts the report is about',
+      body: 'In Build report, the posts MD Media published are ticked to start. Tick any other post from the month to add it, or untick one to leave it out. The explanations and the written report are about the ticked posts; the account totals stay as context. Below the figures, all the month’s posts can be filtered by account, type and who posted them, nine at a time.' },
     { title: '3. The posts are explained',
-      body: 'Every Instagram post of the month is compared with the account’s own last 90 days — not other accounts. The 5 best and up to 3 that fell behind are picked, and the AI looks at each one (the picture, the caption and the numbers) and says why it did well or fell behind.' },
+      body: 'Each ticked post is compared with the account’s own posts from the 90 days around it — not other accounts. The 5 best and up to 3 that fell behind are explained: the picture, the caption and the numbers, and why it did well or fell behind.' },
     { title: '4. The report is written',
-      body: 'The AI writes the report from the figures above, the post explanations, and the objective and notes you give it. It only uses these numbers — it does not look anything up elsewhere.' },
-    { title: '5. A person checks it',
-      body: 'The AI draft is a starting point. Read it, fix anything that sounds wrong, tick the checks, then download the PDF. Nothing is ever sent to the client from here.' },
+      body: 'The AI writes the report from the numbers shown on this page, the post explanations, and the objective and notes you give it. It uses only these numbers.' },
+    { title: '5. Automatic checks',
+      body: 'Every report is checked: followers add up, interaction parts add up to the total, last month matches its own report, every account was read. Anything wrong is listed in red, and Share with client stays off until it is fixed.' },
+    { title: '6. A person checks it, then shares it',
+      body: 'The AI draft is a starting point. Read it, fix anything that sounds wrong, then Share with client to put it on their portal. Sharing sends no email. You can also download the PDF.' },
     { title: 'Nothing is lost',
-      body: 'Building again or editing keeps the old version under “Earlier versions”, with who wrote it and when. The page also shows who last explained the posts and who last edited the report.' },
+      body: 'Building again or editing keeps the old version under “Earlier versions”, with who wrote it and when.' },
   ]
   return (
     <>
@@ -693,7 +700,7 @@ function HowItWorks() {
         <DialogHeader>
           <DialogTitle>How this report works</DialogTitle>
           <DialogDescription>
-            One press of <strong className="text-foreground">Build report</strong> does steps 1, 3 and 4 in order. Here is where everything comes from.
+            One press of <strong className="text-foreground">Build report</strong> does steps 1, 3, 4 and 5 in order. Here is where everything comes from.
           </DialogDescription>
         </DialogHeader>
       <ol className="grid gap-3 sm:grid-cols-2">
@@ -713,7 +720,7 @@ function HowItWorks() {
 /* ── BUILD REPORT, STEP BY STEP ─────────────────────────────────────────── */
 type BuildStep = { label: string; detail: string; state: 'wait' | 'run' | 'done' | 'skip' | 'fail'; from?: number; to?: number; note?: string }
 const BUILD_STEPS: Omit<BuildStep, 'state'>[] = [
-  { label: 'Read the figures fresh', detail: 'Followers, views, reach and every post, from the client’s accounts' },
+  { label: 'Read the figures fresh', detail: 'Followers, views, reach and every post, from the client’s Instagram, Facebook, TikTok and LinkedIn' },
   { label: 'Explain the posts', detail: 'Each ticked post compared with the last 90 days — about a minute' },
   { label: 'Write the report', detail: 'The AI writes it from all of the above — a minute or two' },
 ]
