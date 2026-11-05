@@ -3,7 +3,7 @@ import { table } from '@/lib/db'
 import type { AudienceSnapshot, Client, ClientReport } from '@/lib/db-types'
 import {
   monthRange, previousMonth, readReportData, reportId, reportPrompt, toBreakdown,
-  type Audience, type MonthKey, type PlatformFigures, type ReportData, type TopPost, keepVersion, includedIds, type CandidatePost, REPORT_DATA_VERSION, REPORT_PLATFORMS, platformLabel, includedPlatforms, scopeData, type ReportPlatform, monthFollowers } from './client-report-core'
+  type Audience, type MonthKey, type PlatformFigures, type ReportData, type TopPost, keepVersion, includedIds, type CandidatePost, REPORT_DATA_VERSION, REPORT_PLATFORMS, platformLabel, includedPlatforms, scopeData, type ReportPlatform } from './client-report-core'
 import { breakdownLines, readPostsExplained } from './post-breakdown-core'
 import { keepPictures } from './report-pictures'
 import { aiClient, aiError, viaGateway, writerModel } from './ai-gateway'
@@ -179,23 +179,30 @@ async function figuresOf(acc: Account, profileId: string | null, m: MonthKey, ga
     topPosts: [],
     posts: 0,
   }
-  // FOLLOWERS AT THE MONTH'S END (5 Nov 2026, Kode Finance: "new followers in October, why is it showing 0?").
-  // Zernio's `current` is the count TODAY in both the month and the month before, so end and last month's end were
-  // the same number and the change read 0. The month's end is today's count less what was gained since; the month
-  // began at that less what it gained.
+  // FOLLOWERS: ONLY WHAT ZERNIO GIVES (the owner, 5 Nov 2026: "only use data what you have"). The count today, from a
+  // request that runs to today (on Facebook `current` is the count at the end of the dates asked, on Instagram it is
+  // today's), and what the month gained. Nothing worked out: no month-end count, no comparison built from one.
   {
-    const now = num(fNow.current)
-    let since = 0
     const today = new Date().toISOString().slice(0, 10)
-    const after = new Date(Date.parse(`${to}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10)
-    if (now != null && after <= today) {
-      const later = await zernio<Record<string, unknown>>('/analytics/dashboard', {
-        ...(profileId ? { profileId } : {}), platform: acc.platform, fromDate: after, toDate: today, topPosts: 0, recentPosts: 0,
-      })
-      if (later.ok) since = num(mine(later.data.followers).gained) ?? 0
-      else gaps.push(`${label}: the follower count at the month's end could not be worked out (${later.error})`)
+    let now: number | null = null
+    const live = await zernio<Record<string, unknown>>('/analytics/dashboard', {
+      ...(profileId ? { profileId } : {}), platform: acc.platform, fromDate: today, toDate: today, topPosts: 0, recentPosts: 0,
+    })
+    if (live.ok) now = num(mine(live.data.followers).current)
+    else gaps.push(`${label}: today's follower count could not be read (${live.error})`)
+    // the month before's gain, the same way (its own request: `previousFollowers.gained` read 0 where it was not)
+    const pr = monthRange(previousMonth(m))
+    const prev = await zernio<Record<string, unknown>>('/analytics/dashboard', {
+      ...(profileId ? { profileId } : {}), platform: acc.platform, fromDate: pr.from, toDate: pr.to, topPosts: 0, recentPosts: 0,
+    })
+    // a month with no follower movement on ANY day is a month Zernio did not track (every account read 0 for
+    // September 2026), not a month of no change: "not available", never a 0
+    const tracked = (d: Record<string, unknown>) => arr(d.daily).some(x => (num(x.followersGained) ?? 0) !== 0)
+    fig.followers = {
+      start: null, end: now, previousEnd: null,
+      gained: tracked(d) || (num(fNow.gained) ?? 0) !== 0 ? num(fNow.gained) : null,
+      previousGained: prev.ok && (tracked(prev.data) || (num(mine(prev.data.followers).gained) ?? 0) !== 0) ? num(mine(prev.data.followers).gained) : null,
     }
-    fig.followers = monthFollowers(now, since, num(fNow.gained))
   }
   // the month's posts — captions, pictures and links, ranked by views (the guide: "we primarily report on views")
   let posts: TopPost[] = []

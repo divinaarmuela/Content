@@ -521,7 +521,7 @@ function PrintReport({ data, report, clientName }: { data: ReportData; report: S
           <table className="pr-kpis">
             <tbody>
               {([
-                ['Followers', p.followers.end, p.followers.previousEnd],
+                ['Followers gained this month', p.followers.gained, p.followers.previousGained ?? null],
                 ['Views', p.views, p.previous.views],
                 ['Accounts reached', p.reach, p.previous.reach],
                 ['Interactions', p.interactions, p.previous.interactions],

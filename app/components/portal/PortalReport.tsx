@@ -71,7 +71,8 @@ export default function PortalReport({ report }: { report: Report }) {
             ))}
           </div>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <Kpi label="Followers" value={p.followers.end} was={p.followers.previousEnd} hint="People following the account at the end of the month." />
+            {p.followers.gained != null && <Kpi label="Followers gained" value={p.followers.gained} prefix={p.followers.gained > 0 ? '+' : ''} compare={false}
+              note={p.followers.previousGained != null ? `last month: ${p.followers.previousGained > 0 ? '+' : ''}${fmt(p.followers.previousGained)}` : undefined} hint="New followers less unfollows, over the month." />}
             <Kpi label="Views" value={p.views} was={p.previous.views} hint="How many times your posts were seen." />
             <Kpi label="Accounts reached" value={p.reach} was={p.previous.reach} hint="How many different people saw them." />
             <Kpi label="Interactions" value={p.interactions} was={p.previous.interactions} hint="Likes, comments, shares and saves." />

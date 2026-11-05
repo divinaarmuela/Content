@@ -7,12 +7,12 @@ import { availableStats, statsFor, STAT_WORD, STATS, type Stat, change, fmt, mon
 
 /** THE MONTH'S FIGURES, drawn — shared by the Reports page and the client's portal (5 Nov 2026) */
 
-export function Kpi({ label, value, was, suffix, note, hint, compare = true }: { label: string; value: number | null; was?: number | null; suffix?: string; note?: string; hint?: string; compare?: boolean }) {
+export function Kpi({ label, value, was, suffix, prefix = '', note, hint, compare = true }: { label: string; value: number | null; was?: number | null; suffix?: string; prefix?: string; note?: string; hint?: string; compare?: boolean }) {
   const c = compare ? change(value, was) : null
   return (
     <div className="flex flex-col gap-1 rounded-card border border-border bg-surface p-4">
       <span className="text-[13px] text-muted-foreground">{label}</span>
-      <span className="text-[28px] font-semibold leading-none tracking-tight tabular-nums">{value == null ? '—' : `${fmt(value)}${suffix ?? ''}`}</span>
+      <span className="text-[28px] font-semibold leading-none tracking-tight tabular-nums">{value == null ? '—' : `${prefix}${fmt(value)}${suffix ?? ''}`}</span>
       <span className="flex min-h-5 items-center gap-1 text-[12px]">
         {c && (
           <span className={`inline-flex items-center gap-0.5 font-semibold ${c.up ? 'text-accent-green' : 'text-accent-red'}`}>
@@ -46,8 +46,11 @@ export function PlatformSection({ p, month, running, avail = null }: { p: Platfo
       {/* WHAT THIS PLATFORM GIVES (the owner, 5 Nov 2026: "each social media line should say what analytics it provides") */}
       <GivesLine platform={p.platform} avail={stats} />
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        <Kpi label={running ? 'Followers now' : 'Followers at the end of the month'} value={p.followers.end} was={p.followers.previousEnd} compare={!running}
-          note={running ? `${fmt(p.followers.previousEnd)} when the month began` : undefined} hint="People following the account." />
+        {/* only what the platform gives: the gain in the month, and the count today (5 Nov 2026) */}
+        {p.followers.gained != null && <Kpi label="Followers gained this month" value={p.followers.gained} prefix={p.followers.gained > 0 ? '+' : ''} compare={false}
+          note={p.followers.previousGained != null ? `last month: ${p.followers.previousGained > 0 ? '+' : ''}${fmt(p.followers.previousGained)}` : undefined} hint="New followers less unfollows, over the month." />}
+        {/* the month picker shows THAT month (the owner, 5 Nov 2026): today's count is not a past month's number */}
+        {running && p.followers.end != null && <Kpi label="Followers now" value={p.followers.end} compare={false} hint="People following the account today." />}
         {has(p.views, p.previous.views) && <Kpi label="Views" value={p.views} was={p.previous.views} compare={!running} note={soFar} hint="How many times the posts were seen, repeat views included." />}
         {has(p.reach, p.previous.reach) && <Kpi label="Accounts reached" value={p.reach} was={p.previous.reach} compare={!running} note={soFar} hint="How many different people saw them." />}
         {has(p.interactions, p.previous.interactions) && <Kpi label="Interactions" value={p.interactions} was={p.previous.interactions} compare={!running} note={soFar} hint="Likes, comments, shares and saves added together." />}

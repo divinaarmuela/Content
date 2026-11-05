@@ -84,7 +84,9 @@ export type TopPost = {
 export type PlatformFigures = {
   platform: ReportPlatform
   handle: string | null
-  followers: { start: number | null; end: number | null; previousEnd: number | null; gained: number | null }
+  followers: { start: number | null; end: number | null; previousEnd: number | null; gained: number | null
+    /** what the month before gained, as Zernio gives it (5 Nov 2026: "each month compared to the previous month") */
+    previousGained?: number | null }
   views: number | null
   reach: number | null
   interactions: number | null
@@ -122,7 +124,7 @@ export type CandidatePost = {
 }
 /** RAISE WHEN HOW THE FIGURES ARE READ CHANGES: a month saved under an older one is read again on its next open
  *  (5 Nov 2026: stories were saved as "video" and ranked as blank top posts until someone pressed Read again) */
-export const REPORT_DATA_VERSION = 6
+export const REPORT_DATA_VERSION = 8
 export type ReportData = {
   /** REPORT_DATA_VERSION the figures were read under; unset = before 5 Nov 2026 */
   v?: number
@@ -222,7 +224,8 @@ export function reportPrompt(input: {
 }): { system: string; user: string } {
   const { data } = input
   const platforms = data.platforms.map(p => platformLabel(p.platform)).join(' and ') || 'Instagram'
-  const followers = data.platforms.map(p => `${platformLabel(p.platform)}: ${fmt(p.followers.end)} (last month ${fmt(p.followers.previousEnd)})`).join('; ')
+  // only what was read: today's count and the month's gain (5 Nov 2026)
+  const followers = data.platforms.map(p => `${platformLabel(p.platform)}: ${p.followers.gained == null ? 'gain not available' : `${p.followers.gained >= 0 ? '+' : ''}${fmt(p.followers.gained)} gained in ${monthLabel(data.month)}`}${p.followers.previousGained != null ? ` (the month before: ${p.followers.previousGained >= 0 ? '+' : ''}${fmt(p.followers.previousGained)})` : ''}`).join('; ')
   const { from, to } = monthRange(data.month)
   const system = [
     'You write monthly social media reports for MD Media, a Melbourne content agency, for its clients.',
