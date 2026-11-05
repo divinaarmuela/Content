@@ -23,6 +23,7 @@ import {
 } from './publish-core'
 import type { PlatformOutcome } from './post-outcome-core'
 import { META_PROVIDER, dueForDispatch, metaHold, type MetaJobState } from './meta-route-core'
+import { CHAIN_WAITING, storyAccount, storyPredecessor, waitsFor, type ChainJob } from './story-chain-core'
 
 /**
  * Publishing a client's post is the least reversible thing this system does —
@@ -334,6 +335,56 @@ export async function tellThePost(jobId: string, opts: { lost?: boolean } = {}):
   } catch (e) {
     console.error('[publish] could not arm the post automation', jobId, e instanceof Error ? e.message : e)
   }
+  // the next story in its sequence goes now, not at the dispatcher's next sweep (story-chain-core)
+  await wakeChained(jobId).catch(e => console.error('[publish] could not wake the next story after', jobId, e instanceof Error ? e.message : e))
+}
+
+/* ── STORIES IN ORDER (story-chain-core; the owner, 5 Nov 2026) ─────────── */
+
+/** the live and published story jobs on one account, for finding the one before */
+async function storyJobsOn(account: string): Promise<ChainJob[]> {
+  const rows = await table<PublishJobRow>('publish_jobs').list({
+    where: j => ['queued', 'publishing', 'scheduled', 'published'].includes(String(j.status)) && storyAccount(j as ChainJob) === account,
+  })
+  return rows as unknown as ChainJob[]
+}
+
+/**
+ * Should this queued story wait for the one before it? Marks it `chained_after` that one (so its time is not refused
+ * if the wait runs past it, and so the one before can wake it) and says why on the job. Best effort: a read that
+ * fails never holds a post.
+ */
+async function chainHeld(jobId: string): Promise<boolean> {
+  try {
+    const job = await table<PublishJobRow>('publish_jobs').get(jobId, { fresh: true })
+    if (!job || job.status !== 'queued') return false
+    const account = storyAccount(job as ChainJob)
+    if (!account) return false
+    const pred = storyPredecessor(job as ChainJob, await storyJobsOn(account))
+    const cur = (job as { chained_after?: string | null }).chained_after ?? null
+    if (pred && cur !== pred.id) await table('publish_jobs').update(jobId, { chained_after: pred.id } as never)
+    if (!waitsFor(pred)) {
+      if ((job as { error?: string | null }).error === CHAIN_WAITING) await table('publish_jobs').update(jobId, { error: null } as never)
+      return false
+    }
+    if ((job as { error?: string | null }).error !== CHAIN_WAITING) await table('publish_jobs').update(jobId, { error: CHAIN_WAITING } as never)
+    console.log(`[publish ${jobId}] story waits for ${pred!.id} (${pred!.status}) to go live first`)
+    return true
+  } catch (e) {
+    console.error('[publish] could not check the story order for', jobId, e instanceof Error ? e.message : e)
+    return false
+  }
+}
+
+/** a story just went live, or did not go out: the one waiting on it is asked to go now */
+async function wakeChained(jobId: string): Promise<void> {
+  const job = await table<PublishJobRow>('publish_jobs').get(jobId, { fresh: true })
+  if (!job || !['published', 'failed'].includes(String(job.status))) return
+  const next = await table<PublishJobRow>('publish_jobs').list({ where: j => j.status === 'queued' && (j as { chained_after?: string | null }).chained_after === jobId })
+  if (!next.length) return
+  const { inngest } = await import('../inngest/client')
+  await inngest.send(next.map(n => ({ name: 'app/post.publish.requested', data: { jobId: n.id } })))
+  console.log(`[publish ${jobId}] ${job.status}: woke the next story`, next.map(n => n.id).join(', '))
 }
 
 /**
@@ -373,6 +424,9 @@ async function attemptPublishJob(jobId: string): Promise<string | null> {
   // A META JOB IS NOT TAKEN BEFORE ITS TIME: Instagram's API has no scheduling, so the job waits in
   // 'queued' and is published at its time (meta-route-core.metaHold). Asked inside the claim, so the
   // answer and the write are one.
+  // STORIES IN ORDER (story-chain-core): one with an earlier story on the same account still to go out waits for it
+  if (await chainHeld(jobId)) return 'held'
+
   let held = false
   const taken = await table<PublishJobRow>('publish_jobs').claim(jobId, cur => {
     held = false

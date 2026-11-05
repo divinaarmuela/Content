@@ -22,6 +22,7 @@ import { isTrialTarget } from './trial-reel-core'
 import { readPostedSlides } from './posted-slides-core'
 import { platformOfUrl } from './external-post-match-core'
 import type { NetworkOutcome, OutcomeStatus as PostOutcomeStatus } from './post-stage-core'
+import { CHAIN_LATE_LIMIT_MS } from './story-chain-core'
 
 export type OutcomeStatus = 'queued' | 'scheduled' | 'published' | 'failed' | 'pending' | 'cancelled'
 
@@ -926,7 +927,7 @@ export const LATE_COPY_UNSENT =
  *             back to Ready to post with the reason (T18)
  */
 export function providerTiming(
-  job: { scheduled_for?: string | null; resend_of?: string | null; waiting_on_copy?: boolean | null; late_slot?: string | null },
+  job: { scheduled_for?: string | null; resend_of?: string | null; waiting_on_copy?: boolean | null; late_slot?: string | null; chained_after?: string | null },
   now: Date = new Date(),
 ): { send: 'now' } | { send: 'at'; at: string } | { send: 'refuse'; reason: string } {
   // a network split off to wait for its copy (late_slot = the post's own time) goes at once — for 3 hours
@@ -940,6 +941,8 @@ export function providerTiming(
   if (t > now.getTime()) return { send: 'at', at: new Date(t).toISOString() }
   if (job.resend_of) return { send: 'now' }
   if (now.getTime() - t <= LATE_SEND_GRACE_MS) return { send: 'now' }
+  // a story that waited for the one before it (story-chain-core): late only because of that wait, it goes at once
+  if (job.chained_after) return now.getTime() - t <= CHAIN_LATE_LIMIT_MS ? { send: 'now' } : { send: 'refuse', reason: TIME_PASSED_UNSENT }
   // late only because its clean copy is still being made: it keeps trying, and goes when the copy lands
   if (job.waiting_on_copy) return now.getTime() - t <= LATE_COPY_LIMIT_MS ? { send: 'now' } : { send: 'refuse', reason: LATE_COPY_UNSENT }
   return { send: 'refuse', reason: TIME_PASSED_UNSENT }

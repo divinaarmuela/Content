@@ -1319,6 +1319,8 @@ const GHOST_COLUMNS = {
     //     `late_slot` (app/lib/publish-core.ts lateSplitPlan, post-outcome-core.ts providerTiming).
     ['waiting_on_copy', col('boolean', true)],
     ['late_slot', col('string', true)],
+    // STORIES IN ORDER (story-chain-core, 5 Nov 2026): the story job this one waited for, on the same account
+    ['chained_after', col('string', true)],
     //   publish_jobs.provider / meta_ig — INSTAGRAM THROUGH OUR OWN META APP (1 Oct 2026, branch meta-publish).
     //     `provider` is null for every ordinary job (Zernio, exactly as before) and 'meta_ig' for a job booked
     //     to go to Instagram through the agency's own Meta connection (app/lib/meta-route-core.ts decides,
