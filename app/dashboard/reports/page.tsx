@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import { ArrowDownRight, ArrowUpRight, Check, ExternalLink, FileDown, Pencil, RefreshCw, Sparkles, Trash2 } from 'lucide-react'
+import { ArrowDownRight, ArrowUpRight, Check, CircleHelp, ExternalLink, FileDown, Pencil, RefreshCw, Sparkles, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
@@ -14,6 +14,7 @@ import {
 import PageTitle from '../ui/PageTitle'
 import TintCard from '../ui/TintCard'
 import PostBreakdowns from './PostBreakdowns'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { readPostsExplained } from '../../lib/post-breakdown-core'
 import {
   FRESHNESS, REVIEW_CHECKS, allChecked, change, fmt, melbourneDay, monthLabel, monthRange, monthState, readReportData, recentMonths, reportHtml,
@@ -96,7 +97,12 @@ export default function ReportsPage() {
         {data && (
           <>
             <span className="text-[13px] text-muted-foreground">Read {new Date(data.fetchedAt).toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}</span>
-            <Button variant="outline" onClick={() => void load(true)} disabled={loading} className="ml-auto h-10 gap-2 rounded-full">
+          </>
+        )}
+        <HowItWorks />
+        {data && (
+          <>
+            <Button variant="outline" onClick={() => void load(true)} disabled={loading} className="h-10 gap-2 rounded-full">
               <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} aria-hidden /> Read the figures again
             </Button>
           </>
@@ -649,5 +655,52 @@ function EarlierVersions({ history, people }: { history: ReportVersion[]; people
         ))}
       </ol>
     </details>
+  )
+}
+
+/**
+ * HOW THIS REPORT WORKS (the owner, 5 Nov 2026: "add an explainer how this is gathering info so the team know how this
+ * report works"). Plain words, closed until opened, never printed.
+ */
+function HowItWorks() {
+  const [open, setOpen] = useState(false)
+  const steps: { title: string; body: string }[] = [
+    { title: '1. The figures are read from the client’s own accounts',
+      body: 'Every number comes from the client’s connected Instagram and Facebook, read through Zernio (our posting tool). Nothing is typed in by hand and nothing is posted or changed — it only reads. “Read the figures again” fetches them fresh.' },
+    { title: '2. The month is not final straight away',
+      body: 'Instagram keeps counting views and reach for a couple of days after a post goes out, so a month’s numbers settle 2 days after it ends. Build it before then and the report says so — build it again after for the final numbers.' },
+    { title: '3. The posts are explained',
+      body: 'Every Instagram post of the month is compared with the account’s own last 90 days — not other accounts. The 5 best and up to 3 that fell behind are picked, and the AI looks at each one (the picture, the caption and the numbers) and says why it did well or fell behind.' },
+    { title: '4. The report is written',
+      body: 'The AI writes the report from the figures above, the post explanations, and the objective and notes you give it. It only uses these numbers — it does not look anything up elsewhere.' },
+    { title: '5. A person checks it',
+      body: 'The AI draft is a starting point. Read it, fix anything that sounds wrong, tick the checks, then download the PDF. Nothing is ever sent to the client from here.' },
+    { title: 'Nothing is lost',
+      body: 'Building again or editing keeps the old version under “Earlier versions”, with who wrote it and when. The page also shows who last explained the posts and who last edited the report.' },
+  ]
+  return (
+    <>
+    <Button variant="ghost" onClick={() => setOpen(true)} className="ml-auto h-10 gap-2 rounded-full">
+      <CircleHelp className="h-4 w-4" aria-hidden /> How this report works
+    </Button>
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogContent className="max-h-[85vh] overflow-y-auto bg-popover sm:max-w-[760px]">
+        <DialogHeader>
+          <DialogTitle>How this report works</DialogTitle>
+          <DialogDescription>
+            One press of <strong className="text-foreground">Build report</strong> does steps 1, 3 and 4 in order. Here is where everything comes from.
+          </DialogDescription>
+        </DialogHeader>
+      <ol className="grid gap-3 sm:grid-cols-2">
+        {steps.map(st => (
+          <li key={st.title} className="rounded-inner border border-border bg-background p-3">
+            <p className="text-[14px] font-semibold">{st.title}</p>
+            <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">{st.body}</p>
+          </li>
+        ))}
+      </ol>
+      </DialogContent>
+    </Dialog>
+    </>
   )
 }
