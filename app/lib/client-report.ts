@@ -362,6 +362,8 @@ export async function generateReport(clientId: string, m: MonthKey, by: string, 
     history: keepVersion(cur, by, now) as never,
     body, objective: opts.objective || null, notes: opts.notes || null, checks: {} as never,
     generated_at: now, generated_by: by, updated_by: by, updated_at: now,
+    // written from figures read this way — older text is flagged on the page and cannot be shared (5 Nov 2026)
+    written_v: all.v ?? null,
   } as ClientReport))
   return { ok: true, body }
 }

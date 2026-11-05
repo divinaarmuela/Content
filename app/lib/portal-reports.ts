@@ -1,7 +1,7 @@
 import 'server-only'
 import { table } from '@/lib/db'
 import type { ClientReport } from '@/lib/db-types'
-import { includedIds, monthLabel, readReportData, type CandidatePost, type MonthKey, type PlatformFigures, type ReportData, includedPlatforms, scopeData } from './client-report-core'
+import { includedIds, monthLabel, readReportData, type CandidatePost, type MonthKey, type PlatformFigures, type ReportData, includedPlatforms, scopeData, writtenFromOldFigures } from './client-report-core'
 import { readPostsExplained, type PostsExplained } from './post-breakdown-core'
 
 /**
@@ -28,7 +28,7 @@ export type PortalReport = {
 
 export async function sharedReports(clientId: string): Promise<PortalReportRow[]> {
   const rows = await table<ClientReport>('client_reports').list({
-    where: r => r.client_id === clientId && !!(r as { shared_at?: string | null }).shared_at && !!r.body,
+    where: r => r.client_id === clientId && !!(r as { shared_at?: string | null }).shared_at && !!r.body && !writtenFromOldFigures(r),
   })
   return rows
     .map(r => ({ month: r.month as MonthKey, label: monthLabel(r.month as MonthKey), sharedAt: String((r as { shared_at?: string | null }).shared_at) }))
@@ -38,7 +38,7 @@ export async function sharedReports(clientId: string): Promise<PortalReportRow[]
 export async function sharedReport(clientId: string, month: string): Promise<PortalReport | null> {
   const r = await table<ClientReport>('client_reports').get(`${clientId}_${month}`)
   const sharedAt = (r as { shared_at?: string | null } | null)?.shared_at
-  if (!r || r.client_id !== clientId || !sharedAt || !r.body) return null
+  if (!r || r.client_id !== clientId || !sharedAt || !r.body || writtenFromOldFigures(r)) return null
   const all = readReportData(r.data)
   if (!all) return null
   const data = scopeData(all, includedPlatforms(r.included_platforms, all.platforms.map(p => p.platform)))

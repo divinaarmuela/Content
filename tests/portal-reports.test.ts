@@ -13,7 +13,7 @@ describe('the client’s reports on their portal (5 Nov 2026)', () => {
   })
   it('sharing needs a written report; taking it off clears it', () => {
     const api = readFileSync('app/api/reports/monthly/route.ts', 'utf8')
-    expect(api).toContain("body.share === true && cur.body ? { shared_at: now, shared_by: user.id }")
+    expect(api).toContain("body.share === true && cur.body && !writtenFromOldFigures(cur) ? { shared_at: now, shared_by: user.id }")
     expect(api).toContain("body.share === false ? { shared_at: null, shared_by: null }")
   })
 })

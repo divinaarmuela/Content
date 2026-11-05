@@ -3,7 +3,7 @@ import { table, withRequestCache } from '@/lib/db'
 import type { Client, ClientReport } from '@/lib/db-types'
 import { AuthzError, authzErrorResponse, requireRole, type TeamUser } from '@/app/lib/authz'
 import { accessibleClientIds } from '@/app/lib/production-access'
-import { isMonthKey, mayDeleteReport, mayOpenReports, reportId, REVIEW_CHECKS, type MonthKey, keepVersion, REPORT_DATA_VERSION, REPORT_PLATFORMS } from '@/app/lib/client-report-core'
+import { isMonthKey, mayDeleteReport, mayOpenReports, reportId, REVIEW_CHECKS, type MonthKey, keepVersion, REPORT_DATA_VERSION, REPORT_PLATFORMS, writtenFromOldFigures } from '@/app/lib/client-report-core'
 import { generateReport, loadReportData } from '@/app/lib/client-report'
 import { explainMonth } from '@/app/lib/post-breakdown'
 import { logActivity } from '@/app/lib/workflow'
@@ -122,7 +122,7 @@ export async function PATCH(req: Request) {
         ...(checks ? { checks: checks as never } : {}),
         // the posts in this report: the team's ticks (5 Nov 2026)
         // SHARE WITH THE CLIENT (5 Nov 2026): onto their portal's Reports tab, or off it — a written report only
-        ...(body.share === true && cur.body ? { shared_at: now, shared_by: user.id } : {}),
+        ...(body.share === true && cur.body && !writtenFromOldFigures(cur) ? { shared_at: now, shared_by: user.id } : {}),
         ...(body.share === false ? { shared_at: null, shared_by: null } : {}),
         ...(Array.isArray(body.included_platforms) ? { included_platforms: body.included_platforms.map(String).filter(p => (REPORT_PLATFORMS as readonly string[]).includes(p)) as never } : {}),
         ...(Array.isArray(body.included_post_ids) ? { included_post_ids: body.included_post_ids.map(String).slice(0, 500) as never } : {}),

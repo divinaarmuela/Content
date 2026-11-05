@@ -20,7 +20,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { readPostsExplained } from '../../lib/post-breakdown-core'
 import {
   FRESHNESS, REVIEW_CHECKS, allChecked, change, fmt, melbourneDay, monthLabel, monthRange, monthState, readReportData, recentMonths, reportHtml,
-  type Breakdown, type MonthKey, type MonthState, type PlatformFigures, type ReportData, type TopPost, readHistory, type ReportVersion, includedIds, type CandidatePost, includedPlatforms, scopeData, platformLabel } from '../../lib/client-report-core'
+  type Breakdown, type MonthKey, type MonthState, type PlatformFigures, type ReportData, type TopPost, readHistory, type ReportVersion, includedIds, type CandidatePost, includedPlatforms, scopeData, platformLabel, writtenFromOldFigures } from '../../lib/client-report-core'
 
 /**
  * REPORTS — THE MONTHLY CLIENT REPORT (the owner, 26 Oct 2026: "we need to build a client reporting page … we should view
@@ -41,6 +41,7 @@ type Saved = {
   included_platforms?: unknown
   /** on the client's portal since (5 Nov 2026) */
   shared_at?: string | null; shared_by?: string | null
+  written_v?: number | null
 }
 const OBJECTIVES = ['Growth', 'Engagement', 'Leads', 'Positioning']
 const PREF_KEY = 'reports:last'
@@ -353,6 +354,16 @@ function Writer({ report, clientId, month, mayDelete, onChange, onDeleted, settl
 
       {steps && <BuildProgress steps={steps} />}
 
+      {writtenFromOldFigures(report) && !building && (
+        <div className="rounded-inner border border-accent-amber/40 bg-tint-amber p-4" role="alert">
+          <p className="text-[15px] font-semibold">Written from figures we have since corrected</p>
+          <p className="mt-1 text-[13px]">
+            This report was written before the follower counts and the comparisons with last month were fixed (5 Nov 2026), so numbers in the text may be wrong.
+            Press <strong>Build again</strong> so the text matches the figures above. Your current text is kept under Earlier versions. It cannot be shared with the client until then.
+          </p>
+        </div>
+      )}
+
       {report.body ? (
         <>
           <div className="flex items-center gap-2">
@@ -407,8 +418,10 @@ function Writer({ report, clientId, month, mayDelete, onChange, onDeleted, settl
               <>
                 <p className="text-[13px] text-muted-foreground">When it is ready, share it: it shows in their portal’s Reports tab, with their accounts and posts to click through. Nothing is emailed.</p>
                 <div>
-                  <Button disabled={sharing || !allChecked(checks) || editing} onClick={() => void share(true)} className="h-10 rounded-full">Share with client</Button>
-                  {!allChecked(checks) && <span className="ml-3 text-[13px] text-muted-foreground">Tick every check first.</span>}
+                  <Button disabled={sharing || !allChecked(checks) || editing || writtenFromOldFigures(report)} onClick={() => void share(true)} className="h-10 rounded-full">Share with client</Button>
+                  {writtenFromOldFigures(report)
+                    ? <span className="ml-3 text-[13px] text-muted-foreground">Build it again first: it was written from old figures.</span>
+                    : !allChecked(checks) && <span className="ml-3 text-[13px] text-muted-foreground">Tick every check first.</span>}
                 </div>
               </>
             )}

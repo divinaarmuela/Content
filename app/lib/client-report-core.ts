@@ -451,3 +451,10 @@ export function monthFollowers(now: number | null, gainedSince: number, gainedIn
   const start = gainedInMonth == null ? null : end - gainedInMonth
   return { start, end, previousEnd: start, gained: gainedInMonth }
 }
+
+/** WRITTEN FROM OLD FIGURES (5 Nov 2026): the text predates a correction to how the figures are read, so its numbers
+ *  (followers, the comparisons with last month) may be wrong. Flagged, and kept off the client's portal, until rebuilt. */
+export function writtenFromOldFigures(r: { body?: string | null; written_v?: unknown } | null | undefined): boolean {
+  if (!r?.body) return false
+  return typeof r.written_v !== 'number' || r.written_v < REPORT_DATA_VERSION
+}
