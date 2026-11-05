@@ -20,13 +20,24 @@ async function zernio<T = Record<string, unknown>>(path: string, query: Record<s
   const key = process.env.ZERNIO_API_KEY
   if (!key) return { ok: false, error: 'Zernio is not connected (no API key)' }
   const qs = new URLSearchParams(Object.entries(query).filter(([, v]) => v !== undefined && v !== '').map(([k, v]) => [k, String(v)]))
-  try {
-    const res = await fetch(`${BASE}${path}?${qs}`, { headers: { Authorization: `Bearer ${key}` }, cache: 'no-store' })
-    const body = await res.json().catch(() => ({})) as Record<string, unknown>
-    if (!res.ok) return { ok: false, error: String(body.error ?? body.message ?? `Zernio ${res.status}`) }
-    return { ok: true, data: body as T }
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Zernio could not be reached' }
+  // ZERNIO'S RATE LIMIT (5 Nov 2026: Kode's Instagram post list came back EMPTY, "0 posts", in one read). The
+  // analytics calls allow about 10 at a time (X-RateLimit-Limit: 10); a refused call used to read as "no posts".
+  // A 429 waits until the window resets (X-RateLimit-Reset, or a few seconds) and tries again, up to four times.
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const res = await fetch(`${BASE}${path}?${qs}`, { headers: { Authorization: `Bearer ${key}` }, cache: 'no-store' })
+      const body = await res.json().catch(() => ({})) as Record<string, unknown>
+      if (res.status === 429 && attempt < 4) {
+        const reset = Number(res.headers.get('x-ratelimit-reset'))
+        const wait = Number.isFinite(reset) && reset > 0 ? Math.min(20_000, Math.max(1000, reset * 1000 - Date.now() + 250)) : 2000 * (attempt + 1)
+        await new Promise(r => setTimeout(r, wait))
+        continue
+      }
+      if (!res.ok) return { ok: false, error: String(body.error ?? body.message ?? `Zernio ${res.status}`) }
+      return { ok: true, data: body as T }
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : 'Zernio could not be reached' }
+    }
   }
 }
 
@@ -85,7 +96,7 @@ export async function postsBetween(acc: Account, from: string, to: string, pages
   const out: TopPost[] = []
   for (let page = 1; page <= pages; page++) {
     const r = await zernio<{ posts?: unknown; pagination?: { pages?: number } }>('/analytics', { platform: acc.platform, accountId: acc.id, fromDate: from, toDate: to, limit: 100, page, source })
-    if (!r.ok) break
+    if (!r.ok) { if (page === 1) throw new Error(`the ${acc.platform} posts could not be read (${r.error})`); break }
     out.push(...arr(r.data.posts).map(p => toTopPost(p, acc.platform)).filter(p => p.id))
     if (!(Number(r.data.pagination?.pages) > page)) break
   }
@@ -187,7 +198,8 @@ async function figuresOf(acc: Account, profileId: string | null, m: MonthKey, ga
     fig.followers = monthFollowers(now, since, num(fNow.gained))
   }
   // the month's posts — captions, pictures and links, ranked by views (the guide: "we primarily report on views")
-  const posts = await postsOf(acc, m)
+  let posts: TopPost[] = []
+  try { posts = await postsOf(acc, m) } catch (e) { gaps.push(`${label}: ${e instanceof Error ? e.message : 'the posts could not be read'} — press Read the figures again`) }
   fig.posts = posts.length
   // which of them MD Media published: Zernio's `source=late` is exactly the posts sent through the app (checked
   // against our own post_analytics on 5 Nov 2026)
@@ -284,7 +296,9 @@ export async function loadReportData(clientId: string, m: MonthKey): Promise<Rep
   const now = new Date()
   const profileId = String((client as { social_profile_id?: string | null }).social_profile_id ?? '') || null
   const candidates: CandidatePost[] = []
-  const read = (await Promise.all(accounts.map(a => figuresOf(a, profileId, m, gaps, candidates)))).filter((p): p is PlatformFigures => !!p)
+  // one account at a time: all four at once ran past Zernio's rate limit (5 Nov 2026)
+  const read: PlatformFigures[] = []
+  for (const a of accounts) { const f = await figuresOf(a, profileId, m, gaps, candidates); if (f) read.push(f) }
   // Instagram's own picture addresses expire within days: the top posts keep our own copies (report-pictures.ts)
   const platforms = await Promise.all(read.map(async p => ({ ...p, topPosts: await keepPictures(p.topPosts) })))
   const ig = accounts.find(a => a.platform === 'instagram')

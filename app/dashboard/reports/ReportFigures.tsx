@@ -97,7 +97,11 @@ export function PostTile({ t, rank }: { t: TopPost; rank: number }) {
         <span className="text-[12px] text-muted-foreground">{t.publishedAt ? new Date(t.publishedAt).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' }) : ''}{t.format ? ` · ${t.format}` : ''}</span>
         <p className="line-clamp-2 text-[13px]">{t.caption || 'No caption'}</p>
         <p className="mt-auto text-[13px]"><strong className="tabular-nums">{fmt(t.views)}</strong> views</p>
-        <p className="text-[12px] text-muted-foreground tabular-nums">{fmt(t.likes)} likes · {fmt(t.comments)} comments · {fmt(t.shares)} shares · {fmt(t.saves)} saves</p>
+        {/* Facebook gives no likes, comments, shares or saves for reels (Graph: "nonexisting field (reactions)",
+            checked 5 Nov 2026): a row of zeros there is "not given", said so */}
+        {t.platform === 'facebook' && !t.likes && !t.comments && !t.shares && !t.saves
+          ? <p className="text-[12px] text-muted-foreground">Facebook gives views only for this post, not likes or comments.</p>
+          : <p className="text-[12px] text-muted-foreground tabular-nums">{fmt(t.likes)} likes · {fmt(t.comments)} comments · {fmt(t.shares)} shares · {fmt(t.saves)} saves</p>}
         {t.url && <a href={t.url} target="_blank" rel="noreferrer" className="no-print inline-flex items-center gap-1 text-[12px] underline underline-offset-4">Open <ExternalLink className="h-3 w-3" aria-hidden /></a>}
       </div>
     </li>
