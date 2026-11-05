@@ -3,7 +3,7 @@
 import { useMemo, useState, type CSSProperties } from 'react'
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { ExternalLink, X } from 'lucide-react'
-import { fmt, reportHtml, type CandidatePost } from '../../lib/client-report-core'
+import { fmt, reportHtml, type CandidatePost, platformLabel } from '../../lib/client-report-core'
 import { Kpi, AudienceSection } from '../../dashboard/reports/ReportFigures'
 import type { PortalReport as Report } from '../../lib/portal-reports'
 
@@ -23,7 +23,7 @@ const TOKENS = {
   '--dbx-tint-amber': 'rgba(230, 170, 60, 0.22)',
 } as CSSProperties
 
-const platformName = (p: string) => (p === 'instagram' ? 'Instagram' : p === 'facebook' ? 'Facebook' : p)
+const platformName = platformLabel
 function mediumName(f: string | null | undefined): string {
   switch ((f ?? '').toLowerCase()) {
     case 'story': return 'Story'

@@ -3,7 +3,7 @@ import { table } from '@/lib/db'
 import type { AudienceSnapshot, Client, ClientReport } from '@/lib/db-types'
 import {
   monthRange, previousMonth, readReportData, reportId, reportPrompt, toBreakdown,
-  type Audience, type MonthKey, type PlatformFigures, type ReportData, type TopPost, keepVersion, includedIds, type CandidatePost, REPORT_DATA_VERSION } from './client-report-core'
+  type Audience, type MonthKey, type PlatformFigures, type ReportData, type TopPost, keepVersion, includedIds, type CandidatePost, REPORT_DATA_VERSION, REPORT_PLATFORMS, platformLabel, includedPlatforms, scopeData, type ReportPlatform } from './client-report-core'
 import { breakdownLines, readPostsExplained } from './post-breakdown-core'
 import { keepPictures } from './report-pictures'
 import { aiClient, aiError, viaGateway, writerModel } from './ai-gateway'
@@ -35,15 +35,15 @@ const obj = (v: unknown): Record<string, unknown> => (v && typeof v === 'object'
 const arr = (v: unknown): Record<string, unknown>[] => (Array.isArray(v) ? v.filter(x => x && typeof x === 'object') as Record<string, unknown>[] : [])
 const metricTotal = (metrics: Record<string, unknown>, k: string) => num(obj(metrics[k]).total ?? metrics[k])
 
-export type Account = { id: string; platform: 'instagram' | 'facebook'; handle: string | null }
+export type Account = { id: string; platform: ReportPlatform; handle: string | null }
 
 export async function accountsOf(clientId: string): Promise<Account[]> {
   const rows = await table<{ id: string; client_id: string | null; platform: string; provider_account_id: string | null; username: string | null; name: string | null; active?: boolean | null }>('social_accounts')
-    .list({ where: a => a.client_id === clientId && a.active !== false && (a.platform === 'instagram' || a.platform === 'facebook') && !!a.provider_account_id })
+    .list({ where: a => a.client_id === clientId && a.active !== false && (REPORT_PLATFORMS as readonly string[]).includes(a.platform) && !!a.provider_account_id })
   const seen = new Set<string>()
   return rows.filter(a => !seen.has(a.platform) && seen.add(a.platform))
     .map(a => ({ id: String(a.provider_account_id), platform: a.platform as Account['platform'], handle: a.username ?? a.name ?? null }))
-    .sort((a, b) => (a.platform === 'instagram' ? -1 : 1) - (b.platform === 'instagram' ? -1 : 1))
+    .sort((a, b) => REPORT_PLATFORMS.indexOf(a.platform) - REPORT_PLATFORMS.indexOf(b.platform))
 }
 
 /** one post as Zernio lists it, with its caption, picture, link and numbers */
@@ -141,7 +141,7 @@ export async function snapshotAudience(accountId: string, clientId: string | nul
 
 async function figuresOf(acc: Account, profileId: string | null, m: MonthKey, gaps: string[], candidates: CandidatePost[] = []): Promise<PlatformFigures | null> {
   const { from, to } = monthRange(m)
-  const label = acc.platform === 'instagram' ? 'Instagram' : 'Facebook'
+  const label = platformLabel(acc.platform)
   const dash = await zernio<Record<string, unknown>>('/analytics/dashboard', {
     ...(profileId ? { profileId } : {}), platform: acc.platform, fromDate: from, toDate: to, compare: 'previous_period', topPosts: 10, recentPosts: 0,
   })
@@ -181,7 +181,18 @@ async function figuresOf(acc: Account, profileId: string | null, m: MonthKey, ga
   }
   // stories are not ranked with the posts: Facebook and Instagram drop a story's picture and figures once it expires,
   // so it showed as a blank 0-view card at the top (Shan, 5 Nov 2026)
-  fig.topPosts = [...posts].filter(p => p.format !== 'story').sort((a, b) => b.views - a.views).slice(0, 5)
+  // ranked by views, or by reach where the platform gives no views (LinkedIn, Facebook carousels and images)
+  fig.topPosts = [...posts].filter(p => p.format !== 'story').sort((a, b) => (b.views || b.reach) - (a.views || a.reach)).slice(0, 5)
+  // TIKTOK AND LINKEDIN (5 Nov 2026): Zernio's dashboard totals are not one account's for these, so the month's
+  // figures are the posts' own, added up; there is no day-by-day and no last month to compare
+  if (acc.platform === 'tiktok' || acc.platform === 'linkedin') {
+    const sum = (k: 'views' | 'reach' | 'likes' | 'comments' | 'shares' | 'saves') => posts.reduce((n, p) => n + (p[k] || 0), 0)
+    fig.views = sum('views'); fig.reach = sum('reach')
+    fig.likes = sum('likes'); fig.comments = sum('comments'); fig.shares = sum('shares'); fig.saves = sum('saves')
+    fig.interactions = fig.likes + fig.comments + fig.shares + fig.saves
+    fig.previous = { views: null, reach: null, interactions: null }
+    fig.daily = []
+  }
   // NO VIEWS AT ALL on a page's posts (5 Nov 2026, Capila Finance's Facebook): said, so a row of zeros is not read
   // as nobody watching
   const feed = posts.filter(p => p.format !== 'story')
@@ -277,7 +288,9 @@ async function nextShootConcepts(clientId: string, m: MonthKey): Promise<string[
 export async function generateReport(clientId: string, m: MonthKey, by: string, opts: { objective: string; notes: string }): Promise<{ ok: true; body: string } | { ok: false; error: string }> {
   const id = reportId(clientId, m)
   const saved = await table<ClientReport>('client_reports').get(id)
-  const data = readReportData(saved?.data) ?? await loadReportData(clientId, m)
+  const all = readReportData(saved?.data) ?? await loadReportData(clientId, m)
+  // only the accounts ticked for this report
+  const data = scopeData(all, includedPlatforms(saved?.included_platforms, all.platforms.map(p => p.platform)))
   const before = await table<ClientReport>('client_reports').get(reportId(clientId, previousMonth(m))).catch(() => null)
   const { system, user } = reportPrompt({ data, objective: opts.objective, notes: opts.notes, shootConcepts: await nextShootConcepts(clientId, m), previousReport: before?.body ?? null, included: includedIds(saved?.included_post_ids, data.candidates ?? []), breakdowns: (() => { const x = readPostsExplained(saved?.posts_explained); return x ? breakdownLines(x.items, x.posts) : [] })() })
   let msg: { stop_reason: string; content: { type: string; text?: string }[] }

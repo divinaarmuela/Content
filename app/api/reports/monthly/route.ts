@@ -3,7 +3,7 @@ import { table, withRequestCache } from '@/lib/db'
 import type { Client, ClientReport } from '@/lib/db-types'
 import { AuthzError, authzErrorResponse, requireRole, type TeamUser } from '@/app/lib/authz'
 import { accessibleClientIds } from '@/app/lib/production-access'
-import { isMonthKey, mayDeleteReport, mayOpenReports, reportId, REVIEW_CHECKS, type MonthKey, keepVersion, REPORT_DATA_VERSION } from '@/app/lib/client-report-core'
+import { isMonthKey, mayDeleteReport, mayOpenReports, reportId, REVIEW_CHECKS, type MonthKey, keepVersion, REPORT_DATA_VERSION, REPORT_PLATFORMS } from '@/app/lib/client-report-core'
 import { generateReport, loadReportData } from '@/app/lib/client-report'
 import { explainMonth } from '@/app/lib/post-breakdown'
 import { logActivity } from '@/app/lib/workflow'
@@ -105,7 +105,7 @@ export async function PATCH(req: Request) {
   return withRequestCache(async () => {
     try {
       const user = await who()
-      const body = await req.json().catch(() => ({})) as { client_id?: string; month?: string; body?: unknown; notes?: unknown; objective?: unknown; checks?: unknown; included_post_ids?: unknown; share?: unknown }
+      const body = await req.json().catch(() => ({})) as { client_id?: string; month?: string; body?: unknown; notes?: unknown; objective?: unknown; checks?: unknown; included_post_ids?: unknown; share?: unknown; included_platforms?: unknown }
       if (!body.client_id || !isMonthKey(body.month)) return NextResponse.json({ error: 'Pick a client and a month' }, { status: 400 })
       await mayReportOn(user, body.client_id)
       const id = reportId(body.client_id, body.month)
@@ -124,6 +124,7 @@ export async function PATCH(req: Request) {
         // SHARE WITH THE CLIENT (5 Nov 2026): onto their portal's Reports tab, or off it — a written report only
         ...(body.share === true && cur.body ? { shared_at: now, shared_by: user.id } : {}),
         ...(body.share === false ? { shared_at: null, shared_by: null } : {}),
+        ...(Array.isArray(body.included_platforms) ? { included_platforms: body.included_platforms.map(String).filter(p => (REPORT_PLATFORMS as readonly string[]).includes(p)) as never } : {}),
         ...(Array.isArray(body.included_post_ids) ? { included_post_ids: body.included_post_ids.map(String).slice(0, 500) as never } : {}),
         updated_by: user.id, updated_at: now,
       } : null))

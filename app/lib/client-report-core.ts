@@ -82,7 +82,7 @@ export type TopPost = {
   images?: string[]
 }
 export type PlatformFigures = {
-  platform: 'instagram' | 'facebook'
+  platform: ReportPlatform
   handle: string | null
   followers: { start: number | null; end: number | null; previousEnd: number | null; gained: number | null }
   views: number | null
@@ -122,7 +122,7 @@ export type CandidatePost = {
 }
 /** RAISE WHEN HOW THE FIGURES ARE READ CHANGES: a month saved under an older one is read again on its next open
  *  (5 Nov 2026: stories were saved as "video" and ranked as blank top posts until someone pressed Read again) */
-export const REPORT_DATA_VERSION = 2
+export const REPORT_DATA_VERSION = 3
 export type ReportData = {
   /** REPORT_DATA_VERSION the figures were read under; unset = before 5 Nov 2026 */
   v?: number
@@ -221,8 +221,8 @@ export function reportPrompt(input: {
   included?: ReadonlySet<string> | null
 }): { system: string; user: string } {
   const { data } = input
-  const platforms = data.platforms.map(p => p.platform === 'instagram' ? 'Instagram' : 'Facebook').join(' and ') || 'Instagram'
-  const followers = data.platforms.map(p => `${p.platform === 'instagram' ? 'Instagram' : 'Facebook'}: ${fmt(p.followers.end)} (last month ${fmt(p.followers.previousEnd)})`).join('; ')
+  const platforms = data.platforms.map(p => platformLabel(p.platform)).join(' and ') || 'Instagram'
+  const followers = data.platforms.map(p => `${platformLabel(p.platform)}: ${fmt(p.followers.end)} (last month ${fmt(p.followers.previousEnd)})`).join('; ')
   const { from, to } = monthRange(data.month)
   const system = [
     'You write monthly social media reports for MD Media, a Melbourne content agency, for its clients.',
@@ -262,6 +262,9 @@ export function reportPrompt(input: {
     ...(input.previousReport ? ['', 'Last month’s report for this client, for continuity of structure and to compare against:', input.previousReport.slice(0, 20000)] : []),
     ...(input.breakdowns ?? []),
     ...includedLines(data, input.included ?? null),
+    ...(data.platforms.some(p => p.platform === 'tiktok' || p.platform === 'linkedin')
+      ? ['', `This report also covers ${data.platforms.filter(p => p.platform === 'tiktok' || p.platform === 'linkedin').map(p => platformLabel(p.platform)).join(' and ')}. Report on each of these accounts in its own right (its posts, what worked, its followers) alongside Instagram and Facebook. For LinkedIn and for Facebook carousels and images, the platform gives reach rather than views; use reach for those.`]
+      : []),
     '',
     'With the following analytics below:',
     // an older month's audience may still carry a gender split — it is never sent
@@ -415,4 +418,28 @@ export function includedLines(data: ReportData, included: ReadonlySet<string> | 
     `The posts this report is about (${picked.length} of the month's ${all.length}): the content MD Media made for the client, plus any the team added. Base Top performing content, What underperformed, Content themes and formats and the strategy on THESE posts. The account totals in the data are the whole account, for context only; never present them as these posts' results.`,
     ...picked.map(c => `- ${c.platform} ${(c.publishedAt ?? '').slice(0, 10)} ${c.format ?? ''} | ${c.views} views${c.byMdm ? '' : ' | added by the team'}${c.url ? ` | ${c.url}` : ''} | "${c.caption.slice(0, 140).replace(/\s+/g, ' ')}"`),
   ]
+}
+
+/* THE ACCOUNTS IN A REPORT (5 Nov 2026) ── Instagram and Facebook by default; TikTok and LinkedIn when connected and
+ * ticked. What is ticked is what the written report, the PDF and the client's portal show. */
+export type ReportPlatform = 'instagram' | 'facebook' | 'tiktok' | 'linkedin'
+export const REPORT_PLATFORMS: readonly ReportPlatform[] = ['instagram', 'facebook', 'tiktok', 'linkedin']
+const LABEL: Record<string, string> = { instagram: 'Instagram', facebook: 'Facebook', tiktok: 'TikTok', linkedin: 'LinkedIn' }
+export const platformLabel = (p: string): string => LABEL[p] ?? (p ? p[0].toUpperCase() + p.slice(1) : 'Post')
+export const DEFAULT_PLATFORMS: readonly ReportPlatform[] = ['instagram', 'facebook']
+
+/** the ticked platforms, among those connected: what the team saved, else Instagram and Facebook, else whatever there is */
+export function includedPlatforms(saved: unknown, connected: readonly string[]): Set<string> {
+  if (Array.isArray(saved)) return new Set(saved.map(String).filter(p => connected.includes(p)))
+  const base = connected.filter(p => (DEFAULT_PLATFORMS as readonly string[]).includes(p))
+  return new Set(base.length ? base : connected)
+}
+
+/** the month's figures with only the ticked accounts and their posts */
+export function scopeData(data: ReportData, platforms: ReadonlySet<string>): ReportData {
+  return {
+    ...data,
+    platforms: data.platforms.filter(p => platforms.has(p.platform)),
+    candidates: (data.candidates ?? []).filter(c => platforms.has(c.platform)),
+  }
 }

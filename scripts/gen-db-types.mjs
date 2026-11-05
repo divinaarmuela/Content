@@ -1078,6 +1078,9 @@ const GHOST_TABLES = {
     ['included_post_ids', col('unknown', true, true)],
     // ON THE CLIENT'S PORTAL (5 Nov 2026): when and who pressed "Share with client"; unset = the team's only
     ['shared_at', col('string', true)],
+    // THE ACCOUNTS IN THIS REPORT (5 Nov 2026: "add TikTok and LinkedIn if connected, if they want to include it"):
+    // the platforms ticked; unset = Instagram and Facebook. The written report, the PDF and the portal show only these.
+    ['included_platforms', col('unknown', true, true)],
     ['shared_by', col('string', true)],
     // the post breakdowns, UNLK.AI's way (27 Oct 2026; post-breakdown-core.ts): scores, ranked reasons, Claude's teardowns
     ['posts_explained', col('unknown', true, true)],

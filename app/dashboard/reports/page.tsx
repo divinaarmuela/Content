@@ -20,7 +20,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { readPostsExplained } from '../../lib/post-breakdown-core'
 import {
   FRESHNESS, REVIEW_CHECKS, allChecked, change, fmt, melbourneDay, monthLabel, monthRange, monthState, readReportData, recentMonths, reportHtml,
-  type Breakdown, type MonthKey, type MonthState, type PlatformFigures, type ReportData, type TopPost, readHistory, type ReportVersion, includedIds, type CandidatePost} from '../../lib/client-report-core'
+  type Breakdown, type MonthKey, type MonthState, type PlatformFigures, type ReportData, type TopPost, readHistory, type ReportVersion, includedIds, type CandidatePost, includedPlatforms, scopeData, platformLabel } from '../../lib/client-report-core'
 
 /**
  * REPORTS — THE MONTHLY CLIENT REPORT (the owner, 26 Oct 2026: "we need to build a client reporting page … we should view
@@ -37,6 +37,8 @@ type Saved = {
   posts_explained?: unknown
   /** the posts the team ticked for this report (PostsInReport.tsx) */
   included_post_ids?: unknown
+  /** the accounts ticked for this report (5 Nov 2026) */
+  included_platforms?: unknown
   /** on the client's portal since (5 Nov 2026) */
   shared_at?: string | null; shared_by?: string | null
 }
@@ -152,8 +154,9 @@ export default function ReportsPage() {
               explainedBy={report?.explained_by ? people[String(report.explained_by)] ?? null : null} />
           )}
           {report && <Writer report={report} clientId={clientId} month={month} mayDelete={mayDelete} onChange={setReport} onDeleted={() => void load()}
-            settled={state.kind === 'final'} settlesOn={state.settlesOn} people={people} candidates={data.candidates ?? []} portalLink={portalLink} />}
-          <PrintReport data={data} report={report} clientName={clientName} />
+            settled={state.kind === 'final'} settlesOn={state.settlesOn} people={people} candidates={data.candidates ?? []} portalLink={portalLink}
+            connected={data.platforms.map(p => p.platform)} />}
+          <PrintReport data={scopeData(data, includedPlatforms(report?.included_platforms, data.platforms.map(p => p.platform)))} report={report} clientName={clientName} />
         </>
       )}
     </div>
@@ -198,7 +201,7 @@ function FreshnessCard({ state, month, fetchedAt }: { state: MonthState; month: 
 
 /* ── the written report ──────────────────────────────────────────────────── */
 
-function Writer({ report, clientId, month, mayDelete, onChange, onDeleted, settled, settlesOn, people, candidates, portalLink }: {
+function Writer({ report, clientId, month, mayDelete, onChange, onDeleted, settled, settlesOn, people, candidates: allCandidates, portalLink, connected }: {
   report: Saved; clientId: string; month: MonthKey; mayDelete: boolean; onChange: (r: Saved) => void; onDeleted: () => void
   /** the month's numbers are complete (2 days after it ends) — building before that is allowed, but said */
   settled: boolean; settlesOn: string
@@ -206,7 +209,17 @@ function Writer({ report, clientId, month, mayDelete, onChange, onDeleted, settl
   /** the month's posts, for the Build report popup's "these posts are included" */
   candidates: CandidatePost[]
   portalLink: string | null
+  /** the accounts connected — the ones that can be ticked */
+  connected: string[]
 }) {
+  const platformsOn = includedPlatforms(report.included_platforms, connected)
+  const candidates = allCandidates.filter(c => platformsOn.has(c.platform))
+  const togglePlatform = (pl: string) => {
+    const next = new Set(platformsOn)
+    if (next.has(pl)) next.delete(pl); else next.add(pl)
+    if (next.size === 0) { toast.error('Keep at least one account in the report'); return }
+    void patch({ included_platforms: [...next] }).catch(e => toast.error(e instanceof Error ? e.message : 'Could not save'))
+  }
   // ONE THING (the owner, 5 Nov 2026: "why are there two things"): Build report opens a popup with the posts that are
   // included, more can be ticked in there, and its button builds the report
   const [picking, setPicking] = useState(false)
@@ -411,6 +424,24 @@ function Writer({ report, clientId, month, mayDelete, onChange, onDeleted, settl
             <DialogTitle>{report.body ? 'Build the report again' : 'Build the report'}</DialogTitle>
             <DialogDescription>These posts are included. Click a post to add it or take it out, then press the button at the bottom.</DialogDescription>
           </DialogHeader>
+          {/* THE ACCOUNTS (5 Nov 2026): Instagram and Facebook start on; TikTok and LinkedIn when connected and ticked.
+              What is on here is what the report, the PDF and the client's portal show. */}
+          <div className="flex flex-col gap-2">
+            <p className="text-[15px] font-semibold">Accounts in this report</p>
+            <div className="flex flex-wrap gap-2">
+              {connected.map(pl => {
+                const on = platformsOn.has(pl)
+                return (
+                  <button key={pl} type="button" aria-pressed={on} onClick={() => togglePlatform(pl)}
+                    className={`inline-flex min-h-10 items-center gap-2 rounded-full border px-4 text-[14px] font-medium transition ${on ? 'border-foreground bg-foreground text-background' : 'border-border hover:bg-muted'}`}>
+                    {on ? <Check className="h-4 w-4" aria-hidden /> : <span className="h-4 w-4 rounded-full border border-current opacity-50" aria-hidden />}
+                    {platformLabel(pl)}
+                  </button>
+                )
+              })}
+            </div>
+            <p className="text-[12px] text-muted-foreground">Only the ticked accounts go in the written report, the PDF and the client’s portal.</p>
+          </div>
           <PostsInReport candidates={candidates} saved={report.included_post_ids} clientId={clientId} month={month} onChange={r => onChange(r as Saved)} />
           <div className="sticky bottom-0 -mx-6 -mb-6 flex flex-wrap items-center justify-end gap-3 border-t border-border bg-popover px-6 py-4">
             {report.body && <span className="mr-auto text-[13px] text-muted-foreground">The current report is kept under Earlier versions.</span>}
@@ -473,7 +504,7 @@ function PrintReport({ data, report, clientName }: { data: ReportData; report: S
       </div>
       {data.platforms.map(p => (
         <div key={p.platform} className="pr-block">
-          <h2>{p.platform === 'instagram' ? 'Instagram' : 'Facebook'}{p.handle ? ` · @${p.handle}` : ''}</h2>
+          <h2>{platformLabel(p.platform)}{p.handle ? ` · @${p.handle}` : ''}</h2>
           <table className="pr-kpis">
             <tbody>
               {([

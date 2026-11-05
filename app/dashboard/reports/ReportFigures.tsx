@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { ArrowDownRight, ArrowUpRight, ExternalLink } from 'lucide-react'
-import { change, fmt, monthRange, type Breakdown, type MonthKey, type PlatformFigures, type ReportData, type TopPost } from '../../lib/client-report-core'
+import { change, fmt, monthRange, type Breakdown, type MonthKey, type PlatformFigures, type ReportData, type TopPost, platformLabel } from '../../lib/client-report-core'
 
 /** THE MONTH'S FIGURES, drawn — shared by the Reports page and the client's portal (5 Nov 2026) */
 
@@ -27,7 +27,7 @@ export function Kpi({ label, value, was, suffix, note, hint, compare = true }: {
 }
 
 export function PlatformSection({ p, month, running }: { p: PlatformFigures; month: MonthKey; running: boolean }) {
-  const name = p.platform === 'instagram' ? 'Instagram' : 'Facebook'
+  const name = platformLabel(p.platform)
   const { from, to } = monthRange(month)
   const day = (d: string) => new Date(`${d}T00:00:00`).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })
   const soFar = running ? 'so far this month' : undefined

@@ -1,7 +1,7 @@
 import 'server-only'
 import { table } from '@/lib/db'
 import type { ClientReport } from '@/lib/db-types'
-import { includedIds, monthLabel, readReportData, type CandidatePost, type MonthKey, type PlatformFigures, type ReportData } from './client-report-core'
+import { includedIds, monthLabel, readReportData, type CandidatePost, type MonthKey, type PlatformFigures, type ReportData, includedPlatforms, scopeData } from './client-report-core'
 import { readPostsExplained, type PostsExplained } from './post-breakdown-core'
 
 /**
@@ -39,8 +39,9 @@ export async function sharedReport(clientId: string, month: string): Promise<Por
   const r = await table<ClientReport>('client_reports').get(`${clientId}_${month}`)
   const sharedAt = (r as { shared_at?: string | null } | null)?.shared_at
   if (!r || r.client_id !== clientId || !sharedAt || !r.body) return null
-  const data = readReportData(r.data)
-  if (!data) return null
+  const all = readReportData(r.data)
+  if (!all) return null
+  const data = scopeData(all, includedPlatforms(r.included_platforms, all.platforms.map(p => p.platform)))
   const picked = includedIds(r.included_post_ids, data.candidates ?? [])
   return {
     month: data.month,

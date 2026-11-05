@@ -21,3 +21,24 @@ describe('posts in this report (5 Nov 2026)', () => {
     expect(includedLines(data, null)).toEqual([])
   })
 })
+
+describe('the accounts in a report (5 Nov 2026)', async () => {
+  const { includedPlatforms, scopeData, platformLabel } = await import('../app/lib/client-report-core')
+  it('starts with Instagram and Facebook; TikTok and LinkedIn only when ticked', () => {
+    expect([...includedPlatforms(undefined, ['instagram', 'facebook', 'tiktok', 'linkedin'])]).toEqual(['instagram', 'facebook'])
+    expect([...includedPlatforms(['instagram', 'tiktok'], ['instagram', 'facebook', 'tiktok'])]).toEqual(['instagram', 'tiktok'])
+  })
+  it('a client with only TikTok still gets a report', () => {
+    expect([...includedPlatforms(undefined, ['tiktok'])]).toEqual(['tiktok'])
+  })
+  it('a ticked account no longer connected drops out', () => {
+    expect([...includedPlatforms(['linkedin', 'instagram'], ['instagram'])]).toEqual(['instagram'])
+  })
+  it('only the ticked accounts and their posts are kept', () => {
+    const data = { platforms: [{ platform: 'instagram' }, { platform: 'tiktok' }], candidates: [c('a', true), { ...c('b', true), platform: 'tiktok' }] } as unknown as ReportData
+    const s = scopeData(data, new Set(['instagram']))
+    expect(s.platforms.map(p => p.platform)).toEqual(['instagram'])
+    expect(s.candidates!.map(x => x.id)).toEqual(['a'])
+    expect(platformLabel('linkedin')).toBe('LinkedIn')
+  })
+})
