@@ -16,7 +16,7 @@ import { todayKey } from '../ui/tone'
 import { AccountUnavailable } from '../production/shoot-ui'
 import { useTeamMembers } from '../production/workHooks'
 import { Board, useBoardParams, type BoardCardRow } from '../board/Board'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { readCardParam } from '../../lib/card-sheet-core'
 import { BoardFilters } from '../board/BoardFilters'
 import { useBoardFilters } from '../board/useBoardFilters'
@@ -52,12 +52,13 @@ export default function DesignerPage() {
   const team = useTeamMembers(isManager)
   const { column, show, clearShow } = useBoardParams()
   const router = useRouter()
+  // read from the router, not window.location (6 Nov 2026: going back bounced into the card again)
+  const search = useSearchParams()
+  const cardParam = search?.get('card') ?? null
   useEffect(() => {
-    try {
-      const id = readCardParam(window.location.search)
-      if (id) router.replace(`/dashboard/editor/${id}`)
-    } catch { /* no address to read */ }
-  }, [router])
+    const id = readCardParam(cardParam ? `?card=${cardParam}` : '')
+    if (id) router.replace(`/dashboard/editor/${id}`)
+  }, [router, cardParam])
   const [today, setToday] = useState<string | null>(null)
   useEffect(() => { setToday(todayKey()) }, [])
   const [newOpen, setNewOpen] = useState(false)

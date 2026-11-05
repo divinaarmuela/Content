@@ -18,7 +18,7 @@ import { AccountUnavailable } from '../production/shoot-ui'
 import { useTeamMembers } from '../production/workHooks'
 import GettingStarted from '../GettingStarted'
 import { Board, useBoardParams, type BoardCardRow } from '../board/Board'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { readCardParam } from '../../lib/card-sheet-core'
 import { BoardFilters } from '../board/BoardFilters'
 import { useBoardFilters } from '../board/useBoardFilters'
@@ -61,12 +61,15 @@ export default function EditorPage() {
   // anymore"): /dashboard/editor/<id>. An email or bell link still says
   // ?card=<id> — that lands here and goes on to the page.
   const router = useRouter()
+  // READ FROM THE ROUTER, NOT window.location (the owner, 6 Nov 2026: "← Editor" and the sidebar bounced straight back
+  // into the card): on a move back to this page window.location could still carry the card's ?card=, so it went
+  // to the card again. The router's own search is this page's.
+  const search = useSearchParams()
+  const cardParam = search?.get('card') ?? null
   useEffect(() => {
-    try {
-      const id = readCardParam(window.location.search)
-      if (id) router.replace(`/dashboard/editor/${id}`)
-    } catch { /* no address to read */ }
-  }, [router])
+    const id = readCardParam(cardParam ? `?card=${cardParam}` : '')
+    if (id) router.replace(`/dashboard/editor/${id}`)
+  }, [router, cardParam])
   const [today, setToday] = useState<string | null>(null)
   useEffect(() => { setToday(todayKey()) }, [])
   const [newOpen, setNewOpen] = useState(false)
