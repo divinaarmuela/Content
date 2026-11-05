@@ -7,6 +7,7 @@ import { isMonthKey, mayDeleteReport, mayOpenReports, reportId, REVIEW_CHECKS, t
 import { generateReport, loadReportData } from '@/app/lib/client-report'
 import { explainMonth } from '@/app/lib/post-breakdown'
 import { logActivity } from '@/app/lib/workflow'
+import { onePortalPath } from '@/app/lib/one-portal-core'
 
 /**
  * THE MONTHLY CLIENT REPORT (client-report-core.ts has the why).
@@ -61,7 +62,11 @@ export async function GET(req: Request) {
       // names for "written by", "edited by", "explained by" and the earlier versions
       const team = await table<TeamUser>('team_users').list()
       const people = Object.fromEntries(team.map(u => [u.id, String(u.name || u.email || 'Someone')]))
-      return NextResponse.json({ clients, mayDelete: mayDeleteReport(user.role), report, people })
+      // where the client reads it: their one portal's Reports tab
+      const client = await table<Client>('clients').get(clientId)
+      const token = typeof client?.share_token === 'string' ? client.share_token.trim() : ''
+      const portalLink = token && client?.portal_one ? onePortalPath(token, 'reports', month) : null
+      return NextResponse.json({ clients, mayDelete: mayDeleteReport(user.role), report, people, portalLink })
     } catch (e) {
       const { error, status } = authzErrorResponse(e)
       return NextResponse.json({ error }, { status })
@@ -100,7 +105,7 @@ export async function PATCH(req: Request) {
   return withRequestCache(async () => {
     try {
       const user = await who()
-      const body = await req.json().catch(() => ({})) as { client_id?: string; month?: string; body?: unknown; notes?: unknown; objective?: unknown; checks?: unknown; included_post_ids?: unknown }
+      const body = await req.json().catch(() => ({})) as { client_id?: string; month?: string; body?: unknown; notes?: unknown; objective?: unknown; checks?: unknown; included_post_ids?: unknown; share?: unknown }
       if (!body.client_id || !isMonthKey(body.month)) return NextResponse.json({ error: 'Pick a client and a month' }, { status: 400 })
       await mayReportOn(user, body.client_id)
       const id = reportId(body.client_id, body.month)
@@ -116,6 +121,9 @@ export async function PATCH(req: Request) {
         ...(typeof body.objective === 'string' ? { objective: body.objective.slice(0, 300) } : {}),
         ...(checks ? { checks: checks as never } : {}),
         // the posts in this report: the team's ticks (5 Nov 2026)
+        // SHARE WITH THE CLIENT (5 Nov 2026): onto their portal's Reports tab, or off it — a written report only
+        ...(body.share === true && cur.body ? { shared_at: now, shared_by: user.id } : {}),
+        ...(body.share === false ? { shared_at: null, shared_by: null } : {}),
         ...(Array.isArray(body.included_post_ids) ? { included_post_ids: body.included_post_ids.map(String).slice(0, 500) as never } : {}),
         updated_by: user.id, updated_at: now,
       } : null))

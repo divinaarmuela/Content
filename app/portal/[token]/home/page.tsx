@@ -30,6 +30,8 @@ import IntakeForm from '../../../intake/[token]/IntakeForm'
 import MonthlyForm from '../../../monthly/[token]/MonthlyForm'
 import ShootAnswer from '../../../shoot/[token]/ShootAnswer'
 import { PortalIntakeView } from '../../../components/portal/PortalIntake'
+import PortalReport from '../../../components/portal/PortalReport'
+import { sharedReport, sharedReports } from '../../../lib/portal-reports'
 
 export const metadata: Metadata = {
   title: 'Your portal — MD Media',
@@ -149,6 +151,19 @@ export default async function OnePortalPage({ params, searchParams }: {
       <div className="flex flex-col gap-5" data-one-portal-open={id}>
         {back('All shoots')}
         <OnePortalShoots token={token} data={data} shoots={[card]} initialCardId={typeof sp.card === 'string' ? sp.card : null} />
+      </div>
+    )
+  }
+  // REPORTS (5 Nov 2026): the months the team shared, the business's only; one month opens interactive
+  const reportRows = tab === 'reports' && page.scope.kind === 'business' ? await sharedReports(page.client.id) : []
+  if (tab === 'reports' && id && page.scope.kind === 'business') {
+    const report = await sharedReport(page.client.id, id)
+    if (!report) redirect(onePortalPath(token, tab))
+    opened = (
+      <div className="flex flex-col gap-5" data-one-portal-open={id}>
+        {back('All reports')}
+        <h1 className="text-[26px] font-semibold leading-tight tracking-tight sm:text-[34px]">{report.label} report</h1>
+        <PortalReport report={report} />
       </div>
     )
   }
@@ -289,6 +304,10 @@ export default async function OnePortalPage({ params, searchParams }: {
               {tab === 'forms' && <OnePortalList rows={formsTabRows} empty="No forms for you yet. When the team sends you one, it shows here." />}
               {tab === 'shoot' && (
                 <OnePortalList heading={dateRows.length > 0 ? 'Shoots' : undefined} rows={shootRows} empty="No shoot plans to look at yet. When your next shoot is planned, it shows here." />
+              )}
+              {tab === 'reports' && (
+                <OnePortalList rows={reportRows.map(r => ({ key: r.month, href: onePortalPath(token, 'reports', r.month), title: `${r.label} report`, line: 'Your accounts, your posts and how they did — tap to open' }))}
+                  empty="No reports yet. When the team shares your monthly report, it shows here." />
               )}
               {tab === 'boards' && <OnePortalList rows={boardRows} empty="No boards shared with you yet. When the team shares one, it shows here." />}
               {tab === 'editing' && <OnePortalWorkList token={token} tab="editing" cards={page.editing} empty="No edits to look at yet. When a video is ready for you, it shows here." />}

@@ -88,7 +88,7 @@ describe('mini pages (2 Oct 2026: "each tab has like mini pages"; Scheduling "by
 describe('the Boards tab, and taking a piece off the portal (2 Oct 2026)', () => {
   it('Boards is the fifth tab', async () => {
     const { PORTAL_TABS } = await import('../app/lib/one-portal-core')
-    expect(PORTAL_TABS.map(t => t.label)).toEqual(['Shoot brief', 'Editing', 'Designing', 'Scheduling', 'Boards', 'Forms'])
+    expect(PORTAL_TABS.map(t => t.label)).toEqual(['Shoot brief', 'Editing', 'Designing', 'Scheduling', 'Boards', 'Forms', 'Reports'])
     const page = readFileSync('app/portal/[token]/home/page.tsx', 'utf8')
     expect(page).toContain("{tab === 'boards' && <OnePortalList rows={boardRows}")
   })

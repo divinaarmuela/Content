@@ -15,6 +15,7 @@ import PageTitle from '../ui/PageTitle'
 import TintCard from '../ui/TintCard'
 import PostBreakdowns from './PostBreakdowns'
 import PostsInReport from './PostsInReport'
+import { AudienceSection, PlatformSection } from './ReportFigures'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { readPostsExplained } from '../../lib/post-breakdown-core'
 import {
@@ -36,6 +37,8 @@ type Saved = {
   posts_explained?: unknown
   /** the posts the team ticked for this report (PostsInReport.tsx) */
   included_post_ids?: unknown
+  /** on the client's portal since (5 Nov 2026) */
+  shared_at?: string | null; shared_by?: string | null
 }
 const OBJECTIVES = ['Growth', 'Engagement', 'Leads', 'Positioning']
 const PREF_KEY = 'reports:last'
@@ -49,6 +52,8 @@ export default function ReportsPage() {
   const [report, setReport] = useState<Saved | null>(null)
   /** id → name, for who wrote, edited and explained */
   const [people, setPeople] = useState<Record<string, string>>({})
+  /** where the client reads it: their portal's Reports tab (null: the client is not on the one portal) */
+  const [portalLink, setPortalLink] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -71,6 +76,7 @@ export default function ReportsPage() {
       if (!r.ok) throw new Error(j.error ?? 'Could not read the figures')
       setReport(j.report ?? null)
       if (j.people) setPeople(j.people)
+      setPortalLink(typeof j.portalLink === 'string' ? j.portalLink : null)
       if (refresh) toast.success('Figures read again from the accounts')
     } catch (e) { setError(e instanceof Error ? e.message : 'Could not read the figures'); setReport(null) } finally { setLoading(false) }
   }, [clientId, month])
@@ -146,7 +152,7 @@ export default function ReportsPage() {
               explainedBy={report?.explained_by ? people[String(report.explained_by)] ?? null : null} />
           )}
           {report && <Writer report={report} clientId={clientId} month={month} mayDelete={mayDelete} onChange={setReport} onDeleted={() => void load()}
-            settled={state.kind === 'final'} settlesOn={state.settlesOn} people={people} candidates={data.candidates ?? []} />}
+            settled={state.kind === 'final'} settlesOn={state.settlesOn} people={people} candidates={data.candidates ?? []} portalLink={portalLink} />}
           <PrintReport data={data} report={report} clientName={clientName} />
         </>
       )}
@@ -190,155 +196,16 @@ function FreshnessCard({ state, month, fetchedAt }: { state: MonthState; month: 
   )
 }
 
-function Kpi({ label, value, was, suffix, note, hint, compare = true }: { label: string; value: number | null; was?: number | null; suffix?: string; note?: string; hint?: string; compare?: boolean }) {
-  const c = compare ? change(value, was) : null
-  return (
-    <div className="flex flex-col gap-1 rounded-card border border-border bg-surface p-4">
-      <span className="text-[13px] text-muted-foreground">{label}</span>
-      <span className="text-[28px] font-semibold leading-none tracking-tight tabular-nums">{value == null ? '—' : `${fmt(value)}${suffix ?? ''}`}</span>
-      <span className="flex min-h-5 items-center gap-1 text-[12px]">
-        {c && (
-          <span className={`inline-flex items-center gap-0.5 font-semibold ${c.up ? 'text-accent-green' : 'text-accent-red'}`}>
-            {c.up ? <ArrowUpRight className="h-3.5 w-3.5" aria-hidden /> : <ArrowDownRight className="h-3.5 w-3.5" aria-hidden />}{c.text}
-          </span>
-        )}
-        <span className="text-muted-foreground">{c ? `vs last month (${fmt(was ?? null)})` : note ?? ''}</span>
-      </span>
-      {hint && <span className="text-[12px] leading-snug text-muted-foreground">{hint}</span>}
-    </div>
-  )
-}
-
-function PlatformSection({ p, month, running }: { p: PlatformFigures; month: MonthKey; running: boolean }) {
-  const name = p.platform === 'instagram' ? 'Instagram' : 'Facebook'
-  const { from, to } = monthRange(month)
-  const day = (d: string) => new Date(`${d}T00:00:00`).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })
-  const soFar = running ? 'so far this month' : undefined
-  return (
-    <section className="flex flex-col gap-4">
-      <header className="flex flex-wrap items-baseline gap-2">
-        <h2 className="text-[20px] font-semibold">{name}</h2>
-        {p.handle && <span className="text-[14px] text-muted-foreground">@{p.handle}</span>}
-        <span className="ml-auto text-[13px] text-muted-foreground">{day(from)} – {day(to)} · {p.posts} {p.posts === 1 ? 'post' : 'posts'} this month</span>
-      </header>
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        <Kpi label={running ? 'Followers now' : 'Followers at the end of the month'} value={p.followers.end} was={p.followers.previousEnd} compare={!running}
-          note={running ? `${fmt(p.followers.previousEnd)} when the month began` : undefined} hint="People following the account." />
-        <Kpi label="Views" value={p.views} was={p.previous.views} compare={!running} note={soFar} hint="How many times the posts were seen, repeat views included." />
-        <Kpi label="Accounts reached" value={p.reach} was={p.previous.reach} compare={!running} note={soFar} hint="How many different people saw them." />
-        <Kpi label="Interactions" value={p.interactions} was={p.previous.interactions} compare={!running} note={soFar} hint="Likes, comments, shares and saves added together." />
-        {p.platform === 'instagram' && <Kpi label="Profile visits" value={p.profileVisits} note={soFar ?? 'this month'} hint="People who opened the profile." />}
-        {p.platform === 'instagram' && <Kpi label="Bio link taps" value={p.linkTaps} note={soFar ?? 'this month'} hint="Taps on the link in the bio." />}
-      </div>
-      {p.viewsFromFollowers != null && p.viewsFromNonFollowers != null && (
-        <div className="rounded-card border border-border bg-surface p-4">
-          <div className="mb-2 flex justify-between text-[13px]"><span>Views from followers <strong>{p.viewsFromFollowers}%</strong></span><span>from non-followers <strong>{p.viewsFromNonFollowers}%</strong></span></div>
-          <div className="flex h-3 overflow-hidden rounded-full bg-muted" role="img" aria-label={`${p.viewsFromFollowers}% of views from followers, ${p.viewsFromNonFollowers}% from non-followers`}>
-            <div className="bg-foreground" style={{ width: `${p.viewsFromFollowers}%` }} />
-            <div className="bg-accent-blue" style={{ width: `${p.viewsFromNonFollowers}%` }} />
-          </div>
-        </div>
-      )}
-      {p.daily.some(d => d.views > 0) && (
-        <div className="no-print rounded-card border border-border bg-surface p-4">
-          <p className="mb-2 text-[13px] text-muted-foreground">Views each day</p>
-          <div className="h-44">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={p.daily} margin={{ top: 4, right: 4, bottom: 0, left: -18 }}>
-                <XAxis dataKey="date" tickFormatter={d => String(d).slice(8)} tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
-                <Tooltip formatter={v => fmt(Number(v))} labelFormatter={l => new Date(String(l)).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })} />
-                <Area type="monotone" dataKey="views" stroke="var(--dbx-blue, #2f6fed)" fill="var(--dbx-blue, #2f6fed)" fillOpacity={0.15} strokeWidth={2} />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      )}
-      {p.topPosts.length > 0 && (
-        <div className="flex flex-col gap-2">
-          <h3 className="text-[15px] font-semibold">Top {p.topPosts.length} posts by views</h3>
-          <ol className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">{p.topPosts.map((t, i) => <PostTile key={t.id} t={t} rank={i + 1} />)}</ol>
-        </div>
-      )}
-    </section>
-  )
-}
-
-function PostTile({ t, rank }: { t: TopPost; rank: number }) {
-  // a picture that will not load (an expired Instagram address on a month read before 2 Nov 2026) opens the post instead
-  const [failed, setFailed] = useState(false)
-  return (
-    <li className="flex flex-col overflow-hidden rounded-card border border-border bg-surface">
-      <div className="relative aspect-[4/5] bg-muted">
-        {t.thumbnail && !failed
-          // eslint-disable-next-line @next/next/no-img-element -- the platform's own picture of the post
-          ? <img src={t.thumbnail} alt="" className="h-full w-full object-cover" referrerPolicy="no-referrer" onError={() => setFailed(true)} />
-          : <div className="flex h-full items-center justify-center p-3 text-center text-[12px] text-muted-foreground">{t.url ? <a href={t.url} target="_blank" rel="noreferrer" className="underline underline-offset-4">Open the post</a> : 'No picture'}</div>}
-        <span className="absolute left-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-foreground text-[13px] font-bold text-background">{rank}</span>
-      </div>
-      <div className="flex flex-1 flex-col gap-1.5 p-3">
-        <span className="text-[12px] text-muted-foreground">{t.publishedAt ? new Date(t.publishedAt).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' }) : ''}{t.format ? ` · ${t.format}` : ''}</span>
-        <p className="line-clamp-2 text-[13px]">{t.caption || 'No caption'}</p>
-        <p className="mt-auto text-[13px]"><strong className="tabular-nums">{fmt(t.views)}</strong> views</p>
-        <p className="text-[12px] text-muted-foreground tabular-nums">{fmt(t.likes)} likes · {fmt(t.comments)} comments · {fmt(t.shares)} shares · {fmt(t.saves)} saves</p>
-        {t.url && <a href={t.url} target="_blank" rel="noreferrer" className="no-print inline-flex items-center gap-1 text-[12px] underline underline-offset-4">Open <ExternalLink className="h-3 w-3" aria-hidden /></a>}
-      </div>
-    </li>
-  )
-}
-
-function Bars({ title, rows }: { title: string; rows: Breakdown[] }) {
-  if (!rows.length) return null
-  const max = Math.max(...rows.map(r => r.pct), 1)
-  return (
-    <div className="rounded-card border border-border bg-surface p-4">
-      <p className="mb-3 text-[13px] font-semibold">{title}</p>
-      <ul className="flex flex-col gap-2">
-        {rows.map(r => (
-          <li key={r.label} className="grid grid-cols-[minmax(0,7rem)_1fr_3rem] items-center gap-2 text-[13px]">
-            <span className="truncate" title={r.label}>{r.label}</span>
-            <span className="h-2 overflow-hidden rounded-full bg-muted"><span className="block h-full rounded-full bg-foreground" style={{ width: `${(r.pct / max) * 100}%` }} /></span>
-            <span className="text-right tabular-nums text-muted-foreground">{r.pct}%</span>
-          </li>
-        ))}
-      </ul>
-    </div>
-  )
-}
-
-function AudienceSection({ a }: { a: NonNullable<ReportData['audience']> }) {
-  return (
-    <section className="flex flex-col gap-3">
-      <header className="flex items-baseline gap-2">
-        <h2 className="text-[20px] font-semibold">Audience</h2>
-        <span className="text-[13px] text-muted-foreground">Instagram followers{a.asOf ? ` · as of ${new Date(a.asOf).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}` : ''}</span>
-      </header>
-      <div className="grid gap-3 md:grid-cols-2">
-        <Bars title="Age" rows={a.age} />
-        <Bars title="Top cities" rows={a.cities} />
-      </div>
-      {a.engaged && (
-        <>
-          <p className="mt-2 text-[14px] font-semibold">Who engaged this month <span className="font-normal text-muted-foreground">— the people who liked, commented, shared or saved, not just followers</span></p>
-          <div className="grid gap-3 md:grid-cols-2">
-            <Bars title="Age" rows={a.engaged.age} />
-            <Bars title="Top cities" rows={a.engaged.cities} />
-          </div>
-        </>
-      )}
-    </section>
-  )
-}
-
 /* ── the written report ──────────────────────────────────────────────────── */
 
-function Writer({ report, clientId, month, mayDelete, onChange, onDeleted, settled, settlesOn, people, candidates }: {
+function Writer({ report, clientId, month, mayDelete, onChange, onDeleted, settled, settlesOn, people, candidates, portalLink }: {
   report: Saved; clientId: string; month: MonthKey; mayDelete: boolean; onChange: (r: Saved) => void; onDeleted: () => void
   /** the month's numbers are complete (2 days after it ends) — building before that is allowed, but said */
   settled: boolean; settlesOn: string
   people: Record<string, string>
   /** the month's posts, for the Build report popup's "these posts are included" */
   candidates: CandidatePost[]
+  portalLink: string | null
 }) {
   // ONE THING (the owner, 5 Nov 2026: "why are there two things"): Build report opens a popup with the posts that are
   // included, more can be ticked in there, and its button builds the report
@@ -360,6 +227,13 @@ function Writer({ report, clientId, month, mayDelete, onChange, onDeleted, settl
     const j = await r.json().catch(() => ({}))
     if (!r.ok) throw new Error(j.error ?? 'Could not save')
     onChange(j.report)
+  }
+  const [sharing, setSharing] = useState(false)
+  const share = async (on: boolean) => {
+    setSharing(true)
+    try { await patch({ share: on }); toast.success(on ? 'On the client’s portal now' : 'Taken off their portal') }
+    catch (e) { toast.error(e instanceof Error ? e.message : 'Could not save') }
+    finally { setSharing(false) }
   }
   const generate = async () => {
     setAsking(null); setWriting(true)
@@ -487,6 +361,34 @@ function Writer({ report, clientId, month, mayDelete, onChange, onDeleted, settl
             {allChecked(checks)
               ? <span className="inline-flex items-center gap-1 text-[13px] font-semibold text-accent-green"><Check className="h-4 w-4" aria-hidden /> Every check ticked</span>
               : <span className="text-[13px] text-muted-foreground">Tick every check before it goes to the client. In the print window, choose “Save as PDF”.</span>}
+          </div>
+          {/* ON THE CLIENT'S PORTAL (Manal, via the owner, 5 Nov 2026): the client reads it, interactive, in their
+              portal's Reports tab. Nothing is emailed: the team sends the link themselves. */}
+          <div className="flex flex-col gap-2 rounded-inner border border-border p-4">
+            <p className="text-[15px] font-semibold">On the client’s portal</p>
+            {!portalLink ? (
+              <p className="text-[13px] text-muted-foreground">This client is not on the client portal yet, so there is nowhere to share it.</p>
+            ) : report.shared_at ? (
+              <>
+                <p className="text-[13px] text-muted-foreground">
+                  Shared{report.shared_by ? ` by ${people[String(report.shared_by)] ?? 'someone'}` : ''} · {new Date(report.shared_at).toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}.
+                  The client sees it in the Reports tab of their portal. Edits you save show there too.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <Button onClick={() => { void navigator.clipboard.writeText(`${window.location.origin}${portalLink}`).then(() => toast.success('Link copied — paste it to the client')).catch(() => toast.error('Could not copy')) }} className="h-10 rounded-full">Copy the client’s link</Button>
+                  <Button variant="outline" onClick={() => window.open(portalLink, '_blank', 'noopener')} className="h-10 gap-1.5 rounded-full">See what they see <ExternalLink className="h-4 w-4" aria-hidden /></Button>
+                  <Button variant="ghost" disabled={sharing} onClick={() => void share(false)} className="h-10 rounded-full text-destructive">Take it off their portal</Button>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="text-[13px] text-muted-foreground">When it is ready, share it: it shows in their portal’s Reports tab, with their accounts and posts to click through. Nothing is emailed.</p>
+                <div>
+                  <Button disabled={sharing || !allChecked(checks) || editing} onClick={() => void share(true)} className="h-10 rounded-full">Share with client</Button>
+                  {!allChecked(checks) && <span className="ml-3 text-[13px] text-muted-foreground">Tick every check first.</span>}
+                </div>
+              </>
+            )}
           </div>
         </>
       ) : !writing && (

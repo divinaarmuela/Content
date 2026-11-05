@@ -176,7 +176,8 @@ async function figuresOf(acc: Account, profileId: string | null, m: MonthKey, ga
     const { from, to } = monthRange(m)
     const ours = new Set((await postsBetween(acc, from, to, 1, 'late')).map(p => p.id))
     candidates.push(...posts.map(p => ({ id: p.id, platform: acc.platform, publishedAt: p.publishedAt, url: p.url, thumbnail: p.thumbnail,
-      caption: p.caption.slice(0, 300), format: p.format, views: p.views, byMdm: ours.has(p.id) })))
+      caption: p.caption.slice(0, 600), format: p.format, views: p.views, byMdm: ours.has(p.id),
+      reach: p.reach, likes: p.likes, comments: p.comments, shares: p.shares, saves: p.saves })))
   }
   // stories are not ranked with the posts: Facebook and Instagram drop a story's picture and figures once it expires,
   // so it showed as a blank 0-view card at the top (Shan, 5 Nov 2026)

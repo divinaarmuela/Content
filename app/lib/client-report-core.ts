@@ -117,6 +117,8 @@ export type Audience = {
 export type CandidatePost = {
   id: string; platform: string; publishedAt: string | null; url: string | null; thumbnail: string | null
   caption: string; format: string | null; views: number; byMdm: boolean
+  /** the post's other numbers (read from 5 Nov 2026; an older month has views only) */
+  reach?: number; likes?: number; comments?: number; shares?: number; saves?: number
 }
 /** RAISE WHEN HOW THE FIGURES ARE READ CHANGES: a month saved under an older one is read again on its next open
  *  (5 Nov 2026: stories were saved as "video" and ranked as blank top posts until someone pressed Read again) */

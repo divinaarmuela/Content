@@ -117,6 +117,7 @@ export async function loadOnePortal(rawToken: string): Promise<OnePortalPage | n
       scheduling: 0,
       boards: 0,
       forms: 0,
+      reports: 0,
     },
   }
 }
