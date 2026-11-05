@@ -218,9 +218,17 @@ async function figuresOf(acc: Account, profileId: string | null, m: MonthKey, ga
   // so it showed as a blank 0-view card at the top (Shan, 5 Nov 2026)
   // ranked by views, or by reach where the platform gives no views (LinkedIn, Facebook carousels and images)
   fig.topPosts = [...posts].filter(p => p.format !== 'story').sort((a, b) => (b.views || b.reach) - (a.views || a.reach)).slice(0, 5)
-  // TIKTOK AND LINKEDIN (5 Nov 2026): Zernio's dashboard totals are not one account's for these, so the month's
-  // figures are the posts' own, added up; there is no day-by-day and no last month to compare
-  if (acc.platform === 'tiktok' || acc.platform === 'linkedin') {
+  // THE MONTH'S OWN NUMBERS (the owner, 5 Nov 2026: "for reports it's whatever for that month"). Zernio's dashboard
+  // counts views, reach and interactions day by day, on the day they happened, on any post (Anthony's Facebook:
+  // 1,075 in October against 980 for October's posts so far, which includes November). That is the month's figure.
+  // It is one account's only when the profile has one account on that platform: Anthony's profile holds two
+  // LinkedIn accounts, so its LinkedIn totals would be both added together.
+  const onPlatform = arr(obj(d.followers).byAccount).filter(a => String(a.platform ?? acc.platform) === acc.platform)
+  const oneAccount = onPlatform.length <= 1 && (!onPlatform.length || String(onPlatform[0].accountId) === acc.id)
+  fig.countedAs = 'month'
+  if ((acc.platform === 'tiktok' || acc.platform === 'linkedin') && !oneAccount) {
+    // not one account's: the month's own posts, added up, said as such (no day-by-day, no last month)
+    fig.countedAs = 'posts'
     const sum = (k: 'views' | 'reach' | 'likes' | 'comments' | 'shares' | 'saves') => posts.reduce((n, p) => n + (p[k] || 0), 0)
     fig.views = sum('views'); fig.reach = sum('reach')
     fig.likes = sum('likes'); fig.comments = sum('comments'); fig.shares = sum('shares'); fig.saves = sum('saves')

@@ -90,6 +90,10 @@ export type PlatformFigures = {
   views: number | null
   reach: number | null
   interactions: number | null
+  /** what the account totals count (the owner, 5 Nov 2026: "for reports it's whatever for that month"):
+   *  'month' = views, reach and interactions that happened DURING the month, on any post (Zernio's day-by-day);
+   *  'posts' = what the month's own posts have had so far (only where the platform gives nothing day by day) */
+  countedAs?: 'month' | 'posts'
   likes: number | null
   comments: number | null
   shares: number | null
@@ -124,7 +128,7 @@ export type CandidatePost = {
 }
 /** RAISE WHEN HOW THE FIGURES ARE READ CHANGES: a month saved under an older one is read again on its next open
  *  (5 Nov 2026: stories were saved as "video" and ranked as blank top posts until someone pressed Read again) */
-export const REPORT_DATA_VERSION = 9
+export const REPORT_DATA_VERSION = 10
 export type ReportData = {
   /** REPORT_DATA_VERSION the figures were read under; unset = before 5 Nov 2026 */
   v?: number

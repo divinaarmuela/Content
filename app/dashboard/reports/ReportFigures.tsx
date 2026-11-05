@@ -35,7 +35,11 @@ export function PlatformSection({ p, month, running, avail = null }: { p: Platfo
   const name = platformLabel(p.platform)
   const { from, to } = monthRange(month)
   const day = (d: string) => new Date(`${d}T00:00:00`).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })
-  const soFar = running ? 'so far this month' : undefined
+  // DURING THE MONTH (5 Nov 2026): the totals are what happened in the month, on any post; where the platform gives
+  // nothing day by day they are the month's own posts so far, and the label says so
+  const monthName = new Date(`${month}-01T00:00:00`).toLocaleDateString('en-AU', { month: 'long' })
+  const byPosts = p.countedAs === 'posts'
+  const soFar = byPosts ? `on ${monthName}'s posts so far` : running ? 'so far this month' : `during ${monthName}, on any post`
   return (
     <section className="flex flex-col gap-4">
       <header className="flex flex-wrap items-baseline gap-2">
@@ -52,9 +56,9 @@ export function PlatformSection({ p, month, running, avail = null }: { p: Platfo
           hint="Zernio’s follower count on the 1st of each month." />}
         {/* the month picker shows THAT month (the owner, 5 Nov 2026): today's count is not a past month's number */}
         {running && p.followers.end != null && <Kpi label="Followers now" value={p.followers.end} compare={false} hint="People following the account today." />}
-        {has(p.views, p.previous.views) && <Kpi label="Views" value={p.views} was={p.previous.views} compare={!running} note={soFar} hint="How many times the posts were seen, repeat views included." />}
-        {has(p.reach, p.previous.reach) && <Kpi label="Accounts reached" value={p.reach} was={p.previous.reach} compare={!running} note={soFar} hint="How many different people saw them." />}
-        {has(p.interactions, p.previous.interactions) && <Kpi label="Interactions" value={p.interactions} was={p.previous.interactions} compare={!running} note={soFar} hint="Likes, comments, shares and saves added together." />}
+        {has(p.views, p.previous.views) && <Kpi label={byPosts ? 'Views on the month’s posts' : `Views in ${monthName}`} value={p.views} was={p.previous.views} compare={!running} note={soFar} hint="How many times the posts were seen, repeat views included." />}
+        {has(p.reach, p.previous.reach) && <Kpi label={byPosts ? 'Reached by the month’s posts' : `Accounts reached in ${monthName}`} value={p.reach} was={p.previous.reach} compare={!running} note={soFar} hint="How many different people saw them." />}
+        {has(p.interactions, p.previous.interactions) && <Kpi label={byPosts ? 'Interactions on the month’s posts' : `Interactions in ${monthName}`} value={p.interactions} was={p.previous.interactions} compare={!running} note={soFar} hint="Likes, comments, shares and saves added together." />}
         {p.platform === 'instagram' && has(p.profileVisits) && <Kpi label="Profile visits" value={p.profileVisits} note={soFar ?? 'this month'} hint="People who opened the profile." />}
         {p.platform === 'instagram' && has(p.linkTaps) && <Kpi label="Bio link taps" value={p.linkTaps} note={soFar ?? 'this month'} hint="Taps on the link in the bio." />}
       </div>

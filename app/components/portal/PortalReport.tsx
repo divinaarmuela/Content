@@ -73,9 +73,9 @@ export default function PortalReport({ report }: { report: Report }) {
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {p.followers.gained != null && <Kpi label="Followers gained" value={p.followers.gained} prefix={p.followers.gained > 0 ? '+' : ''} compare={false}
               note={p.followers.previousGained != null ? `last month: ${p.followers.previousGained > 0 ? '+' : ''}${fmt(p.followers.previousGained)}` : undefined} hint="New followers less unfollows, over the month." />}
-            <Kpi label="Views" value={p.views} was={p.previous.views} hint="How many times your posts were seen." />
-            <Kpi label="Accounts reached" value={p.reach} was={p.previous.reach} hint="How many different people saw them." />
-            <Kpi label="Interactions" value={p.interactions} was={p.previous.interactions} hint="Likes, comments, shares and saves." />
+            <Kpi label={p.countedAs === 'posts' ? 'Views on the month’s posts' : 'Views in the month'} value={p.views} was={p.previous.views} hint={p.countedAs === 'posts' ? 'Views this month’s posts have had so far.' : 'Views during the month, on any of your posts.'} />
+            <Kpi label={p.countedAs === 'posts' ? 'Reached by the month’s posts' : 'Accounts reached in the month'} value={p.reach} was={p.previous.reach} hint="How many different people saw them." />
+            <Kpi label={p.countedAs === 'posts' ? 'Interactions on the month’s posts' : 'Interactions in the month'} value={p.interactions} was={p.previous.interactions} hint="Likes, comments, shares and saves." />
           </div>
           {p.daily.some(d => d.views > 0) && (
             <div className="rounded-card border border-border bg-card p-4">
