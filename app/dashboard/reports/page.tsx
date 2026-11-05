@@ -1,6 +1,7 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Suspense, useCallback, useEffect, useMemo, useState } from 'react'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { toast } from 'sonner'
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { ArrowDownRight, ArrowUpRight, Check, CircleHelp, ExternalLink, FileDown, Pencil, RefreshCw, Sparkles, Trash2 } from 'lucide-react'
@@ -15,7 +16,8 @@ import PageTitle from '../ui/PageTitle'
 import TintCard from '../ui/TintCard'
 import PostBreakdowns from './PostBreakdowns'
 import PostsInReport from './PostsInReport'
-import { AudienceSection, PlatformSection } from './ReportFigures'
+import { ReportV2Body } from './v2/ReportV2'
+import { parseView, viewQuery } from '../../lib/report-v2/filters'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { readPostsExplained } from '../../lib/post-breakdown-core'
 import {
@@ -47,11 +49,31 @@ const OBJECTIVES = ['Growth', 'Engagement', 'Leads', 'Positioning']
 const PREF_KEY = 'reports:last'
 
 export default function ReportsPage() {
+  return <Suspense fallback={null}><ReportsInner /></Suspense>
+}
+
+/* THE REBUILT FIGURES ARE THE REPORT NOW (the owner, 5 Nov 2026: "replace the current reports page with the new one").
+ * Client and month live in the URL with the figures' own filters; the figures, posts and checks are report v2's,
+ * read live and read only; Build report, the text, Explain the posts and Share stay here. */
+function ReportsInner() {
+  const router = useRouter()
+  const pathname = usePathname()
+  const params = useSearchParams()
+  const view = useMemo(() => parseView(params), [params])
   const [clients, setClients] = useState<{ id: string; name: string }[] | null>(null)
   const [mayDelete, setMayDelete] = useState(false)
   const months = useMemo(() => recentMonths(new Date()), [])
-  const [clientId, setClientId] = useState('')
-  const [month, setMonth] = useState<MonthKey>(() => months[1] ?? months[0])
+  const clientId = view.client ?? ''
+  const month = (view.month ?? months[1] ?? months[0]) as MonthKey
+  const go = useCallback((patch: { client?: string | null; month?: string }) => {
+    const changed = patch.client !== undefined && patch.client !== view.client
+    const q = viewQuery({ ...view, client: view.client, month, ...patch, ...(changed ? { account: 'all', type: 'all' } : {}) })
+    router.replace(`${pathname}${q ? `?${q}` : ''}`, { scroll: false })
+  }, [view, month, router, pathname])
+  const setClientId = (v: string) => go({ client: v || null })
+  const setMonth = (v: MonthKey) => go({ month: v })
+  /** what the rebuilt checks say stops sharing — shown on Share, and the server refuses the same */
+  const [blockers, setBlockers] = useState<string[]>([])
   const [report, setReport] = useState<Saved | null>(null)
   /** id → name, for who wrote, edited and explained */
   const [people, setPeople] = useState<Record<string, string>>({})
@@ -65,8 +87,9 @@ export default function ReportsPage() {
       const j = await r.json().catch(() => ({}))
       if (!r.ok) { setError(j.error ?? 'Reports could not be opened'); setClients([]); return }
       setClients(j.clients ?? []); setMayDelete(!!j.mayDelete)
-      try { const last = JSON.parse(localStorage.getItem(PREF_KEY) ?? 'null'); if (last?.clientId && (j.clients ?? []).some((c: { id: string }) => c.id === last.clientId)) setClientId(last.clientId) } catch { /* a remembered pick is a convenience */ }
+      try { const last = JSON.parse(localStorage.getItem(PREF_KEY) ?? 'null'); if (!new URLSearchParams(window.location.search).get('client') && last?.clientId && (j.clients ?? []).some((c: { id: string }) => c.id === last.clientId)) setClientId(last.clientId) } catch { /* a remembered pick is a convenience */ }
     })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const load = useCallback(async (refresh = false) => {
@@ -74,7 +97,7 @@ export default function ReportsPage() {
     setLoading(true); setError(null)
     try { localStorage.setItem(PREF_KEY, JSON.stringify({ clientId })) } catch { /* convenience only */ }
     try {
-      const r = await fetch(`/api/reports/monthly?client_id=${encodeURIComponent(clientId)}&month=${month}${refresh ? '&refresh=1' : ''}`)
+      const r = await fetch(`/api/reports/monthly?client_id=${encodeURIComponent(clientId)}&month=${month}${refresh ? '&refresh=1' : '&keep=1'}`)
       const j = await r.json().catch(() => ({}))
       if (!r.ok) throw new Error(j.error ?? 'Could not read the figures')
       setReport(j.report ?? null)
@@ -132,32 +155,23 @@ export default function ReportsPage() {
           </ol>
         </div>
       )}
-      {clientId && loading && !data && <LoadingFigures />}
+      {/* THE FIGURES, POSTS AND CHECKS: report v2, read live (5 Nov 2026) */}
+      {clientId && <ReportV2Body clientId={clientId} month={month} onChecks={setBlockers} />}
 
-      {data && (
+      {clientId && loading && !report && <LoadingFigures />}
+      {clientId && !loading && (
         <>
-          <FreshnessCard state={state} month={data.month} fetchedAt={data.fetchedAt} />
-          {data.gaps.length > 0 && (
-            <TintCard tone="amber" title="Not everything could be read">
-              <ul className="list-disc pl-5 text-[14px]">{data.gaps.map(g => <li key={g}>{g}</li>)}</ul>
-            </TintCard>
-          )}
-          {data.platforms.map(p => (
-            <div key={p.platform} className="flex flex-col gap-6">
-              <PlatformSection p={p} month={data.month} running={state.kind === 'running'} avail={(data.candidates?.length ? availableStats(data.candidates) : null)} />
-            </div>
-          ))}
-          {data.audience && <AudienceSection a={data.audience} />}
-          {/* WHY THE POSTS WORKED, RIGHT ABOVE THE REPORT (the owner, 4 Nov 2026: "one button … make sure explain the
-              posts is shown as well near the report so it's nice and clear") — filled by Build report, no button of its own */}
-          {data.platforms.some(p => p.platform === 'instagram') && (
+          {data && <FreshnessCard state={state} month={data.month} fetchedAt={data.fetchedAt} />}
+          {/* WHY THE POSTS WORKED, RIGHT ABOVE THE REPORT — filled by Build report, no button of its own */}
+          {data?.platforms.some(p => p.platform === 'instagram') && (
             <PostBreakdowns raw={report?.posts_explained} clientId={clientId} month={month} onChange={r => setReport(r as Saved)} noButton
               explainedBy={report?.explained_by ? people[String(report.explained_by)] ?? null : null} />
           )}
-          {report && <Writer report={report} clientId={clientId} month={month} mayDelete={mayDelete} onChange={setReport} onDeleted={() => void load()}
-            settled={state.kind === 'final'} settlesOn={state.settlesOn} people={people} candidates={data.candidates ?? []} portalLink={portalLink}
-            connected={data.platforms.map(p => p.platform)} />}
-          <PrintReport data={scopeData(data, includedPlatforms(report?.included_platforms, data.platforms.map(p => p.platform)))} report={report} clientName={clientName} />
+          <Writer report={report ?? ({ id: `${clientId}_${month}`, month, data: null, body: null, objective: null, notes: null, checks: null, generated_at: null, updated_at: '' } as Saved)}
+            clientId={clientId} month={month} mayDelete={mayDelete} onChange={setReport} onDeleted={() => void load()}
+            settled={state.kind === 'final'} settlesOn={state.settlesOn} people={people} candidates={data?.candidates ?? []} portalLink={portalLink}
+            connected={data?.platforms.map(p => p.platform) ?? []} blockers={blockers} />
+          {data && <PrintReport data={scopeData(data, includedPlatforms(report?.included_platforms, data.platforms.map(p => p.platform)))} report={report} clientName={clientName} />}
         </>
       )}
     </div>
@@ -202,7 +216,7 @@ function FreshnessCard({ state, month, fetchedAt }: { state: MonthState; month: 
 
 /* ── the written report ──────────────────────────────────────────────────── */
 
-function Writer({ report, clientId, month, mayDelete, onChange, onDeleted, settled, settlesOn, people, candidates: allCandidates, portalLink, connected }: {
+function Writer({ report, clientId, month, mayDelete, onChange, onDeleted, settled, settlesOn, people, candidates: allCandidates, portalLink, connected, blockers = [] }: {
   report: Saved; clientId: string; month: MonthKey; mayDelete: boolean; onChange: (r: Saved) => void; onDeleted: () => void
   /** the month's numbers are complete (2 days after it ends) — building before that is allowed, but said */
   settled: boolean; settlesOn: string
@@ -212,6 +226,8 @@ function Writer({ report, clientId, month, mayDelete, onChange, onDeleted, settl
   portalLink: string | null
   /** the accounts connected — the ones that can be ticked */
   connected: string[]
+  /** what the rebuilt checks say stops sharing (5 Nov 2026) */
+  blockers?: string[]
 }) {
   const platformsOn = includedPlatforms(report.included_platforms, connected)
   const candidates = allCandidates.filter(c => platformsOn.has(c.platform))
@@ -239,7 +255,7 @@ function Writer({ report, clientId, month, mayDelete, onChange, onDeleted, settl
   const patch = async (fields: Record<string, unknown>) => {
     const r = await fetch('/api/reports/monthly', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ client_id: clientId, month, ...fields }) })
     const j = await r.json().catch(() => ({}))
-    if (!r.ok) throw new Error(j.error ?? 'Could not save')
+    if (!r.ok) throw new Error([j.error ?? 'Could not save', ...(Array.isArray(j.blockers) ? j.blockers : [])].join(' — '))
     onChange(j.report)
   }
   const [sharing, setSharing] = useState(false)
@@ -418,7 +434,13 @@ function Writer({ report, clientId, month, mayDelete, onChange, onDeleted, settl
               <>
                 <p className="text-[13px] text-muted-foreground">When it is ready, share it: it shows in their portal’s Reports tab, with their accounts and posts to click through. Nothing is emailed.</p>
                 <div>
-                  <Button disabled={sharing || !allChecked(checks) || editing || writtenFromOldFigures(report)} onClick={() => void share(true)} className="h-10 rounded-full">Share with client</Button>
+                  <Button disabled={sharing || !allChecked(checks) || editing || writtenFromOldFigures(report) || blockers.length > 0} onClick={() => void share(true)} className="h-10 rounded-full">Share with client</Button>
+                  {blockers.length > 0 && (
+                    <div className="basis-full text-[13px] text-accent-red">
+                      Sharing is blocked until the automatic checks pass:
+                      <ul className="list-disc pl-5">{blockers.map(b => <li key={b}>{b}</li>)}</ul>
+                    </div>
+                  )}
                   {writtenFromOldFigures(report)
                     ? <span className="ml-3 text-[13px] text-muted-foreground">Build it again first: it was written from old figures.</span>
                     : !allChecked(checks) && <span className="ml-3 text-[13px] text-muted-foreground">Tick every check first.</span>}

@@ -15,8 +15,9 @@ import PostsGrid, { PostDetail } from './PostsGrid'
 import ChecksPanel, { ShareBox } from './ChecksPanel'
 
 /**
- * REPORT V2 — THE PREVIEW (the owner, 5 Nov 2026: "rebuild the code for this page"; see it before it replaces Reports).
- * Client, month, account, type of post, who posted it and the sort live in the URL. Figures are read live, read only.
+ * REPORT V2 (the owner, 5 Nov 2026: "rebuild the code for this page"; then "replace the current reports page with the
+ * new one"). Client, month, account, type of post, who posted it and the sort live in the URL. Figures are read live,
+ * read only. `ReportV2Body` is what the Reports page shows; the default export is the stand-alone view.
  */
 const thisMonth = () => new Date().toISOString().slice(0, 7)
 const select = 'h-9 rounded-md border border-border bg-background px-2 text-[14px]'
@@ -28,40 +29,16 @@ export default function ReportV2() {
   const view = useMemo(() => parseView(params), [params])
   const month = view.month ?? previousMonth(thisMonth())
   const [clients, setClients] = useState<{ id: string; name: string }[] | null>(null)
-  const [report, setReport] = useState<V2Report | null>(null)
-  const [blockers, setBlockers] = useState<string[]>([])
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [open, setOpen] = useState<V2Post | null>(null)
-  const [nonce, setNonce] = useState(0)
-
   const setView = useCallback((patch: Partial<V2View>) => {
     const q = viewQuery({ ...view, month, ...patch })
     router.replace(`${pathname}${q ? `?${q}` : ''}`, { scroll: false })
   }, [view, month, router, pathname])
-
   useEffect(() => {
     fetch('/api/reports/preview').then(r => r.json()).then(j => setClients(j.clients ?? [])).catch(() => setClients([]))
   }, [])
-  useEffect(() => {
-    if (!view.client) { setReport(null); return }
-    let live = true
-    setLoading(true); setError(null)
-    fetch(`/api/reports/preview?client_id=${encodeURIComponent(view.client)}&month=${month}`)
-      .then(async r => { const j = await r.json(); if (!r.ok) throw new Error(j.error ?? 'The figures could not be read'); return j })
-      .then(j => { if (live) { setReport(j.report); setBlockers(j.blockers ?? []) } })
-      .catch(e => { if (live) { setError(e.message); setReport(null) } })
-      .finally(() => { if (live) setLoading(false) })
-    return () => { live = false }
-  }, [view.client, month, nonce])
-
-  const platforms = report?.platforms ?? []
-  const shownPlatforms = view.account === 'all' ? platforms : platforms.filter(p => p.platform === view.account)
-  const allPosts = shownPlatforms.flatMap(p => p.posts)
-
   return (
     <div className="flex flex-col gap-6 pb-16">
-      <PageTitle title="Report preview" summary="The rebuilt monthly report, read live from each account. Every number says where it came from, or why there is none. Nothing here is saved or shared." />
+      <PageTitle title="Report" summary="The monthly report, read live from each account. Every number says where it came from, or why there is none." />
       <div className="flex flex-wrap items-end gap-3">
         <label className="flex flex-col gap-1 text-[12px] text-muted-foreground">Client
           <select className={select} value={view.client ?? ''} onChange={e => setView({ client: e.target.value || null, account: 'all', type: 'all' })} aria-label="Client">
@@ -72,11 +49,64 @@ export default function ReportV2() {
         <label className="flex flex-col gap-1 text-[12px] text-muted-foreground">Month
           <input type="month" className={select} value={month} max={thisMonth()} onChange={e => e.target.value && setView({ month: e.target.value })} aria-label="Month" />
         </label>
-        <span className="pb-2 text-[12px] text-muted-foreground">compared with {monthLabel(previousMonth(month))}</span>
-        {view.client && <Button variant="outline" size="sm" onClick={() => setNonce(n => n + 1)} disabled={loading}><RefreshCw className={`mr-1 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />Read again</Button>}
       </div>
-
       {!view.client && <p className="text-[14px] text-muted-foreground">Pick a client to read their {monthLabel(month)}.</p>}
+      {view.client && <ReportV2Body clientId={view.client} month={month} showShareBox />}
+    </div>
+  )
+}
+
+/**
+ * THE FIGURES, POSTS AND CHECKS for one client and month. Account, type, who posted it and the sort live in the URL
+ * beside client and month. Read live and read only. `onChecks` hands the share blockers up, so the page's Share can
+ * say why it is blocked.
+ */
+export function ReportV2Body({ clientId, month, showShareBox = false, onChecks }: {
+  clientId: string; month: string; showShareBox?: boolean; onChecks?: (blockers: string[]) => void
+}) {
+  const router = useRouter()
+  const pathname = usePathname()
+  const params = useSearchParams()
+  const view = useMemo(() => parseView(params), [params])
+  const [report, setReport] = useState<V2Report | null>(null)
+  const [blockers, setBlockers] = useState<string[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [open, setOpen] = useState<V2Post | null>(null)
+  const [nonce, setNonce] = useState(0)
+
+  const setView = useCallback((patch: Partial<V2View>) => {
+    const q = viewQuery({ ...view, client: clientId, month, ...patch })
+    router.replace(`${pathname}${q ? `?${q}` : ''}`, { scroll: false })
+  }, [view, clientId, month, router, pathname])
+
+  useEffect(() => {
+    let live = true
+    setLoading(true); setError(null)
+    fetch(`/api/reports/preview?client_id=${encodeURIComponent(clientId)}&month=${month}`)
+      .then(async r => { const j = await r.json(); if (!r.ok) throw new Error(j.error ?? 'The figures could not be read'); return j })
+      .then(j => { if (live) { setReport(j.report); setBlockers(j.blockers ?? []); onChecks?.(j.blockers ?? []) } })
+      .catch(e => { if (live) { setError(e.message); setReport(null) } })
+      .finally(() => { if (live) setLoading(false) })
+    return () => { live = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientId, month, nonce])
+
+  const platforms = report?.platforms ?? []
+  const shownPlatforms = view.account === 'all' ? platforms : platforms.filter(p => p.platform === view.account)
+  const allPosts = shownPlatforms.flatMap(p => p.posts)
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div className="no-print flex flex-wrap items-center gap-3">
+        <span className="text-[13px] text-muted-foreground">
+          {monthLabel(month)}, compared with {monthLabel(previousMonth(month))}
+          {report ? ` · read ${new Date(report.readAt).toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}` : ''}
+        </span>
+        <Button variant="outline" size="sm" onClick={() => setNonce(n => n + 1)} disabled={loading} className="rounded-full">
+          <RefreshCw className={`mr-1 h-4 w-4 ${loading ? 'animate-spin' : ''}`} aria-hidden />Read the figures again
+        </Button>
+      </div>
       {loading && <div className="grid gap-3 sm:grid-cols-3"><Skeleton className="h-28" /><Skeleton className="h-28" /><Skeleton className="h-28" /></div>}
       {error && <p className="rounded-md border border-accent-red/40 bg-accent-red/10 p-3 text-[14px] text-accent-red">{error}</p>}
 
@@ -88,9 +118,9 @@ export default function ReportV2() {
                 className={`rounded-full border px-3 py-1 text-[13px] ${view.account === t.id ? 'border-foreground bg-foreground text-background' : 'border-border'}`}>{t.label}</button>
             ))}
           </div>
-          <div className="grid gap-4 lg:grid-cols-2">
+          <div className={`grid gap-4 ${showShareBox ? 'lg:grid-cols-2' : ''}`}>
             <ChecksPanel checks={report.checks} />
-            <ShareBox blockers={blockers} />
+            {showShareBox && <ShareBox blockers={blockers} />}
           </div>
           {report.gaps.map(g => <p key={g} className="text-[13px] text-accent-red">{g}</p>)}
           {shownPlatforms.map(p => <PlatformSection key={p.platform} p={p} month={month} />)}

@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server'
+import { readReportV2 } from '@/app/lib/report-v2/read'
+import { shareBlockers } from '@/app/lib/report-v2/checks'
 import { table, withRequestCache } from '@/lib/db'
 import type { Client, ClientReport } from '@/lib/db-types'
 import { AuthzError, authzErrorResponse, requireRole, type TeamUser } from '@/app/lib/authz'
@@ -55,7 +57,9 @@ export async function GET(req: Request) {
       let report = await table<ClientReport>('client_reports').get(reportId(clientId, month))
       // figures read under an older way of reading are read again (REPORT_DATA_VERSION)
       const stale = (report?.data as { v?: number } | null | undefined)?.v !== REPORT_DATA_VERSION
-      if (!report?.data || stale || q.get('refresh') === '1') {
+      // keep=1 (the Reports page, 5 Nov 2026): viewing writes nothing — the figures shown are read live by report v2;
+      // the saved ones are read again only when Build report asks (refresh=1)
+      if (q.get('refresh') === '1' || (q.get('keep') !== '1' && (!report?.data || stale))) {
         await loadReportData(clientId, month)
         report = await table<ClientReport>('client_reports').get(reportId(clientId, month))
       }
@@ -110,6 +114,17 @@ export async function PATCH(req: Request) {
       await mayReportOn(user, body.client_id)
       const id = reportId(body.client_id, body.month)
       const now = new Date().toISOString()
+      // SHARE IS REFUSED, WITH THE REASONS (5 Nov 2026) — not silently ignored: no text yet, text from old figures, or
+      // a failed automatic check on the figures read now
+      if (body.share === true) {
+        const cur = await table<ClientReport>('client_reports').get(id)
+        const reasons: string[] = []
+        if (!cur?.body) reasons.push('Build the report first — there is no text to share')
+        else if (writtenFromOldFigures(cur)) reasons.push('The text was written from old figures — press Build report again')
+        try { reasons.push(...shareBlockers((await readReportV2(body.client_id, body.month)).checks)) }
+        catch (e) { reasons.push(`The figures could not be read to check them (${e instanceof Error ? e.message : 'try again'})`) }
+        if (reasons.length) return NextResponse.json({ error: 'Not shared', blockers: reasons }, { status: 409 })
+      }
       const checks = body.checks && typeof body.checks === 'object'
         ? Object.fromEntries(REVIEW_CHECKS.map(c => [c.key, (body.checks as Record<string, unknown>)[c.key] === true])) : undefined
       const put = await table<ClientReport>('client_reports').claim(id, cur => (cur ? {

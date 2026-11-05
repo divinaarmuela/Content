@@ -1,4 +1,6 @@
 import 'server-only'
+import { readReportV2 } from './report-v2/read'
+import { overlayV2 } from './report-v2/to-report-data'
 import { table } from '@/lib/db'
 import type { AudienceSnapshot, Client, ClientReport } from '@/lib/db-types'
 import {
@@ -217,7 +219,11 @@ async function figuresOf(acc: Account, profileId: string | null, m: MonthKey, ga
       const enough = daysIn >= 7
       const prevDays = points.find(p => p.d >= prevStart && p.d < `${m}-01`)?.d
       const prevEnough = !!prevDays && (Date.parse(`${m}-01T00:00:00Z`) - Date.parse(`${prevDays}T00:00:00Z`)) / 864e5 >= 7
-      fig.followers = { ...followerMonth(enough ? start : null, end, prevEnough ? prevFirst : null), trackedFrom: startDay }
+      // LAST MONTH THE SAME WAY AS ITS OWN CARD (5 Nov 2026, Anthony: October +43, November's "last month" 42): its
+      // first tracked day to its LAST day — not to this month's 1st
+      const prevEnd = lastBefore(`${m}-01`)
+      const f = followerMonth(enough ? start : null, end, null)
+      fig.followers = { ...f, previousGained: prevEnough && prevFirst != null && prevEnd != null ? prevEnd - prevFirst : null, trackedFrom: startDay }
     } else {
       gaps.push(`${label}: the follower counts could not be read (${fs.error})`)
       fig.followers = { start: null, end: null, previousEnd: null, gained: null, previousGained: null }
@@ -382,7 +388,11 @@ async function nextShootConcepts(clientId: string, m: MonthKey): Promise<string[
 export async function generateReport(clientId: string, m: MonthKey, by: string, opts: { objective: string; notes: string }): Promise<{ ok: true; body: string } | { ok: false; error: string }> {
   const id = reportId(clientId, m)
   const saved = await table<ClientReport>('client_reports').get(id)
-  const all = readReportData(saved?.data) ?? await loadReportData(clientId, m)
+  const saved0 = readReportData(saved?.data) ?? await loadReportData(clientId, m)
+  // THE SAME NUMBERS THE PAGE SHOWS (5 Nov 2026: Reports shows report v2's figures): v2's month figures, last month and
+  // followers laid over the saved data; if v2 cannot be read the saved figures are used and the page's checks say so
+  const v2 = await readReportV2(clientId, m).catch(() => null)
+  const all = v2 ? overlayV2(saved0, v2) : saved0
   // only the accounts ticked for this report
   const data = scopeData(all, includedPlatforms(saved?.included_platforms, all.platforms.map(p => p.platform)))
   const before = await table<ClientReport>('client_reports').get(reportId(clientId, previousMonth(m))).catch(() => null)
