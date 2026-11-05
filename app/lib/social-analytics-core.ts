@@ -3,6 +3,7 @@
  * social medias, and when click in it the posts are there, then when click analytic is there; in the posts page
  * can categorize by weekly etc"). Pure: Zernio's /analytics rows in, the page's numbers out.
  */
+import { followerGain, followerPoints } from './report-v2/definitions'
 
 export type MetricKey = 'views' | 'impressions' | 'reach' | 'likes' | 'comments' | 'shares' | 'saves' | 'clicks'
 
@@ -183,13 +184,11 @@ export function readTimeline(raw: unknown): TimelineDay[] {
  * is shorter, so the words say which day it really counts from. Null with fewer than two readings.
  */
 export function followerChange(readings: unknown): { change: number; since: string } | null {
-  if (!Array.isArray(readings)) return null
-  const pts = readings
-    .map(r => (r ?? {}) as { date?: unknown; followers?: unknown })
-    .filter((r): r is { date: string; followers: number } => typeof r.date === 'string' && typeof r.followers === 'number')
-    .sort((a, b) => a.date.localeCompare(b.date))
+  // the same definition as the monthly report (report-metrics-core.ts followerGain): first reading → last reading
+  const pts = followerPoints(readings)
   if (pts.length < 2) return null
-  return { change: pts[pts.length - 1].followers - pts[0].followers, since: pts[0].date.slice(0, 10) }
+  const g = followerGain(pts, pts[0].date, pts[pts.length - 1].date, 0)
+  return g.state === 'value' && g.value != null ? { change: g.value, since: g.since ?? pts[0].date } : null
 }
 
 /**

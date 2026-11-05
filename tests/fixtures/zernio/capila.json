@@ -1,0 +1,5032 @@
+{
+ "recordedAt": "2026-11-05T08:57:59.739Z",
+ "today": "2026-11-05",
+ "clientId": "b871b7d8-1b97-4c75-b895-51510bd51c2d",
+ "clientName": "Sample clientName 1955",
+ "profileId": "6aa9172fd442650ab8453bd4",
+ "accounts": [
+  {
+   "id": "6ac3127a3c30ec3e468902e0",
+   "platform": "instagram",
+   "handle": "Sample handle 1956"
+  },
+  {
+   "id": "6aaa43608d284ffb21069c2c",
+   "platform": "facebook",
+   "handle": "Sample handle 1957"
+  }
+ ],
+ "calls": {
+  "/analytics/dashboard?compare=previous_period&fromDate=2026-10-01&platform=instagram&profileId=6aa9172fd442650ab8453bd4&recentPosts=0&toDate=2026-10-31&topPosts=10": {
+   "ok": true,
+   "data": {
+    "dateRange": {
+     "fromDate": "2026-10-01",
+     "toDate": "2026-10-31"
+    },
+    "totals": {
+     "impressions": 1561,
+     "reach": 888,
+     "likes": 26,
+     "comments": 3,
+     "shares": 2,
+     "saves": 0,
+     "clicks": 0,
+     "views": 1561,
+     "engagementRate": 1.99
+    },
+    "previousTotals": {
+     "impressions": 2947,
+     "reach": 1357,
+     "likes": 54,
+     "comments": 0,
+     "shares": 5,
+     "saves": 1,
+     "clicks": 0,
+     "views": 2947,
+     "engagementRate": 2.04
+    },
+    "followers": {
+     "current": 3615,
+     "gained": 5,
+     "byAccount": [
+      {
+       "accountId": "6ac3127a3c30ec3e468902e0",
+       "platform": "instagram",
+       "current": 3615,
+       "gained": 5
+      }
+     ]
+    },
+    "previousFollowers": {
+     "current": 3617,
+     "gained": 0,
+     "byAccount": [
+      {
+       "accountId": "6ac3127a3c30ec3e468902e0",
+       "platform": "instagram",
+       "current": 3617,
+       "gained": 0
+      }
+     ]
+    },
+    "daily": [
+     {
+      "date": "2026-10-01",
+      "impressions": 590,
+      "reach": 429,
+      "engagement": 5,
+      "views": 590,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-10-02",
+      "impressions": 0,
+      "reach": 0,
+      "engagement": 0,
+      "views": 0,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-10-03",
+      "impressions": 0,
+      "reach": 0,
+      "engagement": 0,
+      "views": 0,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-10-04",
+      "impressions": 0,
+      "reach": 0,
+      "engagement": 0,
+      "views": 0,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-10-05",
+      "impressions": 0,
+      "reach": 0,
+      "engagement": 0,
+      "views": 0,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-10-06",
+      "impressions": 5,
+      "reach": 0,
+      "engagement": 0,
+      "views": 5,
+      "followersGained": -1
+     },
+     {
+      "date": "2026-10-07",
+      "impressions": 401,
+      "reach": 235,
+      "engagement": 6,
+      "views": 401,
+      "followersGained": 1
+     },
+     {
+      "date": "2026-10-08",
+      "impressions": 95,
+      "reach": 44,
+      "engagement": 0,
+      "views": 95,
+      "followersGained": -1
+     },
+     {
+      "date": "2026-10-09",
+      "impressions": 15,
+      "reach": 0,
+      "engagement": 0,
+      "views": 15,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-10-10",
+      "impressions": 5,
+      "reach": 0,
+      "engagement": 1,
+      "views": 5,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-10-11",
+      "impressions": 7,
+      "reach": 5,
+      "engagement": 0,
+      "views": 7,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-10-12",
+      "impressions": 69,
+      "reach": 18,
+      "engagement": 2,
+      "views": 69,
+      "followersGained": -1
+     },
+     {
+      "date": "2026-10-13",
+      "impressions": 39,
+      "reach": 15,
+      "engagement": 0,
+      "views": 39,
+      "followersGained": 2
+     },
+     {
+      "date": "2026-10-14",
+      "impressions": 14,
+      "reach": 4,
+      "engagement": 1,
+      "views": 14,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-10-15",
+      "impressions": 60,
+      "reach": 21,
+      "engagement": 2,
+      "views": 60,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-10-16",
+      "impressions": 44,
+      "reach": 25,
+      "engagement": 3,
+      "views": 44,
+      "followersGained": 1
+     },
+     {
+      "date": "2026-10-17",
+      "impressions": 7,
+      "reach": 5,
+      "engagement": 0,
+      "views": 7,
+      "followersGained": 2
+     },
+     {
+      "date": "2026-10-18",
+      "impressions": 1,
+      "reach": 1,
+      "engagement": 0,
+      "views": 1,
+      "followersGained": 1
+     },
+     {
+      "date": "2026-10-19",
+      "impressions": 12,
+      "reach": 5,
+      "engagement": 0,
+      "views": 12,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-10-20",
+      "impressions": 42,
+      "reach": 15,
+      "engagement": 3,
+      "views": 42,
+      "followersGained": -1
+     },
+     {
+      "date": "2026-10-21",
+      "impressions": 32,
+      "reach": 15,
+      "engagement": 3,
+      "views": 32,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-10-22",
+      "impressions": 21,
+      "reach": 8,
+      "engagement": 1,
+      "views": 21,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-10-23",
+      "impressions": 6,
+      "reach": 4,
+      "engagement": 0,
+      "views": 6,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-10-24",
+      "impressions": 2,
+      "reach": 1,
+      "engagement": 0,
+      "views": 2,
+      "followersGained": 1
+     },
+     {
+      "date": "2026-10-25",
+      "impressions": 2,
+      "reach": 1,
+      "engagement": 0,
+      "views": 2,
+      "followersGained": 1
+     },
+     {
+      "date": "2026-10-26",
+      "impressions": 2,
+      "reach": 1,
+      "engagement": 0,
+      "views": 2,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-10-27",
+      "impressions": 57,
+      "reach": 15,
+      "engagement": 2,
+      "views": 57,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-10-28",
+      "impressions": 10,
+      "reach": 6,
+      "engagement": 2,
+      "views": 10,
+      "followersGained": 1
+     },
+     {
+      "date": "2026-10-29",
+      "impressions": 7,
+      "reach": 7,
+      "engagement": 0,
+      "views": 7,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-10-30",
+      "impressions": 10,
+      "reach": 7,
+      "engagement": 0,
+      "views": 10,
+      "followersGained": -2
+     },
+     {
+      "date": "2026-10-31",
+      "impressions": 6,
+      "reach": 1,
+      "engagement": 0,
+      "views": 6,
+      "followersGained": 1
+     }
+    ],
+    "topPosts": [
+     {
+      "postId": "6ad727fadab8a70cca241a8e",
+      "platform": "instagram",
+      "publishedAt": "2026-10-20T07:30:01.000Z",
+      "metrics": {
+       "impressions": 75,
+       "reach": 36,
+       "likes": 7,
+       "comments": 0,
+       "shares": 0,
+       "saves": 0,
+       "clicks": 0,
+       "views": 75,
+       "engagementRate": 9.33
+      }
+     },
+     {
+      "postId": "6ac6056b3805c5dda920aea8",
+      "platform": "instagram",
+      "publishedAt": "2026-10-07T07:32:22.000Z",
+      "metrics": {
+       "impressions": 495,
+       "reach": 279,
+       "likes": 5,
+       "comments": 1,
+       "shares": 1,
+       "saves": 0,
+       "clicks": 0,
+       "views": 495,
+       "engagementRate": 1.41
+      }
+     },
+     {
+      "postId": "6ad086f00fce804fd4294f0c",
+      "platform": "instagram",
+      "publishedAt": "2026-10-15T07:30:02.000Z",
+      "metrics": {
+       "impressions": 120,
+       "reach": 57,
+       "likes": 5,
+       "comments": 0,
+       "shares": 0,
+       "saves": 0,
+       "clicks": 0,
+       "views": 120,
+       "engagementRate": 4.17
+      }
+     },
+     {
+      "postId": "6ac3128598f08b62973276e1",
+      "platform": "instagram",
+      "publishedAt": "2026-10-01T07:04:24.000Z",
+      "metrics": {
+       "impressions": 607,
+       "reach": 430,
+       "likes": 2,
+       "comments": 2,
+       "shares": 1,
+       "saves": 0,
+       "clicks": 0,
+       "views": 607,
+       "engagementRate": 0.82
+      }
+     },
+     {
+      "postId": "6ae05a0f097eece4d795559e",
+      "platform": "instagram",
+      "publishedAt": "2026-10-27T07:30:03.000Z",
+      "metrics": {
+       "impressions": 71,
+       "reach": 23,
+       "likes": 4,
+       "comments": 0,
+       "shares": 0,
+       "saves": 0,
+       "clicks": 0,
+       "views": 71,
+       "engagementRate": 5.63
+      }
+     },
+     {
+      "postId": "6acc9d7614ccf37705d40a2e",
+      "platform": "instagram",
+      "publishedAt": "2026-10-12T07:30:01.000Z",
+      "metrics": {
+       "impressions": 118,
+       "reach": 36,
+       "likes": 3,
+       "comments": 0,
+       "shares": 0,
+       "saves": 0,
+       "clicks": 0,
+       "views": 118,
+       "engagementRate": 2.54
+      }
+     }
+    ],
+    "recentPosts": [],
+    "dataAsOf": "2026-11-05T08:52:57.665Z"
+   }
+  },
+  "/analytics/dashboard?fromDate=2026-09-01&platform=instagram&profileId=6aa9172fd442650ab8453bd4&recentPosts=0&toDate=2026-09-30&topPosts=0": {
+   "ok": true,
+   "data": {
+    "dateRange": {
+     "fromDate": "2026-09-01",
+     "toDate": "2026-09-30"
+    },
+    "totals": {
+     "impressions": 0,
+     "reach": 0,
+     "likes": 0,
+     "comments": 0,
+     "shares": 0,
+     "saves": 0,
+     "clicks": 0,
+     "views": 0,
+     "engagementRate": 0
+    },
+    "followers": {
+     "current": 3617,
+     "gained": 0,
+     "byAccount": [
+      {
+       "accountId": "6ac3127a3c30ec3e468902e0",
+       "platform": "instagram",
+       "current": 3617,
+       "gained": 0
+      }
+     ]
+    },
+    "daily": [
+     {
+      "date": "2026-09-01",
+      "impressions": 0,
+      "reach": 0,
+      "engagement": 0,
+      "views": 0,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-09-02",
+      "impressions": 0,
+      "reach": 0,
+      "engagement": 0,
+      "views": 0,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-09-03",
+      "impressions": 0,
+      "reach": 0,
+      "engagement": 0,
+      "views": 0,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-09-04",
+      "impressions": 0,
+      "reach": 0,
+      "engagement": 0,
+      "views": 0,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-09-05",
+      "impressions": 0,
+      "reach": 0,
+      "engagement": 0,
+      "views": 0,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-09-06",
+      "impressions": 0,
+      "reach": 0,
+      "engagement": 0,
+      "views": 0,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-09-07",
+      "impressions": 0,
+      "reach": 0,
+      "engagement": 0,
+      "views": 0,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-09-08",
+      "impressions": 0,
+      "reach": 0,
+      "engagement": 0,
+      "views": 0,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-09-09",
+      "impressions": 0,
+      "reach": 0,
+      "engagement": 0,
+      "views": 0,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-09-10",
+      "impressions": 0,
+      "reach": 0,
+      "engagement": 0,
+      "views": 0,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-09-11",
+      "impressions": 0,
+      "reach": 0,
+      "engagement": 0,
+      "views": 0,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-09-12",
+      "impressions": 0,
+      "reach": 0,
+      "engagement": 0,
+      "views": 0,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-09-13",
+      "impressions": 0,
+      "reach": 0,
+      "engagement": 0,
+      "views": 0,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-09-14",
+      "impressions": 0,
+      "reach": 0,
+      "engagement": 0,
+      "views": 0,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-09-15",
+      "impressions": 0,
+      "reach": 0,
+      "engagement": 0,
+      "views": 0,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-09-16",
+      "impressions": 0,
+      "reach": 0,
+      "engagement": 0,
+      "views": 0,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-09-17",
+      "impressions": 0,
+      "reach": 0,
+      "engagement": 0,
+      "views": 0,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-09-18",
+      "impressions": 0,
+      "reach": 0,
+      "engagement": 0,
+      "views": 0,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-09-19",
+      "impressions": 0,
+      "reach": 0,
+      "engagement": 0,
+      "views": 0,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-09-20",
+      "impressions": 0,
+      "reach": 0,
+      "engagement": 0,
+      "views": 0,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-09-21",
+      "impressions": 0,
+      "reach": 0,
+      "engagement": 0,
+      "views": 0,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-09-22",
+      "impressions": 0,
+      "reach": 0,
+      "engagement": 0,
+      "views": 0,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-09-23",
+      "impressions": 0,
+      "reach": 0,
+      "engagement": 0,
+      "views": 0,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-09-24",
+      "impressions": 0,
+      "reach": 0,
+      "engagement": 0,
+      "views": 0,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-09-25",
+      "impressions": 0,
+      "reach": 0,
+      "engagement": 0,
+      "views": 0,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-09-26",
+      "impressions": 0,
+      "reach": 0,
+      "engagement": 0,
+      "views": 0,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-09-27",
+      "impressions": 0,
+      "reach": 0,
+      "engagement": 0,
+      "views": 0,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-09-28",
+      "impressions": 0,
+      "reach": 0,
+      "engagement": 0,
+      "views": 0,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-09-29",
+      "impressions": 0,
+      "reach": 0,
+      "engagement": 0,
+      "views": 0,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-09-30",
+      "impressions": 0,
+      "reach": 0,
+      "engagement": 0,
+      "views": 0,
+      "followersGained": 0
+     }
+    ],
+    "topPosts": [],
+    "recentPosts": [],
+    "dataAsOf": "2026-11-05T08:52:57.665Z"
+   }
+  },
+  "/accounts/follower-stats?accountIds=6ac3127a3c30ec3e468902e0&fromDate=2026-09-01&granularity=daily&toDate=2026-10-31": {
+   "ok": true,
+   "data": {
+    "accounts": [
+     {
+      "_id": "6ac3127a3c30ec3e468902e0",
+      "profileId": "6aa9172fd442650ab8453bd4",
+      "isActive": true,
+      "platform": "instagram",
+      "username": "Sample username 1958",
+      "displayName": "Sample displayName 1959",
+      "currentFollowers": 3617,
+      "lastUpdated": "2026-11-05T07:01:11.373Z",
+      "growth": 5,
+      "growthPercentage": 0.14,
+      "dataPoints": 27
+     }
+    ],
+    "stats": {
+     "6ac3127a3c30ec3e468902e0": [
+      {
+       "date": "2026-10-05",
+       "followers": 3610
+      },
+      {
+       "date": "2026-10-06",
+       "followers": 3609
+      },
+      {
+       "date": "2026-10-07",
+       "followers": 3610
+      },
+      {
+       "date": "2026-10-08",
+       "followers": 3609
+      },
+      {
+       "date": "2026-10-09",
+       "followers": 3609
+      },
+      {
+       "date": "2026-10-10",
+       "followers": 3609
+      },
+      {
+       "date": "2026-10-11",
+       "followers": 3609
+      },
+      {
+       "date": "2026-10-12",
+       "followers": 3608
+      },
+      {
+       "date": "2026-10-13",
+       "followers": 3610
+      },
+      {
+       "date": "2026-10-14",
+       "followers": 3610
+      },
+      {
+       "date": "2026-10-15",
+       "followers": 3610
+      },
+      {
+       "date": "2026-10-16",
+       "followers": 3611
+      },
+      {
+       "date": "2026-10-17",
+       "followers": 3613
+      },
+      {
+       "date": "2026-10-18",
+       "followers": 3614
+      },
+      {
+       "date": "2026-10-19",
+       "followers": 3614
+      },
+      {
+       "date": "2026-10-20",
+       "followers": 3613
+      },
+      {
+       "date": "2026-10-21",
+       "followers": 3613
+      },
+      {
+       "date": "2026-10-22",
+       "followers": 3613
+      },
+      {
+       "date": "2026-10-23",
+       "followers": 3613
+      },
+      {
+       "date": "2026-10-24",
+       "followers": 3614
+      },
+      {
+       "date": "2026-10-25",
+       "followers": 3615
+      },
+      {
+       "date": "2026-10-26",
+       "followers": 3615
+      },
+      {
+       "date": "2026-10-27",
+       "followers": 3615
+      },
+      {
+       "date": "2026-10-28",
+       "followers": 3616
+      },
+      {
+       "date": "2026-10-29",
+       "followers": 3616
+      },
+      {
+       "date": "2026-10-30",
+       "followers": 3614
+      },
+      {
+       "date": "2026-10-31",
+       "followers": 3615
+      }
+     ]
+    },
+    "dateRange": {
+     "from": "2026-09-01T00:00:00.000Z",
+     "to": "2026-10-31T23:59:59.999Z"
+    },
+    "granularity": "daily"
+   }
+  },
+  "/analytics?accountId=6ac3127a3c30ec3e468902e0&fromDate=2026-10-01&limit=100&page=1&platform=instagram&source=all&toDate=2026-10-31": {
+   "ok": true,
+   "data": {
+    "overview": {
+     "totalPosts": 6,
+     "publishedPosts": 6,
+     "scheduledPosts": 0,
+     "lastSync": "2026-11-05T08:53:00.359Z",
+     "dataStaleness": {
+      "staleAccountCount": 0,
+      "syncTriggered": false
+     }
+    },
+    "posts": [
+     {
+      "_id": "6ae05a0f097eece4d795559e",
+      "latePostId": null,
+      "content": "Sample content 1960",
+      "publishedAt": "2026-10-27T07:30:03.000Z",
+      "scheduledFor": "2026-10-27T07:30:03.000Z",
+      "status": "published",
+      "analytics": {
+       "impressions": 71,
+       "reach": 23,
+       "likes": 4,
+       "comments": 0,
+       "shares": 0,
+       "saves": 0,
+       "clicks": 0,
+       "views": 71,
+       "follows": 0,
+       "igReelsAvgWatchTime": 0,
+       "igReelsVideoViewTotalTime": 0,
+       "reelsSkipRate": 0,
+       "completionRate": 0,
+       "profileViews": 0,
+       "websiteClicks": 0,
+       "impressionSources": {},
+       "audienceTypes": {},
+       "audienceCountries": {},
+       "retentionCurve": {},
+       "replays": 0,
+       "reposts": 0,
+       "videoDurationSeconds": null,
+       "engagementRate": 5.63,
+       "lastUpdated": "2026-11-04T08:00:11Z"
+      },
+      "platforms": [
+       {
+        "platform": "instagram",
+        "status": "published",
+        "platformPostId": "18176313199452867",
+        "accountId": "6ac3127a3c30ec3e468902e0",
+        "accountUsername": "sample_account",
+        "analytics": {
+         "impressions": 71,
+         "reach": 23,
+         "likes": 4,
+         "comments": 0,
+         "shares": 0,
+         "saves": 0,
+         "clicks": 0,
+         "views": 71,
+         "follows": 0,
+         "igReelsAvgWatchTime": 0,
+         "igReelsVideoViewTotalTime": 0,
+         "reelsSkipRate": 0,
+         "completionRate": 0,
+         "profileViews": 0,
+         "websiteClicks": 0,
+         "impressionSources": {},
+         "audienceTypes": {},
+         "audienceCountries": {},
+         "retentionCurve": {},
+         "replays": 0,
+         "reposts": 0,
+         "videoDurationSeconds": null,
+         "engagementRate": 5.63,
+         "lastUpdated": "2026-11-04T08:00:11Z"
+        },
+        "syncStatus": "synced",
+        "platformPostUrl": "https://example.com/sample/1961",
+        "errorMessage": null,
+        "errorCode": null,
+        "isOwner": null
+       }
+      ],
+      "platform": "instagram",
+      "platformPostUrl": "https://example.com/sample/1962",
+      "isExternal": true,
+      "isAd": false,
+      "profileId": "6aa9172fd442650ab8453bd4",
+      "thumbnailUrl": "https://example.com/sample/1963",
+      "mediaType": "carousel",
+      "mediaItems": [
+       {
+        "type": "image",
+        "url": "https://example.com/sample/1964",
+        "thumbnail": "https://example.com/sample/1965"
+       },
+       {
+        "type": "image",
+        "url": "https://example.com/sample/1966",
+        "thumbnail": "https://example.com/sample/1967"
+       },
+       {
+        "type": "image",
+        "url": "https://example.com/sample/1968",
+        "thumbnail": "https://example.com/sample/1969"
+       },
+       {
+        "type": "image",
+        "url": "https://example.com/sample/1970",
+        "thumbnail": "https://example.com/sample/1971"
+       },
+       {
+        "type": "image",
+        "url": "https://example.com/sample/1972",
+        "thumbnail": "https://example.com/sample/1973"
+       },
+       {
+        "type": "image",
+        "url": "https://example.com/sample/1974",
+        "thumbnail": "https://example.com/sample/1975"
+       }
+      ],
+      "mediaProductType": "FEED",
+      "isAiGenerated": false
+     },
+     {
+      "_id": "6ad727fadab8a70cca241a8e",
+      "latePostId": null,
+      "content": "Sample content 1976",
+      "publishedAt": "2026-10-20T07:30:01.000Z",
+      "scheduledFor": "2026-10-20T07:30:01.000Z",
+      "status": "published",
+      "analytics": {
+       "impressions": 75,
+       "reach": 36,
+       "likes": 7,
+       "comments": 0,
+       "shares": 0,
+       "saves": 0,
+       "clicks": 0,
+       "views": 75,
+       "follows": 0,
+       "igReelsAvgWatchTime": 0,
+       "igReelsVideoViewTotalTime": 0,
+       "reelsSkipRate": 0,
+       "completionRate": 0,
+       "profileViews": 1,
+       "websiteClicks": 0,
+       "impressionSources": {},
+       "audienceTypes": {},
+       "audienceCountries": {},
+       "retentionCurve": {},
+       "replays": 0,
+       "reposts": 0,
+       "videoDurationSeconds": null,
+       "engagementRate": 9.33,
+       "lastUpdated": "2026-11-04T11:10:05Z"
+      },
+      "platforms": [
+       {
+        "platform": "instagram",
+        "status": "published",
+        "platformPostId": "18285747538288202",
+        "accountId": "6ac3127a3c30ec3e468902e0",
+        "accountUsername": "sample_account",
+        "analytics": {
+         "impressions": 75,
+         "reach": 36,
+         "likes": 7,
+         "comments": 0,
+         "shares": 0,
+         "saves": 0,
+         "clicks": 0,
+         "views": 75,
+         "follows": 0,
+         "igReelsAvgWatchTime": 0,
+         "igReelsVideoViewTotalTime": 0,
+         "reelsSkipRate": 0,
+         "completionRate": 0,
+         "profileViews": 1,
+         "websiteClicks": 0,
+         "impressionSources": {},
+         "audienceTypes": {},
+         "audienceCountries": {},
+         "retentionCurve": {},
+         "replays": 0,
+         "reposts": 0,
+         "videoDurationSeconds": null,
+         "engagementRate": 9.33,
+         "lastUpdated": "2026-11-04T11:10:05Z"
+        },
+        "syncStatus": "synced",
+        "platformPostUrl": "https://example.com/sample/1977",
+        "errorMessage": null,
+        "errorCode": null,
+        "isOwner": null
+       }
+      ],
+      "platform": "instagram",
+      "platformPostUrl": "https://example.com/sample/1978",
+      "isExternal": true,
+      "isAd": false,
+      "profileId": "6aa9172fd442650ab8453bd4",
+      "thumbnailUrl": "https://example.com/sample/1979",
+      "mediaType": "carousel",
+      "mediaItems": [
+       {
+        "type": "image",
+        "url": "https://example.com/sample/1980",
+        "thumbnail": "https://example.com/sample/1981"
+       },
+       {
+        "type": "image",
+        "url": "https://example.com/sample/1982",
+        "thumbnail": "https://example.com/sample/1983"
+       },
+       {
+        "type": "image",
+        "url": "https://example.com/sample/1984",
+        "thumbnail": "https://example.com/sample/1985"
+       },
+       {
+        "type": "image",
+        "url": "https://example.com/sample/1986",
+        "thumbnail": "https://example.com/sample/1987"
+       },
+       {
+        "type": "image",
+        "url": "https://example.com/sample/1988",
+        "thumbnail": "https://example.com/sample/1989"
+       },
+       {
+        "type": "image",
+        "url": "https://example.com/sample/1990",
+        "thumbnail": "https://example.com/sample/1991"
+       }
+      ],
+      "mediaProductType": "FEED",
+      "isAiGenerated": false
+     },
+     {
+      "_id": "6ad086f00fce804fd4294f0c",
+      "latePostId": null,
+      "content": "Sample content 1992",
+      "publishedAt": "2026-10-15T07:30:02.000Z",
+      "scheduledFor": "2026-10-15T07:30:02.000Z",
+      "status": "published",
+      "analytics": {
+       "impressions": 120,
+       "reach": 57,
+       "likes": 5,
+       "comments": 0,
+       "shares": 0,
+       "saves": 0,
+       "clicks": 0,
+       "views": 120,
+       "follows": 0,
+       "igReelsAvgWatchTime": 0,
+       "igReelsVideoViewTotalTime": 0,
+       "reelsSkipRate": 0,
+       "completionRate": 0,
+       "profileViews": 0,
+       "websiteClicks": 0,
+       "impressionSources": {},
+       "audienceTypes": {},
+       "audienceCountries": {},
+       "retentionCurve": {},
+       "replays": 0,
+       "reposts": 0,
+       "videoDurationSeconds": null,
+       "engagementRate": 4.17,
+       "lastUpdated": "2026-11-04T16:10:02Z"
+      },
+      "platforms": [
+       {
+        "platform": "instagram",
+        "status": "published",
+        "platformPostId": "17998440393034143",
+        "accountId": "6ac3127a3c30ec3e468902e0",
+        "accountUsername": "sample_account",
+        "analytics": {
+         "impressions": 120,
+         "reach": 57,
+         "likes": 5,
+         "comments": 0,
+         "shares": 0,
+         "saves": 0,
+         "clicks": 0,
+         "views": 120,
+         "follows": 0,
+         "igReelsAvgWatchTime": 0,
+         "igReelsVideoViewTotalTime": 0,
+         "reelsSkipRate": 0,
+         "completionRate": 0,
+         "profileViews": 0,
+         "websiteClicks": 0,
+         "impressionSources": {},
+         "audienceTypes": {},
+         "audienceCountries": {},
+         "retentionCurve": {},
+         "replays": 0,
+         "reposts": 0,
+         "videoDurationSeconds": null,
+         "engagementRate": 4.17,
+         "lastUpdated": "2026-11-04T16:10:02Z"
+        },
+        "syncStatus": "synced",
+        "platformPostUrl": "https://example.com/sample/1993",
+        "errorMessage": null,
+        "errorCode": null,
+        "isOwner": null
+       }
+      ],
+      "platform": "instagram",
+      "platformPostUrl": "https://example.com/sample/1994",
+      "isExternal": true,
+      "isAd": false,
+      "profileId": "6aa9172fd442650ab8453bd4",
+      "thumbnailUrl": "https://example.com/sample/1995",
+      "mediaType": "carousel",
+      "mediaItems": [
+       {
+        "type": "image",
+        "url": "https://example.com/sample/1996",
+        "thumbnail": "https://example.com/sample/1997"
+       },
+       {
+        "type": "image",
+        "url": "https://example.com/sample/1998",
+        "thumbnail": "https://example.com/sample/1999"
+       },
+       {
+        "type": "image",
+        "url": "https://example.com/sample/2000",
+        "thumbnail": "https://example.com/sample/2001"
+       },
+       {
+        "type": "image",
+        "url": "https://example.com/sample/2002",
+        "thumbnail": "https://example.com/sample/2003"
+       },
+       {
+        "type": "image",
+        "url": "https://example.com/sample/2004",
+        "thumbnail": "https://example.com/sample/2005"
+       }
+      ],
+      "mediaProductType": "FEED",
+      "isAiGenerated": false
+     },
+     {
+      "_id": "6acc9d7614ccf37705d40a2e",
+      "latePostId": null,
+      "content": "Sample content 2006",
+      "publishedAt": "2026-10-12T07:30:01.000Z",
+      "scheduledFor": "2026-10-12T07:30:01.000Z",
+      "status": "published",
+      "analytics": {
+       "impressions": 118,
+       "reach": 36,
+       "likes": 3,
+       "comments": 0,
+       "shares": 0,
+       "saves": 0,
+       "clicks": 0,
+       "views": 118,
+       "follows": 0,
+       "igReelsAvgWatchTime": 0,
+       "igReelsVideoViewTotalTime": 0,
+       "reelsSkipRate": 0,
+       "completionRate": 0,
+       "profileViews": 0,
+       "websiteClicks": 0,
+       "impressionSources": {},
+       "audienceTypes": {},
+       "audienceCountries": {},
+       "retentionCurve": {},
+       "replays": 0,
+       "reposts": 0,
+       "videoDurationSeconds": null,
+       "engagementRate": 2.54,
+       "lastUpdated": "2026-11-04T21:00:09Z"
+      },
+      "platforms": [
+       {
+        "platform": "instagram",
+        "status": "published",
+        "platformPostId": "18126396619919099",
+        "accountId": "6ac3127a3c30ec3e468902e0",
+        "accountUsername": "sample_account",
+        "analytics": {
+         "impressions": 118,
+         "reach": 36,
+         "likes": 3,
+         "comments": 0,
+         "shares": 0,
+         "saves": 0,
+         "clicks": 0,
+         "views": 118,
+         "follows": 0,
+         "igReelsAvgWatchTime": 0,
+         "igReelsVideoViewTotalTime": 0,
+         "reelsSkipRate": 0,
+         "completionRate": 0,
+         "profileViews": 0,
+         "websiteClicks": 0,
+         "impressionSources": {},
+         "audienceTypes": {},
+         "audienceCountries": {},
+         "retentionCurve": {},
+         "replays": 0,
+         "reposts": 0,
+         "videoDurationSeconds": null,
+         "engagementRate": 2.54,
+         "lastUpdated": "2026-11-04T21:00:09Z"
+        },
+        "syncStatus": "synced",
+        "platformPostUrl": "https://example.com/sample/2007",
+        "errorMessage": null,
+        "errorCode": null,
+        "isOwner": null
+       }
+      ],
+      "platform": "instagram",
+      "platformPostUrl": "https://example.com/sample/2008",
+      "isExternal": true,
+      "isAd": false,
+      "profileId": "6aa9172fd442650ab8453bd4",
+      "thumbnailUrl": "https://example.com/sample/2009",
+      "mediaType": "carousel",
+      "mediaItems": [
+       {
+        "type": "image",
+        "url": "https://example.com/sample/2010",
+        "thumbnail": "https://example.com/sample/2011"
+       },
+       {
+        "type": "image",
+        "url": "https://example.com/sample/2012",
+        "thumbnail": "https://example.com/sample/2013"
+       },
+       {
+        "type": "image",
+        "url": "https://example.com/sample/2014",
+        "thumbnail": "https://example.com/sample/2015"
+       },
+       {
+        "type": "image",
+        "url": "https://example.com/sample/2016",
+        "thumbnail": "https://example.com/sample/2017"
+       },
+       {
+        "type": "image",
+        "url": "https://example.com/sample/2018",
+        "thumbnail": "https://example.com/sample/2019"
+       }
+      ],
+      "mediaProductType": "FEED",
+      "isAiGenerated": false
+     },
+     {
+      "_id": "6ac6056b3805c5dda920aea8",
+      "latePostId": "6ac3e08015ec010a8dea4f94",
+      "content": "Sample content 2020",
+      "publishedAt": "2026-10-07T07:32:22.000Z",
+      "scheduledFor": "2026-10-07T07:32:22.000Z",
+      "status": "published",
+      "analytics": {
+       "impressions": 495,
+       "reach": 279,
+       "likes": 5,
+       "comments": 1,
+       "shares": 1,
+       "saves": 0,
+       "clicks": 0,
+       "views": 495,
+       "follows": 0,
+       "igReelsAvgWatchTime": 0,
+       "igReelsVideoViewTotalTime": 0,
+       "reelsSkipRate": 0,
+       "completionRate": 0,
+       "profileViews": 2,
+       "websiteClicks": 0,
+       "impressionSources": {},
+       "audienceTypes": {},
+       "audienceCountries": {},
+       "retentionCurve": {},
+       "replays": 0,
+       "reposts": 0,
+       "videoDurationSeconds": null,
+       "engagementRate": 1.41,
+       "lastUpdated": "2026-11-04T22:40:05Z"
+      },
+      "platforms": [
+       {
+        "platform": "instagram",
+        "status": "published",
+        "platformPostId": "18034428485847219",
+        "accountId": "6ac3127a3c30ec3e468902e0",
+        "accountUsername": "sample_account",
+        "analytics": {
+         "impressions": 495,
+         "reach": 279,
+         "likes": 5,
+         "comments": 1,
+         "shares": 1,
+         "saves": 0,
+         "clicks": 0,
+         "views": 495,
+         "follows": 0,
+         "igReelsAvgWatchTime": 0,
+         "igReelsVideoViewTotalTime": 0,
+         "reelsSkipRate": 0,
+         "completionRate": 0,
+         "profileViews": 2,
+         "websiteClicks": 0,
+         "impressionSources": {},
+         "audienceTypes": {},
+         "audienceCountries": {},
+         "retentionCurve": {},
+         "replays": 0,
+         "reposts": 0,
+         "videoDurationSeconds": null,
+         "engagementRate": 1.41,
+         "lastUpdated": "2026-11-04T22:40:05Z"
+        },
+        "syncStatus": "synced",
+        "platformPostUrl": "https://example.com/sample/2021",
+        "errorMessage": null,
+        "errorCode": null,
+        "isOwner": null
+       }
+      ],
+      "platform": "instagram",
+      "platformPostUrl": "https://example.com/sample/2022",
+      "isExternal": true,
+      "isAd": false,
+      "profileId": "6aa9172fd442650ab8453bd4",
+      "thumbnailUrl": "https://example.com/sample/2023",
+      "mediaType": "carousel",
+      "mediaItems": [
+       {
+        "type": "image",
+        "url": "https://example.com/sample/2024",
+        "thumbnail": "https://example.com/sample/2025"
+       },
+       {
+        "type": "image",
+        "url": "https://example.com/sample/2026",
+        "thumbnail": "https://example.com/sample/2027"
+       },
+       {
+        "type": "image",
+        "url": "https://example.com/sample/2028",
+        "thumbnail": "https://example.com/sample/2029"
+       },
+       {
+        "type": "image",
+        "url": "https://example.com/sample/2030",
+        "thumbnail": "https://example.com/sample/2031"
+       },
+       {
+        "type": "image",
+        "url": "https://example.com/sample/2032",
+        "thumbnail": "https://example.com/sample/2033"
+       }
+      ],
+      "mediaProductType": "FEED",
+      "isAiGenerated": false
+     },
+     {
+      "_id": "6ac3128598f08b62973276e1",
+      "latePostId": null,
+      "content": "Sample content 2034",
+      "publishedAt": "2026-10-01T07:04:24.000Z",
+      "scheduledFor": "2026-10-01T07:04:24.000Z",
+      "status": "published",
+      "analytics": {
+       "impressions": 607,
+       "reach": 430,
+       "likes": 2,
+       "comments": 2,
+       "shares": 1,
+       "saves": 0,
+       "clicks": 0,
+       "views": 607,
+       "follows": 0,
+       "igReelsAvgWatchTime": 0,
+       "igReelsVideoViewTotalTime": 0,
+       "reelsSkipRate": 0,
+       "completionRate": 0,
+       "profileViews": 2,
+       "websiteClicks": 0,
+       "impressionSources": {},
+       "audienceTypes": {},
+       "audienceCountries": {},
+       "retentionCurve": {},
+       "replays": 0,
+       "reposts": 0,
+       "videoDurationSeconds": null,
+       "engagementRate": 0.82,
+       "lastUpdated": "2026-11-05T05:50:04Z"
+      },
+      "platforms": [
+       {
+        "platform": "instagram",
+        "status": "published",
+        "platformPostId": "18336160459272538",
+        "accountId": "6ac3127a3c30ec3e468902e0",
+        "accountUsername": "sample_account",
+        "analytics": {
+         "impressions": 607,
+         "reach": 430,
+         "likes": 2,
+         "comments": 2,
+         "shares": 1,
+         "saves": 0,
+         "clicks": 0,
+         "views": 607,
+         "follows": 0,
+         "igReelsAvgWatchTime": 0,
+         "igReelsVideoViewTotalTime": 0,
+         "reelsSkipRate": 0,
+         "completionRate": 0,
+         "profileViews": 2,
+         "websiteClicks": 0,
+         "impressionSources": {},
+         "audienceTypes": {},
+         "audienceCountries": {},
+         "retentionCurve": {},
+         "replays": 0,
+         "reposts": 0,
+         "videoDurationSeconds": null,
+         "engagementRate": 0.82,
+         "lastUpdated": "2026-11-05T05:50:04Z"
+        },
+        "syncStatus": "synced",
+        "platformPostUrl": "https://example.com/sample/2035",
+        "errorMessage": null,
+        "errorCode": null,
+        "isOwner": null
+       }
+      ],
+      "platform": "instagram",
+      "platformPostUrl": "https://example.com/sample/2036",
+      "isExternal": true,
+      "isAd": false,
+      "profileId": "6aa9172fd442650ab8453bd4",
+      "thumbnailUrl": "https://example.com/sample/2037",
+      "mediaType": "image",
+      "mediaItems": [
+       {
+        "type": "image",
+        "url": "https://example.com/sample/2038",
+        "thumbnail": "https://example.com/sample/2039"
+       }
+      ],
+      "mediaProductType": "FEED",
+      "isAiGenerated": false
+     }
+    ],
+    "pagination": {
+     "page": 1,
+     "limit": 100,
+     "total": 6,
+     "pages": 1
+    },
+    "accounts": [
+     {
+      "_id": "6aec2908cffff921eaad6e44",
+      "platform": "instagram",
+      "username": "Sample username 2040",
+      "displayName": "Sample displayName 2041",
+      "profileId": "6aa9e3fc69c97fce8161df74",
+      "followersCount": 7831,
+      "followersLastUpdated": "2026-11-05T06:58:16.226Z"
+     },
+     {
+      "_id": "6aa917a8726ebfe037f04739",
+      "platform": "instagram",
+      "username": "Sample username 2042",
+      "displayName": "Sample displayName 2043",
+      "profileId": "6ac30538bd18fa3f007d1698",
+      "followersCount": 2524,
+      "followersLastUpdated": "2026-11-05T05:29:45.317Z"
+     },
+     {
+      "_id": "6aec2a3a36acf8180fb93a8a",
+      "platform": "instagram",
+      "username": "Sample username 2044",
+      "displayName": "Sample displayName 2045",
+      "profileId": "6a6ff48cf964c89501951cf9",
+      "followersCount": 1630,
+      "followersLastUpdated": "2026-11-05T07:03:21.831Z"
+     },
+     {
+      "_id": "6abc7047772515a403d9c4d0",
+      "platform": "instagram",
+      "username": "Sample username 2046",
+      "displayName": "Sample displayName 2047",
+      "profileId": "6ab9edae48812216462e77d4",
+      "followersCount": 11675,
+      "followersLastUpdated": "2026-11-05T06:38:24.021Z"
+     },
+     {
+      "_id": "6aaa5c0a8d284ffb2106fd76",
+      "platform": "instagram",
+      "username": "Sample username 2048",
+      "displayName": "Sample displayName 2049",
+      "profileId": "6aaa430f9768a3ff8bedd631",
+      "followersCount": 56154,
+      "followersLastUpdated": "2026-11-05T05:34:45.321Z"
+     },
+     {
+      "_id": "6aaa5c318d284ffb2106fdd6",
+      "platform": "instagram",
+      "username": "Sample username 2050",
+      "displayName": "Sample displayName 2051",
+      "profileId": "6aa800e7fd8f93400838a89b",
+      "followersCount": 810,
+      "followersLastUpdated": "2026-11-05T05:34:45.558Z"
+     },
+     {
+      "_id": "6ac3127a3c30ec3e468902e0",
+      "platform": "instagram",
+      "username": "Sample username 2052",
+      "displayName": "Sample displayName 2053",
+      "profileId": "6aa9172fd442650ab8453bd4",
+      "followersCount": 3617,
+      "followersLastUpdated": "2026-11-05T07:01:11.373Z"
+     },
+     {
+      "_id": "6abc8909b7b2f90611c2f6a8",
+      "platform": "instagram",
+      "username": "Sample username 2054",
+      "displayName": "Sample displayName 2055",
+      "profileId": "6abc7c9683d6589989b1d700",
+      "followersCount": 18500,
+      "followersLastUpdated": "2026-11-05T06:38:43.322Z"
+     },
+     {
+      "_id": "6aa8b664726ebfe037eed368",
+      "platform": "instagram",
+      "username": "Sample username 2056",
+      "displayName": "Sample displayName 2057",
+      "profileId": "6aa89351e83c3ab9408bcd87",
+      "followersCount": 1666,
+      "followersLastUpdated": "2026-11-05T05:27:58.033Z"
+     },
+     {
+      "_id": "6aa8b9cb726ebfe037eedfca",
+      "platform": "instagram",
+      "username": "Sample username 2058",
+      "displayName": "Sample displayName 2059",
+      "profileId": "6aa1ffd63600be45e76ff818",
+      "followersCount": 4967,
+      "followersLastUpdated": "2026-11-05T05:28:26.966Z"
+     },
+     {
+      "_id": "6aa91782726ebfe037f046a5",
+      "platform": "instagram",
+      "username": "Sample username 2060",
+      "displayName": "Sample displayName 2061",
+      "profileId": "6aa916c1ea3196097c306a77",
+      "followersCount": 60,
+      "followersLastUpdated": "2026-11-05T05:29:44.096Z"
+     },
+     {
+      "_id": "6aa92ac0726ebfe037f0b063",
+      "platform": "instagram",
+      "username": "Sample username 2062",
+      "displayName": "Sample displayName 2063",
+      "profileId": "6aa92ab669c7b75f184541e2",
+      "followersCount": 138,
+      "followersLastUpdated": "2026-11-05T05:29:47.161Z"
+     },
+     {
+      "_id": "6aa8a054726ebfe037ee7def",
+      "platform": "instagram",
+      "username": "Sample username 2064",
+      "displayName": "Sample displayName 2065",
+      "profileId": "6a6dd53eb2f4e0f27ee13a42",
+      "followersCount": 4,
+      "followersLastUpdated": "2026-11-05T05:28:08.777Z"
+     },
+     {
+      "_id": "6ae26e0bc986cd628744d071",
+      "platform": "instagram",
+      "username": "Sample username 2066",
+      "displayName": "Sample displayName 2067",
+      "profileId": "6ae26dd7cf5a48ef8fe69865",
+      "followersCount": 540,
+      "followersLastUpdated": "2026-11-04T09:48:40.363Z"
+     },
+     {
+      "_id": "6ae26ea8821a88159942f898",
+      "platform": "instagram",
+      "username": "Sample username 2068",
+      "displayName": "Sample displayName 2069",
+      "profileId": "6ae26e9d9bb357d3eab4b97d",
+      "followersCount": 540,
+      "followersLastUpdated": "2026-11-04T09:48:42.668Z"
+     },
+     {
+      "_id": "6ae26f3843d52ea6e27aec78",
+      "platform": "instagram",
+      "username": "Sample username 2070",
+      "displayName": "Sample displayName 2071",
+      "profileId": "6ae26e9d9bb357d3eab4b97d",
+      "followersCount": 210,
+      "followersLastUpdated": "2026-11-04T09:48:44.255Z"
+     },
+     {
+      "_id": "6abf4f8b6594e7e8cc30c79a",
+      "platform": "instagram",
+      "username": "Sample username 2072",
+      "displayName": "Sample displayName 2073",
+      "profileId": "6ab085479ce265a7ad916980",
+      "followersCount": 2416,
+      "followersLastUpdated": "2026-11-05T06:47:21.766Z"
+     },
+     {
+      "_id": "6aab523d8d284ffb210c00ab",
+      "platform": "instagram",
+      "username": "Sample username 2074",
+      "displayName": "Sample displayName 2075",
+      "profileId": "6aa79fcf86b365ea629a55fa",
+      "followersCount": 540,
+      "followersLastUpdated": "2026-11-05T05:38:29.079Z"
+     },
+     {
+      "_id": "6aab92258d284ffb210cf13f",
+      "platform": "instagram",
+      "username": "Sample username 2076",
+      "displayName": "Sample displayName 2077",
+      "profileId": "6aab8743d95a8d5e47e932a8",
+      "followersCount": 2502,
+      "followersLastUpdated": "2026-11-05T05:42:08.262Z"
+     },
+     {
+      "_id": "6aad458a8d284ffb2115e139",
+      "platform": "instagram",
+      "username": "Sample username 2078",
+      "displayName": "Sample displayName 2079",
+      "profileId": "6aad454499365ea6ed0b8d24",
+      "followersCount": 379,
+      "followersLastUpdated": "2026-11-05T05:45:23.394Z"
+     },
+     {
+      "_id": "6ad19c3a58a374977c97372c",
+      "platform": "instagram",
+      "username": "Sample username 2080",
+      "displayName": "Sample displayName 2081",
+      "profileId": "6ad19adaf2091c132f05ec82",
+      "followersCount": 0,
+      "followersLastUpdated": "2026-11-05T08:01:43.666Z"
+     }
+    ],
+    "hasAnalyticsAccess": true
+   }
+  },
+  "/analytics?accountId=6ac3127a3c30ec3e468902e0&fromDate=2026-10-01&limit=100&page=1&platform=instagram&source=late&toDate=2026-10-31": {
+   "ok": true,
+   "data": {
+    "overview": {
+     "totalPosts": 1,
+     "publishedPosts": 1,
+     "scheduledPosts": 0,
+     "lastSync": "2026-11-05T08:53:00.359Z",
+     "dataStaleness": {
+      "staleAccountCount": 0,
+      "syncTriggered": false
+     }
+    },
+    "posts": [
+     {
+      "_id": "6ac6056b3805c5dda920aea8",
+      "latePostId": "6ac3e08015ec010a8dea4f94",
+      "content": "Sample content 2082",
+      "publishedAt": "2026-10-07T07:32:22.000Z",
+      "scheduledFor": "2026-10-07T07:32:22.000Z",
+      "status": "published",
+      "analytics": {
+       "impressions": 495,
+       "reach": 279,
+       "likes": 5,
+       "comments": 1,
+       "shares": 1,
+       "saves": 0,
+       "clicks": 0,
+       "views": 495,
+       "follows": 0,
+       "igReelsAvgWatchTime": 0,
+       "igReelsVideoViewTotalTime": 0,
+       "reelsSkipRate": 0,
+       "completionRate": 0,
+       "profileViews": 2,
+       "websiteClicks": 0,
+       "impressionSources": {},
+       "audienceTypes": {},
+       "audienceCountries": {},
+       "retentionCurve": {},
+       "replays": 0,
+       "reposts": 0,
+       "videoDurationSeconds": null,
+       "engagementRate": 1.41,
+       "lastUpdated": "2026-11-04T22:40:05Z"
+      },
+      "platforms": [
+       {
+        "platform": "instagram",
+        "status": "published",
+        "platformPostId": "18034428485847219",
+        "accountId": "6ac3127a3c30ec3e468902e0",
+        "accountUsername": "sample_account",
+        "analytics": {
+         "impressions": 495,
+         "reach": 279,
+         "likes": 5,
+         "comments": 1,
+         "shares": 1,
+         "saves": 0,
+         "clicks": 0,
+         "views": 495,
+         "follows": 0,
+         "igReelsAvgWatchTime": 0,
+         "igReelsVideoViewTotalTime": 0,
+         "reelsSkipRate": 0,
+         "completionRate": 0,
+         "profileViews": 2,
+         "websiteClicks": 0,
+         "impressionSources": {},
+         "audienceTypes": {},
+         "audienceCountries": {},
+         "retentionCurve": {},
+         "replays": 0,
+         "reposts": 0,
+         "videoDurationSeconds": null,
+         "engagementRate": 1.41,
+         "lastUpdated": "2026-11-04T22:40:05Z"
+        },
+        "syncStatus": "synced",
+        "platformPostUrl": "https://example.com/sample/2083",
+        "errorMessage": null,
+        "errorCode": null,
+        "isOwner": null
+       }
+      ],
+      "platform": "instagram",
+      "platformPostUrl": "https://example.com/sample/2084",
+      "isExternal": true,
+      "isAd": false,
+      "profileId": "6aa9172fd442650ab8453bd4",
+      "thumbnailUrl": "https://example.com/sample/2085",
+      "mediaType": "carousel",
+      "mediaItems": [
+       {
+        "type": "image",
+        "url": "https://example.com/sample/2086",
+        "thumbnail": "https://example.com/sample/2087"
+       },
+       {
+        "type": "image",
+        "url": "https://example.com/sample/2088",
+        "thumbnail": "https://example.com/sample/2089"
+       },
+       {
+        "type": "image",
+        "url": "https://example.com/sample/2090",
+        "thumbnail": "https://example.com/sample/2091"
+       },
+       {
+        "type": "image",
+        "url": "https://example.com/sample/2092",
+        "thumbnail": "https://example.com/sample/2093"
+       },
+       {
+        "type": "image",
+        "url": "https://example.com/sample/2094",
+        "thumbnail": "https://example.com/sample/2095"
+       }
+      ],
+      "mediaProductType": "FEED",
+      "isAiGenerated": false
+     }
+    ],
+    "pagination": {
+     "page": 1,
+     "limit": 100,
+     "total": 1,
+     "pages": 1
+    },
+    "accounts": [
+     {
+      "_id": "6aec2908cffff921eaad6e44",
+      "platform": "instagram",
+      "username": "Sample username 2096",
+      "displayName": "Sample displayName 2097",
+      "profileId": "6aa9e3fc69c97fce8161df74",
+      "followersCount": 7831,
+      "followersLastUpdated": "2026-11-05T06:58:16.226Z"
+     },
+     {
+      "_id": "6aa917a8726ebfe037f04739",
+      "platform": "instagram",
+      "username": "Sample username 2098",
+      "displayName": "Sample displayName 2099",
+      "profileId": "6ac30538bd18fa3f007d1698",
+      "followersCount": 2524,
+      "followersLastUpdated": "2026-11-05T05:29:45.317Z"
+     },
+     {
+      "_id": "6aec2a3a36acf8180fb93a8a",
+      "platform": "instagram",
+      "username": "Sample username 2100",
+      "displayName": "Sample displayName 2101",
+      "profileId": "6a6ff48cf964c89501951cf9",
+      "followersCount": 1630,
+      "followersLastUpdated": "2026-11-05T07:03:21.831Z"
+     },
+     {
+      "_id": "6abc7047772515a403d9c4d0",
+      "platform": "instagram",
+      "username": "Sample username 2102",
+      "displayName": "Sample displayName 2103",
+      "profileId": "6ab9edae48812216462e77d4",
+      "followersCount": 11675,
+      "followersLastUpdated": "2026-11-05T06:38:24.021Z"
+     },
+     {
+      "_id": "6aaa5c0a8d284ffb2106fd76",
+      "platform": "instagram",
+      "username": "Sample username 2104",
+      "displayName": "Sample displayName 2105",
+      "profileId": "6aaa430f9768a3ff8bedd631",
+      "followersCount": 56154,
+      "followersLastUpdated": "2026-11-05T05:34:45.321Z"
+     },
+     {
+      "_id": "6aaa5c318d284ffb2106fdd6",
+      "platform": "instagram",
+      "username": "Sample username 2106",
+      "displayName": "Sample displayName 2107",
+      "profileId": "6aa800e7fd8f93400838a89b",
+      "followersCount": 810,
+      "followersLastUpdated": "2026-11-05T05:34:45.558Z"
+     },
+     {
+      "_id": "6ac3127a3c30ec3e468902e0",
+      "platform": "instagram",
+      "username": "Sample username 2108",
+      "displayName": "Sample displayName 2109",
+      "profileId": "6aa9172fd442650ab8453bd4",
+      "followersCount": 3617,
+      "followersLastUpdated": "2026-11-05T07:01:11.373Z"
+     },
+     {
+      "_id": "6abc8909b7b2f90611c2f6a8",
+      "platform": "instagram",
+      "username": "Sample username 2110",
+      "displayName": "Sample displayName 2111",
+      "profileId": "6abc7c9683d6589989b1d700",
+      "followersCount": 18500,
+      "followersLastUpdated": "2026-11-05T06:38:43.322Z"
+     },
+     {
+      "_id": "6aa8b664726ebfe037eed368",
+      "platform": "instagram",
+      "username": "Sample username 2112",
+      "displayName": "Sample displayName 2113",
+      "profileId": "6aa89351e83c3ab9408bcd87",
+      "followersCount": 1666,
+      "followersLastUpdated": "2026-11-05T05:27:58.033Z"
+     },
+     {
+      "_id": "6aa8b9cb726ebfe037eedfca",
+      "platform": "instagram",
+      "username": "Sample username 2114",
+      "displayName": "Sample displayName 2115",
+      "profileId": "6aa1ffd63600be45e76ff818",
+      "followersCount": 4967,
+      "followersLastUpdated": "2026-11-05T05:28:26.966Z"
+     },
+     {
+      "_id": "6aa91782726ebfe037f046a5",
+      "platform": "instagram",
+      "username": "Sample username 2116",
+      "displayName": "Sample displayName 2117",
+      "profileId": "6aa916c1ea3196097c306a77",
+      "followersCount": 60,
+      "followersLastUpdated": "2026-11-05T05:29:44.096Z"
+     },
+     {
+      "_id": "6aa92ac0726ebfe037f0b063",
+      "platform": "instagram",
+      "username": "Sample username 2118",
+      "displayName": "Sample displayName 2119",
+      "profileId": "6aa92ab669c7b75f184541e2",
+      "followersCount": 138,
+      "followersLastUpdated": "2026-11-05T05:29:47.161Z"
+     },
+     {
+      "_id": "6aa8a054726ebfe037ee7def",
+      "platform": "instagram",
+      "username": "Sample username 2120",
+      "displayName": "Sample displayName 2121",
+      "profileId": "6a6dd53eb2f4e0f27ee13a42",
+      "followersCount": 4,
+      "followersLastUpdated": "2026-11-05T05:28:08.777Z"
+     },
+     {
+      "_id": "6ae26e0bc986cd628744d071",
+      "platform": "instagram",
+      "username": "Sample username 2122",
+      "displayName": "Sample displayName 2123",
+      "profileId": "6ae26dd7cf5a48ef8fe69865",
+      "followersCount": 540,
+      "followersLastUpdated": "2026-11-04T09:48:40.363Z"
+     },
+     {
+      "_id": "6ae26ea8821a88159942f898",
+      "platform": "instagram",
+      "username": "Sample username 2124",
+      "displayName": "Sample displayName 2125",
+      "profileId": "6ae26e9d9bb357d3eab4b97d",
+      "followersCount": 540,
+      "followersLastUpdated": "2026-11-04T09:48:42.668Z"
+     },
+     {
+      "_id": "6ae26f3843d52ea6e27aec78",
+      "platform": "instagram",
+      "username": "Sample username 2126",
+      "displayName": "Sample displayName 2127",
+      "profileId": "6ae26e9d9bb357d3eab4b97d",
+      "followersCount": 210,
+      "followersLastUpdated": "2026-11-04T09:48:44.255Z"
+     },
+     {
+      "_id": "6abf4f8b6594e7e8cc30c79a",
+      "platform": "instagram",
+      "username": "Sample username 2128",
+      "displayName": "Sample displayName 2129",
+      "profileId": "6ab085479ce265a7ad916980",
+      "followersCount": 2416,
+      "followersLastUpdated": "2026-11-05T06:47:21.766Z"
+     },
+     {
+      "_id": "6aab523d8d284ffb210c00ab",
+      "platform": "instagram",
+      "username": "Sample username 2130",
+      "displayName": "Sample displayName 2131",
+      "profileId": "6aa79fcf86b365ea629a55fa",
+      "followersCount": 540,
+      "followersLastUpdated": "2026-11-05T05:38:29.079Z"
+     },
+     {
+      "_id": "6aab92258d284ffb210cf13f",
+      "platform": "instagram",
+      "username": "Sample username 2132",
+      "displayName": "Sample displayName 2133",
+      "profileId": "6aab8743d95a8d5e47e932a8",
+      "followersCount": 2502,
+      "followersLastUpdated": "2026-11-05T05:42:08.262Z"
+     },
+     {
+      "_id": "6aad458a8d284ffb2115e139",
+      "platform": "instagram",
+      "username": "Sample username 2134",
+      "displayName": "Sample displayName 2135",
+      "profileId": "6aad454499365ea6ed0b8d24",
+      "followersCount": 379,
+      "followersLastUpdated": "2026-11-05T05:45:23.394Z"
+     },
+     {
+      "_id": "6ad19c3a58a374977c97372c",
+      "platform": "instagram",
+      "username": "Sample username 2136",
+      "displayName": "Sample displayName 2137",
+      "profileId": "6ad19adaf2091c132f05ec82",
+      "followersCount": 0,
+      "followersLastUpdated": "2026-11-05T08:01:43.666Z"
+     }
+    ],
+    "hasAnalyticsAccess": true
+   }
+  },
+  "/analytics/instagram/account-insights?accountId=6ac3127a3c30ec3e468902e0&fromDate=2026-10-01&metricType=total_value&metrics=views,reach,total_interactions,profile_views,profile_links_taps,likes,comments,shares,saves,accounts_engaged,replies,reposts,website_clicks&toDate=2026-10-31": {
+   "ok": true,
+   "data": {
+    "success": true,
+    "accountId": "6ac3127a3c30ec3e468902e0",
+    "platform": "instagram",
+    "dateRange": {
+     "since": "2026-10-01",
+     "until": "2026-10-31"
+    },
+    "metricType": "total_value",
+    "metrics": {
+     "views": {
+      "total": 27104
+     },
+     "reach": {
+      "total": 4913
+     },
+     "total_interactions": {
+      "total": 554
+     },
+     "profile_views": {
+      "total": 219
+     },
+     "profile_links_taps": {
+      "total": 4
+     },
+     "likes": {
+      "total": 391
+     },
+     "comments": {
+      "total": 25
+     },
+     "shares": {
+      "total": 57
+     },
+     "saves": {
+      "total": 21
+     },
+     "accounts_engaged": {
+      "total": 216
+     },
+     "replies": {
+      "total": 0
+     },
+     "reposts": {
+      "total": 3
+     },
+     "website_clicks": {
+      "total": 9
+     }
+    },
+    "dataDelay": "Data may be delayed up to 48 hours"
+   }
+  },
+  "/analytics/instagram/account-insights?accountId=6ac3127a3c30ec3e468902e0&fromDate=2026-09-01&metricType=total_value&metrics=views,reach,total_interactions,profile_views,profile_links_taps,likes,comments,shares,saves,accounts_engaged,replies,reposts,website_clicks&toDate=2026-09-30": {
+   "ok": true,
+   "data": {
+    "success": true,
+    "accountId": "6ac3127a3c30ec3e468902e0",
+    "platform": "instagram",
+    "dateRange": {
+     "since": "2026-09-01",
+     "until": "2026-09-30"
+    },
+    "metricType": "total_value",
+    "metrics": {
+     "views": {
+      "total": 29369
+     },
+     "reach": {
+      "total": 3510
+     },
+     "total_interactions": {
+      "total": 791
+     },
+     "profile_views": {
+      "total": 267
+     },
+     "profile_links_taps": {
+      "total": 6
+     },
+     "likes": {
+      "total": 607
+     },
+     "comments": {
+      "total": 12
+     },
+     "shares": {
+      "total": 81
+     },
+     "saves": {
+      "total": 8
+     },
+     "accounts_engaged": {
+      "total": 158
+     },
+     "replies": {
+      "total": 0
+     },
+     "reposts": {
+      "total": 2
+     },
+     "website_clicks": {
+      "total": 14
+     }
+    },
+    "dataDelay": "Data may be delayed up to 48 hours"
+   }
+  },
+  "/analytics/instagram/account-insights?accountId=6ac3127a3c30ec3e468902e0&breakdown=follow_type&fromDate=2026-10-01&metricType=total_value&metrics=views&toDate=2026-10-31": {
+   "ok": true,
+   "data": {
+    "success": true,
+    "accountId": "6ac3127a3c30ec3e468902e0",
+    "platform": "instagram",
+    "dateRange": {
+     "since": "2026-10-01",
+     "until": "2026-10-31"
+    },
+    "metricType": "total_value",
+    "metrics": {
+     "views": {
+      "total": 27104,
+      "breakdowns": [
+       {
+        "dimension": "NON_FOLLOWER",
+        "value": 23044
+       },
+       {
+        "dimension": "FOLLOWER",
+        "value": 4060
+       }
+      ]
+     }
+    },
+    "dataDelay": "Data may be delayed up to 48 hours",
+    "breakdown": "follow_type"
+   }
+  },
+  "/analytics/instagram/account-insights?accountId=6ac3127a3c30ec3e468902e0&breakdown=follow_type&fromDate=2026-10-01&metricType=total_value&metrics=follows_and_unfollows&toDate=2026-10-31": {
+   "ok": true,
+   "data": {
+    "success": true,
+    "accountId": "6ac3127a3c30ec3e468902e0",
+    "platform": "instagram",
+    "dateRange": {
+     "since": "2026-10-01",
+     "until": "2026-10-31"
+    },
+    "metricType": "total_value",
+    "metrics": {
+     "follows_and_unfollows": {
+      "total": 0,
+      "breakdowns": [
+       {
+        "dimension": "FOLLOWER",
+        "value": 18
+       },
+       {
+        "dimension": "NON_FOLLOWER",
+        "value": 15
+       }
+      ]
+     }
+    },
+    "dataDelay": "Data may be delayed up to 48 hours",
+    "breakdown": "follow_type"
+   }
+  },
+  "/analytics/instagram/account-insights?accountId=6ac3127a3c30ec3e468902e0&breakdown=follow_type&fromDate=2026-09-01&metricType=total_value&metrics=follows_and_unfollows&toDate=2026-09-30": {
+   "ok": true,
+   "data": {
+    "success": true,
+    "accountId": "6ac3127a3c30ec3e468902e0",
+    "platform": "instagram",
+    "dateRange": {
+     "since": "2026-09-01",
+     "until": "2026-09-30"
+    },
+    "metricType": "total_value",
+    "metrics": {
+     "follows_and_unfollows": {
+      "total": 0,
+      "breakdowns": [
+       {
+        "dimension": "FOLLOWER",
+        "value": 29
+       },
+       {
+        "dimension": "NON_FOLLOWER",
+        "value": 8
+       }
+      ]
+     }
+    },
+    "dataDelay": "Data may be delayed up to 48 hours",
+    "breakdown": "follow_type"
+   }
+  },
+  "/analytics/dashboard?compare=previous_period&fromDate=2026-10-01&platform=facebook&profileId=6aa9172fd442650ab8453bd4&recentPosts=0&toDate=2026-10-31&topPosts=10": {
+   "ok": true,
+   "data": {
+    "dateRange": {
+     "fromDate": "2026-10-01",
+     "toDate": "2026-10-31"
+    },
+    "totals": {
+     "impressions": 619,
+     "reach": 387,
+     "likes": 1,
+     "comments": 0,
+     "shares": 6,
+     "saves": 0,
+     "clicks": 1,
+     "views": 27,
+     "engagementRate": 1.13
+    },
+    "previousTotals": {
+     "impressions": 292,
+     "reach": 175,
+     "likes": 0,
+     "comments": 0,
+     "shares": 2,
+     "saves": 0,
+     "clicks": 1,
+     "views": 0,
+     "engagementRate": 0.68
+    },
+    "followers": {
+     "current": 366,
+     "gained": 3,
+     "byAccount": [
+      {
+       "accountId": "6aaa43608d284ffb21069c2c",
+       "platform": "facebook",
+       "current": 366,
+       "gained": 3
+      }
+     ]
+    },
+    "previousFollowers": {
+     "current": 363,
+     "gained": -1,
+     "byAccount": [
+      {
+       "accountId": "6aaa43608d284ffb21069c2c",
+       "platform": "facebook",
+       "current": 363,
+       "gained": -1
+      }
+     ]
+    },
+    "daily": [
+     {
+      "date": "2026-10-01",
+      "impressions": 53,
+      "reach": 28,
+      "engagement": 0,
+      "views": 0,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-10-02",
+      "impressions": 22,
+      "reach": 20,
+      "engagement": 0,
+      "views": 1,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-10-03",
+      "impressions": 4,
+      "reach": 3,
+      "engagement": 2,
+      "views": 0,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-10-04",
+      "impressions": 1,
+      "reach": 1,
+      "engagement": 0,
+      "views": 1,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-10-05",
+      "impressions": 22,
+      "reach": 15,
+      "engagement": 1,
+      "views": 0,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-10-06",
+      "impressions": 4,
+      "reach": 4,
+      "engagement": 0,
+      "views": 0,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-10-07",
+      "impressions": 6,
+      "reach": 3,
+      "engagement": 0,
+      "views": 0,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-10-08",
+      "impressions": 5,
+      "reach": 1,
+      "engagement": 0,
+      "views": 0,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-10-09",
+      "impressions": 14,
+      "reach": 6,
+      "engagement": 0,
+      "views": 0,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-10-10",
+      "impressions": 36,
+      "reach": 14,
+      "engagement": 0,
+      "views": 0,
+      "followersGained": 1
+     },
+     {
+      "date": "2026-10-11",
+      "impressions": 15,
+      "reach": 8,
+      "engagement": 0,
+      "views": 1,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-10-12",
+      "impressions": 17,
+      "reach": 11,
+      "engagement": 0,
+      "views": 0,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-10-13",
+      "impressions": 24,
+      "reach": 17,
+      "engagement": 0,
+      "views": 0,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-10-14",
+      "impressions": 3,
+      "reach": 3,
+      "engagement": 0,
+      "views": 0,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-10-15",
+      "impressions": 20,
+      "reach": 9,
+      "engagement": 0,
+      "views": 0,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-10-16",
+      "impressions": 0,
+      "reach": 0,
+      "engagement": 0,
+      "views": 0,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-10-17",
+      "impressions": 0,
+      "reach": 0,
+      "engagement": 0,
+      "views": 0,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-10-18",
+      "impressions": 0,
+      "reach": 0,
+      "engagement": 0,
+      "views": 0,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-10-19",
+      "impressions": 187,
+      "reach": 121,
+      "engagement": 0,
+      "views": 24,
+      "followersGained": 1
+     },
+     {
+      "date": "2026-10-20",
+      "impressions": 16,
+      "reach": 7,
+      "engagement": 4,
+      "views": 0,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-10-21",
+      "impressions": 5,
+      "reach": 3,
+      "engagement": 0,
+      "views": 0,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-10-22",
+      "impressions": 5,
+      "reach": 2,
+      "engagement": 0,
+      "views": 0,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-10-23",
+      "impressions": 19,
+      "reach": 5,
+      "engagement": 0,
+      "views": 0,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-10-24",
+      "impressions": 23,
+      "reach": 17,
+      "engagement": 0,
+      "views": 0,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-10-25",
+      "impressions": 10,
+      "reach": 9,
+      "engagement": 0,
+      "views": 0,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-10-26",
+      "impressions": 1,
+      "reach": 1,
+      "engagement": 0,
+      "views": 0,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-10-27",
+      "impressions": 33,
+      "reach": 27,
+      "engagement": 0,
+      "views": 0,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-10-28",
+      "impressions": 27,
+      "reach": 25,
+      "engagement": 0,
+      "views": 0,
+      "followersGained": 1
+     },
+     {
+      "date": "2026-10-29",
+      "impressions": 32,
+      "reach": 20,
+      "engagement": 0,
+      "views": 0,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-10-30",
+      "impressions": 8,
+      "reach": 1,
+      "engagement": 0,
+      "views": 0,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-10-31",
+      "impressions": 7,
+      "reach": 6,
+      "engagement": 0,
+      "views": 0,
+      "followersGained": 0
+     }
+    ],
+    "topPosts": [
+     {
+      "postId": "6ad71d2a20681f4b5e899e3f",
+      "platform": "facebook",
+      "publishedAt": "2026-10-20T07:30:07.000Z",
+      "metrics": {
+       "impressions": 42,
+       "reach": 23,
+       "likes": 1,
+       "comments": 0,
+       "shares": 0,
+       "saves": 0,
+       "clicks": 0,
+       "views": 0,
+       "engagementRate": 2.38
+      }
+     },
+     {
+      "postId": "6ae5abbe7aacb26f9ee48373",
+      "platform": "facebook",
+      "publishedAt": "2026-10-31T07:38:10.000Z",
+      "metrics": {
+       "impressions": 0,
+       "reach": 0,
+       "likes": 0,
+       "comments": 0,
+       "shares": 0,
+       "saves": 0,
+       "clicks": 0,
+       "views": 0,
+       "engagementRate": 0
+      }
+     },
+     {
+      "postId": "6ae457e860167a8b650daf63",
+      "platform": "facebook",
+      "publishedAt": "2026-10-30T07:04:52.000Z",
+      "metrics": {
+       "impressions": 0,
+       "reach": 0,
+       "likes": 0,
+       "comments": 0,
+       "shares": 0,
+       "saves": 0,
+       "clicks": 0,
+       "views": 0,
+       "engagementRate": 0
+      }
+     },
+     {
+      "postId": "6ae1b73dd4ec26822792b137",
+      "platform": "facebook",
+      "publishedAt": "2026-10-28T07:28:24.000Z",
+      "metrics": {
+       "impressions": 0,
+       "reach": 0,
+       "likes": 0,
+       "comments": 0,
+       "shares": 0,
+       "saves": 0,
+       "clicks": 0,
+       "views": 0,
+       "engagementRate": 0
+      }
+     },
+     {
+      "postId": "6ae07176c3689bbb9c17ecbd",
+      "platform": "facebook",
+      "publishedAt": "2026-10-27T08:05:42.000Z",
+      "metrics": {
+       "impressions": 0,
+       "reach": 0,
+       "likes": 0,
+       "comments": 0,
+       "shares": 0,
+       "saves": 0,
+       "clicks": 0,
+       "views": 0,
+       "engagementRate": 0
+      }
+     },
+     {
+      "postId": "6ae05a0e0b52c03a455e749c",
+      "platform": "facebook",
+      "publishedAt": "2026-10-27T07:30:09.000Z",
+      "metrics": {
+       "impressions": 35,
+       "reach": 17,
+       "likes": 0,
+       "comments": 0,
+       "shares": 0,
+       "saves": 0,
+       "clicks": 0,
+       "views": 0,
+       "engagementRate": 0
+      }
+     },
+     {
+      "postId": "6ad588a9a53688b827cdb1f9",
+      "platform": "facebook",
+      "publishedAt": "2026-10-15T07:30:08.000Z",
+      "metrics": {
+       "impressions": 46,
+       "reach": 23,
+       "likes": 0,
+       "comments": 0,
+       "shares": 0,
+       "saves": 0,
+       "clicks": 0,
+       "views": 0,
+       "engagementRate": 0
+      }
+     },
+     {
+      "postId": "6acc9be505c31a1b27ef5da1",
+      "platform": "facebook",
+      "publishedAt": "2026-10-12T07:30:08.000Z",
+      "metrics": {
+       "impressions": 61,
+       "reach": 34,
+       "likes": 0,
+       "comments": 0,
+       "shares": 0,
+       "saves": 0,
+       "clicks": 1,
+       "views": 0,
+       "engagementRate": 0
+      }
+     },
+     {
+      "postId": "6acc9be505c31a1b27ef5da0",
+      "platform": "facebook",
+      "publishedAt": "2026-10-12T07:13:40.000Z",
+      "metrics": {
+       "impressions": 0,
+       "reach": 0,
+       "likes": 0,
+       "comments": 0,
+       "shares": 0,
+       "saves": 0,
+       "clicks": 0,
+       "views": 0,
+       "engagementRate": 0
+      }
+     },
+     {
+      "postId": "6acb4a74483724aefb2f7279",
+      "platform": "facebook",
+      "publishedAt": "2026-10-11T07:31:36.000Z",
+      "metrics": {
+       "impressions": 0,
+       "reach": 0,
+       "likes": 0,
+       "comments": 0,
+       "shares": 0,
+       "saves": 0,
+       "clicks": 0,
+       "views": 0,
+       "engagementRate": 0
+      }
+     }
+    ],
+    "recentPosts": [],
+    "dataAsOf": "2026-11-05T07:27:05.148Z"
+   }
+  },
+  "/analytics/dashboard?fromDate=2026-09-01&platform=facebook&profileId=6aa9172fd442650ab8453bd4&recentPosts=0&toDate=2026-09-30&topPosts=0": {
+   "ok": true,
+   "data": {
+    "dateRange": {
+     "fromDate": "2026-09-01",
+     "toDate": "2026-09-30"
+    },
+    "totals": {
+     "impressions": 263,
+     "reach": 157,
+     "likes": 0,
+     "comments": 0,
+     "shares": 2,
+     "saves": 0,
+     "clicks": 1,
+     "views": 0,
+     "engagementRate": 0.76
+    },
+    "followers": {
+     "current": 363,
+     "gained": -1,
+     "byAccount": [
+      {
+       "accountId": "6aaa43608d284ffb21069c2c",
+       "platform": "facebook",
+       "current": 363,
+       "gained": -1
+      }
+     ]
+    },
+    "daily": [
+     {
+      "date": "2026-09-01",
+      "impressions": 29,
+      "reach": 19,
+      "engagement": 1,
+      "views": 0,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-09-02",
+      "impressions": 23,
+      "reach": 19,
+      "engagement": 0,
+      "views": 0,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-09-03",
+      "impressions": 0,
+      "reach": 0,
+      "engagement": 0,
+      "views": 0,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-09-04",
+      "impressions": 0,
+      "reach": 0,
+      "engagement": 0,
+      "views": 0,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-09-05",
+      "impressions": 0,
+      "reach": 0,
+      "engagement": 0,
+      "views": 0,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-09-06",
+      "impressions": 0,
+      "reach": 0,
+      "engagement": 0,
+      "views": 0,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-09-07",
+      "impressions": 0,
+      "reach": 0,
+      "engagement": 0,
+      "views": 0,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-09-08",
+      "impressions": 0,
+      "reach": 0,
+      "engagement": 0,
+      "views": 0,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-09-09",
+      "impressions": 19,
+      "reach": 11,
+      "engagement": 1,
+      "views": 0,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-09-10",
+      "impressions": 0,
+      "reach": 0,
+      "engagement": 0,
+      "views": 0,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-09-11",
+      "impressions": 15,
+      "reach": 10,
+      "engagement": 0,
+      "views": 0,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-09-12",
+      "impressions": 0,
+      "reach": 0,
+      "engagement": 0,
+      "views": 0,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-09-13",
+      "impressions": 16,
+      "reach": 8,
+      "engagement": 0,
+      "views": 0,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-09-14",
+      "impressions": 0,
+      "reach": 0,
+      "engagement": 0,
+      "views": 0,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-09-15",
+      "impressions": 0,
+      "reach": 0,
+      "engagement": 0,
+      "views": 0,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-09-16",
+      "impressions": 0,
+      "reach": 0,
+      "engagement": 0,
+      "views": 0,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-09-17",
+      "impressions": 24,
+      "reach": 12,
+      "engagement": 0,
+      "views": 0,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-09-18",
+      "impressions": 9,
+      "reach": 7,
+      "engagement": 0,
+      "views": 0,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-09-19",
+      "impressions": 0,
+      "reach": 0,
+      "engagement": 0,
+      "views": 0,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-09-20",
+      "impressions": 16,
+      "reach": 11,
+      "engagement": 0,
+      "views": 0,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-09-21",
+      "impressions": 12,
+      "reach": 3,
+      "engagement": 0,
+      "views": 0,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-09-22",
+      "impressions": 3,
+      "reach": 1,
+      "engagement": 0,
+      "views": 0,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-09-23",
+      "impressions": 1,
+      "reach": 1,
+      "engagement": 0,
+      "views": 0,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-09-24",
+      "impressions": 4,
+      "reach": 0,
+      "engagement": 0,
+      "views": 0,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-09-25",
+      "impressions": 3,
+      "reach": 2,
+      "engagement": 0,
+      "views": 0,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-09-26",
+      "impressions": 5,
+      "reach": 4,
+      "engagement": 0,
+      "views": 0,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-09-27",
+      "impressions": 11,
+      "reach": 10,
+      "engagement": 0,
+      "views": 0,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-09-28",
+      "impressions": 26,
+      "reach": 6,
+      "engagement": 0,
+      "views": 0,
+      "followersGained": 0
+     },
+     {
+      "date": "2026-09-29",
+      "impressions": 33,
+      "reach": 22,
+      "engagement": 0,
+      "views": 0,
+      "followersGained": -1
+     },
+     {
+      "date": "2026-09-30",
+      "impressions": 14,
+      "reach": 11,
+      "engagement": 0,
+      "views": 0,
+      "followersGained": 0
+     }
+    ],
+    "topPosts": [],
+    "recentPosts": [],
+    "dataAsOf": "2026-11-05T07:27:05.148Z"
+   }
+  },
+  "/accounts/follower-stats?accountIds=6aaa43608d284ffb21069c2c&fromDate=2026-09-01&granularity=daily&toDate=2026-10-31": {
+   "ok": true,
+   "data": {
+    "accounts": [
+     {
+      "_id": "6aaa43608d284ffb21069c2c",
+      "profileId": "6aa9172fd442650ab8453bd4",
+      "isActive": true,
+      "platform": "facebook",
+      "username": "Sample username 2138",
+      "displayName": "Sample displayName 2139",
+      "currentFollowers": 367,
+      "lastUpdated": "2026-11-05T05:34:29.222Z",
+      "growth": 2,
+      "growthPercentage": 0.55,
+      "dataPoints": 40
+     }
+    ],
+    "stats": {
+     "6aaa43608d284ffb21069c2c": [
+      {
+       "date": "2026-09-17",
+       "followers": 364
+      },
+      {
+       "date": "2026-09-18",
+       "followers": 364
+      },
+      {
+       "date": "2026-09-19",
+       "followers": 364
+      },
+      {
+       "date": "2026-09-20",
+       "followers": 364
+      },
+      {
+       "date": "2026-09-21",
+       "followers": 364
+      },
+      {
+       "date": "2026-09-22",
+       "followers": 364
+      },
+      {
+       "date": "2026-09-23",
+       "followers": 364
+      },
+      {
+       "date": "2026-09-24",
+       "followers": 364
+      },
+      {
+       "date": "2026-09-25",
+       "followers": 364
+      },
+      {
+       "date": "2026-09-26",
+       "followers": 364
+      },
+      {
+       "date": "2026-09-27",
+       "followers": 364
+      },
+      {
+       "date": "2026-09-28",
+       "followers": 364
+      },
+      {
+       "date": "2026-09-29",
+       "followers": 363
+      },
+      {
+       "date": "2026-09-30",
+       "followers": 363
+      },
+      {
+       "date": "2026-10-01",
+       "followers": 363
+      },
+      {
+       "date": "2026-10-02",
+       "followers": 363
+      },
+      {
+       "date": "2026-10-03",
+       "followers": 363
+      },
+      {
+       "date": "2026-10-04",
+       "followers": 363
+      },
+      {
+       "date": "2026-10-05",
+       "followers": 363
+      },
+      {
+       "date": "2026-10-06",
+       "followers": 363
+      },
+      {
+       "date": "2026-10-07",
+       "followers": 363
+      },
+      {
+       "date": "2026-10-08",
+       "followers": 363
+      },
+      {
+       "date": "2026-10-09",
+       "followers": 363
+      },
+      {
+       "date": "2026-10-10",
+       "followers": 364
+      },
+      {
+       "date": "2026-10-11",
+       "followers": 364
+      },
+      {
+       "date": "2026-10-12",
+       "followers": 364
+      },
+      {
+       "date": "2026-10-13",
+       "followers": 364
+      },
+      {
+       "date": "2026-10-19",
+       "followers": 365
+      },
+      {
+       "date": "2026-10-20",
+       "followers": 365
+      },
+      {
+       "date": "2026-10-21",
+       "followers": 365
+      },
+      {
+       "date": "2026-10-22",
+       "followers": 365
+      },
+      {
+       "date": "2026-10-23",
+       "followers": 365
+      },
+      {
+       "date": "2026-10-24",
+       "followers": 365
+      },
+      {
+       "date": "2026-10-25",
+       "followers": 365
+      },
+      {
+       "date": "2026-10-26",
+       "followers": 365
+      },
+      {
+       "date": "2026-10-27",
+       "followers": 365
+      },
+      {
+       "date": "2026-10-28",
+       "followers": 366
+      },
+      {
+       "date": "2026-10-29",
+       "followers": 366
+      },
+      {
+       "date": "2026-10-30",
+       "followers": 366
+      },
+      {
+       "date": "2026-10-31",
+       "followers": 366
+      }
+     ]
+    },
+    "dateRange": {
+     "from": "2026-09-01T00:00:00.000Z",
+     "to": "2026-10-31T23:59:59.999Z"
+    },
+    "granularity": "daily"
+   }
+  },
+  "/analytics?accountId=6aaa43608d284ffb21069c2c&fromDate=2026-10-01&limit=100&page=1&platform=facebook&source=all&toDate=2026-10-31": {
+   "ok": true,
+   "data": {
+    "overview": {
+     "totalPosts": 15,
+     "publishedPosts": 15,
+     "scheduledPosts": 0,
+     "lastSync": "2026-11-05T08:53:00.359Z",
+     "dataStaleness": {
+      "staleAccountCount": 4,
+      "syncTriggered": true
+     }
+    },
+    "posts": [
+     {
+      "_id": "6ae5abbe7aacb26f9ee48373",
+      "latePostId": null,
+      "content": "",
+      "publishedAt": "2026-10-31T07:38:10.000Z",
+      "scheduledFor": "2026-10-31T07:38:10.000Z",
+      "status": "published",
+      "analytics": {
+       "impressions": 0,
+       "reach": 0,
+       "likes": 0,
+       "comments": 0,
+       "shares": 0,
+       "saves": 0,
+       "clicks": 0,
+       "views": 0,
+       "follows": null,
+       "igReelsAvgWatchTime": 0,
+       "igReelsVideoViewTotalTime": 0,
+       "reelsSkipRate": 0,
+       "completionRate": 0,
+       "profileViews": 0,
+       "websiteClicks": 0,
+       "impressionSources": {},
+       "audienceTypes": {},
+       "audienceCountries": {},
+       "retentionCurve": {},
+       "replays": 0,
+       "reposts": 0,
+       "videoDurationSeconds": null,
+       "engagementRate": 0,
+       "lastUpdated": "2026-11-01T06:45:41Z"
+      },
+      "platforms": [
+       {
+        "platform": "facebook",
+        "status": "published",
+        "platformPostId": "1659197792250779",
+        "accountId": "6aaa43608d284ffb21069c2c",
+        "accountUsername": "sample_account",
+        "analytics": {
+         "impressions": 0,
+         "reach": 0,
+         "likes": 0,
+         "comments": 0,
+         "shares": 0,
+         "saves": 0,
+         "clicks": 0,
+         "views": 0,
+         "follows": null,
+         "igReelsAvgWatchTime": 0,
+         "igReelsVideoViewTotalTime": 0,
+         "reelsSkipRate": 0,
+         "completionRate": 0,
+         "profileViews": 0,
+         "websiteClicks": 0,
+         "impressionSources": {},
+         "audienceTypes": {},
+         "audienceCountries": {},
+         "retentionCurve": {},
+         "replays": 0,
+         "reposts": 0,
+         "videoDurationSeconds": null,
+         "engagementRate": 0,
+         "lastUpdated": "2026-11-01T06:45:41Z"
+        },
+        "syncStatus": "synced",
+        "platformPostUrl": "https://example.com/sample/2140",
+        "errorMessage": null,
+        "errorCode": null,
+        "isOwner": null
+       }
+      ],
+      "platform": "facebook",
+      "platformPostUrl": "https://example.com/sample/2141",
+      "isExternal": true,
+      "isAd": false,
+      "profileId": "6aa9172fd442650ab8453bd4",
+      "thumbnailUrl": "https://example.com/sample/2142",
+      "mediaType": "video",
+      "mediaItems": [
+       {
+        "type": "video",
+        "url": null,
+        "thumbnail": "https://example.com/sample/2143",
+        "mediaStatus": "unavailable",
+        "unavailableReason": "platform_withheld"
+       }
+      ],
+      "mediaProductType": "STORY"
+     },
+     {
+      "_id": "6ae457e860167a8b650daf63",
+      "latePostId": null,
+      "content": "",
+      "publishedAt": "2026-10-30T07:04:52.000Z",
+      "scheduledFor": "2026-10-30T07:04:52.000Z",
+      "status": "published",
+      "analytics": {
+       "impressions": 0,
+       "reach": 0,
+       "likes": 0,
+       "comments": 0,
+       "shares": 0,
+       "saves": 0,
+       "clicks": 0,
+       "views": 0,
+       "follows": null,
+       "igReelsAvgWatchTime": 0,
+       "igReelsVideoViewTotalTime": 0,
+       "reelsSkipRate": 0,
+       "completionRate": 0,
+       "profileViews": 0,
+       "websiteClicks": 0,
+       "impressionSources": {},
+       "audienceTypes": {},
+       "audienceCountries": {},
+       "retentionCurve": {},
+       "replays": 0,
+       "reposts": 0,
+       "videoDurationSeconds": null,
+       "engagementRate": 0,
+       "lastUpdated": "2026-10-31T06:15:41Z"
+      },
+      "platforms": [
+       {
+        "platform": "facebook",
+        "status": "published",
+        "platformPostId": "2328728447961444",
+        "accountId": "6aaa43608d284ffb21069c2c",
+        "accountUsername": "sample_account",
+        "analytics": {
+         "impressions": 0,
+         "reach": 0,
+         "likes": 0,
+         "comments": 0,
+         "shares": 0,
+         "saves": 0,
+         "clicks": 0,
+         "views": 0,
+         "follows": null,
+         "igReelsAvgWatchTime": 0,
+         "igReelsVideoViewTotalTime": 0,
+         "reelsSkipRate": 0,
+         "completionRate": 0,
+         "profileViews": 0,
+         "websiteClicks": 0,
+         "impressionSources": {},
+         "audienceTypes": {},
+         "audienceCountries": {},
+         "retentionCurve": {},
+         "replays": 0,
+         "reposts": 0,
+         "videoDurationSeconds": null,
+         "engagementRate": 0,
+         "lastUpdated": "2026-10-31T06:15:41Z"
+        },
+        "syncStatus": "synced",
+        "platformPostUrl": "https://example.com/sample/2144",
+        "errorMessage": null,
+        "errorCode": null,
+        "isOwner": null
+       }
+      ],
+      "platform": "facebook",
+      "platformPostUrl": "https://example.com/sample/2145",
+      "isExternal": true,
+      "isAd": false,
+      "profileId": "6aa9172fd442650ab8453bd4",
+      "thumbnailUrl": "https://example.com/sample/2146",
+      "mediaType": "video",
+      "mediaItems": [
+       {
+        "type": "video",
+        "url": null,
+        "thumbnail": "https://example.com/sample/2147",
+        "mediaStatus": "unavailable",
+        "unavailableReason": "platform_withheld"
+       }
+      ],
+      "mediaProductType": "STORY"
+     },
+     {
+      "_id": "6ae1b73dd4ec26822792b137",
+      "latePostId": null,
+      "content": "",
+      "publishedAt": "2026-10-28T07:28:24.000Z",
+      "scheduledFor": "2026-10-28T07:28:24.000Z",
+      "status": "published",
+      "analytics": {
+       "impressions": 0,
+       "reach": 0,
+       "likes": 0,
+       "comments": 0,
+       "shares": 0,
+       "saves": 0,
+       "clicks": 0,
+       "views": 0,
+       "follows": null,
+       "igReelsAvgWatchTime": 0,
+       "igReelsVideoViewTotalTime": 0,
+       "reelsSkipRate": 0,
+       "completionRate": 0,
+       "profileViews": 0,
+       "websiteClicks": 0,
+       "impressionSources": {},
+       "audienceTypes": {},
+       "audienceCountries": {},
+       "retentionCurve": {},
+       "replays": 0,
+       "reposts": 0,
+       "videoDurationSeconds": null,
+       "engagementRate": 0,
+       "lastUpdated": "2026-10-29T06:30:41Z"
+      },
+      "platforms": [
+       {
+        "platform": "facebook",
+        "status": "published",
+        "platformPostId": "1672458551263052",
+        "accountId": "6aaa43608d284ffb21069c2c",
+        "accountUsername": "sample_account",
+        "analytics": {
+         "impressions": 0,
+         "reach": 0,
+         "likes": 0,
+         "comments": 0,
+         "shares": 0,
+         "saves": 0,
+         "clicks": 0,
+         "views": 0,
+         "follows": null,
+         "igReelsAvgWatchTime": 0,
+         "igReelsVideoViewTotalTime": 0,
+         "reelsSkipRate": 0,
+         "completionRate": 0,
+         "profileViews": 0,
+         "websiteClicks": 0,
+         "impressionSources": {},
+         "audienceTypes": {},
+         "audienceCountries": {},
+         "retentionCurve": {},
+         "replays": 0,
+         "reposts": 0,
+         "videoDurationSeconds": null,
+         "engagementRate": 0,
+         "lastUpdated": "2026-10-29T06:30:41Z"
+        },
+        "syncStatus": "synced",
+        "platformPostUrl": "https://example.com/sample/2148",
+        "errorMessage": null,
+        "errorCode": null,
+        "isOwner": null
+       }
+      ],
+      "platform": "facebook",
+      "platformPostUrl": "https://example.com/sample/2149",
+      "isExternal": true,
+      "isAd": false,
+      "profileId": "6aa9172fd442650ab8453bd4",
+      "thumbnailUrl": "https://example.com/sample/2150",
+      "mediaType": "video",
+      "mediaItems": [
+       {
+        "type": "video",
+        "url": null,
+        "thumbnail": "https://example.com/sample/2151",
+        "mediaStatus": "unavailable",
+        "unavailableReason": "platform_withheld"
+       }
+      ],
+      "mediaProductType": "STORY"
+     },
+     {
+      "_id": "6ae07176c3689bbb9c17ecbd",
+      "latePostId": null,
+      "content": "",
+      "publishedAt": "2026-10-27T08:05:42.000Z",
+      "scheduledFor": "2026-10-27T08:05:42.000Z",
+      "status": "published",
+      "analytics": {
+       "impressions": 0,
+       "reach": 0,
+       "likes": 0,
+       "comments": 0,
+       "shares": 0,
+       "saves": 0,
+       "clicks": 0,
+       "views": 0,
+       "follows": null,
+       "igReelsAvgWatchTime": 0,
+       "igReelsVideoViewTotalTime": 0,
+       "reelsSkipRate": 0,
+       "completionRate": 0,
+       "profileViews": 0,
+       "websiteClicks": 0,
+       "impressionSources": {},
+       "audienceTypes": {},
+       "audienceCountries": {},
+       "retentionCurve": {},
+       "replays": 0,
+       "reposts": 0,
+       "videoDurationSeconds": null,
+       "engagementRate": 0,
+       "lastUpdated": "2026-10-28T07:15:41Z"
+      },
+      "platforms": [
+       {
+        "platform": "facebook",
+        "status": "published",
+        "platformPostId": "1647078056799887",
+        "accountId": "6aaa43608d284ffb21069c2c",
+        "accountUsername": "sample_account",
+        "analytics": {
+         "impressions": 0,
+         "reach": 0,
+         "likes": 0,
+         "comments": 0,
+         "shares": 0,
+         "saves": 0,
+         "clicks": 0,
+         "views": 0,
+         "follows": null,
+         "igReelsAvgWatchTime": 0,
+         "igReelsVideoViewTotalTime": 0,
+         "reelsSkipRate": 0,
+         "completionRate": 0,
+         "profileViews": 0,
+         "websiteClicks": 0,
+         "impressionSources": {},
+         "audienceTypes": {},
+         "audienceCountries": {},
+         "retentionCurve": {},
+         "replays": 0,
+         "reposts": 0,
+         "videoDurationSeconds": null,
+         "engagementRate": 0,
+         "lastUpdated": "2026-10-28T07:15:41Z"
+        },
+        "syncStatus": "synced",
+        "platformPostUrl": "https://example.com/sample/2152",
+        "errorMessage": null,
+        "errorCode": null,
+        "isOwner": null
+       }
+      ],
+      "platform": "facebook",
+      "platformPostUrl": "https://example.com/sample/2153",
+      "isExternal": true,
+      "isAd": false,
+      "profileId": "6aa9172fd442650ab8453bd4",
+      "thumbnailUrl": "https://example.com/sample/2154",
+      "mediaType": "video",
+      "mediaItems": [
+       {
+        "type": "video",
+        "url": null,
+        "thumbnail": "https://example.com/sample/2155",
+        "mediaStatus": "unavailable",
+        "unavailableReason": "platform_withheld"
+       }
+      ],
+      "mediaProductType": "STORY"
+     },
+     {
+      "_id": "6ae05a0e0b52c03a455e749c",
+      "latePostId": null,
+      "content": "Sample content 2156",
+      "publishedAt": "2026-10-27T07:30:09.000Z",
+      "scheduledFor": "2026-10-27T07:30:09.000Z",
+      "status": "published",
+      "analytics": {
+       "impressions": 35,
+       "reach": 17,
+       "likes": 0,
+       "comments": 0,
+       "shares": 0,
+       "saves": 0,
+       "clicks": 0,
+       "views": 0,
+       "follows": null,
+       "igReelsAvgWatchTime": 0,
+       "igReelsVideoViewTotalTime": 0,
+       "reelsSkipRate": 0,
+       "completionRate": 0,
+       "profileViews": 0,
+       "websiteClicks": 0,
+       "impressionSources": {},
+       "audienceTypes": {},
+       "audienceCountries": {},
+       "retentionCurve": {},
+       "replays": 0,
+       "reposts": 0,
+       "videoDurationSeconds": null,
+       "engagementRate": 0,
+       "lastUpdated": "2026-11-05T07:27:04Z"
+      },
+      "platforms": [
+       {
+        "platform": "facebook",
+        "status": "published",
+        "platformPostId": "106674738335812_1433041595702736",
+        "accountId": "6aaa43608d284ffb21069c2c",
+        "accountUsername": "sample_account",
+        "analytics": {
+         "impressions": 35,
+         "reach": 17,
+         "likes": 0,
+         "comments": 0,
+         "shares": 0,
+         "saves": 0,
+         "clicks": 0,
+         "views": 0,
+         "follows": null,
+         "igReelsAvgWatchTime": 0,
+         "igReelsVideoViewTotalTime": 0,
+         "reelsSkipRate": 0,
+         "completionRate": 0,
+         "profileViews": 0,
+         "websiteClicks": 0,
+         "impressionSources": {},
+         "audienceTypes": {},
+         "audienceCountries": {},
+         "retentionCurve": {},
+         "replays": 0,
+         "reposts": 0,
+         "videoDurationSeconds": null,
+         "engagementRate": 0,
+         "lastUpdated": "2026-11-05T07:27:04Z"
+        },
+        "syncStatus": "synced",
+        "platformPostUrl": "https://example.com/sample/2157",
+        "errorMessage": null,
+        "errorCode": null,
+        "isOwner": true
+       }
+      ],
+      "platform": "facebook",
+      "platformPostUrl": "https://example.com/sample/2158",
+      "isExternal": true,
+      "isAd": false,
+      "profileId": "6aa9172fd442650ab8453bd4",
+      "thumbnailUrl": "https://example.com/sample/2159",
+      "mediaType": "carousel",
+      "mediaItems": [
+       {
+        "type": "image",
+        "url": "https://example.com/sample/2160",
+        "thumbnail": "https://example.com/sample/2161"
+       },
+       {
+        "type": "image",
+        "url": "https://example.com/sample/2162",
+        "thumbnail": "https://example.com/sample/2163"
+       },
+       {
+        "type": "image",
+        "url": "https://example.com/sample/2164",
+        "thumbnail": "https://example.com/sample/2165"
+       },
+       {
+        "type": "image",
+        "url": "https://example.com/sample/2166",
+        "thumbnail": "https://example.com/sample/2167"
+       },
+       {
+        "type": "image",
+        "url": "https://example.com/sample/2168",
+        "thumbnail": "https://example.com/sample/2169"
+       },
+       {
+        "type": "image",
+        "url": "https://example.com/sample/2170",
+        "thumbnail": "https://example.com/sample/2171"
+       }
+      ]
+     },
+     {
+      "_id": "6ad71d2a20681f4b5e899e3f",
+      "latePostId": null,
+      "content": "Sample content 2172",
+      "publishedAt": "2026-10-20T07:30:07.000Z",
+      "scheduledFor": "2026-10-20T07:30:07.000Z",
+      "status": "published",
+      "analytics": {
+       "impressions": 42,
+       "reach": 23,
+       "likes": 1,
+       "comments": 0,
+       "shares": 0,
+       "saves": 0,
+       "clicks": 0,
+       "views": 0,
+       "follows": null,
+       "igReelsAvgWatchTime": 0,
+       "igReelsVideoViewTotalTime": 0,
+       "reelsSkipRate": 0,
+       "completionRate": 0,
+       "profileViews": 0,
+       "websiteClicks": 0,
+       "impressionSources": {},
+       "audienceTypes": {},
+       "audienceCountries": {},
+       "retentionCurve": {},
+       "replays": 0,
+       "reposts": 0,
+       "videoDurationSeconds": null,
+       "engagementRate": 2.38,
+       "lastUpdated": "2026-11-04T11:00:08Z"
+      },
+      "platforms": [
+       {
+        "platform": "facebook",
+        "status": "published",
+        "platformPostId": "106674738335812_1426472076359688",
+        "accountId": "6aaa43608d284ffb21069c2c",
+        "accountUsername": "sample_account",
+        "analytics": {
+         "impressions": 42,
+         "reach": 23,
+         "likes": 1,
+         "comments": 0,
+         "shares": 0,
+         "saves": 0,
+         "clicks": 0,
+         "views": 0,
+         "follows": null,
+         "igReelsAvgWatchTime": 0,
+         "igReelsVideoViewTotalTime": 0,
+         "reelsSkipRate": 0,
+         "completionRate": 0,
+         "profileViews": 0,
+         "websiteClicks": 0,
+         "impressionSources": {},
+         "audienceTypes": {},
+         "audienceCountries": {},
+         "retentionCurve": {},
+         "replays": 0,
+         "reposts": 0,
+         "videoDurationSeconds": null,
+         "engagementRate": 2.38,
+         "lastUpdated": "2026-11-04T11:00:08Z"
+        },
+        "syncStatus": "synced",
+        "platformPostUrl": "https://example.com/sample/2173",
+        "errorMessage": null,
+        "errorCode": null,
+        "isOwner": true
+       }
+      ],
+      "platform": "facebook",
+      "platformPostUrl": "https://example.com/sample/2174",
+      "isExternal": true,
+      "isAd": false,
+      "profileId": "6aa9172fd442650ab8453bd4",
+      "thumbnailUrl": "https://example.com/sample/2175",
+      "mediaType": "carousel",
+      "mediaItems": [
+       {
+        "type": "image",
+        "url": "https://example.com/sample/2176",
+        "thumbnail": "https://example.com/sample/2177"
+       },
+       {
+        "type": "image",
+        "url": "https://example.com/sample/2178",
+        "thumbnail": "https://example.com/sample/2179"
+       },
+       {
+        "type": "image",
+        "url": "https://example.com/sample/2180",
+        "thumbnail": "https://example.com/sample/2181"
+       },
+       {
+        "type": "image",
+        "url": "https://example.com/sample/2182",
+        "thumbnail": "https://example.com/sample/2183"
+       },
+       {
+        "type": "image",
+        "url": "https://example.com/sample/2184",
+        "thumbnail": "https://example.com/sample/2185"
+       },
+       {
+        "type": "image",
+        "url": "https://example.com/sample/2186",
+        "thumbnail": "https://example.com/sample/2187"
+       }
+      ]
+     },
+     {
+      "_id": "6ad588a9a53688b827cdb1f9",
+      "latePostId": null,
+      "content": "Sample content 2188",
+      "publishedAt": "2026-10-15T07:30:08.000Z",
+      "scheduledFor": "2026-10-15T07:30:08.000Z",
+      "status": "published",
+      "analytics": {
+       "impressions": 46,
+       "reach": 23,
+       "likes": 0,
+       "comments": 0,
+       "shares": 0,
+       "saves": 0,
+       "clicks": 0,
+       "views": 0,
+       "follows": null,
+       "igReelsAvgWatchTime": 0,
+       "igReelsVideoViewTotalTime": 0,
+       "reelsSkipRate": 0,
+       "completionRate": 0,
+       "profileViews": 0,
+       "websiteClicks": 0,
+       "impressionSources": {},
+       "audienceTypes": {},
+       "audienceCountries": {},
+       "retentionCurve": {},
+       "replays": 0,
+       "reposts": 0,
+       "videoDurationSeconds": null,
+       "engagementRate": 0,
+       "lastUpdated": "2026-11-04T15:50:04Z"
+      },
+      "platforms": [
+       {
+        "platform": "facebook",
+        "status": "published",
+        "platformPostId": "106674738335812_1421807986826097",
+        "accountId": "6aaa43608d284ffb21069c2c",
+        "accountUsername": "sample_account",
+        "analytics": {
+         "impressions": 46,
+         "reach": 23,
+         "likes": 0,
+         "comments": 0,
+         "shares": 0,
+         "saves": 0,
+         "clicks": 0,
+         "views": 0,
+         "follows": null,
+         "igReelsAvgWatchTime": 0,
+         "igReelsVideoViewTotalTime": 0,
+         "reelsSkipRate": 0,
+         "completionRate": 0,
+         "profileViews": 0,
+         "websiteClicks": 0,
+         "impressionSources": {},
+         "audienceTypes": {},
+         "audienceCountries": {},
+         "retentionCurve": {},
+         "replays": 0,
+         "reposts": 0,
+         "videoDurationSeconds": null,
+         "engagementRate": 0,
+         "lastUpdated": "2026-11-04T15:50:04Z"
+        },
+        "syncStatus": "synced",
+        "platformPostUrl": "https://example.com/sample/2189",
+        "errorMessage": null,
+        "errorCode": null,
+        "isOwner": true
+       }
+      ],
+      "platform": "facebook",
+      "platformPostUrl": "https://example.com/sample/2190",
+      "isExternal": true,
+      "isAd": false,
+      "profileId": "6aa9172fd442650ab8453bd4",
+      "thumbnailUrl": "https://example.com/sample/2191",
+      "mediaType": "carousel",
+      "mediaItems": [
+       {
+        "type": "image",
+        "url": "https://example.com/sample/2192",
+        "thumbnail": "https://example.com/sample/2193"
+       },
+       {
+        "type": "image",
+        "url": "https://example.com/sample/2194",
+        "thumbnail": "https://example.com/sample/2195"
+       },
+       {
+        "type": "image",
+        "url": "https://example.com/sample/2196",
+        "thumbnail": "https://example.com/sample/2197"
+       },
+       {
+        "type": "image",
+        "url": "https://example.com/sample/2198",
+        "thumbnail": "https://example.com/sample/2199"
+       },
+       {
+        "type": "image",
+        "url": "https://example.com/sample/2200",
+        "thumbnail": "https://example.com/sample/2201"
+       }
+      ]
+     },
+     {
+      "_id": "6acc9be505c31a1b27ef5da1",
+      "latePostId": null,
+      "content": "Sample content 2202",
+      "publishedAt": "2026-10-12T07:30:08.000Z",
+      "scheduledFor": "2026-10-12T07:30:08.000Z",
+      "status": "published",
+      "analytics": {
+       "impressions": 61,
+       "reach": 34,
+       "likes": 0,
+       "comments": 0,
+       "shares": 0,
+       "saves": 0,
+       "clicks": 1,
+       "views": 0,
+       "follows": null,
+       "igReelsAvgWatchTime": 0,
+       "igReelsVideoViewTotalTime": 0,
+       "reelsSkipRate": 0,
+       "completionRate": 0,
+       "profileViews": 0,
+       "websiteClicks": 0,
+       "impressionSources": {},
+       "audienceTypes": {},
+       "audienceCountries": {},
+       "retentionCurve": {},
+       "replays": 0,
+       "reposts": 0,
+       "videoDurationSeconds": null,
+       "engagementRate": 0,
+       "lastUpdated": "2026-11-04T17:30:08Z"
+      },
+      "platforms": [
+       {
+        "platform": "facebook",
+        "status": "published",
+        "platformPostId": "106674738335812_1418929177113978",
+        "accountId": "6aaa43608d284ffb21069c2c",
+        "accountUsername": "sample_account",
+        "analytics": {
+         "impressions": 61,
+         "reach": 34,
+         "likes": 0,
+         "comments": 0,
+         "shares": 0,
+         "saves": 0,
+         "clicks": 1,
+         "views": 0,
+         "follows": null,
+         "igReelsAvgWatchTime": 0,
+         "igReelsVideoViewTotalTime": 0,
+         "reelsSkipRate": 0,
+         "completionRate": 0,
+         "profileViews": 0,
+         "websiteClicks": 0,
+         "impressionSources": {},
+         "audienceTypes": {},
+         "audienceCountries": {},
+         "retentionCurve": {},
+         "replays": 0,
+         "reposts": 0,
+         "videoDurationSeconds": null,
+         "engagementRate": 0,
+         "lastUpdated": "2026-11-04T17:30:08Z"
+        },
+        "syncStatus": "synced",
+        "platformPostUrl": "https://example.com/sample/2203",
+        "errorMessage": null,
+        "errorCode": null,
+        "isOwner": true
+       }
+      ],
+      "platform": "facebook",
+      "platformPostUrl": "https://example.com/sample/2204",
+      "isExternal": true,
+      "isAd": false,
+      "profileId": "6aa9172fd442650ab8453bd4",
+      "thumbnailUrl": "https://example.com/sample/2205",
+      "mediaType": "carousel",
+      "mediaItems": [
+       {
+        "type": "image",
+        "url": "https://example.com/sample/2206",
+        "thumbnail": "https://example.com/sample/2207"
+       },
+       {
+        "type": "image",
+        "url": "https://example.com/sample/2208",
+        "thumbnail": "https://example.com/sample/2209"
+       },
+       {
+        "type": "image",
+        "url": "https://example.com/sample/2210",
+        "thumbnail": "https://example.com/sample/2211"
+       },
+       {
+        "type": "image",
+        "url": "https://example.com/sample/2212",
+        "thumbnail": "https://example.com/sample/2213"
+       },
+       {
+        "type": "image",
+        "url": "https://example.com/sample/2214",
+        "thumbnail": "https://example.com/sample/2215"
+       }
+      ]
+     },
+     {
+      "_id": "6acc9be505c31a1b27ef5da0",
+      "latePostId": null,
+      "content": "",
+      "publishedAt": "2026-10-12T07:13:40.000Z",
+      "scheduledFor": "2026-10-12T07:13:40.000Z",
+      "status": "published",
+      "analytics": {
+       "impressions": 0,
+       "reach": 0,
+       "likes": 0,
+       "comments": 0,
+       "shares": 0,
+       "saves": 0,
+       "clicks": 0,
+       "views": 0,
+       "follows": null,
+       "igReelsAvgWatchTime": 0,
+       "igReelsVideoViewTotalTime": 0,
+       "reelsSkipRate": 0,
+       "completionRate": 0,
+       "profileViews": 0,
+       "websiteClicks": 0,
+       "impressionSources": {},
+       "audienceTypes": {},
+       "audienceCountries": {},
+       "retentionCurve": {},
+       "replays": 0,
+       "reposts": 0,
+       "videoDurationSeconds": null,
+       "engagementRate": 0,
+       "lastUpdated": "2026-10-13T06:15:41Z"
+      },
+      "platforms": [
+       {
+        "platform": "facebook",
+        "status": "published",
+        "platformPostId": "943106775141198",
+        "accountId": "6aaa43608d284ffb21069c2c",
+        "accountUsername": "sample_account",
+        "analytics": {
+         "impressions": 0,
+         "reach": 0,
+         "likes": 0,
+         "comments": 0,
+         "shares": 0,
+         "saves": 0,
+         "clicks": 0,
+         "views": 0,
+         "follows": null,
+         "igReelsAvgWatchTime": 0,
+         "igReelsVideoViewTotalTime": 0,
+         "reelsSkipRate": 0,
+         "completionRate": 0,
+         "profileViews": 0,
+         "websiteClicks": 0,
+         "impressionSources": {},
+         "audienceTypes": {},
+         "audienceCountries": {},
+         "retentionCurve": {},
+         "replays": 0,
+         "reposts": 0,
+         "videoDurationSeconds": null,
+         "engagementRate": 0,
+         "lastUpdated": "2026-10-13T06:15:41Z"
+        },
+        "syncStatus": "synced",
+        "platformPostUrl": "https://example.com/sample/2216",
+        "errorMessage": null,
+        "errorCode": null,
+        "isOwner": null
+       }
+      ],
+      "platform": "facebook",
+      "platformPostUrl": "https://example.com/sample/2217",
+      "isExternal": true,
+      "isAd": false,
+      "profileId": "6aa9172fd442650ab8453bd4",
+      "thumbnailUrl": "https://example.com/sample/2218",
+      "mediaType": "video",
+      "mediaItems": [
+       {
+        "type": "video",
+        "url": null,
+        "thumbnail": "https://example.com/sample/2219",
+        "mediaStatus": "unavailable",
+        "unavailableReason": "platform_withheld"
+       }
+      ],
+      "mediaProductType": "STORY"
+     },
+     {
+      "_id": "6acb4a74483724aefb2f7279",
+      "latePostId": null,
+      "content": "",
+      "publishedAt": "2026-10-11T07:31:36.000Z",
+      "scheduledFor": "2026-10-11T07:31:36.000Z",
+      "status": "published",
+      "analytics": {
+       "impressions": 0,
+       "reach": 0,
+       "likes": 0,
+       "comments": 0,
+       "shares": 0,
+       "saves": 0,
+       "clicks": 0,
+       "views": 0,
+       "follows": null,
+       "igReelsAvgWatchTime": 0,
+       "igReelsVideoViewTotalTime": 0,
+       "reelsSkipRate": 0,
+       "completionRate": 0,
+       "profileViews": 0,
+       "websiteClicks": 0,
+       "impressionSources": {},
+       "audienceTypes": {},
+       "audienceCountries": {},
+       "retentionCurve": {},
+       "replays": 0,
+       "reposts": 0,
+       "videoDurationSeconds": null,
+       "engagementRate": 0,
+       "lastUpdated": "2026-10-12T06:45:41Z"
+      },
+      "platforms": [
+       {
+        "platform": "facebook",
+        "status": "published",
+        "platformPostId": "1095639353069218",
+        "accountId": "6aaa43608d284ffb21069c2c",
+        "accountUsername": "sample_account",
+        "analytics": {
+         "impressions": 0,
+         "reach": 0,
+         "likes": 0,
+         "comments": 0,
+         "shares": 0,
+         "saves": 0,
+         "clicks": 0,
+         "views": 0,
+         "follows": null,
+         "igReelsAvgWatchTime": 0,
+         "igReelsVideoViewTotalTime": 0,
+         "reelsSkipRate": 0,
+         "completionRate": 0,
+         "profileViews": 0,
+         "websiteClicks": 0,
+         "impressionSources": {},
+         "audienceTypes": {},
+         "audienceCountries": {},
+         "retentionCurve": {},
+         "replays": 0,
+         "reposts": 0,
+         "videoDurationSeconds": null,
+         "engagementRate": 0,
+         "lastUpdated": "2026-10-12T06:45:41Z"
+        },
+        "syncStatus": "synced",
+        "platformPostUrl": "https://example.com/sample/2220",
+        "errorMessage": null,
+        "errorCode": null,
+        "isOwner": null
+       }
+      ],
+      "platform": "facebook",
+      "platformPostUrl": "https://example.com/sample/2221",
+      "isExternal": true,
+      "isAd": false,
+      "profileId": "6aa9172fd442650ab8453bd4",
+      "thumbnailUrl": "https://example.com/sample/2222",
+      "mediaType": "video",
+      "mediaItems": [
+       {
+        "type": "video",
+        "url": null,
+        "thumbnail": "https://example.com/sample/2223",
+        "mediaStatus": "unavailable",
+        "unavailableReason": "platform_withheld"
+       }
+      ],
+      "mediaProductType": "STORY"
+     },
+     {
+      "_id": "6ac60404bda00b285953256a",
+      "latePostId": null,
+      "content": "",
+      "publishedAt": "2026-10-07T07:40:54.000Z",
+      "scheduledFor": "2026-10-07T07:40:54.000Z",
+      "status": "published",
+      "analytics": {
+       "impressions": 0,
+       "reach": 0,
+       "likes": 0,
+       "comments": 0,
+       "shares": 0,
+       "saves": 0,
+       "clicks": 0,
+       "views": 0,
+       "follows": null,
+       "igReelsAvgWatchTime": 0,
+       "igReelsVideoViewTotalTime": 0,
+       "reelsSkipRate": 0,
+       "completionRate": 0,
+       "profileViews": 0,
+       "websiteClicks": 0,
+       "impressionSources": {},
+       "audienceTypes": {},
+       "audienceCountries": {},
+       "retentionCurve": {},
+       "replays": 0,
+       "reposts": 0,
+       "videoDurationSeconds": null,
+       "engagementRate": 0,
+       "lastUpdated": "2026-10-08T07:36:57Z"
+      },
+      "platforms": [
+       {
+        "platform": "facebook",
+        "status": "published",
+        "platformPostId": "1870669180958328",
+        "accountId": "6aaa43608d284ffb21069c2c",
+        "accountUsername": "sample_account",
+        "analytics": {
+         "impressions": 0,
+         "reach": 0,
+         "likes": 0,
+         "comments": 0,
+         "shares": 0,
+         "saves": 0,
+         "clicks": 0,
+         "views": 0,
+         "follows": null,
+         "igReelsAvgWatchTime": 0,
+         "igReelsVideoViewTotalTime": 0,
+         "reelsSkipRate": 0,
+         "completionRate": 0,
+         "profileViews": 0,
+         "websiteClicks": 0,
+         "impressionSources": {},
+         "audienceTypes": {},
+         "audienceCountries": {},
+         "retentionCurve": {},
+         "replays": 0,
+         "reposts": 0,
+         "videoDurationSeconds": null,
+         "engagementRate": 0,
+         "lastUpdated": "2026-10-08T07:36:57Z"
+        },
+        "syncStatus": "synced",
+        "platformPostUrl": "https://example.com/sample/2224",
+        "errorMessage": null,
+        "errorCode": null,
+        "isOwner": null
+       }
+      ],
+      "platform": "facebook",
+      "platformPostUrl": "https://example.com/sample/2225",
+      "isExternal": true,
+      "isAd": false,
+      "profileId": "6aa9172fd442650ab8453bd4",
+      "thumbnailUrl": "https://example.com/sample/2226",
+      "mediaType": "image",
+      "mediaItems": [
+       {
+        "type": "image",
+        "url": "https://example.com/sample/2227",
+        "thumbnail": "https://example.com/sample/2228"
+       }
+      ],
+      "mediaProductType": "STORY"
+     },
+     {
+      "_id": "6ac60404bda00b285953256c",
+      "latePostId": "6ac3e08015ec010a8dea4f94",
+      "content": "Sample content 2229",
+      "publishedAt": "2026-10-07T07:31:39.000Z",
+      "scheduledFor": "2026-10-07T07:31:39.000Z",
+      "status": "published",
+      "analytics": {
+       "impressions": 61,
+       "reach": 27,
+       "likes": 0,
+       "comments": 0,
+       "shares": 0,
+       "saves": 0,
+       "clicks": 0,
+       "views": 0,
+       "follows": null,
+       "igReelsAvgWatchTime": 0,
+       "igReelsVideoViewTotalTime": 0,
+       "reelsSkipRate": 0,
+       "completionRate": 0,
+       "profileViews": 0,
+       "websiteClicks": 0,
+       "impressionSources": {},
+       "audienceTypes": {},
+       "audienceCountries": {},
+       "retentionCurve": {},
+       "replays": 0,
+       "reposts": 0,
+       "videoDurationSeconds": null,
+       "engagementRate": 0,
+       "lastUpdated": "2026-11-04T14:10:05Z"
+      },
+      "platforms": [
+       {
+        "platform": "facebook",
+        "status": "published",
+        "platformPostId": "106674738335812_1414374087569487",
+        "accountId": "6aaa43608d284ffb21069c2c",
+        "accountUsername": "sample_account",
+        "analytics": {
+         "impressions": 61,
+         "reach": 27,
+         "likes": 0,
+         "comments": 0,
+         "shares": 0,
+         "saves": 0,
+         "clicks": 0,
+         "views": 0,
+         "follows": null,
+         "igReelsAvgWatchTime": 0,
+         "igReelsVideoViewTotalTime": 0,
+         "reelsSkipRate": 0,
+         "completionRate": 0,
+         "profileViews": 0,
+         "websiteClicks": 0,
+         "impressionSources": {},
+         "audienceTypes": {},
+         "audienceCountries": {},
+         "retentionCurve": {},
+         "replays": 0,
+         "reposts": 0,
+         "videoDurationSeconds": null,
+         "engagementRate": 0,
+         "lastUpdated": "2026-11-04T14:10:05Z"
+        },
+        "syncStatus": "synced",
+        "platformPostUrl": "https://example.com/sample/2230",
+        "errorMessage": null,
+        "errorCode": null,
+        "isOwner": true
+       }
+      ],
+      "platform": "facebook",
+      "platformPostUrl": "https://example.com/sample/2231",
+      "isExternal": true,
+      "isAd": false,
+      "profileId": "6aa9172fd442650ab8453bd4",
+      "thumbnailUrl": "https://example.com/sample/2232",
+      "mediaType": "carousel",
+      "mediaItems": [
+       {
+        "type": "image",
+        "url": "https://example.com/sample/2233",
+        "thumbnail": "https://example.com/sample/2234"
+       },
+       {
+        "type": "image",
+        "url": "https://example.com/sample/2235",
+        "thumbnail": "https://example.com/sample/2236"
+       },
+       {
+        "type": "image",
+        "url": "https://example.com/sample/2237",
+        "thumbnail": "https://example.com/sample/2238"
+       },
+       {
+        "type": "image",
+        "url": "https://example.com/sample/2239",
+        "thumbnail": "https://example.com/sample/2240"
+       },
+       {
+        "type": "image",
+        "url": "https://example.com/sample/2241",
+        "thumbnail": "https://example.com/sample/2242"
+       }
+      ]
+     },
+     {
+      "_id": "6ac36e1c95d492b8dd515da7",
+      "latePostId": null,
+      "content": "",
+      "publishedAt": "2026-10-05T07:50:10.000Z",
+      "scheduledFor": "2026-10-05T07:50:10.000Z",
+      "status": "published",
+      "analytics": {
+       "impressions": 0,
+       "reach": 0,
+       "likes": 0,
+       "comments": 0,
+       "shares": 0,
+       "saves": 0,
+       "clicks": 0,
+       "views": 0,
+       "follows": null,
+       "igReelsAvgWatchTime": 0,
+       "igReelsVideoViewTotalTime": 0,
+       "reelsSkipRate": 0,
+       "completionRate": 0,
+       "profileViews": 0,
+       "websiteClicks": 0,
+       "impressionSources": {},
+       "audienceTypes": {},
+       "audienceCountries": {},
+       "retentionCurve": {},
+       "replays": 0,
+       "reposts": 0,
+       "videoDurationSeconds": null,
+       "engagementRate": 0,
+       "lastUpdated": "2026-10-06T07:00:41Z"
+      },
+      "platforms": [
+       {
+        "platform": "facebook",
+        "status": "published",
+        "platformPostId": "1623527685810902",
+        "accountId": "6aaa43608d284ffb21069c2c",
+        "accountUsername": "sample_account",
+        "analytics": {
+         "impressions": 0,
+         "reach": 0,
+         "likes": 0,
+         "comments": 0,
+         "shares": 0,
+         "saves": 0,
+         "clicks": 0,
+         "views": 0,
+         "follows": null,
+         "igReelsAvgWatchTime": 0,
+         "igReelsVideoViewTotalTime": 0,
+         "reelsSkipRate": 0,
+         "completionRate": 0,
+         "profileViews": 0,
+         "websiteClicks": 0,
+         "impressionSources": {},
+         "audienceTypes": {},
+         "audienceCountries": {},
+         "retentionCurve": {},
+         "replays": 0,
+         "reposts": 0,
+         "videoDurationSeconds": null,
+         "engagementRate": 0,
+         "lastUpdated": "2026-10-06T07:00:41Z"
+        },
+        "syncStatus": "synced",
+        "platformPostUrl": "https://example.com/sample/2243",
+        "errorMessage": null,
+        "errorCode": null,
+        "isOwner": null
+       }
+      ],
+      "platform": "facebook",
+      "platformPostUrl": "https://example.com/sample/2244",
+      "isExternal": true,
+      "isAd": false,
+      "profileId": "6aa9172fd442650ab8453bd4",
+      "thumbnailUrl": "https://example.com/sample/2245",
+      "mediaType": "video",
+      "mediaItems": [
+       {
+        "type": "video",
+        "url": null,
+        "thumbnail": "https://example.com/sample/2246",
+        "mediaStatus": "unavailable",
+        "unavailableReason": "platform_withheld"
+       }
+      ],
+      "mediaProductType": "STORY"
+     },
+     {
+      "_id": "6abf72951988613d5b2654f4",
+      "latePostId": null,
+      "content": "",
+      "publishedAt": "2026-10-02T08:38:25.000Z",
+      "scheduledFor": "2026-10-02T08:38:25.000Z",
+      "status": "published",
+      "analytics": {
+       "impressions": 0,
+       "reach": 0,
+       "likes": 0,
+       "comments": 0,
+       "shares": 0,
+       "saves": 0,
+       "clicks": 0,
+       "views": 0,
+       "follows": null,
+       "igReelsAvgWatchTime": 0,
+       "igReelsVideoViewTotalTime": 0,
+       "reelsSkipRate": 0,
+       "completionRate": 0,
+       "profileViews": 0,
+       "websiteClicks": 0,
+       "impressionSources": {},
+       "audienceTypes": {},
+       "audienceCountries": {},
+       "retentionCurve": {},
+       "replays": 0,
+       "reposts": 0,
+       "videoDurationSeconds": null,
+       "engagementRate": 0,
+       "lastUpdated": "2026-10-03T07:45:42Z"
+      },
+      "platforms": [
+       {
+        "platform": "facebook",
+        "status": "published",
+        "platformPostId": "2194430754828206",
+        "accountId": "6aaa43608d284ffb21069c2c",
+        "accountUsername": "sample_account",
+        "analytics": {
+         "impressions": 0,
+         "reach": 0,
+         "likes": 0,
+         "comments": 0,
+         "shares": 0,
+         "saves": 0,
+         "clicks": 0,
+         "views": 0,
+         "follows": null,
+         "igReelsAvgWatchTime": 0,
+         "igReelsVideoViewTotalTime": 0,
+         "reelsSkipRate": 0,
+         "completionRate": 0,
+         "profileViews": 0,
+         "websiteClicks": 0,
+         "impressionSources": {},
+         "audienceTypes": {},
+         "audienceCountries": {},
+         "retentionCurve": {},
+         "replays": 0,
+         "reposts": 0,
+         "videoDurationSeconds": null,
+         "engagementRate": 0,
+         "lastUpdated": "2026-10-03T07:45:42Z"
+        },
+        "syncStatus": "synced",
+        "platformPostUrl": "https://example.com/sample/2247",
+        "errorMessage": null,
+        "errorCode": null,
+        "isOwner": null
+       }
+      ],
+      "platform": "facebook",
+      "platformPostUrl": "https://example.com/sample/2248",
+      "isExternal": true,
+      "isAd": false,
+      "profileId": "6aa9172fd442650ab8453bd4",
+      "thumbnailUrl": "https://example.com/sample/2249",
+      "mediaType": "video",
+      "mediaItems": [
+       {
+        "type": "video",
+        "url": null,
+        "thumbnail": "https://example.com/sample/2250",
+        "mediaStatus": "unavailable",
+        "unavailableReason": "platform_withheld"
+       }
+      ],
+      "mediaProductType": "STORY"
+     },
+     {
+      "_id": "6abe1a0ee6aab02d0ecdea6a",
+      "latePostId": null,
+      "content": "Sample content 2251",
+      "publishedAt": "2026-10-01T07:04:30.000Z",
+      "scheduledFor": "2026-10-01T07:04:30.000Z",
+      "status": "published",
+      "analytics": {
+       "impressions": 72,
+       "reach": 43,
+       "likes": 0,
+       "comments": 0,
+       "shares": 0,
+       "saves": 0,
+       "clicks": 0,
+       "views": 0,
+       "follows": null,
+       "igReelsAvgWatchTime": 0,
+       "igReelsVideoViewTotalTime": 0,
+       "reelsSkipRate": 0,
+       "completionRate": 0,
+       "profileViews": 0,
+       "websiteClicks": 0,
+       "impressionSources": {},
+       "audienceTypes": {},
+       "audienceCountries": {},
+       "retentionCurve": {},
+       "replays": 0,
+       "reposts": 0,
+       "videoDurationSeconds": null,
+       "engagementRate": 0,
+       "lastUpdated": "2026-11-04T14:10:05Z"
+      },
+      "platforms": [
+       {
+        "platform": "facebook",
+        "status": "published",
+        "platformPostId": "106674738335812_1408776528129243",
+        "accountId": "6aaa43608d284ffb21069c2c",
+        "accountUsername": "sample_account",
+        "analytics": {
+         "impressions": 72,
+         "reach": 43,
+         "likes": 0,
+         "comments": 0,
+         "shares": 0,
+         "saves": 0,
+         "clicks": 0,
+         "views": 0,
+         "follows": null,
+         "igReelsAvgWatchTime": 0,
+         "igReelsVideoViewTotalTime": 0,
+         "reelsSkipRate": 0,
+         "completionRate": 0,
+         "profileViews": 0,
+         "websiteClicks": 0,
+         "impressionSources": {},
+         "audienceTypes": {},
+         "audienceCountries": {},
+         "retentionCurve": {},
+         "replays": 0,
+         "reposts": 0,
+         "videoDurationSeconds": null,
+         "engagementRate": 0,
+         "lastUpdated": "2026-11-04T14:10:05Z"
+        },
+        "syncStatus": "synced",
+        "platformPostUrl": "https://example.com/sample/2252",
+        "errorMessage": null,
+        "errorCode": null,
+        "isOwner": true
+       }
+      ],
+      "platform": "facebook",
+      "platformPostUrl": "https://example.com/sample/2253",
+      "isExternal": true,
+      "isAd": false,
+      "profileId": "6aa9172fd442650ab8453bd4",
+      "thumbnailUrl": "https://example.com/sample/2254",
+      "mediaType": "image",
+      "mediaItems": [
+       {
+        "type": "image",
+        "url": "https://example.com/sample/2255",
+        "thumbnail": "https://example.com/sample/2256"
+       }
+      ]
+     }
+    ],
+    "pagination": {
+     "page": 1,
+     "limit": 100,
+     "total": 15,
+     "pages": 1
+    },
+    "accounts": [
+     {
+      "_id": "6aec2a08399cfc501407a5e1",
+      "platform": "facebook",
+      "username": "Sample username 2257",
+      "displayName": "Sample displayName 2258",
+      "profileId": "6aa800e7fd8f93400838a89b",
+      "followersCount": 78,
+      "followersLastUpdated": "2026-11-05T07:02:32.716Z"
+     },
+     {
+      "_id": "6aec29c9056d89c45023d556",
+      "platform": "facebook",
+      "username": "Sample username 2259",
+      "displayName": "Sample displayName 2260",
+      "profileId": "6a6ff48cf964c89501951cf9",
+      "followersCount": 994,
+      "followersLastUpdated": "2026-11-05T07:01:29.585Z"
+     },
+     {
+      "_id": "6aec28c4cffff921eaad6e21",
+      "platform": "facebook",
+      "username": "Sample username 2261",
+      "displayName": "Sample displayName 2262",
+      "profileId": "6aa9e3fc69c97fce8161df74",
+      "followersCount": 144,
+      "followersLastUpdated": "2026-11-05T06:57:08.903Z"
+     },
+     {
+      "_id": "6aec2b4982f412cdf12c9676",
+      "platform": "facebook",
+      "username": "Sample username 2263",
+      "displayName": "Sample displayName 2264",
+      "profileId": "6ab9edae48812216462e77d4",
+      "followersCount": 6020,
+      "followersLastUpdated": "2026-11-05T07:07:53.899Z"
+     },
+     {
+      "_id": "6ad5885f24adc6edf8386841",
+      "platform": "facebook",
+      "username": "Sample username 2265",
+      "displayName": "Sample displayName 2266",
+      "profileId": "6ac30538bd18fa3f007d1698",
+      "followersCount": 367,
+      "followersLastUpdated": "2026-11-05T08:21:26.876Z"
+     },
+     {
+      "_id": "6adebf1664aefc26db91063e",
+      "platform": "facebook",
+      "username": "Sample username 2267",
+      "displayName": "Sample displayName 2268",
+      "profileId": "6aa92ab669c7b75f184541e2",
+      "followersCount": 6,
+      "followersLastUpdated": "2026-11-04T09:23:38.636Z"
+     },
+     {
+      "_id": "6aba5a55c37f1f55540dc525",
+      "platform": "facebook",
+      "username": "Sample username 2269",
+      "displayName": "Sample displayName 2270",
+      "profileId": "6aba59a92e5a9ebdb23cfdfb",
+      "followersCount": 1144,
+      "followersLastUpdated": "2026-11-05T06:25:08.534Z"
+     },
+     {
+      "_id": "6aba5b53d829446fd920d6aa",
+      "platform": "facebook",
+      "username": "Sample username 2271",
+      "displayName": "Sample displayName 2272",
+      "profileId": "6aa89351e83c3ab9408bcd87",
+      "followersCount": 1144,
+      "followersLastUpdated": "2026-11-05T06:25:43.522Z"
+     },
+     {
+      "_id": "6ae270aae7cad9a28471b5fd",
+      "platform": "facebook",
+      "username": "Sample username 2273",
+      "displayName": "Sample displayName 2274",
+      "profileId": "6ae26dd7cf5a48ef8fe69865",
+      "followersCount": 150,
+      "followersLastUpdated": "2026-11-04T09:48:48.582Z"
+     },
+     {
+      "_id": "6ad55b7f78132418843e17f6",
+      "platform": "facebook",
+      "username": "Sample username 2275",
+      "displayName": "Sample displayName 2276",
+      "profileId": "6abc7c9683d6589989b1d700",
+      "followersCount": 245,
+      "followersLastUpdated": "2026-11-05T08:20:53.659Z"
+     },
+     {
+      "_id": "6aaa43608d284ffb21069c2c",
+      "platform": "facebook",
+      "username": "Sample username 2277",
+      "displayName": "Sample displayName 2278",
+      "profileId": "6aa9172fd442650ab8453bd4",
+      "followersCount": 367,
+      "followersLastUpdated": "2026-11-05T05:34:29.222Z"
+     },
+     {
+      "_id": "6ae2700be7cad9a28471b576",
+      "platform": "facebook",
+      "username": "Sample username 2279",
+      "displayName": "Sample displayName 2280",
+      "profileId": "6ae26e9d9bb357d3eab4b97d",
+      "followersCount": 150,
+      "followersLastUpdated": "2026-11-04T09:48:47.084Z"
+     },
+     {
+      "_id": "6abf4fc8c9aafff9ce75a83d",
+      "platform": "facebook",
+      "username": "Sample username 2281",
+      "displayName": "Sample displayName 2282",
+      "profileId": "6ab085479ce265a7ad916980",
+      "followersCount": 134,
+      "followersLastUpdated": "2026-11-05T06:47:23.927Z"
+     },
+     {
+      "_id": "6abf4fc8c9aafff9ce75a83f",
+      "platform": "facebook",
+      "username": "Sample username 2283",
+      "displayName": "Sample displayName 2284",
+      "profileId": "6ab085479ce265a7ad916980",
+      "followersCount": 1,
+      "followersLastUpdated": "2026-11-05T06:47:24.363Z"
+     }
+    ],
+    "hasAnalyticsAccess": true
+   }
+  },
+  "/analytics?accountId=6aaa43608d284ffb21069c2c&fromDate=2026-10-01&limit=100&page=1&platform=facebook&source=late&toDate=2026-10-31": {
+   "ok": true,
+   "data": {
+    "overview": {
+     "totalPosts": 1,
+     "publishedPosts": 1,
+     "scheduledPosts": 0,
+     "lastSync": "2026-11-05T08:53:00.359Z",
+     "dataStaleness": {
+      "staleAccountCount": 4,
+      "syncTriggered": true
+     }
+    },
+    "posts": [
+     {
+      "_id": "6ac60404bda00b285953256c",
+      "latePostId": "6ac3e08015ec010a8dea4f94",
+      "content": "Sample content 2285",
+      "publishedAt": "2026-10-07T07:31:39.000Z",
+      "scheduledFor": "2026-10-07T07:31:39.000Z",
+      "status": "published",
+      "analytics": {
+       "impressions": 61,
+       "reach": 27,
+       "likes": 0,
+       "comments": 0,
+       "shares": 0,
+       "saves": 0,
+       "clicks": 0,
+       "views": 0,
+       "follows": null,
+       "igReelsAvgWatchTime": 0,
+       "igReelsVideoViewTotalTime": 0,
+       "reelsSkipRate": 0,
+       "completionRate": 0,
+       "profileViews": 0,
+       "websiteClicks": 0,
+       "impressionSources": {},
+       "audienceTypes": {},
+       "audienceCountries": {},
+       "retentionCurve": {},
+       "replays": 0,
+       "reposts": 0,
+       "videoDurationSeconds": null,
+       "engagementRate": 0,
+       "lastUpdated": "2026-11-04T14:10:05Z"
+      },
+      "platforms": [
+       {
+        "platform": "facebook",
+        "status": "published",
+        "platformPostId": "106674738335812_1414374087569487",
+        "accountId": "6aaa43608d284ffb21069c2c",
+        "accountUsername": "sample_account",
+        "analytics": {
+         "impressions": 61,
+         "reach": 27,
+         "likes": 0,
+         "comments": 0,
+         "shares": 0,
+         "saves": 0,
+         "clicks": 0,
+         "views": 0,
+         "follows": null,
+         "igReelsAvgWatchTime": 0,
+         "igReelsVideoViewTotalTime": 0,
+         "reelsSkipRate": 0,
+         "completionRate": 0,
+         "profileViews": 0,
+         "websiteClicks": 0,
+         "impressionSources": {},
+         "audienceTypes": {},
+         "audienceCountries": {},
+         "retentionCurve": {},
+         "replays": 0,
+         "reposts": 0,
+         "videoDurationSeconds": null,
+         "engagementRate": 0,
+         "lastUpdated": "2026-11-04T14:10:05Z"
+        },
+        "syncStatus": "synced",
+        "platformPostUrl": "https://example.com/sample/2286",
+        "errorMessage": null,
+        "errorCode": null,
+        "isOwner": true
+       }
+      ],
+      "platform": "facebook",
+      "platformPostUrl": "https://example.com/sample/2287",
+      "isExternal": true,
+      "isAd": false,
+      "profileId": "6aa9172fd442650ab8453bd4",
+      "thumbnailUrl": "https://example.com/sample/2288",
+      "mediaType": "carousel",
+      "mediaItems": [
+       {
+        "type": "image",
+        "url": "https://example.com/sample/2289",
+        "thumbnail": "https://example.com/sample/2290"
+       },
+       {
+        "type": "image",
+        "url": "https://example.com/sample/2291",
+        "thumbnail": "https://example.com/sample/2292"
+       },
+       {
+        "type": "image",
+        "url": "https://example.com/sample/2293",
+        "thumbnail": "https://example.com/sample/2294"
+       },
+       {
+        "type": "image",
+        "url": "https://example.com/sample/2295",
+        "thumbnail": "https://example.com/sample/2296"
+       },
+       {
+        "type": "image",
+        "url": "https://example.com/sample/2297",
+        "thumbnail": "https://example.com/sample/2298"
+       }
+      ]
+     }
+    ],
+    "pagination": {
+     "page": 1,
+     "limit": 100,
+     "total": 1,
+     "pages": 1
+    },
+    "accounts": [
+     {
+      "_id": "6aec2a08399cfc501407a5e1",
+      "platform": "facebook",
+      "username": "Sample username 2299",
+      "displayName": "Sample displayName 2300",
+      "profileId": "6aa800e7fd8f93400838a89b",
+      "followersCount": 78,
+      "followersLastUpdated": "2026-11-05T07:02:32.716Z"
+     },
+     {
+      "_id": "6aec29c9056d89c45023d556",
+      "platform": "facebook",
+      "username": "Sample username 2301",
+      "displayName": "Sample displayName 2302",
+      "profileId": "6a6ff48cf964c89501951cf9",
+      "followersCount": 994,
+      "followersLastUpdated": "2026-11-05T07:01:29.585Z"
+     },
+     {
+      "_id": "6aec28c4cffff921eaad6e21",
+      "platform": "facebook",
+      "username": "Sample username 2303",
+      "displayName": "Sample displayName 2304",
+      "profileId": "6aa9e3fc69c97fce8161df74",
+      "followersCount": 144,
+      "followersLastUpdated": "2026-11-05T06:57:08.903Z"
+     },
+     {
+      "_id": "6aec2b4982f412cdf12c9676",
+      "platform": "facebook",
+      "username": "Sample username 2305",
+      "displayName": "Sample displayName 2306",
+      "profileId": "6ab9edae48812216462e77d4",
+      "followersCount": 6020,
+      "followersLastUpdated": "2026-11-05T07:07:53.899Z"
+     },
+     {
+      "_id": "6ad5885f24adc6edf8386841",
+      "platform": "facebook",
+      "username": "Sample username 2307",
+      "displayName": "Sample displayName 2308",
+      "profileId": "6ac30538bd18fa3f007d1698",
+      "followersCount": 367,
+      "followersLastUpdated": "2026-11-05T08:21:26.876Z"
+     },
+     {
+      "_id": "6adebf1664aefc26db91063e",
+      "platform": "facebook",
+      "username": "Sample username 2309",
+      "displayName": "Sample displayName 2310",
+      "profileId": "6aa92ab669c7b75f184541e2",
+      "followersCount": 6,
+      "followersLastUpdated": "2026-11-04T09:23:38.636Z"
+     },
+     {
+      "_id": "6aba5a55c37f1f55540dc525",
+      "platform": "facebook",
+      "username": "Sample username 2311",
+      "displayName": "Sample displayName 2312",
+      "profileId": "6aba59a92e5a9ebdb23cfdfb",
+      "followersCount": 1144,
+      "followersLastUpdated": "2026-11-05T06:25:08.534Z"
+     },
+     {
+      "_id": "6aba5b53d829446fd920d6aa",
+      "platform": "facebook",
+      "username": "Sample username 2313",
+      "displayName": "Sample displayName 2314",
+      "profileId": "6aa89351e83c3ab9408bcd87",
+      "followersCount": 1144,
+      "followersLastUpdated": "2026-11-05T06:25:43.522Z"
+     },
+     {
+      "_id": "6ae270aae7cad9a28471b5fd",
+      "platform": "facebook",
+      "username": "Sample username 2315",
+      "displayName": "Sample displayName 2316",
+      "profileId": "6ae26dd7cf5a48ef8fe69865",
+      "followersCount": 150,
+      "followersLastUpdated": "2026-11-04T09:48:48.582Z"
+     },
+     {
+      "_id": "6ad55b7f78132418843e17f6",
+      "platform": "facebook",
+      "username": "Sample username 2317",
+      "displayName": "Sample displayName 2318",
+      "profileId": "6abc7c9683d6589989b1d700",
+      "followersCount": 245,
+      "followersLastUpdated": "2026-11-05T08:20:53.659Z"
+     },
+     {
+      "_id": "6aaa43608d284ffb21069c2c",
+      "platform": "facebook",
+      "username": "Sample username 2319",
+      "displayName": "Sample displayName 2320",
+      "profileId": "6aa9172fd442650ab8453bd4",
+      "followersCount": 367,
+      "followersLastUpdated": "2026-11-05T05:34:29.222Z"
+     },
+     {
+      "_id": "6ae2700be7cad9a28471b576",
+      "platform": "facebook",
+      "username": "Sample username 2321",
+      "displayName": "Sample displayName 2322",
+      "profileId": "6ae26e9d9bb357d3eab4b97d",
+      "followersCount": 150,
+      "followersLastUpdated": "2026-11-04T09:48:47.084Z"
+     },
+     {
+      "_id": "6abf4fc8c9aafff9ce75a83d",
+      "platform": "facebook",
+      "username": "Sample username 2323",
+      "displayName": "Sample displayName 2324",
+      "profileId": "6ab085479ce265a7ad916980",
+      "followersCount": 134,
+      "followersLastUpdated": "2026-11-05T06:47:23.927Z"
+     },
+     {
+      "_id": "6abf4fc8c9aafff9ce75a83f",
+      "platform": "facebook",
+      "username": "Sample username 2325",
+      "displayName": "Sample displayName 2326",
+      "profileId": "6ab085479ce265a7ad916980",
+      "followersCount": 1,
+      "followersLastUpdated": "2026-11-05T06:47:24.363Z"
+     }
+    ],
+    "hasAnalyticsAccess": true
+   }
+  }
+ }
+}
