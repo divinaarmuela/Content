@@ -88,7 +88,9 @@ describe('a shoot brief opens for whoever made it or assigned its review (1 Oct 
   })
   it('a note left empty is removed when its editing ends, never saved blank', () => {
     const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'app/dashboard/production/shoots/[id]/BriefCanvas.tsx'), 'utf8')
-    expect(src).toMatch(/\(card\.kind === 'note' \|\| card\.kind === 'label'\) && !text\.trim\(\)\) \{\s*setCards\(prev => prev\.filter\(c => c\.id !== card\.id\)\)[\s\S]{0,120}persist\(\[\], \[card\.id\]\)/)
+    // …unless somebody dragged or resized it, which means it was placed on purpose (6 Nov 2026)
+    expect(src).toContain('placedRef.current.add(card.id)')
+    expect(src).toMatch(/\(card\.kind === 'note' \|\| card\.kind === 'label'\) && !text\.trim\(\) && !placedRef\.current\.has\(card\.id\)\) \{\s*setCards\(prev => prev\.filter\(c => c\.id !== card\.id\)\)[\s\S]{0,120}persist\(\[\], \[card\.id\]\)/)
   })
 })
 

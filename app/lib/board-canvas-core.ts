@@ -759,3 +759,70 @@ export function whenLabel(iso: string, now: Date = new Date()): string {
 export function itemBoardId(itemId: string): string {
   return `item-${itemId}`
 }
+
+/* ── LINES, AS MILANOTE DRAWS THEM (the owner, 6 Nov 2026) ──
+ * A line has a start, an end and a middle handle. Dragging the middle bends it into a curve that passes through the
+ * handle; dragging an end moves that end. Every other field the line already has (an imported Milanote line's
+ * label, weight, dashes, arrowheads, colour) is kept exactly — only the fields the drag owns change. */
+export type LinePoint = { x: number; y: number }
+export type LineShape = {
+  fx?: number; fy?: number; tx?: number; ty?: number; cx?: number; cy?: number
+  label?: string; start?: 'none' | 'arrow'; end?: 'none' | 'arrow'; dashed?: boolean; weight?: number
+}
+
+/** the quadratic control point that makes the curve pass through `mid` halfway along */
+export function controlThrough(a: LinePoint, b: LinePoint, mid: LinePoint): LinePoint {
+  return { x: Math.round(2 * mid.x - (a.x + b.x) / 2), y: Math.round(2 * mid.y - (a.y + b.y) / 2) }
+}
+
+/** where the middle handle sits: halfway along the curve (or the straight line) */
+export function lineMiddle(a: LinePoint, b: LinePoint, line?: Pick<LineShape, 'cx' | 'cy'>): LinePoint {
+  return line?.cx !== undefined && line?.cy !== undefined
+    ? { x: (a.x + 2 * line.cx + b.x) / 4, y: (a.y + 2 * line.cy + b.y) / 4 }
+    : { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }
+}
+
+/** the SVG path for a line: a curve through its handle, or straight */
+export function linePath(a: LinePoint, b: LinePoint, line?: Pick<LineShape, 'cx' | 'cy'>): string {
+  return line?.cx !== undefined && line?.cy !== undefined
+    ? `M${a.x},${a.y} Q${line.cx},${line.cy} ${b.x},${b.y}`
+    : `M${a.x},${a.y} L${b.x},${b.y}`
+}
+
+/** a new free line, dropped centred on a point: a short diagonal with an arrowhead at the top end */
+export function newFreeLine(centre: LinePoint, length = 200): LineShape {
+  const h = Math.round(length / 2 / Math.SQRT2)
+  return { fx: Math.round(centre.x - h), fy: Math.round(centre.y + h), tx: Math.round(centre.x + h), ty: Math.round(centre.y - h), start: 'none', end: 'arrow' }
+}
+
+/** a line's shape after its middle handle is dragged to `mid` (only cx/cy change) */
+export function bendLine(line: LineShape | undefined, a: LinePoint, b: LinePoint, mid: LinePoint): LineShape {
+  const c = controlThrough(a, b, mid)
+  // a card-to-card arrow had no line and always pointed; giving it one keeps the arrowhead
+  return { ...(line ?? { end: 'arrow' as const }), cx: c.x, cy: c.y }
+}
+
+/** a line straightened (the curve's handle removed; nothing else changes) */
+export function straightenLine(line: LineShape | undefined): LineShape | undefined {
+  if (!line) return line
+  const { cx: _cx, cy: _cy, ...rest } = line
+  void _cx; void _cy
+  return rest
+}
+
+/** a line's shape after one end is moved to a free point (only that end's x/y change) */
+export function moveLineEnd(line: LineShape | undefined, end: 'start' | 'end', p: LinePoint): LineShape {
+  const base = line ?? { end: 'arrow' as const }
+  return end === 'start' ? { ...base, fx: Math.round(p.x), fy: Math.round(p.y) } : { ...base, tx: Math.round(p.x), ty: Math.round(p.y) }
+}
+
+/** which arrowheads: the end, the start, both or none */
+export type ArrowHeads = 'end' | 'start' | 'both' | 'none'
+export function arrowHeadsOf(line: LineShape | undefined): ArrowHeads {
+  const end = line ? line.end === 'arrow' : true
+  const start = line?.start === 'arrow'
+  return end && start ? 'both' : end ? 'end' : start ? 'start' : 'none'
+}
+export function withArrowHeads(line: LineShape | undefined, heads: ArrowHeads): LineShape {
+  return { ...(line ?? {}), start: heads === 'start' || heads === 'both' ? 'arrow' : 'none', end: heads === 'end' || heads === 'both' ? 'arrow' : 'none' }
+}

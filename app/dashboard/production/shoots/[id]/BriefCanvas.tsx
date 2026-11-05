@@ -30,6 +30,7 @@ import {
   hasTextStyle, defaultAlignOf, textBoldOf, boldWordsIn, inBoldRun,
   CANVAS_FONTS, CANVAS_FONTS_HREF, FONT_LABEL, FONT_STACK, fontOf, hasFontChoice, type CanvasFont } from '../../../../lib/batch-brief-core'
 import { FONT_CLASS, fontVars } from './canvasFont'
+import { arrowHeadsOf, bendLine, lineMiddle, moveLineEnd, newFreeLine, straightenLine, withArrowHeads, type ArrowHeads, type LinePoint } from '../../../../lib/board-canvas-core'
 import { pastedTableWidth, tableFromClipboard } from '../../../../lib/canvas-paste-core'
 import { applyBold } from './BoldBox'
 import { holdPageScroll } from '../../../../lib/hold-page-scroll'
@@ -474,6 +475,70 @@ export default function BriefCanvas({
     return { x: (clientX - rect.left - cam.x) / cam.s, y: (clientY - rect.top - cam.y) / cam.s }
   }
 
+  /* ── LINES (the owner, 6 Nov 2026): a free line from the toolbar; a selected line has three handles — its start,
+   *    its end and its middle. The middle bends it, an end moves it (and joins a card when dropped on one). The drag
+   *    is drawn from local state and saved once, on release; only the fields that handle owns change. Nothing is
+   *    written for a line nobody dragged. ── */
+  const [lineEdit, setLineEdit] = useState<{ id: string; handle: 'start' | 'end' | 'mid'; card: CanvasCard } | null>(null)
+  const lineEnds = (arrow: CanvasCard): { a: LinePoint; b: LinePoint } | null => {
+    const fromCard = arrow.from ? cards.find(c => c.id === arrow.from) : undefined
+    const toCard = arrow.to ? cards.find(c => c.id === arrow.to) : undefined
+    const ln = arrow.line
+    const ac = fromCard ? centreOf(fromCard) : ln?.fx !== undefined && ln?.fy !== undefined ? { cx: ln.fx, cy: ln.fy } : null
+    const bc = toCard ? centreOf(toCard) : ln?.tx !== undefined && ln?.ty !== undefined ? { cx: ln.tx, cy: ln.ty } : null
+    return ac && bc ? { a: { x: ac.cx, y: ac.cy }, b: { x: bc.cx, y: bc.cy } } : null
+  }
+  const placeFreeLine = () => {
+    const line: CanvasCard = { id: mint(), kind: 'arrow', x: 0, y: 0, w: 240, z: 0, line: newFreeLine(centerWorld()), ...(board ? { parent: board } : {}) }
+    upsertLocal(line)
+    persist([line])
+    setSelected(line.id)
+  }
+  const saveLine = (next: CanvasCard) => { upsertLocal(next); persist([next]) }
+  const onLineHandleDown = (e: React.PointerEvent, arrow: CanvasCard, handle: 'start' | 'end' | 'mid') => {
+    e.stopPropagation()
+    e.preventDefault()
+    ;(e.currentTarget as Element).setPointerCapture?.(e.pointerId)
+    interactingRef.current = true
+    setLineEdit({ id: arrow.id, handle, card: arrow })
+  }
+  const onLineHandleMove = (e: React.PointerEvent) => {
+    if (!lineEdit) return
+    const p = toWorld(e.clientX, e.clientY)
+    const cur = lineEdit.card
+    if (lineEdit.handle === 'mid') {
+      const ends = lineEnds(cur)
+      if (!ends) return
+      setLineEdit({ ...lineEdit, card: { ...cur, line: bendLine(cur.line, ends.a, ends.b, p) } })
+      return
+    }
+    // an end pulled off its card becomes a free point; the other end keeps where it is
+    const other = lineEnds(cur)
+    const rest: CanvasCard = { ...cur }
+    if (lineEdit.handle === 'start') delete rest.from; else delete rest.to
+    let line = moveLineEnd(cur.line, lineEdit.handle, p)
+    if (other && lineEdit.handle === 'start' && !cur.to && line.tx === undefined) line = moveLineEnd(line, 'end', other.b)
+    if (other && lineEdit.handle === 'end' && !cur.from && line.fx === undefined) line = moveLineEnd(line, 'start', other.a)
+    setLineEdit({ ...lineEdit, card: { ...rest, line } })
+  }
+  const onLineHandleUp = (e: React.PointerEvent) => {
+    if (!lineEdit) return
+    interactingRef.current = false
+    let next = lineEdit.card
+    if (lineEdit.handle !== 'mid') {
+      // dropped on a card: that end joins it
+      const hits = typeof document.elementsFromPoint === 'function' ? document.elementsFromPoint(e.clientX, e.clientY) : []
+      const hit = hits.map(el => (el as HTMLElement).closest?.('[data-cid]') as HTMLElement | null).find(el => el && el.dataset.kind !== 'arrow')
+      const cid = hit?.dataset.cid
+      const otherId = lineEdit.handle === 'start' ? next.to : next.from
+      if (cid && cid !== otherId) next = lineEdit.handle === 'start' ? { ...next, from: cid } : { ...next, to: cid }
+    }
+    setLineEdit(null)
+    const before = cards.find(c => c.id === next.id)
+    if (before && JSON.stringify(before) === JSON.stringify(next)) return // a press without a move writes nothing
+    saveLine(next)
+  }
+
   const connectCards = (from: string, to: string) => {
     if (from === to) return
     // an arrow lives on the board its cards are on
@@ -493,6 +558,9 @@ export default function BriefCanvas({
   }
   const cancelLinkOpen = () => { if (openTimer.current) { window.clearTimeout(openTimer.current); openTimer.current = null } }
 
+  // PLACED ON PURPOSE (the owner, 6 Nov 2026: "the note disappears if we drag it without typing it first"): a note or
+  // heading somebody dragged or resized is kept even while it is empty; only an untouched stray one is cleaned up
+  const placedRef = useRef(new Set<string>())
   const onCardPointerDown = (e: React.PointerEvent, card: CanvasCard) => {
     draggedRef.current = false
     if (viewOnly || editing === card.id) return
@@ -614,6 +682,7 @@ export default function BriefCanvas({
     if (!d.moved && Math.hypot(dx, dy) < 4) return
     if (!d.moved) {
       d.moved = true
+      placedRef.current.add(card.id)
       interactingRef.current = true
       // bump to front visually — committing z through React here would
       // re-render every card at the exact moment the drag begins
@@ -745,6 +814,7 @@ export default function BriefCanvas({
 
   /* ── resizing: the same three handlers behind every handle ── */
   const startResize = (e: React.PointerEvent, card: CanvasCard, mode: 'e' | 'w' | 'se') => {
+    placedRef.current.add(card.id)
     e.stopPropagation()
     e.preventDefault()
     interactingRef.current = true
@@ -1148,7 +1218,7 @@ export default function BriefCanvas({
     // A NOTE LEFT EMPTY IS NOT KEPT (1 Oct 2026): a double-click on the board saves a blank note at
     // once, so clicking about a board that looked empty left ten "Write it down…" notes scattered
     // across Jordan 9th October's plan — nobody wrote them, and they hid the real cards
-    if ((card.kind === 'note' || card.kind === 'label') && !text.trim()) {
+    if ((card.kind === 'note' || card.kind === 'label') && !text.trim() && !placedRef.current.has(card.id)) {
       setCards(prev => prev.filter(c => c.id !== card.id))
       setSelected(sel => (sel === card.id ? null : sel))
       persist([], [card.id])
@@ -1698,8 +1768,8 @@ export default function BriefCanvas({
             <Copy className="h-3.5 w-3.5" /> Duplicate
           </Button>
         )}
-        <Button size="sm" variant="ghost" className={tb} onClick={() => { setConnectFrom(card.id); setSelected(null) }}>
-          <MoveUpRight className="h-3.5 w-3.5" /> Arrow
+        <Button size="sm" variant="ghost" className={tb} title="Draw a line from this card to another" onClick={() => { setConnectFrom(card.id); setSelected(null) }}>
+          <MoveUpRight className="h-3.5 w-3.5" /> Line to…
         </Button>
         <Button size="sm" variant="ghost" className={`${tb} text-accent-red hover:text-accent-red`} onClick={() => removeCard(card)} aria-label="Delete" title="Delete">
           <Trash2 className="h-3.5 w-3.5" />
@@ -1843,7 +1913,9 @@ export default function BriefCanvas({
               className="stroke-accent-blue" strokeWidth={1.5} strokeDasharray="4 3"
               strokeLinecap="round" markerEnd="url(#brief-arrowhead-sel)"
               style={{ pointerEvents: 'none' }} />
-            {ordered.filter(c => c.kind === 'arrow').map(arrow => {
+            {ordered.filter(c => c.kind === 'arrow').map(saved => {
+              // while a handle is dragged the line draws from the drag; otherwise exactly as saved
+              const arrow = lineEdit?.id === saved.id ? lineEdit.card : saved
               const fromCard = arrow.from ? cards.find(c => c.id === arrow.from) : undefined
               const toCard = arrow.to ? cards.find(c => c.id === arrow.to) : undefined
               const ln = arrow.line
@@ -1879,6 +1951,20 @@ export default function BriefCanvas({
                     markerEnd={endArrow ? marker : undefined}
                     markerStart={startArrow ? marker : undefined}
                     style={{ pointerEvents: 'none' }} />
+                  {isSel && !viewOnly && (() => {
+                    const m = lineMiddle({ x: a.cx, y: a.cy }, { x: b.cx, y: b.cy }, ln)
+                    const knob = (h: 'start' | 'end' | 'mid', x: number, y: number) => (
+                      <circle key={h} cx={x} cy={y} r={h === 'mid' ? 6 : 7} data-line-handle={h} data-card=""
+                        className={h === 'mid' ? 'fill-background stroke-accent-blue' : 'fill-accent-blue stroke-background'} strokeWidth={2}
+                        style={{ pointerEvents: 'all', cursor: h === 'mid' ? 'grab' : 'move', touchAction: 'none' }}
+                        onPointerDown={e => onLineHandleDown(e, saved, h)}
+                        onPointerMove={onLineHandleMove} onPointerUp={onLineHandleUp} onPointerCancel={onLineHandleUp}
+                        onDoubleClick={h === 'mid' ? (e => { e.stopPropagation(); if (saved.line?.cx !== undefined) saveLine({ ...saved, line: straightenLine(saved.line) }) }) : undefined}>
+                        <title>{h === 'mid' ? 'Drag to curve · double-click to straighten' : h === 'start' ? 'Drag the start' : 'Drag the end'}</title>
+                      </circle>
+                    )
+                    return <>{knob('start', a.cx, a.cy)}{knob('end', b.cx, b.cy)}{knob('mid', m.x, m.y)}</>
+                  })()}
                   {ln?.label && (
                     <text x={mid.x} y={mid.y} textAnchor="middle" dominantBaseline="middle"
                       className="fill-foreground text-[13px]" stroke="var(--background, #fff)" strokeWidth={4} paintOrder="stroke"
@@ -2116,7 +2202,7 @@ export default function BriefCanvas({
         {connectFrom !== null && (
           <div className="absolute left-1/2 top-3 z-10 -translate-x-1/2 rounded-full border border-accent-blue/25 bg-tint-blue px-3 py-1 text-secondary-13 text-foreground shadow-sm">
             {connectFrom === ''
-              ? 'Click the first card the arrow starts from — Esc cancels'
+              ? 'Click the first card the line starts from — Esc cancels'
               : 'Now click the card it points to — Esc cancels'}
           </div>
         )}
@@ -2149,9 +2235,10 @@ export default function BriefCanvas({
               onClick={() => addCard({ ...NEW_COLUMN })}>
               <Columns3 className="h-3.5 w-3.5" /> Column
             </Button>
-            <Button size="sm" variant={connectFrom !== null ? 'default' : 'ghost'} className="h-7 gap-1.5 px-2 text-secondary-13"
-              onClick={() => setConnectFrom(v => (v === null ? '' : null))}>
-              <MoveUpRight className="h-3.5 w-3.5" /> Arrow
+            <Button size="sm" variant="ghost" className="h-7 gap-1.5 px-2 text-secondary-13"
+              title="A line with an arrowhead: drag its middle to curve it, its ends to move them"
+              onClick={() => { setConnectFrom(null); placeFreeLine() }}>
+              <MoveUpRight className="h-3.5 w-3.5" /> Line
             </Button>
             {/* open: the dark pill must carry LIGHT words — `text-secondary-13`
                 sets a dark colour and hid "Post" (the owner, 13 Sep 2026) */}
@@ -2226,7 +2313,27 @@ export default function BriefCanvas({
         {/* an arrow has no box to hang a toolbar on: its one tool sits here */}
         {selectedCard && !viewOnly && !editing && selectedCard.kind === 'arrow' && (
           <div className="absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-1 rounded-inner border border-border bg-surface/95 p-1 shadow-md backdrop-blur">
-            <span className="px-2 font-mono text-[11px] uppercase tracking-wider text-muted-foreground">Arrow</span>
+            <span className="px-2 font-mono text-[11px] uppercase tracking-wider text-muted-foreground">Line</span>
+            {(['end', 'start', 'both', 'none'] as ArrowHeads[]).map(h => (
+              <Button key={h} size="sm" variant={arrowHeadsOf(selectedCard.line) === h ? 'default' : 'ghost'} className="h-8 px-2 text-secondary-13"
+                aria-pressed={arrowHeadsOf(selectedCard.line) === h} title={h === 'end' ? 'Arrowhead at the end' : h === 'start' ? 'Arrowhead at the start' : h === 'both' ? 'Arrowheads at both ends' : 'No arrowhead'}
+                onClick={() => saveLine({ ...selectedCard, line: withArrowHeads(selectedCard.line, h) })}>
+                {h === 'end' ? '→' : h === 'start' ? '←' : h === 'both' ? '↔' : '—'}
+              </Button>
+            ))}
+            <span className="mx-0.5 h-5 w-px bg-foreground/[0.08]" />
+            <Button size="sm" variant={selectedCard.line?.dashed ? 'default' : 'ghost'} className="h-8 px-2 text-secondary-13"
+              aria-pressed={!!selectedCard.line?.dashed}
+              onClick={() => { const ln = { ...(selectedCard.line ?? { end: 'arrow' as const }) }; if (ln.dashed) delete ln.dashed; else ln.dashed = true; saveLine({ ...selectedCard, line: ln }) }}>
+              Dashed
+            </Button>
+            {LINE_COLOURS.map(c => (
+              <button key={c.name} type="button" aria-label={`Colour ${c.name}`} title={c.name}
+                aria-pressed={(selectedCard.hex ?? undefined) === c.hex}
+                onClick={() => { const next: CanvasCard = { ...selectedCard }; if (c.hex) next.hex = c.hex; else delete next.hex; saveLine(next) }}
+                className={`h-6 w-6 rounded-full border [@media(pointer:coarse)]:h-10 [@media(pointer:coarse)]:w-10 ${(selectedCard.hex ?? undefined) === c.hex ? 'border-accent-blue ring-2 ring-accent-blue/30' : 'border-border'}`}
+                style={{ backgroundColor: c.hex ?? 'transparent' }} />
+            ))}
             <Button size="sm" variant="ghost" className="h-8 gap-1.5 px-2 text-accent-red hover:text-accent-red"
               onClick={() => removeCard(selectedCard)}>
               <Trash2 className="h-3.5 w-3.5" /> Delete
@@ -2357,3 +2464,8 @@ export default function BriefCanvas({
 
   return view
 }
+
+/** a line's colours: the default ink, then a few that read on the board (6 Nov 2026) */
+const LINE_COLOURS: { name: string; hex?: string }[] = [
+  { name: 'Default' }, { name: 'Red', hex: '#d64545' }, { name: 'Blue', hex: '#2f6fd6' }, { name: 'Green', hex: '#2e8b57' }, { name: 'Amber', hex: '#c98a1b' },
+]

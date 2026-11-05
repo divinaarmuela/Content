@@ -17,7 +17,7 @@ describe('the Editor page opens a card as a page', () => {
     expect(board).not.toContain('useCardSheet')
   })
   it('an email or bell link (?card=) still lands on the board and goes on to the page', () => {
-    expect(board).toContain('const id = readCardParam(window.location.search)')
+    expect(board).toContain("const cardParam = search?.get('card') ?? null") // read from the router (6 Nov 2026: going back bounced into the card)
     expect(board).toContain('if (id) router.replace(`/dashboard/editor/${id}`)')
   })
 })
