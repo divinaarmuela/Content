@@ -122,7 +122,7 @@ export type CandidatePost = {
 }
 /** RAISE WHEN HOW THE FIGURES ARE READ CHANGES: a month saved under an older one is read again on its next open
  *  (5 Nov 2026: stories were saved as "video" and ranked as blank top posts until someone pressed Read again) */
-export const REPORT_DATA_VERSION = 4
+export const REPORT_DATA_VERSION = 5
 export type ReportData = {
   /** REPORT_DATA_VERSION the figures were read under; unset = before 5 Nov 2026 */
   v?: number

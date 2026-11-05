@@ -231,7 +231,7 @@ async function figuresOf(acc: Account, profileId: string | null, m: MonthKey, ga
   // the views came from (the guide's Overview tab)
   if (acc.platform === 'instagram') {
     const ins = await zernio<{ metrics?: unknown }>('/analytics/instagram/account-insights', {
-      accountId: acc.id, metrics: 'views,reach,total_interactions,profile_views,profile_links_taps', fromDate: from, toDate: to, metricType: 'total_value',
+      accountId: acc.id, metrics: IG_METRICS, fromDate: from, toDate: to, metricType: 'total_value',
     })
     if (ins.ok) {
       const mt = obj(ins.data.metrics)
@@ -240,7 +240,24 @@ async function figuresOf(acc: Account, profileId: string | null, m: MonthKey, ga
       fig.interactions = metricTotal(mt, 'total_interactions') ?? fig.interactions
       fig.profileVisits = metricTotal(mt, 'profile_views')
       fig.linkTaps = metricTotal(mt, 'profile_links_taps')
+      // the parts of the interactions, from the same place, so they add up to it (5 Nov 2026: likes read 854 from
+      // Zernio's post roll-up against Instagram's 1,379)
+      fig.likes = metricTotal(mt, 'likes') ?? fig.likes
+      fig.comments = metricTotal(mt, 'comments') ?? fig.comments
+      fig.shares = metricTotal(mt, 'shares') ?? fig.shares
+      fig.saves = metricTotal(mt, 'saves') ?? fig.saves
     } else gaps.push(`Instagram account figures: ${ins.error}`)
+    // LAST MONTH FROM THE SAME PLACE (5 Nov 2026, Kode Finance: interactions "+99% vs last month (938)"). The
+    // comparison came from Zernio's post roll-up, a smaller and different count, so it was never like for like
+    // (September was really 1,684). Instagram's own figures for the month before, the same way as this month's.
+    const prevRange = monthRange(previousMonth(m))
+    const before = await zernio<{ metrics?: unknown }>('/analytics/instagram/account-insights', {
+      accountId: acc.id, metrics: IG_METRICS, fromDate: prevRange.from, toDate: prevRange.to, metricType: 'total_value',
+    })
+    if (before.ok) {
+      const mt = obj(before.data.metrics)
+      fig.previous = { views: metricTotal(mt, 'views'), reach: metricTotal(mt, 'reach'), interactions: metricTotal(mt, 'total_interactions') }
+    } else fig.previous = { views: null, reach: null, interactions: null }
     const split = await zernio<{ metrics?: unknown }>('/analytics/instagram/account-insights', {
       accountId: acc.id, metrics: 'views', fromDate: from, toDate: to, metricType: 'total_value', breakdown: 'follow_type',
     })
@@ -254,6 +271,8 @@ async function figuresOf(acc: Account, profileId: string | null, m: MonthKey, ga
   }
   return fig
 }
+
+const IG_METRICS = 'views,reach,total_interactions,profile_views,profile_links_taps,likes,comments,shares,saves'
 
 /** every figure for one client's month, read now, and kept on the report */
 export async function loadReportData(clientId: string, m: MonthKey): Promise<ReportData> {
