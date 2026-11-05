@@ -158,9 +158,15 @@ async function figuresOf(acc: Account, profileId: string | null, m: MonthKey, ga
   })
   if (!dash.ok) { gaps.push(`${label}: ${dash.error}`); return null }
   const d = dash.data
-  const totals = obj(d.totals), prev = obj(d.previousTotals)
+  const totals = obj(d.totals)
   const mine = (f: unknown) => arr(obj(f).byAccount).find(a => String(a.accountId) === acc.id) ?? obj(f)
   const fNow = mine(d.followers)
+  const prevRange = monthRange(previousMonth(m))
+  const prevDash = await zernio<Record<string, unknown>>('/analytics/dashboard', {
+    ...(profileId ? { profileId } : {}), platform: acc.platform, fromDate: prevRange.from, toDate: prevRange.to, topPosts: 0, recentPosts: 0,
+  })
+  const prev = prevDash.ok ? obj(prevDash.data.totals) : {}
+  if (!prevDash.ok) gaps.push(`${label}: last month's figures could not be read (${prevDash.error})`)
   const fig: PlatformFigures = {
     platform: acc.platform,
     handle: acc.handle,
@@ -171,31 +177,41 @@ async function figuresOf(acc: Account, profileId: string | null, m: MonthKey, ga
     interactions: [totals.likes, totals.comments, totals.shares, totals.saves].map(num).reduce<number | null>((n, v) => (v == null ? n : (n ?? 0) + v), null),
     likes: num(totals.likes), comments: num(totals.comments), shares: num(totals.shares), saves: num(totals.saves),
     profileVisits: null, linkTaps: null, viewsFromFollowers: null, viewsFromNonFollowers: null,
-    previous: {
-      views: num(prev.views) ?? num(prev.impressions), reach: num(prev.reach),
-      interactions: [prev.likes, prev.comments, prev.shares, prev.saves].map(num).reduce<number | null>((n, v) => (v == null ? n : (n ?? 0) + v), null),
-    },
+    // filled in below from LAST CALENDAR MONTH's own read — not Zernio's "previous period", which is the same number of
+    // days before the 1st (for October: 31 Aug – 30 Sep), so Capila's Facebook read 175 reached against September's 157
+    previous: { views: null, reach: null, interactions: null },
+    // what the interactions are made of, as given — so the page says "1 like + 6 shares", not a fixed list
+    interactionParts: { likes: num(totals.likes), comments: num(totals.comments), shares: num(totals.shares), saves: num(totals.saves) },
     daily: arr(d.daily).map(x => ({ date: String(x.date), views: num(x.views) ?? num(x.impressions) ?? 0, engagement: num(x.engagement) ?? 0, followersGained: num(x.followersGained) ?? 0 })),
     topPosts: [],
     posts: 0,
   }
-  // FOLLOWERS: ZERNIO'S MONTHLY COUNT (the owner, 5 Nov 2026: "yes, follower count"). /accounts/follower-stats with
-  // granularity=monthly gives the account's follower count on the 1st of each month, from Zernio's daily snapshot,
-  // the same for Instagram, Facebook, TikTok and LinkedIn. The month = the count on its 1st and on the next month's
-  // 1st (today's count while the month is running); last month = its own two counts. A count Zernio does not have
-  // (its snapshots began 1 Oct 2026) is left empty, never filled in.
+  fig.previous = prevDash.ok ? {
+    views: num(prev.views) ?? num(prev.impressions), reach: num(prev.reach),
+    interactions: [prev.likes, prev.comments, prev.shares, prev.saves].map(num).reduce<number | null>((n, v) => (v == null ? n : (n ?? 0) + v), null),
+  } : { views: null, reach: null, interactions: null }
+  // FOLLOWERS: ZERNIO'S DAILY FOLLOWER COUNT (5 Nov 2026), every platform: the month = its first tracked day's count
+  // to its last day's (today's while it runs). Instagram October for Anthony: 2,371 (3 Oct) → 2,414 (31 Oct) = +43,
+  // against Instagram's own app +44. A count Zernio does not have is left empty, never filled in.
   {
     const next = nextMonthStart(m)
     const prevStart = `${previousMonth(m)}-01`
     const today = new Date().toISOString().slice(0, 10)
+    // DAILY, NOT MONTHLY (5 Nov 2026): Zernio's monthly bucket labelled "1 Oct" carries a mid-month count (Anthony's
+    // Instagram: 2,390 = its 16 Oct count), so the month is read from the daily counts — first day in the month to the
+    // first day of the next (or the last day there is), the same for every platform
     const fs = await zernio<{ accounts?: unknown; stats?: Record<string, unknown> }>('/accounts/follower-stats', {
-      accountIds: acc.id, fromDate: prevStart, toDate: next <= today ? next : today, granularity: 'monthly',
+      accountIds: acc.id, fromDate: prevStart, toDate: next <= today ? next : today, granularity: 'daily',
     })
     if (fs.ok) {
-      const points = arr(obj(fs.data.stats)[acc.id])
-      const at = (d: string) => num(points.find(p => String(p.date).slice(0, 10) === d)?.followers)
-      const nowCount = num(arr(fs.data.accounts).find(a => String(a._id) === acc.id)?.currentFollowers)
-      fig.followers = followerMonth(at(`${m}-01`), next <= today ? at(next) : nowCount, at(prevStart))
+      const points = arr(obj(fs.data.stats)[acc.id]).map(p => ({ d: String(p.date).slice(0, 10), n: num(p.followers) })).filter(p => p.n != null).sort((a, b) => a.d.localeCompare(b.d))
+      const firstFrom = (d: string, before: string) => points.find(p => p.d >= d && p.d < before)?.n ?? null
+      const lastBefore = (d: string) => [...points].reverse().find(p => p.d < d)?.n ?? null
+      const start = firstFrom(`${m}-01`, next)
+      const end = next <= today ? lastBefore(next) : (num(arr(fs.data.accounts).find(a => String(a._id) === acc.id)?.currentFollowers) ?? lastBefore(next))
+      const prevFirst = firstFrom(prevStart, `${m}-01`)
+      const startDay = points.find(p => p.d >= `${m}-01` && p.d < next)?.d ?? null
+      fig.followers = { ...followerMonth(start, end, prevFirst), trackedFrom: startDay }
     } else {
       gaps.push(`${label}: the follower counts could not be read (${fs.error})`)
       fig.followers = { start: null, end: null, previousEnd: null, gained: null, previousGained: null }
@@ -233,6 +249,7 @@ async function figuresOf(acc: Account, profileId: string | null, m: MonthKey, ga
     fig.views = sum('views'); fig.reach = sum('reach')
     fig.likes = sum('likes'); fig.comments = sum('comments'); fig.shares = sum('shares'); fig.saves = sum('saves')
     fig.interactions = fig.likes + fig.comments + fig.shares + fig.saves
+    fig.interactionParts = { likes: fig.likes, comments: fig.comments, shares: fig.shares, saves: fig.saves }
     fig.previous = { views: null, reach: null, interactions: null }
     fig.daily = []
   }
@@ -270,13 +287,14 @@ async function figuresOf(acc: Account, profileId: string | null, m: MonthKey, ga
       fig.comments = metricTotal(mt, 'comments') ?? fig.comments
       fig.shares = metricTotal(mt, 'shares') ?? fig.shares
       fig.saves = metricTotal(mt, 'saves') ?? fig.saves
+      fig.interactionParts = { likes: fig.likes, comments: fig.comments, shares: fig.shares, saves: fig.saves }
     } else gaps.push(`Instagram account figures: ${ins.error}`)
     // LAST MONTH FROM THE SAME PLACE (5 Nov 2026, Kode Finance: interactions "+99% vs last month (938)"). The
     // comparison came from Zernio's post roll-up, a smaller and different count, so it was never like for like
     // (September was really 1,684). Instagram's own figures for the month before, the same way as this month's.
-    const prevRange = monthRange(previousMonth(m))
+    const prevIg = monthRange(previousMonth(m))
     const before = await zernio<{ metrics?: unknown }>('/analytics/instagram/account-insights', {
-      accountId: acc.id, metrics: IG_METRICS, fromDate: prevRange.from, toDate: prevRange.to, metricType: 'total_value',
+      accountId: acc.id, metrics: IG_METRICS, fromDate: prevIg.from, toDate: prevIg.to, metricType: 'total_value',
     })
     if (before.ok) {
       const mt = obj(before.data.metrics)

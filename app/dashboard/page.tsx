@@ -658,6 +658,23 @@ export default function OverviewPage() {
         why: readStoredHealth((a as { health?: unknown }).health)?.level === 'act' ? readStoredHealth((a as { health?: unknown }).health)!.reason : 'Disconnected — posts will not go out until it is reconnected.',
       }))
   }, [viewer, isManager, accountRows, live.tables.assignments.rows, live.tables.clients.rows])
+  // LOGINS RUNNING OUT SOON (the owner, 5 Nov 2026: "how come the Overview page is not showing it"): still posting,
+  // but reconnect before the date — the morning check's 'watch'
+  const expiringSoon = useMemo(() => {
+    if (!viewer || !isManager) return []
+    const scoped = accessibleClientIdsOf(viewer, live.tables.assignments.rows)
+    const names = new Map(live.tables.clients.rows.map(c => [c.id, c.name]))
+    return accountRows
+      .filter(a => a.active !== false && readStoredHealth((a as { health?: unknown }).health)?.level === 'watch'
+        && !!a.client_id && (scoped === null || scoped.includes(a.client_id)))
+      .map(a => ({
+        id: a.id, client_id: String(a.client_id), client: names.get(String(a.client_id)) ?? 'A client',
+        what: `${PLATFORM_NAMES[String(a.platform)] ?? a.platform} · @${(a as { username?: string | null }).username ?? a.name ?? ''}`,
+        why: readStoredHealth((a as { health?: unknown }).health)!.reason,
+        at: readStoredHealth((a as { health?: unknown }).health)!.expires_at ?? '',
+      }))
+      .sort((x, y) => x.at.localeCompare(y.at))
+  }, [viewer, isManager, accountRows, live.tables.assignments.rows, live.tables.clients.rows])
   const role = data?.role
   const zone = viewerTz || me?.timezone || DEFAULT_TZ
   const todayKey = now ? dayKeyInZone(now, zone) : null
@@ -934,6 +951,17 @@ export default function OverviewPage() {
         </Section>
       )}
 
+
+      {expiringSoon.length > 0 && (
+        <Section title={`${expiringSoon.length} ${expiringSoon.length === 1 ? 'login runs' : 'logins run'} out soon — still posting`}>
+          <div className="flex flex-col gap-2">
+            {expiringSoon.map(r => (
+              <WorkRow key={r.id} tone="surface" href={`/dashboard/social#client-${r.client_id}`}
+                title={`${r.client} · ${r.what}`} detail={r.why} chip="Reconnect before" />
+            ))}
+          </div>
+        </Section>
+      )}
 
       {/* a listener that could not read is a failure, not a page of zeros —
           every number below is drawn from those rows, and showing "0 waiting

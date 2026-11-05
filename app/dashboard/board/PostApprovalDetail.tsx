@@ -8,7 +8,7 @@ import { ArrowLeft, ArrowRight, ExternalLink, MessageCircle, Plus, RefreshCw, Tr
 import PickOrderDialog from './PickOrderDialog'
 import { cn } from '@/lib/utils'
 import { useRow, useTable } from '@/lib/db-client'
-import type { AssetVersion, Client, ContentItem, ItemComment, PublishJob, SocialPost, TeamUser, TeamUserClient, WorkflowActivity, WorkKind } from '@/lib/db-types'
+import type { AssetVersion, Client, ContentItem, ItemComment, PublishJob, SocialAccount, SocialPost, TeamUser, TeamUserClient, WorkflowActivity, WorkKind } from '@/lib/db-types'
 import { Button } from '@/components/ui/button'
 import Chip from '../ui/Chip'
 import { useRole } from '../useRole'
@@ -29,6 +29,7 @@ import {
 } from '../../lib/card-history-core'
 import { DEFAULT_TZ, formatInZone } from '../../lib/timezone-core'
 import { networkName } from '../../lib/publish-core'
+import { readStoredHealth } from '../../lib/account-health-core'
 import { clearGroup, dismissUpload, uploadFiles } from '../uploadQueue'
 import { UploadOverall, UploadRows, useUploadGroup } from '../UploadRows'
 import { usePlayable } from '../social/usePlayable'
@@ -154,6 +155,17 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
   // the AM manager name"). Read live from the client's team links.
   const byClient = useMemo(() => ({ client_id: item?.client_id ?? '' }), [item?.client_id])
   const { rows: clientLinks } = useTable<TeamUserClient>('team_user_clients', { by: byClient })
+  // THE CLIENT'S CHANNELS THAT NEED A WORD (the owner, 5 Nov 2026: "make sure it shows in post approval … when
+  // posting"): disconnected (posts will not go out) or a login running out soon (posts until the date)
+  const { rows: clientAccounts } = useTable<SocialAccount>('social_accounts', { by: byClient })
+  const channelWord = useMemo(() => clientAccounts
+    .map(a => ({ a, h: readStoredHealth((a as { health?: unknown }).health) }))
+    .filter(({ a, h }) => a.active === false || h?.level === 'act' || h?.level === 'watch')
+    .map(({ a, h }) => ({
+      id: a.id, down: a.active === false || h?.level === 'act',
+      what: `${networkName(String(a.platform))} · @${a.username ?? a.name ?? ''}`,
+      why: a.active === false ? 'Disconnected — posts will not go out until it is reconnected.' : h!.reason,
+    })), [clientAccounts])
   const { row: kind } = useRow<WorkKind>('work_kinds', item?.work_kind_id ?? null)
   const adhoc = (item as { adhoc_post?: unknown } | null)?.adhoc_post === true
   // the encoder's .mp4 copy of a master when one exists — a camera .mov
@@ -704,6 +716,15 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
       ]} />
 
       <div role="tabpanel" className={tabPanel(tab === 'post')}>
+      {channelWord.length > 0 && item.client_id && (
+        <div className={cn('rounded-inner border px-3 py-2 text-secondary-13', channelWord.some(c => c.down) ? 'border-accent-red/35 bg-tint-red' : 'border-accent-amber/35 bg-tint-amber')}>
+          <p className="font-semibold">{channelWord.some(c => c.down) ? 'A channel for this client is disconnected' : 'A login for this client runs out soon'}</p>
+          <ul className="mt-1 flex flex-col gap-0.5">
+            {channelWord.map(c => <li key={c.id}><span className="font-medium">{c.what}</span> — {c.why}</li>)}
+          </ul>
+          <a href={`/dashboard/social#client-${item.client_id}`} className="mt-1 inline-block underline decoration-dotted">Open the client’s channels to reconnect</a>
+        </div>
+      )}
       {/* ── 2a. THE FINISHED EDIT — the link the editor handed in, above the
           folder they worked from, so the reviewer opens the work first ── */}
       {finished && (

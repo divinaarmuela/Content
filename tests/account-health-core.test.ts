@@ -86,3 +86,14 @@ describe('the Channels card draws what the last check found (5 Oct 2026: Luxe La
     expect(ui).toContain('if (!live) return stored ?? null')
   })
 })
+
+// 5 Nov 2026: a healthy login running out within 14 days is said (Instagram/LinkedIn ~60-day logins); a daily-renewed one is not
+import { healthVerdict as hv } from '../app/lib/account-health-core'
+import { describe as d2, it as i2, expect as e2 } from 'vitest'
+d2('a login running out soon, though healthy', () => {
+  const now = Date.parse('2026-11-05T00:00:00Z')
+  const row = (days: number) => ({ status: 'healthy', tokenValid: true, canPost: true, tokenExpiresAt: new Date(now + days * 864e5).toISOString() })
+  i2('9 days out is watch, still posting', () => { const h = hv(row(9), now); e2(h.level).toBe('watch'); e2(h.can_post).toBe(true) })
+  i2('a 1-day rolling token (TikTok) stays ok', () => e2(hv(row(1), now).level).toBe('ok'))
+  i2('30 days out is ok', () => e2(hv(row(30), now).level).toBe('ok'))
+})

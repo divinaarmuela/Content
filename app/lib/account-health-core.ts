@@ -43,6 +43,10 @@ export type StoredHealth = {
 const DAY = 86_400_000
 /** a token that dies inside this many days is worth a word */
 export const WATCH_DAYS = 7
+/** a healthy login that runs out inside this many days is said everywhere (the Social page's own 14) */
+export const LOGIN_WATCH_DAYS = 14
+/** a login the provider renews every day (TikTok: 24 hours) — its date always looks this close */
+export const RENEWED_DAILY_DAYS = 2
 
 export function daysLeft(expiresAt: string | null, now: number): number | null {
   if (!expiresAt) return null
@@ -77,6 +81,16 @@ export function healthVerdict(row: ProviderHealth, now: number): StoredHealth {
   const vouched = status === 'healthy' && row.tokenValid === true
   if (!vouched && left !== null && left <= 0) {
     return { level: 'act', can_post: false, expires_at, checked_at, reason: 'Its connection has expired — reconnect it before the next post.' }
+  }
+  // A LOGIN THAT RUNS OUT SOON, though healthy today (the owner, 5 Nov 2026: "make sure it shows in post approval,
+  // when posting … and how come the Overview page is not showing it"). Instagram's and LinkedIn's last about 60
+  // days and are not renewed by the provider: 9–13 days out, the Social page warned and everywhere else said
+  // "Connected". A login renewed every day (TikTok's 24 hours) is never inside this window long enough to count.
+  if (vouched && left !== null && left > RENEWED_DAILY_DAYS && left <= LOGIN_WATCH_DAYS) {
+    return {
+      level: 'watch', can_post: true, expires_at, checked_at,
+      reason: `Connected, but its login runs out in ${left} days (${new Date(Date.parse(expires_at!)).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', timeZone: 'Australia/Melbourne' })}). It posts as normal until then — reconnect before that date.`,
+    }
   }
   if (status === 'warning' || (!vouched && left !== null && left <= WATCH_DAYS)) {
     return {

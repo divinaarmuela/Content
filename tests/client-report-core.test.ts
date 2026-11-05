@@ -33,7 +33,7 @@ describe('the figures', () => {
       .toEqual([{ label: 'Women', value: 3, pct: 75 }, { label: 'Men', value: 1, pct: 25 }])
     expect(change(120, 100)).toEqual({ text: '+20%', up: true })
     expect(change(80, 100)).toEqual({ text: '−20%', up: false })
-    expect(change(5, 0)).toEqual({ text: 'new', up: true })
+    expect(change(5, 0)).toBeNull() // last month's 0 is no comparison (5 Nov 2026)
     expect(change(null, 100)).toBeNull()
   })
 })

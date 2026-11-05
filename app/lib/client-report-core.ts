@@ -86,7 +86,9 @@ export type PlatformFigures = {
   handle: string | null
   followers: { start: number | null; end: number | null; previousEnd: number | null; gained: number | null
     /** what the month before gained, as Zernio gives it (5 Nov 2026: "each month compared to the previous month") */
-    previousGained?: number | null }
+    previousGained?: number | null
+    /** Instagram only: its follows and unfollows in the month, and the first day Zernio has them (5 Nov 2026) */
+    followsIn?: number | null; unfollowsOut?: number | null; trackedFrom?: string | null }
   views: number | null
   reach: number | null
   interactions: number | null
@@ -94,6 +96,8 @@ export type PlatformFigures = {
    *  'month' = views, reach and interactions that happened DURING the month, on any post (Zernio's day-by-day);
    *  'posts' = what the month's own posts have had so far (only where the platform gives nothing day by day) */
   countedAs?: 'month' | 'posts'
+  /** the interactions' own parts as the platform gave them (5 Nov 2026) */
+  interactionParts?: { likes: number | null; comments: number | null; shares: number | null; saves: number | null }
   likes: number | null
   comments: number | null
   shares: number | null
@@ -128,7 +132,7 @@ export type CandidatePost = {
 }
 /** RAISE WHEN HOW THE FIGURES ARE READ CHANGES: a month saved under an older one is read again on its next open
  *  (5 Nov 2026: stories were saved as "video" and ranked as blank top posts until someone pressed Read again) */
-export const REPORT_DATA_VERSION = 10
+export const REPORT_DATA_VERSION = 11
 export type ReportData = {
   /** REPORT_DATA_VERSION the figures were read under; unset = before 5 Nov 2026 */
   v?: number
@@ -156,7 +160,9 @@ export function toBreakdown(rows: readonly { dimension?: unknown; value?: unknow
 /** a change in words and a sign: "+12%" / "−8%" / "new" / null when there is nothing to compare */
 export function change(now: number | null | undefined, before: number | null | undefined): { text: string; up: boolean } | null {
   if (now == null || before == null) return null
-  if (before === 0) return now > 0 ? { text: 'new', up: true } : null
+  // LAST MONTH'S 0 IS NOT A COMPARISON (5 Nov 2026, Capila's Facebook: views 27 "new vs last month (0)" — Zernio gave
+  // 0 for September because it did not count views then, not because nobody watched). No percentage against 0.
+  if (before === 0) return null
   const pct = Math.round(((now - before) / before) * 100)
   return { text: `${pct >= 0 ? '+' : '−'}${Math.abs(pct)}%`, up: pct >= 0 }
 }
