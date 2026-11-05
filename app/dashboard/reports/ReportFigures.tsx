@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { ArrowDownRight, ArrowUpRight, ExternalLink } from 'lucide-react'
-import { change, fmt, monthRange, type Breakdown, type MonthKey, type PlatformFigures, type ReportData, type TopPost, platformLabel } from '../../lib/client-report-core'
+import { availableStats, statsFor, STAT_WORD, STATS, type Stat, change, fmt, monthRange, type Breakdown, type MonthKey, type PlatformFigures, type ReportData, type TopPost, platformLabel } from '../../lib/client-report-core'
 
 /** THE MONTH'S FIGURES, drawn — shared by the Reports page and the client's portal (5 Nov 2026) */
 
@@ -26,7 +26,12 @@ export function Kpi({ label, value, was, suffix, note, hint, compare = true }: {
   )
 }
 
-export function PlatformSection({ p, month, running }: { p: PlatformFigures; month: MonthKey; running: boolean }) {
+export function PlatformSection({ p, month, running, avail = null }: { p: PlatformFigures; month: MonthKey; running: boolean
+  /** which numbers each platform and kind of post gives (availableStats over the month's posts) */
+  avail?: Map<string, Set<Stat>> | null }) {
+  // a figure the platform did not give is left out, never drawn as 0 (5 Nov 2026)
+  const has = (v: number | null | undefined, was?: number | null) => (v ?? 0) > 0 || (was ?? 0) > 0
+  const stats = avail ?? availableStats(p.topPosts)
   const name = platformLabel(p.platform)
   const { from, to } = monthRange(month)
   const day = (d: string) => new Date(`${d}T00:00:00`).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })
@@ -38,14 +43,16 @@ export function PlatformSection({ p, month, running }: { p: PlatformFigures; mon
         {p.handle && <span className="text-[14px] text-muted-foreground">@{p.handle}</span>}
         <span className="ml-auto text-[13px] text-muted-foreground">{day(from)} – {day(to)} · {p.posts} {p.posts === 1 ? 'post' : 'posts'} this month</span>
       </header>
+      {/* WHAT THIS PLATFORM GIVES (the owner, 5 Nov 2026: "each social media line should say what analytics it provides") */}
+      <GivesLine platform={p.platform} avail={stats} />
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <Kpi label={running ? 'Followers now' : 'Followers at the end of the month'} value={p.followers.end} was={p.followers.previousEnd} compare={!running}
           note={running ? `${fmt(p.followers.previousEnd)} when the month began` : undefined} hint="People following the account." />
-        <Kpi label="Views" value={p.views} was={p.previous.views} compare={!running} note={soFar} hint="How many times the posts were seen, repeat views included." />
-        <Kpi label="Accounts reached" value={p.reach} was={p.previous.reach} compare={!running} note={soFar} hint="How many different people saw them." />
-        <Kpi label="Interactions" value={p.interactions} was={p.previous.interactions} compare={!running} note={soFar} hint="Likes, comments, shares and saves added together." />
-        {p.platform === 'instagram' && <Kpi label="Profile visits" value={p.profileVisits} note={soFar ?? 'this month'} hint="People who opened the profile." />}
-        {p.platform === 'instagram' && <Kpi label="Bio link taps" value={p.linkTaps} note={soFar ?? 'this month'} hint="Taps on the link in the bio." />}
+        {has(p.views, p.previous.views) && <Kpi label="Views" value={p.views} was={p.previous.views} compare={!running} note={soFar} hint="How many times the posts were seen, repeat views included." />}
+        {has(p.reach, p.previous.reach) && <Kpi label="Accounts reached" value={p.reach} was={p.previous.reach} compare={!running} note={soFar} hint="How many different people saw them." />}
+        {has(p.interactions, p.previous.interactions) && <Kpi label="Interactions" value={p.interactions} was={p.previous.interactions} compare={!running} note={soFar} hint="Likes, comments, shares and saves added together." />}
+        {p.platform === 'instagram' && has(p.profileVisits) && <Kpi label="Profile visits" value={p.profileVisits} note={soFar ?? 'this month'} hint="People who opened the profile." />}
+        {p.platform === 'instagram' && has(p.linkTaps) && <Kpi label="Bio link taps" value={p.linkTaps} note={soFar ?? 'this month'} hint="Taps on the link in the bio." />}
       </div>
       {p.viewsFromFollowers != null && p.viewsFromNonFollowers != null && (
         <div className="rounded-card border border-border bg-surface p-4">
@@ -74,14 +81,17 @@ export function PlatformSection({ p, month, running }: { p: PlatformFigures; mon
       {p.topPosts.length > 0 && (
         <div className="flex flex-col gap-2">
           <h3 className="text-[15px] font-semibold">Top {p.topPosts.length} posts by views</h3>
-          <ol className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">{p.topPosts.map((t, i) => <PostTile key={t.id} t={t} rank={i + 1} />)}</ol>
+          <ol className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">{p.topPosts.map((t, i) => <PostTile key={t.id} t={t} rank={i + 1} shown={statsFor({ ...t, platform: p.platform }, stats)} />)}</ol>
         </div>
       )}
     </section>
   )
 }
 
-export function PostTile({ t, rank }: { t: TopPost; rank: number }) {
+export function PostTile({ t, rank, shown = null }: { t: TopPost; rank: number; shown?: Stat[] | null }) {
+  const list = shown ?? statsFor(t, null)
+  const lead: Stat | null = list.includes('views') ? 'views' : list.includes('reach') ? 'reach' : null
+  const rest = list.filter(s => s !== lead)
   // a picture that will not load (an expired Instagram address on a month read before 2 Nov 2026) opens the post instead
   const [failed, setFailed] = useState(false)
   return (
@@ -96,12 +106,12 @@ export function PostTile({ t, rank }: { t: TopPost; rank: number }) {
       <div className="flex flex-1 flex-col gap-1.5 p-3">
         <span className="text-[12px] text-muted-foreground">{t.publishedAt ? new Date(t.publishedAt).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' }) : ''}{t.format ? ` · ${t.format}` : ''}</span>
         <p className="line-clamp-2 text-[13px]">{t.caption || 'No caption'}</p>
-        <p className="mt-auto text-[13px]"><strong className="tabular-nums">{fmt(t.views)}</strong> views</p>
+        {lead
+          ? <p className="mt-auto text-[13px]"><strong className="tabular-nums">{fmt(t[lead])}</strong> {STAT_WORD[lead][t[lead] === 1 ? 0 : 1]}{lead === 'reach' && <span className="text-muted-foreground"> · no views given</span>}</p>
+          : <p className="mt-auto text-[13px] text-muted-foreground">{t.format === 'story' ? 'Story: no numbers once it expires' : 'No numbers given for this post'}</p>}
         {/* Facebook gives no likes, comments, shares or saves for reels (Graph: "nonexisting field (reactions)",
             checked 5 Nov 2026): a row of zeros there is "not given", said so */}
-        {t.platform === 'facebook' && !t.likes && !t.comments && !t.shares && !t.saves
-          ? <p className="text-[12px] text-muted-foreground">Facebook gives views only for this post, not likes or comments.</p>
-          : <p className="text-[12px] text-muted-foreground tabular-nums">{fmt(t.likes)} likes · {fmt(t.comments)} comments · {fmt(t.shares)} shares · {fmt(t.saves)} saves</p>}
+        {rest.length > 0 && <p className="text-[12px] text-muted-foreground tabular-nums">{rest.map(s => `${fmt(t[s])} ${STAT_WORD[s][t[s] === 1 ? 0 : 1]}`).join(' · ')}</p>}
         {t.url && <a href={t.url} target="_blank" rel="noreferrer" className="no-print inline-flex items-center gap-1 text-[12px] underline underline-offset-4">Open <ExternalLink className="h-3 w-3" aria-hidden /></a>}
       </div>
     </li>
@@ -148,5 +158,29 @@ export function AudienceSection({ a }: { a: NonNullable<ReportData['audience']> 
         </>
       )}
     </section>
+  )
+}
+
+const KIND_WORD: Record<string, string> = { reel: 'videos and reels', carousel: 'carousels', image: 'images', story: 'stories' }
+// views and reach are different numbers, said so: views = times seen (repeats count), reach = different people
+const statWord = (st: Stat) => (st === 'views' ? 'views (times seen)' : st === 'reach' ? 'reach (people who saw it)' : STAT_WORD[st][1])
+
+/** "Gives: views, reach, likes… · Not given: …", per kind of post when they differ */
+export function GivesLine({ platform, avail }: { platform: string; avail: Map<string, Set<Stat>> }) {
+  const kinds = [...avail.entries()].filter(([k]) => k.startsWith(`${platform}:`)).map(([k, set]) => [k.split(':')[1], set] as const)
+  if (!kinds.length) return null
+  const say = (set: ReadonlySet<Stat>) => {
+    const given = STATS.filter(st => set.has(st)).map(statWord)
+    const not = STATS.filter(st => !set.has(st)).map(statWord)
+    return `${given.length ? given.join(', ') : 'no numbers'}${not.length && given.length ? ` · not given: ${not.join(', ')}` : ''}`
+  }
+  const same = kinds.every(([, set]) => STATS.every(st => set.has(st) === kinds[0][1].has(st)))
+  return (
+    <div className="-mt-2 rounded-inner bg-muted/50 px-3 py-2 text-[12px] text-muted-foreground">
+      <span className="font-semibold text-foreground">What {platformLabel(platform)} gives: </span>
+      {same
+        ? say(kinds[0][1])
+        : kinds.map(([kind, set]) => <span key={kind} className="block"><span className="text-foreground">{KIND_WORD[kind] ?? kind}</span>: {kind === 'story' && set.size === 0 ? 'no numbers once a story expires' : say(set)}</span>)}
+    </div>
   )
 }

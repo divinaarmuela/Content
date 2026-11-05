@@ -3,7 +3,7 @@
 import { useMemo, useState, type CSSProperties } from 'react'
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { ExternalLink, X } from 'lucide-react'
-import { fmt, reportHtml, type CandidatePost, platformLabel } from '../../lib/client-report-core'
+import { fmt, reportHtml, type CandidatePost, platformLabel, availableStats, statsFor, STAT_WORD } from '../../lib/client-report-core'
 import { Kpi, AudienceSection } from '../../dashboard/reports/ReportFigures'
 import type { PortalReport as Report } from '../../lib/portal-reports'
 
@@ -49,6 +49,8 @@ export default function PortalReport({ report }: { report: Report }) {
   const [sort, setSort] = useState<'views' | 'newest'>('views')
   const [open, setOpen] = useState<CandidatePost | null>(null)
   const kinds = [...new Set(report.posts.map(c => mediumName(c.format)))]
+  // only the numbers each platform gives (5 Nov 2026)
+  const avail = useMemo(() => availableStats(report.posts), [report.posts])
   const postPlatforms = [...new Set(report.posts.map(c => c.platform))]
   const posts = report.posts
     .filter(c => (where === 'all' || c.platform === where) && (kind === 'all' || mediumName(c.format) === kind))
@@ -132,7 +134,7 @@ export default function PortalReport({ report }: { report: Report }) {
                           <span className="rounded-full border border-border px-2 py-0.5 text-[11px] font-semibold">{platformName(c.platform)}</span>
                           <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold">{mediumName(c.format)}</span>
                         </span>
-                        <span className="text-[13px]"><strong className="tabular-nums">{fmt(c.views || c.reach || 0)}</strong> <span className="text-muted-foreground">{c.views ? 'views' : 'reached'} · {day(c.publishedAt)}</span></span>
+                        <span className="text-[13px]"><strong className="tabular-nums">{fmt(c.views || c.reach || 0)}</strong> <span className="text-muted-foreground">{c.views ? 'views' : 'people reached'} · {day(c.publishedAt)}</span></span>
                         <span className="line-clamp-2 text-[12px] text-muted-foreground">{c.caption || 'No caption'}</span>
                       </div>
                     </button>
@@ -172,8 +174,7 @@ export default function PortalReport({ report }: { report: Report }) {
                   <button type="button" onClick={() => setOpen(null)} aria-label="Close" className="ml-auto flex h-10 w-10 items-center justify-center rounded-full hover:bg-muted"><X className="h-5 w-5" /></button>
                 </div>
                 <dl className="grid grid-cols-3 gap-2">
-                  {([['Views', open.views], ['Reached', open.reach], ['Likes', open.likes], ['Comments', open.comments], ['Shares', open.shares], ['Saves', open.saves]] as [string, number | undefined][])
-                    .filter(([, v]) => v != null)
+                  {statsFor(open, avail).map(s => [s === 'reach' ? 'People reached' : STAT_WORD[s][1][0].toUpperCase() + STAT_WORD[s][1].slice(1), open[s]] as [string, number | undefined])
                     .map(([k, v]) => (
                       <div key={k} className="rounded-inner border border-border p-2.5">
                         <dt className="text-[11px] text-muted-foreground">{k}</dt>

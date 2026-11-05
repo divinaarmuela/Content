@@ -458,3 +458,41 @@ export function writtenFromOldFigures(r: { body?: string | null; written_v?: unk
   if (!r?.body) return false
   return typeof r.written_v !== 'number' || r.written_v < REPORT_DATA_VERSION
 }
+
+/* ── ONLY WHAT EACH PLATFORM GIVES (the owner, 5 Nov 2026: "show only what analytics are available for Instagram,
+ * LinkedIn, Facebook and TikTok") ──
+ * A number a platform does not give came back as 0 and was drawn as one (Facebook reels: 0 likes, 0 comments, which
+ * Facebook never reports — Graph answers "nonexisting field (reactions)"). A number is shown for a platform and kind
+ * of post only when some post of that platform and kind this month has it; otherwise it is left out, not drawn as 0. */
+export type Stat = 'views' | 'reach' | 'likes' | 'comments' | 'shares' | 'saves'
+export const STATS: readonly Stat[] = ['views', 'reach', 'likes', 'comments', 'shares', 'saves']
+export const STAT_WORD: Record<Stat, [string, string]> = {
+  views: ['view', 'views'], reach: ['person reached', 'people reached'], likes: ['like', 'likes'], comments: ['comment', 'comments'], shares: ['share', 'shares'], saves: ['save', 'saves'],
+}
+type StatPost = { platform: string; format?: string | null } & Partial<Record<Stat, number | null>>
+export function postKindOf(format: string | null | undefined): 'story' | 'reel' | 'carousel' | 'image' {
+  const f = String(format ?? '').toLowerCase()
+  if (f === 'story') return 'story'
+  if (/carousel|album/.test(f)) return 'carousel'
+  if (/video|reel/.test(f)) return 'reel'
+  return 'image'
+}
+const statKey = (p: StatPost) => `${p.platform}:${postKindOf(p.format)}`
+
+/** which numbers each platform and kind of post actually gave this month */
+export function availableStats(posts: readonly StatPost[]): Map<string, Set<Stat>> {
+  const out = new Map<string, Set<Stat>>()
+  for (const p of posts) {
+    const k = statKey(p)
+    const set = out.get(k) ?? new Set<Stat>()
+    for (const s of STATS) if ((p[s] ?? 0) > 0) set.add(s)
+    out.set(k, set)
+  }
+  return out
+}
+
+/** the numbers to show for this post: those its platform and kind give (never a 0 that means "not given") */
+export function statsFor(post: StatPost, avail: Map<string, Set<Stat>> | null): Stat[] {
+  const set = avail?.get(statKey(post))
+  return STATS.filter(s => (set ? set.has(s) : (post[s] ?? 0) > 0))
+}

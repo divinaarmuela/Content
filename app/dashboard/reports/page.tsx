@@ -20,7 +20,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { readPostsExplained } from '../../lib/post-breakdown-core'
 import {
   FRESHNESS, REVIEW_CHECKS, allChecked, change, fmt, melbourneDay, monthLabel, monthRange, monthState, readReportData, recentMonths, reportHtml,
-  type Breakdown, type MonthKey, type MonthState, type PlatformFigures, type ReportData, type TopPost, readHistory, type ReportVersion, includedIds, type CandidatePost, includedPlatforms, scopeData, platformLabel, writtenFromOldFigures } from '../../lib/client-report-core'
+  type Breakdown, type MonthKey, type MonthState, type PlatformFigures, type ReportData, type TopPost, readHistory, type ReportVersion, includedIds, type CandidatePost, includedPlatforms, scopeData, platformLabel, writtenFromOldFigures, availableStats } from '../../lib/client-report-core'
 
 /**
  * REPORTS — THE MONTHLY CLIENT REPORT (the owner, 26 Oct 2026: "we need to build a client reporting page … we should view
@@ -144,7 +144,7 @@ export default function ReportsPage() {
           )}
           {data.platforms.map(p => (
             <div key={p.platform} className="flex flex-col gap-6">
-              <PlatformSection p={p} month={data.month} running={state.kind === 'running'} />
+              <PlatformSection p={p} month={data.month} running={state.kind === 'running'} avail={(data.candidates?.length ? availableStats(data.candidates) : null)} />
             </div>
           ))}
           {data.audience && <AudienceSection a={data.audience} />}
