@@ -76,3 +76,12 @@ describe('a saved report read back', () => {
     expect(readReportData(null)).toBeNull()
   })
 })
+
+import { availableStats as av } from '../app/lib/client-report-core'
+import { it as it2, expect as ex2 } from 'vitest'
+it2('Instagram carousels give saves even when none got one (5 Nov 2026)', () => {
+  const m = av([{ platform: 'instagram', format: 'carousel', views: 10, reach: 5, likes: 2, comments: 0, shares: 0, saves: 0 }])
+  ex2(m.get('instagram:carousel')?.has('saves')).toBe(true)
+  const f = av([{ platform: 'facebook', format: 'carousel', reach: 5, likes: 0 }])
+  ex2(f.get('facebook:carousel')?.has('views')).toBe(false)
+})
