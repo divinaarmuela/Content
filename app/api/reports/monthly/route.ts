@@ -3,7 +3,7 @@ import { table, withRequestCache } from '@/lib/db'
 import type { Client, ClientReport } from '@/lib/db-types'
 import { AuthzError, authzErrorResponse, requireRole, type TeamUser } from '@/app/lib/authz'
 import { accessibleClientIds } from '@/app/lib/production-access'
-import { isMonthKey, mayDeleteReport, mayOpenReports, reportId, REVIEW_CHECKS, type MonthKey, keepVersion} from '@/app/lib/client-report-core'
+import { isMonthKey, mayDeleteReport, mayOpenReports, reportId, REVIEW_CHECKS, type MonthKey, keepVersion, REPORT_DATA_VERSION } from '@/app/lib/client-report-core'
 import { generateReport, loadReportData } from '@/app/lib/client-report'
 import { explainMonth } from '@/app/lib/post-breakdown'
 import { logActivity } from '@/app/lib/workflow'
@@ -52,7 +52,9 @@ export async function GET(req: Request) {
       const { clientId, month } = pick(req.url)
       await mayReportOn(user, clientId)
       let report = await table<ClientReport>('client_reports').get(reportId(clientId, month))
-      if (!report?.data || q.get('refresh') === '1') {
+      // figures read under an older way of reading are read again (REPORT_DATA_VERSION)
+      const stale = (report?.data as { v?: number } | null | undefined)?.v !== REPORT_DATA_VERSION
+      if (!report?.data || stale || q.get('refresh') === '1') {
         await loadReportData(clientId, month)
         report = await table<ClientReport>('client_reports').get(reportId(clientId, month))
       }

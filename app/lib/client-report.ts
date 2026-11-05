@@ -3,7 +3,7 @@ import { table } from '@/lib/db'
 import type { AudienceSnapshot, Client, ClientReport } from '@/lib/db-types'
 import {
   monthRange, previousMonth, readReportData, reportId, reportPrompt, toBreakdown,
-  type Audience, type MonthKey, type PlatformFigures, type ReportData, type TopPost, keepVersion, includedIds, type CandidatePost } from './client-report-core'
+  type Audience, type MonthKey, type PlatformFigures, type ReportData, type TopPost, keepVersion, includedIds, type CandidatePost, REPORT_DATA_VERSION } from './client-report-core'
 import { breakdownLines, readPostsExplained } from './post-breakdown-core'
 import { keepPictures } from './report-pictures'
 import { aiClient, aiError, viaGateway, writerModel } from './ai-gateway'
@@ -242,6 +242,7 @@ export async function loadReportData(clientId: string, m: MonthKey): Promise<Rep
   if (ig && !audience) gaps.push('Audience breakdown: Instagram only gives it for the current month, to accounts with 100+ followers — none was kept for this month')
   const data: ReportData = {
     clientId, clientName: client.name, industry: (client as { industry?: string | null }).industry ?? null,
+    v: REPORT_DATA_VERSION,
     month: m, fetchedAt: now.toISOString(), platforms, audience, gaps,
     candidates: candidates.sort((a, b) => String(b.publishedAt ?? '').localeCompare(String(a.publishedAt ?? ''))),
   }

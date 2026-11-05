@@ -118,7 +118,12 @@ export type CandidatePost = {
   id: string; platform: string; publishedAt: string | null; url: string | null; thumbnail: string | null
   caption: string; format: string | null; views: number; byMdm: boolean
 }
+/** RAISE WHEN HOW THE FIGURES ARE READ CHANGES: a month saved under an older one is read again on its next open
+ *  (5 Nov 2026: stories were saved as "video" and ranked as blank top posts until someone pressed Read again) */
+export const REPORT_DATA_VERSION = 2
 export type ReportData = {
+  /** REPORT_DATA_VERSION the figures were read under; unset = before 5 Nov 2026 */
+  v?: number
   /** every post of the month on each account, marked when MD Media published it (5 Nov 2026) */
   candidates?: CandidatePost[]
   clientId: string
@@ -329,6 +334,7 @@ export function readReportData(raw: unknown): ReportData | null {
     month: String(d.month ?? ''), fetchedAt: String(d.fetchedAt ?? ''),
     gaps: list<string>(d.gaps),
     candidates: list<CandidatePost>(d.candidates),
+    v: typeof d.v === 'number' ? d.v : undefined,
     audience: a ? {
       asOf: a.asOf ?? null, age: list(a.age), cities: list(a.cities), countries: list(a.countries),
       engaged: a.engaged ? { age: list(a.engaged.age), cities: list(a.engaged.cities), countries: list(a.engaged.countries) } : null,
