@@ -19,7 +19,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { readPostsExplained } from '../../lib/post-breakdown-core'
 import {
   FRESHNESS, REVIEW_CHECKS, allChecked, change, fmt, melbourneDay, monthLabel, monthRange, monthState, readReportData, recentMonths, reportHtml,
-  type Breakdown, type MonthKey, type MonthState, type PlatformFigures, type ReportData, type TopPost, readHistory, type ReportVersion} from '../../lib/client-report-core'
+  type Breakdown, type MonthKey, type MonthState, type PlatformFigures, type ReportData, type TopPost, readHistory, type ReportVersion, includedIds, type CandidatePost} from '../../lib/client-report-core'
 
 /**
  * REPORTS — THE MONTHLY CLIENT REPORT (the owner, 26 Oct 2026: "we need to build a client reporting page … we should view
@@ -141,16 +141,12 @@ export default function ReportsPage() {
           {data.audience && <AudienceSection a={data.audience} />}
           {/* WHY THE POSTS WORKED, RIGHT ABOVE THE REPORT (the owner, 4 Nov 2026: "one button … make sure explain the
               posts is shown as well near the report so it's nice and clear") — filled by Build report, no button of its own */}
-          {/* THE POSTS IN THIS REPORT (5 Nov 2026): MD Media's own posts ticked, any other addable */}
-          {(data.candidates?.length ?? 0) > 0 && (
-            <PostsInReport candidates={data.candidates!} saved={report?.included_post_ids} clientId={clientId} month={month} onChange={r => setReport(r as Saved)} />
-          )}
           {data.platforms.some(p => p.platform === 'instagram') && (
             <PostBreakdowns raw={report?.posts_explained} clientId={clientId} month={month} onChange={r => setReport(r as Saved)} noButton
               explainedBy={report?.explained_by ? people[String(report.explained_by)] ?? null : null} />
           )}
           {report && <Writer report={report} clientId={clientId} month={month} mayDelete={mayDelete} onChange={setReport} onDeleted={() => void load()}
-            settled={state.kind === 'final'} settlesOn={state.settlesOn} people={people} />}
+            settled={state.kind === 'final'} settlesOn={state.settlesOn} people={people} candidates={data.candidates ?? []} />}
           <PrintReport data={data} report={report} clientName={clientName} />
         </>
       )}
@@ -336,12 +332,18 @@ function AudienceSection({ a }: { a: NonNullable<ReportData['audience']> }) {
 
 /* ── the written report ──────────────────────────────────────────────────── */
 
-function Writer({ report, clientId, month, mayDelete, onChange, onDeleted, settled, settlesOn, people }: {
+function Writer({ report, clientId, month, mayDelete, onChange, onDeleted, settled, settlesOn, people, candidates }: {
   report: Saved; clientId: string; month: MonthKey; mayDelete: boolean; onChange: (r: Saved) => void; onDeleted: () => void
   /** the month's numbers are complete (2 days after it ends) — building before that is allowed, but said */
   settled: boolean; settlesOn: string
   people: Record<string, string>
+  /** the month's posts, for the Build report popup's "these posts are included" */
+  candidates: CandidatePost[]
 }) {
+  // ONE THING (the owner, 5 Nov 2026: "why are there two things"): Build report opens a popup with the posts that are
+  // included, more can be ticked in there, and its button builds the report
+  const [picking, setPicking] = useState(false)
+  const pickedCount = includedIds(report.included_post_ids, candidates).size
   const [objective, setObjective] = useState(report.objective || 'Growth')
   const [notes, setNotes] = useState(report.notes ?? '')
   const [body, setBody] = useState(report.body ?? '')
@@ -423,7 +425,7 @@ function Writer({ report, clientId, month, mayDelete, onChange, onDeleted, settl
   return (
     <section className="no-print flex flex-col gap-4 rounded-card border border-border bg-surface p-5">
       <header className="flex flex-wrap items-center gap-2">
-        <h2 className="mr-auto text-[20px] font-semibold"><span className="text-muted-foreground">Step 2 · </span>Build the report</h2>
+        <h2 className="mr-auto text-[20px] font-semibold">The report</h2>
         {report.body && <span className="text-[13px] text-muted-foreground">{stampLine(report, people)}</span>}
         {mayDelete && report.body && (
           <Button variant="ghost" onClick={() => setAsking('delete')} className="h-10 gap-1.5 rounded-full text-destructive"><Trash2 className="h-4 w-4" aria-hidden /> Delete</Button>
@@ -443,7 +445,7 @@ function Writer({ report, clientId, month, mayDelete, onChange, onDeleted, settl
         </label>
       </div>
       <div className="flex flex-wrap items-center gap-3">
-        <Button onClick={() => (report.body ? setAsking('regen') : void build())} disabled={writing || !!building} className="h-11 gap-2 rounded-full px-5">
+        <Button onClick={() => (candidates.length ? setPicking(true) : report.body ? setAsking('regen') : void build())} disabled={writing || !!building} className="h-11 gap-2 rounded-full px-5">
           <Sparkles className={`h-4 w-4 ${building ? 'animate-pulse' : ''}`} aria-hidden /> {building ? 'Building…' : report.body ? 'Build again' : 'Build report'}
         </Button>
         {building && <span className="text-[13px] text-muted-foreground" role="status">{building}</span>}
@@ -488,9 +490,25 @@ function Writer({ report, clientId, month, mayDelete, onChange, onDeleted, settl
           </div>
         </>
       ) : !writing && (
-        <p className="text-[14px] text-muted-foreground">When the ticked posts above look right, press Build report. That one button does everything: it reads the figures fresh, explains the ticked posts, and writes the report. Notes are optional.</p>
+        <p className="text-[14px] text-muted-foreground">Press Build report. It shows the posts that are included, you can add more, then it builds the report.</p>
       )}
 
+      <Dialog open={picking} onOpenChange={setPicking}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto bg-popover sm:max-w-[960px]">
+          <DialogHeader>
+            <DialogTitle>{report.body ? 'Build the report again' : 'Build the report'}</DialogTitle>
+            <DialogDescription>These posts are included. Click a post to add it or take it out, then press the button at the bottom.</DialogDescription>
+          </DialogHeader>
+          <PostsInReport candidates={candidates} saved={report.included_post_ids} clientId={clientId} month={month} onChange={r => onChange(r as Saved)} />
+          <div className="sticky bottom-0 -mx-6 -mb-6 flex flex-wrap items-center justify-end gap-3 border-t border-border bg-popover px-6 py-4">
+            {report.body && <span className="mr-auto text-[13px] text-muted-foreground">The current report is kept under Earlier versions.</span>}
+            <Button variant="ghost" onClick={() => setPicking(false)} className="h-11 rounded-full">Cancel</Button>
+            <Button disabled={pickedCount === 0} onClick={() => { setPicking(false); void build() }} className="h-11 gap-2 rounded-full px-5">
+              <Sparkles className="h-4 w-4" aria-hidden /> Build report with {pickedCount} post{pickedCount === 1 ? '' : 's'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
       <AlertDialog open={asking !== null} onOpenChange={o => { if (!o) setAsking(null) }}>
         <AlertDialogContent className="bg-popover">
           <AlertDialogHeader>
