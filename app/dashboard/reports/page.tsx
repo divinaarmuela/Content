@@ -180,7 +180,7 @@ function FreshnessCard({ state, month, fetchedAt }: { state: MonthState; month: 
         <summary className="cursor-pointer font-semibold">How up to date each number is</summary>
         <ul className="mt-1.5 flex flex-col gap-0.5">
           {FRESHNESS.map(f => <li key={f.what}><strong>{f.what}</strong>: {f.how}</li>)}
-          <li>All of it comes from Zernio, which reads it from Instagram and Facebook.</li>
+          <li>All of it is read straight from Instagram and Facebook.</li>
         </ul>
       </details>
     </TintCard>
@@ -666,7 +666,7 @@ function HowItWorks() {
   const [open, setOpen] = useState(false)
   const steps: { title: string; body: string }[] = [
     { title: '1. The figures are read from the client’s own accounts',
-      body: 'Every number comes from the client’s connected Instagram and Facebook, read through Zernio (our posting tool). Nothing is typed in by hand and nothing is posted or changed — it only reads. “Read the figures again” fetches them fresh.' },
+      body: 'Every number comes from the client’s connected Instagram and Facebook. Nothing is typed in by hand and nothing is posted or changed — it only reads. “Read the figures again” fetches them fresh.' },
     { title: '2. The month is not final straight away',
       body: 'Instagram keeps counting views and reach for a couple of days after a post goes out, so a month’s numbers settle 2 days after it ends. Build it before then and the report says so — build it again after for the final numbers.' },
     { title: '3. The posts are explained',
