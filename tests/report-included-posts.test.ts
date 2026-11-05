@@ -42,3 +42,10 @@ describe('the accounts in a report (5 Nov 2026)', async () => {
     expect(platformLabel('linkedin')).toBe('LinkedIn')
   })
 })
+
+describe('followers at the month end (5 Nov 2026, Kode Finance)', async () => {
+  const { monthFollowers } = await import('../app/lib/client-report-core')
+  it('the month shows what it gained, not 0', () => {
+    expect(monthFollowers(2414, 5, 43)).toEqual({ start: 2366, end: 2409, previousEnd: 2366, gained: 43 })
+  })
+})

@@ -122,7 +122,7 @@ export type CandidatePost = {
 }
 /** RAISE WHEN HOW THE FIGURES ARE READ CHANGES: a month saved under an older one is read again on its next open
  *  (5 Nov 2026: stories were saved as "video" and ranked as blank top posts until someone pressed Read again) */
-export const REPORT_DATA_VERSION = 3
+export const REPORT_DATA_VERSION = 4
 export type ReportData = {
   /** REPORT_DATA_VERSION the figures were read under; unset = before 5 Nov 2026 */
   v?: number
@@ -442,4 +442,12 @@ export function scopeData(data: ReportData, platforms: ReadonlySet<string>): Rep
     platforms: data.platforms.filter(p => platforms.has(p.platform)),
     candidates: (data.candidates ?? []).filter(c => platforms.has(c.platform)),
   }
+}
+
+/** a month's followers from the count NOW, what was gained after the month, and what the month gained (5 Nov 2026) */
+export function monthFollowers(now: number | null, gainedSince: number, gainedInMonth: number | null): PlatformFigures['followers'] {
+  if (now == null) return { start: null, end: null, previousEnd: null, gained: gainedInMonth }
+  const end = now - gainedSince
+  const start = gainedInMonth == null ? null : end - gainedInMonth
+  return { start, end, previousEnd: start, gained: gainedInMonth }
 }
