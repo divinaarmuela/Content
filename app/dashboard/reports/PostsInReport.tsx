@@ -77,10 +77,15 @@ export default function PostsInReport({ candidates, saved, clientId, month, onCh
                 <button type="button" onClick={() => toggle(c.id)} disabled={busy} aria-pressed={on}
                   className={`group relative flex w-full flex-col overflow-hidden rounded-inner border text-left transition ${on ? 'border-foreground ring-2 ring-foreground/20' : 'border-border opacity-70 hover:opacity-100'}`}>
                   <div className="relative aspect-[4/5] w-full bg-muted">
+                    {/* under the picture: what shows when there is none — an expired story's picture is refused by
+                        Facebook and Instagram (403, checked 5 Nov 2026), so say so rather than leave a grey box */}
+                    <span className="absolute inset-0 flex flex-col items-center justify-center gap-1 p-3 text-center text-[12px] text-muted-foreground">
+                      {c.format === 'story' ? <><strong className="text-foreground">Story</strong>Expired: {platformName(c.platform)} no longer shows its picture</> : 'No picture'}
+                    </span>
                     {c.thumbnail && (
                       // Instagram's picture links expire; a broken one just leaves the grey box and the caption
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={c.thumbnail} alt="" loading="lazy" className="h-full w-full object-cover"
+                      <img src={c.thumbnail} alt="" loading="lazy" referrerPolicy="no-referrer" className="relative h-full w-full object-cover"
                         onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} />
                     )}
                     <span className={`absolute left-2 top-2 flex h-6 w-6 items-center justify-center rounded-full border-2 ${on ? 'border-foreground bg-foreground text-background' : 'border-white bg-black/30'}`}>
