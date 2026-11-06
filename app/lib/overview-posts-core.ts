@@ -412,7 +412,7 @@ export function metaQueueCounts(
   log?: Map<string, PostLogEntry[]>,
 ): Map<string, LiveCounts> {
   for (const j of jobs) {
-    if (String(j.provider ?? '') !== 'meta_ig') continue
+    if (!['meta_ig', 'meta_fb'].includes(String(j.provider ?? ''))) continue
     const st = String(j.status ?? '')
     const k: keyof LiveCounts | null = st === 'published' ? 'went_out' : ['queued', 'publishing', 'scheduled'].includes(st) ? 'booked' : st === 'failed' ? 'did_not' : null
     if (!k) continue

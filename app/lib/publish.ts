@@ -23,6 +23,7 @@ import {
 } from './publish-core'
 import type { PlatformOutcome } from './post-outcome-core'
 import { META_PROVIDER, dueForDispatch, metaHold, type MetaJobState } from './meta-route-core'
+import { META_FB_PROVIDER, type MetaFbJobState } from './meta-fb-core'
 import { CHAIN_WAITING, storyAccount, storyPredecessor, waitsFor, type ChainJob } from './story-chain-core'
 
 /**
@@ -84,7 +85,7 @@ export function mediaKeyOf(urls: readonly string[]): string {
 
 /** A Meta job (Instagram through our own Meta app) holds its own lane's lock: the booking's Zernio job for
  *  the SAME files on the OTHER networks is not a second post of it (meta-route-core.ts). */
-export const laneSuffix = (provider: unknown) => provider === META_PROVIDER ? `__${META_PROVIDER}` : ''
+export const laneSuffix = (provider: unknown) => provider === META_PROVIDER || provider === META_FB_PROVIDER ? `__${provider}` : ''
 
 export const jobLockKey = (job: { content_item_id?: unknown; media?: unknown; targets?: unknown; provider?: unknown }) =>
   publishLockKey(String(job.content_item_id), mediaKeyOf(jobMediaUrls(job)) + laneSuffix(job.provider))
@@ -112,7 +113,7 @@ export async function queuePublishJob(input: {
   createdBy?: string
   /** Instagram through the agency's own Meta app: the job is in the 'meta_ig' lane and remembers which
    *  account (meta-route-core.ts). Absent = Zernio, as every job always was. */
-  lane?: { provider: typeof META_PROVIDER; state: MetaJobState } | null
+  lane?: { provider: typeof META_PROVIDER; state: MetaJobState } | { provider: typeof META_FB_PROVIDER; state: MetaFbJobState } | null
 }): Promise<{ id: string } | { error: string; issues?: string[]; blocked?: boolean }> {
   const provider = input.lane?.provider ?? null
   const platforms = input.targets.map(t => t.platform).filter(isPlatform)
@@ -237,7 +238,7 @@ export async function queuePublishJob(input: {
       request_id: randomUUID(),
       attempts: 0,
       updated_at: now,
-      ...(provider ? { provider, meta_ig: input.lane!.state } : {}),
+      ...(provider === META_FB_PROVIDER ? { provider, meta_fb: input.lane!.state } : provider ? { provider, meta_ig: input.lane!.state } : {}),
     })
     return { id: row.id }
   } catch (e) {
@@ -587,6 +588,33 @@ async function attemptPublishJob(jobId: string): Promise<string | null> {
      * posted pages read it unchanged. If the switch was turned off (or the connection lost) since it
      * was booked, it carries on below and goes through Zernio after all.
      */
+    /** FACEBOOK PAGE THROUGH OUR OWN META APP (6 Nov 2026): the same, for a job in the 'meta_fb' lane. */
+    if (claimed.provider === META_FB_PROVIDER) {
+      const { metaFbStillRouted, publishJobToFacebook } = await import('./meta-fb-publish')
+      const still = await metaFbStillRouted(claimed)
+      if (still.ok) {
+        const out = await publishJobToFacebook({
+          id: jobId, caption: job.caption, media: job.media ?? [], targets: (job.targets ?? []) as Target[], meta_fb: claimed.meta_fb,
+        })
+        const at = new Date().toISOString()
+        switch (out.kind) {
+          case 'published':
+            await settle({
+              status: 'published', published_at: at, attempts: job.attempts + 1, error: out.note,
+              ...(out.permalink ? { permalink: out.permalink } : {}),
+              platform_results: perChannel('published', { at, url: out.permalink }),
+            })
+            return 'published'
+          case 'retryable':
+            return tryAgain(out.message)
+          case 'permanent':
+            await settle({ status: 'failed', attempts: job.attempts + 1, error: out.message, platform_results: perChannel('failed', { reason: out.message }) })
+            return 'failed'
+        }
+      }
+      console.warn(`[publish ${jobId}] booked for Facebook via Meta, sent through Zernio instead: ${still.reason}`)
+    }
+
     if (claimed.provider === META_PROVIDER) {
       const { metaStillRouted, publishJobToInstagram } = await import('./meta-ig-publish')
       const still = await metaStillRouted(claimed)

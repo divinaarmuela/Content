@@ -1,4 +1,5 @@
 import type { MediaItem, PostOptions, Target } from './publish-core'
+import { META_FB_PROVIDER } from './meta-fb-core'
 import { validatePublish, type GraphErrorDetail, type PublishItem, type PublishRequest } from './meta-ig-core'
 
 /**
@@ -211,7 +212,8 @@ export function metaHold(
   job: { provider?: string | null; scheduled_for?: string | null },
   now: number,
 ): { held: false } | { held: true; until: string } {
-  if (job.provider !== META_PROVIDER || !job.scheduled_for) return { held: false }
+  // Facebook through Meta (provider 'meta_fb', 6 Nov 2026) is held the same way: it is posted at its time, by us
+  if ((job.provider !== META_PROVIDER && job.provider !== META_FB_PROVIDER) || !job.scheduled_for) return { held: false }
   const t = Date.parse(job.scheduled_for)
   if (!Number.isFinite(t) || t <= now) return { held: false }
   return { held: true, until: new Date(t).toISOString() }

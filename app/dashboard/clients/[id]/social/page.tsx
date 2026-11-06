@@ -4,6 +4,7 @@ import SocialChannels from '../../SocialChannels'
 import InstagramLocations from '../../InstagramLocations'
 import ClientApproval from '../../ClientApproval'
 import MetaDirectInstagram from '../../MetaDirectInstagram'
+import MetaDirectFacebook from '../../MetaDirectFacebook'
 import { useRole } from '../../../useRole'
 
 export default function ClientSocialPage() {
@@ -26,6 +27,8 @@ export default function ClientSocialPage() {
           and drawn for super admins only, so it stays out of the way of the
           channels above, which is where posting still happens. */}
       <MetaDirectInstagram clientId={id} />
+      {/* …and its Facebook Page twin (6 Nov 2026). */}
+      <MetaDirectFacebook clientId={id} />
     </div>
   )
 }

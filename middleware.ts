@@ -39,6 +39,10 @@ const isProtectedRoute = createRouteMatcher([
   '/api/meta/instagram/accounts(.*)',
   '/api/meta/instagram/subscribe(.*)',
   '/api/meta/instagram/inbox(.*)',
+  // the Facebook Page twin (6 Nov 2026): /api/meta/facebook/callback stays public, like Instagram's
+  '/api/meta/facebook/connect(.*)',
+  '/api/meta/facebook/pages(.*)',
+  '/api/meta/facebook/inbox(.*)',
 ])
 
 /**
@@ -166,6 +170,9 @@ export const config = {
     '/api/meta/instagram/accounts',
     '/api/meta/instagram/subscribe',
     '/api/meta/instagram/inbox',
+    '/api/meta/facebook/connect',
+    '/api/meta/facebook/pages',
+    '/api/meta/facebook/inbox',
     '/api/portal/:path*',
     '/api/overview/:path*',
     '/api/posts/:path*',

@@ -65,6 +65,8 @@ export type TableName =
   | 'leads'
   | 'linktree_connections'
   | 'linktree_states'
+  | 'meta_fb_events'
+  | 'meta_fb_pages'
   | 'meta_ig_accounts'
   | 'meta_ig_events'
   | 'milanote_media'
@@ -634,6 +636,7 @@ export interface Client {
   hide_from_social: boolean | null
   instagram_locations: unknown
   instagram_via_meta: boolean | null
+  facebook_via_meta: boolean | null
   client_approval_required: boolean | null
   drive_folder_id: string | null
   drive_folder_origin: string | null
@@ -1163,6 +1166,33 @@ export interface LinktreeState {
   created_at: string
 }
 
+export interface MetaFbEvent {
+  id: string
+  page_id: string
+  client_id: string | null
+  kind: string
+  item: string | null
+  payload: unknown
+  occurred_at: string | null
+  received_at: string
+  delivery_id: string | null
+}
+
+export interface MetaFbPage {
+  id: string
+  client_id: string
+  page_id: string
+  name: string | null
+  category: string | null
+  picture: string | null
+  access_token_encrypted: string
+  tasks: unknown
+  connected_by: string | null
+  connected_at: string
+  active: boolean
+  last_error: string | null
+}
+
 export interface MetaIgAccount {
   id: string
   client_id: string
@@ -1479,6 +1509,7 @@ export interface PublishJob {
   chained_after: string | null
   provider: string | null
   meta_ig: unknown | null
+  meta_fb: unknown | null
 }
 
 export interface ReportSetting {
@@ -1948,7 +1979,7 @@ export const TABLE_COLUMNS = {
   client_credentials: ['id', 'created_at', 'updated_at', 'client_id', 'platform', 'label', 'username', 'secret_cipher', 'url', 'notes', 'updated_by', 'updated_by_name'],
   client_notes: ['id', 'created_at', 'updated_at', 'client_id', 'body', 'author_id', 'author_name', 'visibility'],
   client_reports: ['id', 'client_id', 'month', 'data', 'body', 'objective', 'notes', 'checks', 'included_post_ids', 'shared_at', 'written_v', 'included_platforms', 'shared_by', 'posts_explained', 'explained_by', 'history', 'generated_at', 'generated_by', 'updated_by', 'created_at', 'updated_at'],
-  clients: ['brand_profile', 'brand_profile_updated_at', 'brand_profile_updated_by', 'upload_folder_id', 'timezone', 'posts_own_content', 'website', 'source', 'default_scheduler_ids', 'share_token', 'social_profile_id', 'id', 'created_at', 'name', 'slug', 'industry', 'contact_name', 'email', 'phone', 'clerk_user_id', 'status', 'notes', 'portal_one', 'hide_from_social', 'instagram_locations', 'instagram_via_meta', 'client_approval_required', 'drive_folder_id', 'drive_folder_origin'],
+  clients: ['brand_profile', 'brand_profile_updated_at', 'brand_profile_updated_by', 'upload_folder_id', 'timezone', 'posts_own_content', 'website', 'source', 'default_scheduler_ids', 'share_token', 'social_profile_id', 'id', 'created_at', 'name', 'slug', 'industry', 'contact_name', 'email', 'phone', 'clerk_user_id', 'status', 'notes', 'portal_one', 'hide_from_social', 'instagram_locations', 'instagram_via_meta', 'facebook_via_meta', 'client_approval_required', 'drive_folder_id', 'drive_folder_origin'],
   comment_automations: ['id', 'client_id', 'social_account_id', 'provider_account_id', 'platform', 'zernio_automation_id', 'runner', 'social_post_id', 'platform_post_id', 'zernio_post_id', 'post_title', 'post_thumb', 'post_date', 'name', 'keywords', 'match_mode', 'dm_message', 'button_title', 'link', 'comment_reply', 'dm_variations', 'reply_variations', 'active', 'paused_reason', 'created_by', 'created_at', 'updated_at'],
   content_applications: ['id', 'created_at', 'first_name', 'last_name', 'email', 'phone', 'business', 'industry', 'model_interest', 'content_needed', 'budget', 'timeline'],
   content_assets: ['id', 'client_id', 'title', 'platform', 'slug', 'dest_url', 'post_url', 'provider_post_id', 'source', 'offer_code', 'keyword', 'published_at', 'created_at'],
@@ -1977,6 +2008,8 @@ export const TABLE_COLUMNS = {
   leads: ['source', 'id', 'created_at', 'fname', 'lname', 'email', 'phone', 'biz', 'model', 'need', 'budget', 'timeline', 'stage', 'stage_entered_at', 'owner_id', 'tier', 'source_tag', 'partner', 'next_action', 'next_action_at', 'qualifiers', 'exit_ticks', 'call_at', 'proposal_sent_at', 'walkthrough_at', 'signed_at', 'deposit_at', 'vs_delivered_at', 'objection', 'deal_value', 'not_now_at', 'reopen_at', 'touches', 'pipeline_notes'],
   linktree_connections: ['id', 'client_id', 'access_token_enc', 'refresh_token_enc', 'expires_at', 'profile_username', 'profile_url', 'profile_name', 'connected_by', 'connected_at', 'updated_at', 'last_error'],
   linktree_states: ['id', 'client_id', 'user_id', 'verifier_enc', 'used_at', 'created_at'],
+  meta_fb_events: ['id', 'page_id', 'client_id', 'kind', 'item', 'payload', 'occurred_at', 'received_at', 'delivery_id'],
+  meta_fb_pages: ['id', 'client_id', 'page_id', 'name', 'category', 'picture', 'access_token_encrypted', 'tasks', 'connected_by', 'connected_at', 'active', 'last_error'],
   meta_ig_accounts: ['id', 'client_id', 'username', 'account_type', 'access_token_encrypted', 'token_expires_at', 'scopes', 'connected_by', 'connected_at', 'refreshed_at', 'status', 'last_error'],
   meta_ig_events: ['id', 'ig_user_id', 'client_id', 'kind', 'payload', 'occurred_at', 'received_at', 'delivery_id'],
   milanote_media: ['id', 'src', 'name', 'mime', 'size', 'url', 'status', 'attempts', 'error', 'updated_at'],
@@ -1993,7 +2026,7 @@ export const TABLE_COLUMNS = {
   prospect_events: ['id', 'prospect_id', 'kind', 'at', 'by', 'source', 'detail', 'points', 'confirmed', 'evidence_id', 'confidence', 'dismissed_at', 'dismissed_by'],
   prospects: ['id', 'business', 'lead_id', 'tier', 'industry', 'website', 'instagram', 'linkedin', 'contact_name', 'contact_role', 'email', 'phone', 'source', 'source_detail', 'stage', 'stage_entered_at', 'owner_id', 'added_by', 'audit_angle', 'loom_url', 'post_url', 'cta_url', 'outreach_at', 'outreach_channel', 'outreach_by', 'replied_at', 'call_at', 'call_notes', 'proposal_url', 'proposal_sent_at', 'deal_value', 'invoice_ref', 'deposit_amount', 'deposit_sent_at', 'deposit_paid_at', 'contract_url', 'signed_at', 'client_id', 'next_action', 'next_action_at', 'not_now_at', 'reopen_at', 'dormant_at', 'notes', 'created_at', 'updated_at', 'agent_checked_at', 'weakness_tags'],
   provider_webhooks: ['id', 'provider', 'provider_hook_id', 'url', 'events', 'secret_encrypted', 'active', 'registered_by', 'created_at', 'updated_at'],
-  publish_jobs: ['resend_of', 'resent_platforms', 'id', 'client_id', 'content_item_id', 'schedule_entry_id', 'caption', 'media', 'targets', 'scheduled_for', 'timezone', 'status', 'request_id', 'provider_post_id', 'permalink', 'error', 'attempts', 'created_by', 'created_at', 'updated_at', 'published_at', 'platform_results', 'waiting_on_copy', 'late_slot', 'chained_after', 'provider', 'meta_ig'],
+  publish_jobs: ['resend_of', 'resent_platforms', 'id', 'client_id', 'content_item_id', 'schedule_entry_id', 'caption', 'media', 'targets', 'scheduled_for', 'timezone', 'status', 'request_id', 'provider_post_id', 'permalink', 'error', 'attempts', 'created_by', 'created_at', 'updated_at', 'published_at', 'platform_results', 'waiting_on_copy', 'late_slot', 'chained_after', 'provider', 'meta_ig', 'meta_fb'],
   report_settings: ['id', 'updated_at', 'enabled', 'recipients', 'send_day', 'data_from', 'last_sent_for'],
   room_invite_requests: ['id', 'name', 'email', 'about', 'created_at'],
   scan_mailboxes: ['refresh_token_encrypted', 'connected_at', 'connected_by', 'scopes', 'signature', 'email', 'enabled', 'label', 'source', 'created_at', 'updated_at', 'updated_by', 'id'],
@@ -2060,7 +2093,7 @@ export const NULLABLE_COLUMNS = {
   client_credentials: ['secret_cipher', 'updated_by'],
   client_notes: ['author_id', 'visibility'],
   client_reports: ['data', 'body', 'objective', 'notes', 'checks', 'included_post_ids', 'shared_at', 'written_v', 'included_platforms', 'shared_by', 'posts_explained', 'explained_by', 'history', 'generated_at', 'generated_by', 'updated_by'],
-  clients: ['brand_profile', 'brand_profile_updated_at', 'brand_profile_updated_by', 'upload_folder_id', 'timezone', 'posts_own_content', 'website', 'source', 'default_scheduler_ids', 'share_token', 'social_profile_id', 'industry', 'contact_name', 'email', 'phone', 'clerk_user_id', 'notes', 'portal_one', 'hide_from_social', 'instagram_via_meta', 'client_approval_required', 'drive_folder_id', 'drive_folder_origin'],
+  clients: ['brand_profile', 'brand_profile_updated_at', 'brand_profile_updated_by', 'upload_folder_id', 'timezone', 'posts_own_content', 'website', 'source', 'default_scheduler_ids', 'share_token', 'social_profile_id', 'industry', 'contact_name', 'email', 'phone', 'clerk_user_id', 'notes', 'portal_one', 'hide_from_social', 'instagram_via_meta', 'facebook_via_meta', 'client_approval_required', 'drive_folder_id', 'drive_folder_origin'],
   comment_automations: ['zernio_automation_id', 'runner', 'social_post_id', 'platform_post_id', 'zernio_post_id', 'post_title', 'post_thumb', 'post_date', 'button_title', 'link', 'comment_reply', 'dm_variations', 'reply_variations', 'paused_reason', 'created_by'],
   content_applications: ['industry', 'model_interest', 'content_needed', 'budget', 'timeline'],
   content_assets: ['client_id', 'platform', 'dest_url', 'post_url', 'provider_post_id', 'offer_code', 'keyword', 'published_at'],
@@ -2089,6 +2122,8 @@ export const NULLABLE_COLUMNS = {
   leads: ['source', 'fname', 'lname', 'email', 'phone', 'biz', 'model', 'need', 'budget', 'timeline', 'stage', 'stage_entered_at', 'owner_id', 'tier', 'source_tag', 'partner', 'next_action', 'next_action_at', 'qualifiers', 'exit_ticks', 'call_at', 'proposal_sent_at', 'walkthrough_at', 'signed_at', 'deposit_at', 'vs_delivered_at', 'objection', 'deal_value', 'not_now_at', 'reopen_at', 'touches', 'pipeline_notes'],
   linktree_connections: ['access_token_enc', 'refresh_token_enc', 'expires_at', 'profile_username', 'profile_url', 'profile_name', 'connected_by', 'connected_at', 'updated_at', 'last_error'],
   linktree_states: ['used_at'],
+  meta_fb_events: ['client_id', 'item', 'occurred_at', 'delivery_id'],
+  meta_fb_pages: ['name', 'category', 'picture', 'connected_by', 'last_error'],
   meta_ig_accounts: ['username', 'account_type', 'token_expires_at', 'connected_by', 'refreshed_at', 'last_error'],
   meta_ig_events: ['client_id', 'occurred_at', 'delivery_id'],
   milanote_media: ['mime', 'size', 'url', 'error'],
@@ -2105,7 +2140,7 @@ export const NULLABLE_COLUMNS = {
   prospect_events: ['by', 'source', 'detail', 'points', 'confirmed', 'evidence_id', 'confidence', 'dismissed_at', 'dismissed_by'],
   prospects: ['lead_id', 'tier', 'industry', 'website', 'instagram', 'linkedin', 'contact_name', 'contact_role', 'email', 'phone', 'source', 'source_detail', 'stage', 'stage_entered_at', 'owner_id', 'added_by', 'audit_angle', 'loom_url', 'post_url', 'cta_url', 'outreach_at', 'outreach_channel', 'outreach_by', 'replied_at', 'call_at', 'call_notes', 'proposal_url', 'proposal_sent_at', 'deal_value', 'invoice_ref', 'deposit_amount', 'deposit_sent_at', 'deposit_paid_at', 'contract_url', 'signed_at', 'client_id', 'next_action', 'next_action_at', 'not_now_at', 'reopen_at', 'dormant_at', 'notes', 'created_at', 'updated_at', 'agent_checked_at', 'weakness_tags'],
   provider_webhooks: ['provider_hook_id', 'secret_encrypted', 'registered_by'],
-  publish_jobs: ['resend_of', 'resent_platforms', 'client_id', 'content_item_id', 'schedule_entry_id', 'scheduled_for', 'provider_post_id', 'permalink', 'error', 'created_by', 'published_at', 'platform_results', 'waiting_on_copy', 'late_slot', 'chained_after', 'provider', 'meta_ig'],
+  publish_jobs: ['resend_of', 'resent_platforms', 'client_id', 'content_item_id', 'schedule_entry_id', 'scheduled_for', 'provider_post_id', 'permalink', 'error', 'created_by', 'published_at', 'platform_results', 'waiting_on_copy', 'late_slot', 'chained_after', 'provider', 'meta_ig', 'meta_fb'],
   report_settings: ['data_from', 'last_sent_for'],
   room_invite_requests: ['about'],
   scan_mailboxes: ['refresh_token_encrypted', 'connected_at', 'connected_by', 'scopes', 'signature', 'label', 'updated_by'],
@@ -2208,6 +2243,8 @@ export const JSON_COLUMNS = {
   leads: [],
   linktree_connections: [],
   linktree_states: [],
+  meta_fb_events: ['payload'],
+  meta_fb_pages: ['tasks'],
   meta_ig_accounts: ['scopes'],
   meta_ig_events: ['payload'],
   milanote_media: [],
@@ -2224,7 +2261,7 @@ export const JSON_COLUMNS = {
   prospect_events: [],
   prospects: ['weakness_tags'],
   provider_webhooks: ['events'],
-  publish_jobs: ['resent_platforms', 'media', 'targets', 'platform_results', 'meta_ig'],
+  publish_jobs: ['resent_platforms', 'media', 'targets', 'platform_results', 'meta_ig', 'meta_fb'],
   report_settings: [],
   room_invite_requests: [],
   scan_mailboxes: [],
@@ -2326,6 +2363,8 @@ export const JSON_ARRAY_COLUMNS = {
   leads: [],
   linktree_connections: [],
   linktree_states: [],
+  meta_fb_events: [],
+  meta_fb_pages: ['tasks'],
   meta_ig_accounts: ['scopes'],
   meta_ig_events: [],
   milanote_media: [],

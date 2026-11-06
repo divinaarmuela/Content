@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { recordWebhook } from '@/app/lib/meta-ig'
+import { recordPageWebhook } from '@/app/lib/meta-fb'
+import { readMetaFbEnv } from '@/app/lib/meta-fb-core'
 import { handshakeChallenge, readMetaIgEnv, verifyWebhookSignature } from '@/app/lib/meta-ig-core'
 
 /**
@@ -17,6 +19,9 @@ import { handshakeChallenge, readMetaIgEnv, verifyWebhookSignature } from '@/app
  *        mentions and messages. It replies to nobody, DMs nobody and emails
  *        nobody (the owner's rule: nothing ever replies to a prospect on its
  *        own). Zernio's webhook is separate and unchanged.
+ *        Facebook Pages (6 Nov 2026): a body with object 'page' must be signed
+ *        with META_APP_SECRET; its feed changes are stored in meta_fb_events
+ *        (app/lib/meta-fb.ts recordPageWebhook) — again, nothing acts on them.
  */
 export const dynamic = 'force-dynamic'
 
@@ -33,17 +38,24 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   const { appSecret } = readMetaIgEnv()
-  if (!appSecret) return plain('Not configured: META_IG_APP_SECRET is not set.', 503)
+  // Facebook Page webhooks (object 'page', 6 Nov 2026) are signed with the Facebook app's own secret
+  const fbSecret = readMetaFbEnv().appSecret
+  if (!appSecret && !fbSecret) return plain('Not configured: META_IG_APP_SECRET is not set.', 503)
 
   const raw = await req.text()
-  if (!verifyWebhookSignature(raw, req.headers.get('x-hub-signature-256'), appSecret)) {
-    return plain('Bad signature', 401)
-  }
+  const header = req.headers.get('x-hub-signature-256')
+  const igSigned = !!appSecret && verifyWebhookSignature(raw, header, appSecret)
+  const fbSigned = !!fbSecret && verifyWebhookSignature(raw, header, fbSecret)
+  if (!igSigned && !fbSigned) return plain('Bad signature', 401)
   let body: unknown
   try { body = JSON.parse(raw) } catch { return plain('Body is not JSON', 400) }
+  const isPage = (body as { object?: unknown } | null)?.object === 'page'
+  // each kind of delivery must carry ITS app's signature: a Page body signed with the Instagram secret, or
+  // the reverse, is refused
+  if (isPage ? !fbSigned : !igSigned) return plain('Bad signature', 401)
 
   try {
-    const result = await recordWebhook(raw, body, Date.now())
+    const result = isPage ? await recordPageWebhook(raw, body, Date.now()) : await recordWebhook(raw, body, Date.now())
     return NextResponse.json(result.kind === 'duplicate' ? { ok: true, duplicate: true } : { ok: true, stored: result.stored })
   } catch {
     // a database failure: answer non-2xx so Meta delivers it again

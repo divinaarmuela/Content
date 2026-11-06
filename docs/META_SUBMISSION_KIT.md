@@ -195,3 +195,72 @@ Rules: 100M / @testbusinessaccount2026 only — never a real client. Test posts 
 >    it is published to @testbusinessaccount2026.
 
 `[…]` = owner to fill; passwords are never written in this repo.
+
+
+---
+
+# Facebook Page (Facebook Login for Business) — added 6 Nov 2026
+
+Configuration "Connect Facebook Page" (`config_id` 1428692675563072). Built in `app/lib/meta-fb*.ts`;
+setup in `docs/META_FACEBOOK_SETUP.md`. Test Page "MD Media Test Page" (61596416725098), test client 100M.
+
+## Permissions — status
+
+Meta approves a permission only after at least one successful call with it. **None of these has been called
+live yet** (the build was finished and tested against mocks on 6 Nov 2026; nothing has been run against the
+test Page). Update this column as each is exercised on 100M.
+
+| Permission | What the app calls | Where in the app | Live call made? |
+|---|---|---|---|
+| `pages_show_list` | `GET /me/accounts` | Connect Facebook Page → Page picker | not yet called |
+| `pages_manage_metadata` | `POST /{page-id}/subscribed_apps` (feed, messages) | picking the Page | not yet called |
+| `pages_read_engagement` | `GET /{page-id}/posts`, `GET /{page-id}` (followers) | card → Comments (post list), Numbers | not yet called |
+| `pages_read_user_content` | `GET /{post-id}/comments` | card → Comments → a post | not yet called |
+| `pages_manage_engagement` | `POST /{comment-id}/comments`, `POST /{comment-id}` is_hidden, `DELETE /{comment-id}` | Reply / Hide / Delete | not yet called |
+| `pages_manage_posts` | `POST /{page-id}/feed`, `/photos`, `/videos` | Schedule → a post for 100M's Facebook, switch on | not yet called |
+| `read_insights` | `GET /{page-id}/insights`, `GET /{post-id}/insights` | card → Numbers; a post's numbers | not yet called |
+| `pages_messaging` | `GET /{page-id}/conversations?platform=messenger`, `POST /{page-id}/messages` (RESPONSE) | card → Messages | not yet called |
+
+## Form text — one per permission
+
+**`pages_show_list`** — MD Media is a social media agency. When a team member connects a client's Facebook Page,
+we list the Pages they manage so they can choose which Page belongs to that client. Only the chosen Page is kept.
+
+**`pages_manage_metadata`** — When a Page is chosen we subscribe it to our app's webhooks (feed and messages) so
+new comments and messages appear in our dashboard for the agency team to answer. We do not change Page settings.
+
+**`pages_read_engagement`** — We show the client's recent Page posts with their comment and reaction counts, and
+the Page's follower count, in the client's dashboard, so the team can see which posts need attention.
+
+**`pages_read_user_content`** — We list the comments people leave on the client's Page posts so the team can read
+and answer them from one place.
+
+**`pages_manage_engagement`** — A team member replies to, hides, shows again or deletes a comment on the client's
+Page. Every action is one person pressing one button; nothing is automated.
+
+**`pages_manage_posts`** — The team schedules the client's approved posts (text, photos, a video) in our
+calendar, and at the chosen time our app publishes them to the client's Page.
+
+**`read_insights`** — We show the Page's views, people reached, engagement, page visits and new followers for the
+last 7 or 28 days, and each post's views and reactions, so the agency can report to the client.
+
+**`pages_messaging`** — The team reads Messenger conversations with the client's Page and answers a person within
+24 hours of their last message. No automated or promotional messages are sent.
+
+## Screencast scripts
+
+Each starts: sign in at app.mdmmarketing.com.au → Clients → 100 Hundred Million Group → Social → scroll to
+"Facebook Page — our own Meta app (Direct — testing)".
+
+1. **Connect (`pages_show_list`, `pages_manage_metadata`)** — press *Connect Facebook Page (Meta)* → Facebook's
+   dialog → choose "MD Media Test Page" → Continue → back in the app the Page's name and picture show (or press
+   *Use this Page* when several were shared).
+2. **Comments (`pages_read_engagement`, `pages_read_user_content`, `pages_manage_engagement`)** — Comments →
+   choose a post → its comments show → type a reply → Reply → the reply appears; Hide → "Hidden"; Show; Delete.
+   (First leave a comment on a test-Page post from a test user.)
+3. **Messages (`pages_messaging`)** — first send the Page a Messenger message from a test user → Messages → open
+   the conversation → write → Send → show it arriving in Messenger.
+4. **Insights (`read_insights`)** — Numbers → Last 7 days / Last 28 days; then Comments → a post shows its numbers.
+5. **Publish (`pages_manage_posts`)** — (super admin) switch on *Post this client's Facebook through Meta* →
+   Social → Schedule → 100M → New post → picture + caption → Facebook channel → a time 15 minutes ahead →
+   Schedule → at that time show the post on the Page.

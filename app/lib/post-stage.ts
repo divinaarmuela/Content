@@ -20,6 +20,7 @@ import type { ChannelExtras } from './schedule-compose-core'
 import type { Slide } from './version-files-core'
 import { CANCELLED_REASON, TAKEN_OFF_REASON, readPostAutomation, type PostAutomation } from './comment-automation-core'
 import { META_PROVIDER } from './meta-route-core'
+import { META_FB_PROVIDER } from './meta-fb-core'
 import { insideLastSlot, nextFreeSlot, onePortal } from './one-portal-core'
 
 /**
@@ -1425,12 +1426,31 @@ async function defaultQueuePublish(input: QueueInput): Promise<{ id: string; ids
       console.error('could not ask the Meta routing — everything goes through Zernio:', (e as Error).message)
       return { meta: null, rest: targets }
     })
+  /* FACEBOOK PAGE THROUGH OUR OWN META APP (6 Nov 2026): the same split for the Facebook target, from what is
+   * left. Switch off (every client but a test one): `fbSplit.meta` is null and nothing changes. */
+  const { splitBookingForMetaFb } = await import('./meta-fb-publish')
+  const fbSplit = await splitBookingForMetaFb({ clientId: input.post.client_id, targets: split.rest, media })
+    .catch(e => {
+      console.error('could not ask the Facebook Meta routing — Facebook goes through Zernio:', (e as Error).message)
+      return { meta: null, rest: split.rest }
+    })
+  split.rest = fbSplit.rest
   const ids: string[] = []
+  if (fbSplit.meta) {
+    const fbJob = await queuePublishJob({
+      ...common, targets: [fbSplit.meta.target], lane: { provider: META_FB_PROVIDER, state: fbSplit.meta.state },
+    })
+    if ('error' in fbJob) return { error: fbJob.error, issues: fbJob.issues }
+    ids.push(fbJob.id)
+  }
   if (split.meta) {
     const metaJob = await queuePublishJob({
       ...common, targets: [split.meta.target], lane: { provider: META_PROVIDER, state: split.meta.state },
     })
-    if ('error' in metaJob) return { error: metaJob.error, issues: metaJob.issues }
+    if ('error' in metaJob) {
+      for (const id of ids) await defaultCancelJob(id).catch(() => {})
+      return { error: metaJob.error, issues: metaJob.issues }
+    }
     ids.push(metaJob.id)
   }
   if (split.rest.length > 0) {

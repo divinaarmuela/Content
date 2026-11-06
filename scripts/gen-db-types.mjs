@@ -67,6 +67,7 @@ for (const f of fs.readdirSync(SQL_DIR).filter(f => f.endsWith('.sql'))) {
 // Tables the code queries but no SQL ever created.
 //   website        — the CMS singleton node
 //   meta_ig_accounts, meta_ig_events — the agency's own Instagram Login (see below)
+//   meta_fb_pages — the agency's own Facebook Page connection (see below)
 //   portal_feeds — the one portal's copy of each account's posted feed (see below)
 //   claim_locks    — one row per "exactly one winner" rule that spans rows
 //                    (id = `<rule>__<key>`), compare-and-set by lib/db.ts's
@@ -969,6 +970,40 @@ const GHOST_TABLES = {
   // What Meta's webhook told us about a directly connected account: comments, messages and mentions ONLY,
   // stored and nothing more — nothing replies on its own (the owner's rule). id is derived from the event
   // itself (app/lib/meta-ig-core.ts webhookEventKey) and taken with a claim, so a redelivery is one row.
+  // THE AGENCY'S OWN FACEBOOK PAGE CONNECTION (6 Nov 2026, Facebook Login for Business, config "Connect Facebook
+  // Page"). One row per Facebook Page, id = the Page id. The connect stores EVERY Page the person manages for that
+  // client as a candidate (active false); a person then picks the one Page that belongs to the client (active
+  // true) and the other candidates are removed. The Page token is AES-GCM ciphertext (app/lib/secret-box.ts), the
+  // same as meta_ig_accounts, and never reaches a browser. Page tokens derived from a long-lived user token do not
+  // expire, so there is no refresh job. `tasks` = the person's tasks on the Page (MANAGE, CREATE_CONTENT, ...).
+  meta_fb_pages: [
+    ['id', col('string', false)],
+    ['client_id', col('string', false)],
+    ['page_id', col('string', false)],
+    ['name', col('string', true)],
+    ['category', col('string', true)],
+    ['picture', col('string', true)],
+    ['access_token_encrypted', col('string', false)],
+    ['tasks', col('unknown', false, true, true)],
+    ['connected_by', col('string', true)],
+    ['connected_at', col('string', false)],
+    ['active', col('boolean', false)],
+    ['last_error', col('string', true)],
+  ],
+  // What Meta's webhook told us about a connected Facebook Page (object 'page', field 'feed': posts, comments,
+  // reactions on the Page). Stored and nothing more — nothing replies on its own. id derived from the event
+  // (app/lib/meta-fb-core.ts pageEventKey), taken with a claim, so a redelivery is one row.
+  meta_fb_events: [
+    ['id', col('string', false)],
+    ['page_id', col('string', false)],
+    ['client_id', col('string', true)],
+    ['kind', col('string', false)],
+    ['item', col('string', true)],
+    ['payload', col('unknown', false, true, false)],
+    ['occurred_at', col('string', true)],
+    ['received_at', col('string', false)],
+    ['delivery_id', col('string', true)],
+  ],
   // THE ONE PORTAL'S FEED COPY (docs/ONE_PORTAL_SPEC.md §3, 2 Oct 2026): each connected account's 25 newest posts
   // as Zernio lists them (GET /accounts/{id}/posts — every network, including posts made outside the app), kept so
   // the client's Scheduling tab never calls the platforms on every visit. The id IS the social_accounts id;
@@ -1338,6 +1373,11 @@ const GHOST_COLUMNS = {
     //     making a second post (app/lib/meta-ig-publish.ts).
     ['provider', col('string', true)],
     ['meta_ig', col('unknown', true, true)],
+    //   publish_jobs.meta_fb — FACEBOOK PAGE THROUGH OUR OWN META APP (6 Nov 2026): provider 'meta_fb' and its
+    //     own record { page_id, page_name, sending_at, post_id, permalink, published_at, first_comment_id,
+    //     first_comment_error }. `sending_at` is written BEFORE the one publishing call, so a retry that finds
+    //     it set and no post_id never posts again (app/lib/meta-fb-publish.ts).
+    ['meta_fb', col('unknown', true, true)],
   ],
   clients: [
     //   clients.portal_one — ONE PORTAL, ONE LINK (docs/ONE_PORTAL_SPEC.md, 2 Oct 2026): the tabbed portal and
@@ -1353,6 +1393,9 @@ const GHOST_COLUMNS = {
     //     Social page. Unset/false = Zernio, as always. Only takes effect with an ACTIVE meta_ig_accounts
     //     row for the same Instagram account (app/lib/meta-route-core.ts).
     ['instagram_via_meta', col('boolean', true)],
+    //   clients.facebook_via_meta — the same switch for the client's Facebook Page (6 Nov 2026). Only takes
+    //     effect with an ACTIVE meta_fb_pages row for the client (app/lib/meta-fb-core.ts facebookRoute).
+    ['facebook_via_meta', col('boolean', true)],
     //   clients.client_approval_required — does THIS CLIENT sign every post
     //     off themselves. Unset on almost everybody, and that is the point:
     //     the owner's ruling of 5 Sep 2026 is that an account manager or a
