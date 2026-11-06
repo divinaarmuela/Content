@@ -2380,7 +2380,9 @@ export default function BriefCanvas({
           <div className="absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-1 rounded-inner border border-border bg-surface/95 p-1 shadow-md backdrop-blur">
             <span className="px-2 font-mono text-[11px] uppercase tracking-wider text-muted-foreground">Line</span>
             {(['end', 'start', 'both', 'none'] as ArrowHeads[]).map(h => (
-              <Button key={h} size="sm" variant={arrowHeadsOf(selectedCard.line) === h ? 'default' : 'ghost'} className="h-8 px-2 text-secondary-13"
+              <Button key={h} size="sm" variant="ghost"
+                // the chosen one reads as chosen WITH its arrow visible (the owner, 6 Nov 2026: "all black when selected")
+                className={`h-8 min-w-8 px-2 text-[15px] leading-none ${arrowHeadsOf(selectedCard.line) === h ? 'bg-accent-blue/15 text-accent-blue ring-1 ring-accent-blue hover:bg-accent-blue/20' : 'text-foreground'}`}
                 aria-pressed={arrowHeadsOf(selectedCard.line) === h} title={h === 'end' ? 'Arrowhead at the end' : h === 'start' ? 'Arrowhead at the start' : h === 'both' ? 'Arrowheads at both ends' : 'No arrowhead'}
                 onClick={() => saveLine({ ...selectedCard, line: withArrowHeads(selectedCard.line, h) })}>
                 {h === 'end' ? '→' : h === 'start' ? '←' : h === 'both' ? '↔' : '—'}
