@@ -5,6 +5,7 @@ import InstagramLocations from '../../InstagramLocations'
 import ClientApproval from '../../ClientApproval'
 import MetaDirectInstagram from '../../MetaDirectInstagram'
 import MetaDirectFacebook from '../../MetaDirectFacebook'
+import MdAppDirect from '../../MdAppDirect'
 import { useRole } from '../../../useRole'
 
 export default function ClientSocialPage() {
@@ -29,6 +30,8 @@ export default function ClientSocialPage() {
       <MetaDirectInstagram clientId={id} />
       {/* …and its Facebook Page twin (6 Nov 2026). */}
       <MetaDirectFacebook clientId={id} />
+      {/* MD App, Meta's new app with Unified Login (6 Nov 2026) — super admins only, opt-in per client. */}
+      <MdAppDirect clientId={id} />
     </div>
   )
 }

@@ -3,6 +3,8 @@ import { recordWebhook } from '@/app/lib/meta-ig'
 import { recordPageWebhook } from '@/app/lib/meta-fb'
 import { readMetaFbEnv } from '@/app/lib/meta-fb-core'
 import { handshakeChallenge, readMetaIgEnv, verifyWebhookSignature } from '@/app/lib/meta-ig-core'
+import { recordMdAppWebhook } from '@/app/lib/md-app'
+import { readMdAppEnv } from '@/app/lib/md-app-core'
 
 /**
  * META'S WEBHOOK for directly connected Instagram accounts (1 Oct 2026,
@@ -22,6 +24,9 @@ import { handshakeChallenge, readMetaIgEnv, verifyWebhookSignature } from '@/app
  *        Facebook Pages (6 Nov 2026): a body with object 'page' must be signed
  *        with META_APP_SECRET; its feed changes are stored in meta_fb_events
  *        (app/lib/meta-fb.ts recordPageWebhook) — again, nothing acts on them.
+ *        MD App (Unified Login, 6 Nov 2026): a body signed with MD_APP_SECRET only (object 'instagram' or
+ *        'page') goes ONLY to md_app_events (app/lib/md-app.ts) — never the old tables, never Zernio's inbox
+ *        copy. The handshake also accepts MD_APP_WEBHOOK_VERIFY_TOKEN.
  */
 export const dynamic = 'force-dynamic'
 
@@ -30,8 +35,10 @@ const plain = (body: string, status: number) =>
 
 export async function GET(req: NextRequest) {
   const { verifyToken } = readMetaIgEnv()
-  if (!verifyToken) return plain('Not configured: META_WEBHOOK_VERIFY_TOKEN is not set.', 503)
-  const challenge = handshakeChallenge(req.nextUrl.searchParams, verifyToken)
+  const mdToken = readMdAppEnv().verifyToken
+  if (!verifyToken && !mdToken) return plain('Not configured: META_WEBHOOK_VERIFY_TOKEN is not set.', 503)
+  const challenge = (verifyToken ? handshakeChallenge(req.nextUrl.searchParams, verifyToken) : null)
+    ?? (mdToken ? handshakeChallenge(req.nextUrl.searchParams, mdToken) : null)
   if (challenge == null) return plain('Forbidden', 403)
   return plain(challenge, 200)
 }
@@ -40,15 +47,22 @@ export async function POST(req: NextRequest) {
   const { appSecret } = readMetaIgEnv()
   // Facebook Page webhooks (object 'page', 6 Nov 2026) are signed with the Facebook app's own secret
   const fbSecret = readMetaFbEnv().appSecret
-  if (!appSecret && !fbSecret) return plain('Not configured: META_IG_APP_SECRET is not set.', 503)
+  const mdSecret = readMdAppEnv().appSecret
+  if (!appSecret && !fbSecret && !mdSecret) return plain('Not configured: META_IG_APP_SECRET is not set.', 503)
 
   const raw = await req.text()
   const header = req.headers.get('x-hub-signature-256')
   const igSigned = !!appSecret && verifyWebhookSignature(raw, header, appSecret)
   const fbSigned = !!fbSecret && verifyWebhookSignature(raw, header, fbSecret)
-  if (!igSigned && !fbSigned) return plain('Bad signature', 401)
+  const mdSigned = !!mdSecret && verifyWebhookSignature(raw, header, mdSecret)
+  if (!igSigned && !fbSigned && !mdSigned) return plain('Bad signature', 401)
   let body: unknown
   try { body = JSON.parse(raw) } catch { return plain('Body is not JSON', 400) }
+  // MD App's own deliveries (signed with ITS secret only) are kept apart, in md_app_events
+  if (mdSigned && !igSigned && !fbSigned) {
+    try { return NextResponse.json({ ok: true, stored: (await recordMdAppWebhook(body, Date.now())).stored }) }
+    catch { return plain('Could not record the delivery', 500) }
+  }
   const isPage = (body as { object?: unknown } | null)?.object === 'page'
   // each kind of delivery must carry ITS app's signature: a Page body signed with the Instagram secret, or
   // the reverse, is refused

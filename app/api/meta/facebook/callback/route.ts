@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { connectPages, metaFbReady } from '@/app/lib/meta-fb'
 import { verifyFbState } from '@/app/lib/meta-fb-core'
+import { isMdAppState } from '@/app/lib/md-app-core'
+import { mdAppCallback } from '@/app/lib/md-app-callback'
 
 /**
  * GET /api/meta/facebook/callback — where Facebook sends the person back (6 Nov 2026). The redirect URI
@@ -24,6 +26,8 @@ const back = (req: NextRequest, clientId: string, result: Record<string, string>
 }
 
 export async function GET(req: NextRequest) {
+  // MD App (Unified Login, 6 Nov 2026) shares this registered redirect URI; its state carries its own prefix
+  if (isMdAppState(req.nextUrl.searchParams.get('state'))) return mdAppCallback(req)
   const ready = metaFbReady()
   if (!ready.ok) return plain(ready.reason, 503)
   const q = req.nextUrl.searchParams

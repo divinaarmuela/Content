@@ -94,6 +94,56 @@ for (const f of fs.readdirSync(SQL_DIR).filter(f => f.endsWith('.sql'))) {
 //                    provider.
 const col = (type, nullable, json = false, jsonArray = false) => ({ type, nullable, json, jsonArray })
 const GHOST_TABLES = {
+  // MD APP (Meta "MD App", Instagram API with Unified Login, 6 Nov 2026 — app/lib/md-app*.ts, docs/MD_APP_SETUP.md).
+  // ONE connection per client: id = client_id. The Business Integration System User token is encrypted with
+  // CREDENTIALS_KEY (secret-box) and never leaves the server. use_md_app is THE switch (default false = Zernio).
+  md_app_connections: [
+    ['id', col('string', false)],
+    ['client_id', col('string', false)],
+    ['business_id', col('string', true)],
+    ['token_encrypted', col('string', false)],
+    ['connected_by', col('string', true)],
+    ['connected_at', col('string', false)],
+    ['active', col('boolean', false)],
+    ['use_md_app', col('boolean', false)],
+    ['last_error', col('string', true)],
+  ],
+  // What the client's system user was assigned: id = "<client_id>__<kind>__<asset_id>" (md-app-core assetRowId).
+  // picked = a super admin said it belongs to this client. Page tokens are never stored.
+  md_app_assets: [
+    ['id', col('string', false)],
+    ['client_id', col('string', false)],
+    ['kind', col('string', false)],
+    ['asset_id', col('string', false)],
+    ['name', col('string', true)],
+    ['picked', col('boolean', false)],
+    ['seen_at', col('string', false)],
+  ],
+  // MD App webhook deliveries, kept apart from every Zernio/old-app table. Stored, never acted on.
+  md_app_events: [
+    ['id', col('string', false)],
+    ['object', col('string', false)],
+    ['account_id', col('string', false)],
+    ['client_id', col('string', true)],
+    ['field', col('string', false)],
+    ['payload', col('unknown', false, true, false)],
+    ['occurred_at', col('string', true)],
+    ['received_at', col('string', false)],
+  ],
+  // One MD App publish: the never-twice guard. sending_at is written (by claim) BEFORE the one publishing call.
+  md_app_publishes: [
+    ['id', col('string', false)],
+    ['client_id', col('string', false)],
+    ['network', col('string', false)],
+    ['account_id', col('string', false)],
+    ['request', col('unknown', false, true, false)],
+    ['container_id', col('string', true)],
+    ['sending_at', col('string', true)],
+    ['post_id', col('string', true)],
+    ['published_at', col('string', true)],
+    ['error', col('string', true)],
+    ['created_at', col('string', false)],
+  ],
   website: [['id', col('string', false)]],
   claim_locks: [['id', col('string', false)]],
   booking_seats: [['id', col('string', false)]],

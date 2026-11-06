@@ -43,6 +43,9 @@ const isProtectedRoute = createRouteMatcher([
   '/api/meta/facebook/connect(.*)',
   '/api/meta/facebook/pages(.*)',
   '/api/meta/facebook/inbox(.*)',
+  // MD App (Unified Login, 6 Nov 2026): connect, status/pick/switch, test buttons. Its callback reuses
+  // /api/meta/facebook/callback (public) and its webhook is /api/meta/webhook (public).
+  '/api/meta/md-app(.*)',
 ])
 
 /**
@@ -173,6 +176,8 @@ export const config = {
     '/api/meta/facebook/connect',
     '/api/meta/facebook/pages',
     '/api/meta/facebook/inbox',
+    '/api/meta/md-app',
+    '/api/meta/md-app/:path*',
     '/api/portal/:path*',
     '/api/overview/:path*',
     '/api/posts/:path*',

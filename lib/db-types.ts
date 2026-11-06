@@ -70,6 +70,10 @@ export type TableName =
   | 'leads'
   | 'linktree_connections'
   | 'linktree_states'
+  | 'md_app_assets'
+  | 'md_app_connections'
+  | 'md_app_events'
+  | 'md_app_publishes'
   | 'meta_fb_events'
   | 'meta_fb_pages'
   | 'meta_ig_accounts'
@@ -1218,6 +1222,53 @@ export interface LinktreeState {
   created_at: string
 }
 
+export interface MdAppAsset {
+  id: string
+  client_id: string
+  kind: string
+  asset_id: string
+  name: string | null
+  picked: boolean
+  seen_at: string
+}
+
+export interface MdAppConnection {
+  id: string
+  client_id: string
+  business_id: string | null
+  token_encrypted: string
+  connected_by: string | null
+  connected_at: string
+  active: boolean
+  use_md_app: boolean
+  last_error: string | null
+}
+
+export interface MdAppEvent {
+  id: string
+  object: string
+  account_id: string
+  client_id: string | null
+  field: string
+  payload: unknown
+  occurred_at: string | null
+  received_at: string
+}
+
+export interface MdAppPublish {
+  id: string
+  client_id: string
+  network: string
+  account_id: string
+  request: unknown
+  container_id: string | null
+  sending_at: string | null
+  post_id: string | null
+  published_at: string | null
+  error: string | null
+  created_at: string
+}
+
 export interface MetaFbEvent {
   id: string
   page_id: string
@@ -2065,6 +2116,10 @@ export const TABLE_COLUMNS = {
   leads: ['source', 'id', 'created_at', 'fname', 'lname', 'email', 'phone', 'biz', 'model', 'need', 'budget', 'timeline', 'stage', 'stage_entered_at', 'owner_id', 'tier', 'source_tag', 'partner', 'next_action', 'next_action_at', 'qualifiers', 'exit_ticks', 'call_at', 'proposal_sent_at', 'walkthrough_at', 'signed_at', 'deposit_at', 'vs_delivered_at', 'objection', 'deal_value', 'not_now_at', 'reopen_at', 'touches', 'pipeline_notes'],
   linktree_connections: ['id', 'client_id', 'access_token_enc', 'refresh_token_enc', 'expires_at', 'profile_username', 'profile_url', 'profile_name', 'connected_by', 'connected_at', 'updated_at', 'last_error'],
   linktree_states: ['id', 'client_id', 'user_id', 'verifier_enc', 'used_at', 'created_at'],
+  md_app_assets: ['id', 'client_id', 'kind', 'asset_id', 'name', 'picked', 'seen_at'],
+  md_app_connections: ['id', 'client_id', 'business_id', 'token_encrypted', 'connected_by', 'connected_at', 'active', 'use_md_app', 'last_error'],
+  md_app_events: ['id', 'object', 'account_id', 'client_id', 'field', 'payload', 'occurred_at', 'received_at'],
+  md_app_publishes: ['id', 'client_id', 'network', 'account_id', 'request', 'container_id', 'sending_at', 'post_id', 'published_at', 'error', 'created_at'],
   meta_fb_events: ['id', 'page_id', 'client_id', 'kind', 'item', 'payload', 'occurred_at', 'received_at', 'delivery_id'],
   meta_fb_pages: ['id', 'client_id', 'page_id', 'name', 'category', 'picture', 'access_token_encrypted', 'tasks', 'connected_by', 'connected_at', 'active', 'last_error'],
   meta_ig_accounts: ['id', 'client_id', 'username', 'account_type', 'access_token_encrypted', 'token_expires_at', 'scopes', 'connected_by', 'connected_at', 'refreshed_at', 'status', 'last_error'],
@@ -2184,6 +2239,10 @@ export const NULLABLE_COLUMNS = {
   leads: ['source', 'fname', 'lname', 'email', 'phone', 'biz', 'model', 'need', 'budget', 'timeline', 'stage', 'stage_entered_at', 'owner_id', 'tier', 'source_tag', 'partner', 'next_action', 'next_action_at', 'qualifiers', 'exit_ticks', 'call_at', 'proposal_sent_at', 'walkthrough_at', 'signed_at', 'deposit_at', 'vs_delivered_at', 'objection', 'deal_value', 'not_now_at', 'reopen_at', 'touches', 'pipeline_notes'],
   linktree_connections: ['access_token_enc', 'refresh_token_enc', 'expires_at', 'profile_username', 'profile_url', 'profile_name', 'connected_by', 'connected_at', 'updated_at', 'last_error'],
   linktree_states: ['used_at'],
+  md_app_assets: ['name'],
+  md_app_connections: ['business_id', 'connected_by', 'last_error'],
+  md_app_events: ['client_id', 'occurred_at'],
+  md_app_publishes: ['container_id', 'sending_at', 'post_id', 'published_at', 'error'],
   meta_fb_events: ['client_id', 'item', 'occurred_at', 'delivery_id'],
   meta_fb_pages: ['name', 'category', 'picture', 'connected_by', 'last_error'],
   meta_ig_accounts: ['username', 'account_type', 'token_expires_at', 'connected_by', 'refreshed_at', 'last_error'],
@@ -2310,6 +2369,10 @@ export const JSON_COLUMNS = {
   leads: [],
   linktree_connections: [],
   linktree_states: [],
+  md_app_assets: [],
+  md_app_connections: [],
+  md_app_events: ['payload'],
+  md_app_publishes: ['request'],
   meta_fb_events: ['payload'],
   meta_fb_pages: ['tasks'],
   meta_ig_accounts: ['scopes'],
@@ -2435,6 +2498,10 @@ export const JSON_ARRAY_COLUMNS = {
   leads: [],
   linktree_connections: [],
   linktree_states: [],
+  md_app_assets: [],
+  md_app_connections: [],
+  md_app_events: [],
+  md_app_publishes: [],
   meta_fb_events: [],
   meta_fb_pages: ['tasks'],
   meta_ig_accounts: ['scopes'],
