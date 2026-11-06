@@ -30,7 +30,7 @@ import {
   hasTextStyle, defaultAlignOf, textBoldOf, boldWordsIn, inBoldRun,
   CANVAS_FONTS, CANVAS_FONTS_HREF, FONT_LABEL, FONT_STACK, fontOf, hasFontChoice, type CanvasFont } from '../../../../lib/batch-brief-core'
 import { FONT_CLASS, fontVars } from './canvasFont'
-import { arrowHeadsOf, bendLine, lineMiddle, moveLineEnd, moveWholeLine, newFreeLine, straightenLine, withArrowHeads, type ArrowHeads, type LinePoint } from '../../../../lib/board-canvas-core'
+import { arrowHeadsOf, bendLine, lineMiddle, linePath, moveLineEnd, moveWholeLine, newFreeLine, straightenLine, withArrowHeads, type ArrowHeads, type LinePoint } from '../../../../lib/board-canvas-core'
 import { pastedTableWidth, tableFromClipboard } from '../../../../lib/canvas-paste-core'
 import { applyBold } from './BoldBox'
 import { holdPageScroll } from '../../../../lib/hold-page-scroll'
@@ -479,7 +479,6 @@ export default function BriefCanvas({
    *    its end and its middle. The middle bends it, an end moves it (and joins a card when dropped on one). The drag
    *    is drawn from local state and saved once, on release; only the fields that handle owns change. Nothing is
    *    written for a line nobody dragged. ── */
-  const [lineEdit, setLineEdit] = useState<{ id: string; handle: 'start' | 'end' | 'mid' | 'body'; card: CanvasCard; origin?: { p: LinePoint; a: LinePoint; b: LinePoint; base: CanvasCard } } | null>(null)
   const lineEnds = (arrow: CanvasCard): { a: LinePoint; b: LinePoint } | null => {
     const fromCard = arrow.from ? cards.find(c => c.id === arrow.from) : undefined
     const toCard = arrow.to ? cards.find(c => c.id === arrow.to) : undefined
@@ -489,75 +488,107 @@ export default function BriefCanvas({
     return ac && bc ? { a: { x: ac.cx, y: ac.cy }, b: { x: bc.cx, y: bc.cy } } : null
   }
   const placeFreeLine = () => {
-    const line: CanvasCard = { id: mint(), kind: 'arrow', x: 0, y: 0, w: 240, z: 0, line: newFreeLine(centerWorld()), ...(board ? { parent: board } : {}) }
+    // in empty space near the middle of the screen, never on top of (or under) cards — the owner, 6 Nov 2026
+    const mid = centerWorld()
+    const size = { w: 160, h: 160 }
+    const at = freeSpot({ x: mid.x - size.w / 2, y: mid.y - size.h / 2 }, size, takenBoxes())
+    const line: CanvasCard = { id: mint(), kind: 'arrow', x: 0, y: 0, w: 240, z: 0, line: newFreeLine({ x: at.x + size.w / 2, y: at.y + size.h / 2 }), ...(board ? { parent: board } : {}) }
     upsertLocal(line)
     persist([line])
     setSelected(line.id)
   }
   const saveLine = (next: CanvasCard) => { upsertLocal(next); persist([next]) }
-  const onLineHandleDown = (e: React.PointerEvent, arrow: CanvasCard, handle: 'start' | 'end' | 'mid') => {
-    e.stopPropagation()
-    e.preventDefault()
-    ;(e.currentTarget as Element).setPointerCapture?.(e.pointerId)
-    interactingRef.current = true
-    setLineEdit({ id: arrow.id, handle, card: arrow })
+  /* THE DRAG DRAWS ITSELF (the owner, 6 Nov 2026: "it's laggy … it moves around and stops, sometimes doesn't move").
+   * Setting React state on every pointer move redrew the whole board each frame; and the listeners sat on the line
+   * itself, which is redrawn in another layer once selected, so the drag was dropped part-way. Now the drag lives in a
+   * ref, follows the pointer through window listeners, paints only that one line's SVG straight into the page, and is
+   * saved once on release. A press that moves less than 4 px is a click and moves nothing. */
+  const lineDragRef = useRef<{ id: string; handle: 'start' | 'end' | 'mid' | 'body'; base: CanvasCard; card: CanvasCard; startClient: { x: number; y: number }; origin: { p: LinePoint; a: LinePoint; b: LinePoint } | null; live: boolean } | null>(null)
+  const paintLine = (next: CanvasCard) => {
+    const ends = lineEnds(next)
+    const g = document.querySelector(`[data-arrow="${CSS.escape(next.id)}"]`)
+    if (!ends || !g) return
+    const ln = next.line
+    const d = linePath(ends.a, ends.b, ln)
+    g.querySelectorAll('path').forEach(el => el.setAttribute('d', d))
+    const m = lineMiddle(ends.a, ends.b, ln)
+    const put = (h: string, x: number, y: number) => { const c = g.querySelector(`[data-line-handle="${h}"]`); if (c) { c.setAttribute('cx', String(x)); c.setAttribute('cy', String(y)) } }
+    put('start', ends.a.x, ends.a.y); put('end', ends.b.x, ends.b.y); put('mid', m.x, m.y)
+    const t = g.querySelector('text'); if (t) { t.setAttribute('x', String(m.x)); t.setAttribute('y', String(m.y)) }
   }
-  /** press on a selected line itself: the whole line follows the pointer */
-  const onLineBodyDown = (e: React.PointerEvent, arrow: CanvasCard) => {
+  const lineDragNext = (dr: NonNullable<typeof lineDragRef.current>, p: LinePoint): CanvasCard | null => {
+    const cur = dr.base
+    if (dr.handle === 'body' && dr.origin) {
+      const rest: CanvasCard = { ...cur }
+      delete rest.from; delete rest.to
+      return { ...rest, line: moveWholeLine(cur.line, dr.origin.a, dr.origin.b, p.x - dr.origin.p.x, p.y - dr.origin.p.y) }
+    }
+    if (dr.handle === 'mid') {
+      const ends = lineEnds(cur)
+      return ends ? { ...cur, line: bendLine(cur.line, ends.a, ends.b, p) } : null
+    }
+    const end = dr.handle === 'start' ? 'start' : 'end'
+    const other = lineEnds(cur)
+    const rest: CanvasCard = { ...cur }
+    if (end === 'start') delete rest.from; else delete rest.to
+    let line = moveLineEnd(cur.line, end, p)
+    if (other && end === 'start' && !cur.to && line.tx === undefined) line = moveLineEnd(line, 'end', other.b)
+    if (other && end === 'end' && !cur.from && line.fx === undefined) line = moveLineEnd(line, 'start', other.a)
+    return { ...rest, line }
+  }
+  const startLineDrag = (e: React.PointerEvent, arrow: CanvasCard, handle: 'start' | 'end' | 'mid' | 'body') => {
+    if (e.button !== 0) return
     const ends = lineEnds(arrow)
     if (!ends) return
     e.stopPropagation()
     e.preventDefault()
-    ;(e.currentTarget as Element).setPointerCapture?.(e.pointerId)
+    setSelected(arrow.id)
     interactingRef.current = true
-    setLineEdit({ id: arrow.id, handle: 'body', card: arrow, origin: { p: toWorld(e.clientX, e.clientY), a: ends.a, b: ends.b, base: arrow } })
-  }
-  const onLineHandleMove = (e: React.PointerEvent) => {
-    if (!lineEdit) return
-    const p = toWorld(e.clientX, e.clientY)
-    const cur = lineEdit.card
-    if (lineEdit.handle === 'body' && lineEdit.origin) {
-      const o = lineEdit.origin
-      const dx = p.x - o.p.x, dy = p.y - o.p.y
-      if (Math.abs(dx) < 2 && Math.abs(dy) < 2 && cur === o.base) return
-      // moved off its cards: both ends become free points where they now are
-      const rest: CanvasCard = { ...o.base }
-      delete rest.from; delete rest.to
-      setLineEdit({ ...lineEdit, card: { ...rest, line: moveWholeLine(o.base.line, o.a, o.b, dx, dy) } })
-      return
+    lineDragRef.current = {
+      id: arrow.id, handle, base: arrow, card: arrow, startClient: { x: e.clientX, y: e.clientY }, live: false,
+      origin: handle === 'body' ? { p: toWorld(e.clientX, e.clientY), a: ends.a, b: ends.b } : null,
     }
-    if (lineEdit.handle === 'mid') {
-      const ends = lineEnds(cur)
-      if (!ends) return
-      setLineEdit({ ...lineEdit, card: { ...cur, line: bendLine(cur.line, ends.a, ends.b, p) } })
-      return
+    let frame = 0
+    let last: PointerEvent | null = null
+    const onMove = (ev: PointerEvent) => {
+      const dr = lineDragRef.current
+      if (!dr) return
+      if (!dr.live && Math.hypot(ev.clientX - dr.startClient.x, ev.clientY - dr.startClient.y) < 4) return
+      dr.live = true
+      last = ev
+      if (frame) return
+      frame = requestAnimationFrame(() => {
+        frame = 0
+        const d2 = lineDragRef.current
+        if (!d2 || !last) return
+        const next = lineDragNext(d2, toWorld(last.clientX, last.clientY))
+        if (next) { d2.card = next; paintLine(next) }
+      })
     }
-    if (lineEdit.handle === 'body') return
-    // an end pulled off its card becomes a free point; the other end keeps where it is
-    const other = lineEnds(cur)
-    const rest: CanvasCard = { ...cur }
-    if (lineEdit.handle === 'start') delete rest.from; else delete rest.to
-    let line = moveLineEnd(cur.line, lineEdit.handle, p)
-    if (other && lineEdit.handle === 'start' && !cur.to && line.tx === undefined) line = moveLineEnd(line, 'end', other.b)
-    if (other && lineEdit.handle === 'end' && !cur.from && line.fx === undefined) line = moveLineEnd(line, 'start', other.a)
-    setLineEdit({ ...lineEdit, card: { ...rest, line } })
-  }
-  const onLineHandleUp = (e: React.PointerEvent) => {
-    if (!lineEdit) return
-    interactingRef.current = false
-    let next = lineEdit.card
-    if (lineEdit.handle === 'start' || lineEdit.handle === 'end') {
-      // dropped on a card: that end joins it
-      const hits = typeof document.elementsFromPoint === 'function' ? document.elementsFromPoint(e.clientX, e.clientY) : []
-      const hit = hits.map(el => (el as HTMLElement).closest?.('[data-cid]') as HTMLElement | null).find(el => el && el.dataset.kind !== 'arrow')
-      const cid = hit?.dataset.cid
-      const otherId = lineEdit.handle === 'start' ? next.to : next.from
-      if (cid && cid !== otherId) next = lineEdit.handle === 'start' ? { ...next, from: cid } : { ...next, to: cid }
+    const onUp = (ev: PointerEvent) => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+      window.removeEventListener('pointercancel', onUp)
+      if (frame) cancelAnimationFrame(frame)
+      interactingRef.current = false
+      const dr = lineDragRef.current
+      lineDragRef.current = null
+      if (!dr || !dr.live) return // a click: nothing moves, nothing is written
+      let next = lineDragNext(dr, toWorld(ev.clientX, ev.clientY)) ?? dr.card
+      if (dr.handle === 'start' || dr.handle === 'end') {
+        // dropped on a card: that end joins it
+        const hits = typeof document.elementsFromPoint === 'function' ? document.elementsFromPoint(ev.clientX, ev.clientY) : []
+        const hit = hits.map(el => (el as HTMLElement).closest?.('[data-cid]') as HTMLElement | null).find(el => el && el.dataset.kind !== 'arrow')
+        const cid = hit?.dataset.cid
+        const otherId = dr.handle === 'start' ? next.to : next.from
+        if (cid && cid !== otherId) next = dr.handle === 'start' ? { ...next, from: cid } : { ...next, to: cid }
+      }
+      if (JSON.stringify(dr.base) === JSON.stringify(next)) return
+      saveLine(next)
     }
-    setLineEdit(null)
-    const before = cards.find(c => c.id === next.id)
-    if (before && JSON.stringify(before) === JSON.stringify(next)) return // a press without a move writes nothing
-    saveLine(next)
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+    window.addEventListener('pointercancel', onUp)
   }
 
   const connectCards = (from: string, to: string) => {
@@ -1823,6 +1854,70 @@ export default function BriefCanvas({
     </nav>
   )
 
+  /** one line on the board: drawn in the line layer, or above the cards when it is the selected one */
+  const drawArrow = (saved: CanvasCard) => {
+              // while a handle is dragged the line draws from the drag; otherwise exactly as saved
+              const arrow = saved
+              const fromCard = arrow.from ? cards.find(c => c.id === arrow.from) : undefined
+              const toCard = arrow.to ? cards.find(c => c.id === arrow.to) : undefined
+              const ln = arrow.line
+              // an end joined to a card sits at its centre; Milanote's free ends sit at their points
+              const a = fromCard ? centreOf(fromCard) : ln?.fx !== undefined && ln?.fy !== undefined ? { cx: ln.fx, cy: ln.fy } : null
+              const b = toCard ? centreOf(toCard) : ln?.tx !== undefined && ln?.ty !== undefined ? { cx: ln.tx, cy: ln.ty } : null
+              if (!a || !b) return null
+              const isSel = selected === arrow.id
+              // a curve through Milanote's handle, or straight
+              const d = ln?.cx !== undefined && ln?.cy !== undefined
+                ? `M${a.cx},${a.cy} Q${ln.cx},${ln.cy} ${b.cx},${b.cy}`
+                : `M${a.cx},${a.cy} L${b.cx},${b.cy}`
+              // our own arrows always point; Milanote's say which ends do
+              const endArrow = ln ? ln.end === 'arrow' : true
+              const startArrow = ln?.start === 'arrow'
+              const marker = isSel ? 'url(#brief-arrowhead-sel)' : 'url(#brief-arrowhead)'
+              const mid = ln?.cx !== undefined && ln?.cy !== undefined
+                ? { x: (a.cx + 2 * ln.cx + b.cx) / 4, y: (a.cy + 2 * ln.cy + b.cy) / 4 }
+                : { x: (a.cx + b.cx) / 2, y: (a.cy + b.cy) / 2 }
+              return (
+                <g key={arrow.id} data-arrow={arrow.id}>
+                  {/* wide invisible hit line so the arrow is clickable */}
+                  <path d={d} fill="none"
+                    stroke="transparent" strokeWidth={14}
+                    style={{ pointerEvents: viewOnly ? 'none' : 'stroke', cursor: 'move', touchAction: 'none' }}
+                    onPointerDown={!viewOnly ? (e => startLineDrag(e, saved, 'body')) : undefined}
+                    onClick={e => { e.stopPropagation(); setSelected(arrow.id) }}>
+                    {isSel && <title>Drag to move the line</title>}
+                  </path>
+                  <path d={d} fill="none"
+                    className={isSel ? 'stroke-accent-blue' : arrow.hex ? '' : ln ? 'stroke-foreground' : 'stroke-muted-foreground'}
+                    stroke={!isSel && arrow.hex ? arrow.hex : undefined}
+                    strokeWidth={isSel ? 1.75 : ln?.weight ? Math.max(1, ln.weight / 2) : 1.25}
+                    strokeDasharray={ln?.dashed ? '6 5' : undefined}
+                    strokeLinecap="round"
+                    markerEnd={endArrow ? marker : undefined}
+                    markerStart={startArrow ? marker : undefined}
+                    style={{ pointerEvents: 'none' }} />
+                  {isSel && !viewOnly && (() => {
+                    const m = lineMiddle({ x: a.cx, y: a.cy }, { x: b.cx, y: b.cy }, ln)
+                    const knob = (h: 'start' | 'end' | 'mid', x: number, y: number) => (
+                      <circle key={h} cx={x} cy={y} r={h === 'mid' ? 6 : 7} data-line-handle={h} data-card=""
+                        className={h === 'mid' ? 'fill-background stroke-accent-blue' : 'fill-accent-blue stroke-background'} strokeWidth={2}
+                        style={{ pointerEvents: 'all', cursor: h === 'mid' ? 'grab' : 'move', touchAction: 'none' }}
+                        onPointerDown={e => startLineDrag(e, saved, h)}
+                        onDoubleClick={h === 'mid' ? (e => { e.stopPropagation(); if (saved.line?.cx !== undefined) saveLine({ ...saved, line: straightenLine(saved.line) }) }) : undefined}>
+                        <title>{h === 'mid' ? 'Drag to curve · double-click to straighten' : h === 'start' ? 'Drag the start' : 'Drag the end'}</title>
+                      </circle>
+                    )
+                    return <>{knob('start', a.cx, a.cy)}{knob('end', b.cx, b.cy)}{knob('mid', m.x, m.y)}</>
+                  })()}
+                  {ln?.label && (
+                    <text x={mid.x} y={mid.y} textAnchor="middle" dominantBaseline="middle"
+                      className="fill-foreground text-[13px]" stroke="var(--background, #fff)" strokeWidth={4} paintOrder="stroke"
+                      style={{ pointerEvents: 'none' }}>{ln.label}</text>
+                  )}
+                </g>
+              )
+}
+
   const view = (
     // Expanded, the board covers the whole window. The cover MUST be opaque:
     // the restyle once gave it the canvas's 4% tint, and the sidebar, header
@@ -1934,72 +2029,13 @@ export default function BriefCanvas({
               className="stroke-accent-blue" strokeWidth={1.5} strokeDasharray="4 3"
               strokeLinecap="round" markerEnd="url(#brief-arrowhead-sel)"
               style={{ pointerEvents: 'none' }} />
-            {ordered.filter(c => c.kind === 'arrow').map(saved => {
-              // while a handle is dragged the line draws from the drag; otherwise exactly as saved
-              const arrow = lineEdit?.id === saved.id ? lineEdit.card : saved
-              const fromCard = arrow.from ? cards.find(c => c.id === arrow.from) : undefined
-              const toCard = arrow.to ? cards.find(c => c.id === arrow.to) : undefined
-              const ln = arrow.line
-              // an end joined to a card sits at its centre; Milanote's free ends sit at their points
-              const a = fromCard ? centreOf(fromCard) : ln?.fx !== undefined && ln?.fy !== undefined ? { cx: ln.fx, cy: ln.fy } : null
-              const b = toCard ? centreOf(toCard) : ln?.tx !== undefined && ln?.ty !== undefined ? { cx: ln.tx, cy: ln.ty } : null
-              if (!a || !b) return null
-              const isSel = selected === arrow.id
-              // a curve through Milanote's handle, or straight
-              const d = ln?.cx !== undefined && ln?.cy !== undefined
-                ? `M${a.cx},${a.cy} Q${ln.cx},${ln.cy} ${b.cx},${b.cy}`
-                : `M${a.cx},${a.cy} L${b.cx},${b.cy}`
-              // our own arrows always point; Milanote's say which ends do
-              const endArrow = ln ? ln.end === 'arrow' : true
-              const startArrow = ln?.start === 'arrow'
-              const marker = isSel ? 'url(#brief-arrowhead-sel)' : 'url(#brief-arrowhead)'
-              const mid = ln?.cx !== undefined && ln?.cy !== undefined
-                ? { x: (a.cx + 2 * ln.cx + b.cx) / 4, y: (a.cy + 2 * ln.cy + b.cy) / 4 }
-                : { x: (a.cx + b.cx) / 2, y: (a.cy + b.cy) / 2 }
-              return (
-                <g key={arrow.id} data-arrow={arrow.id}>
-                  {/* wide invisible hit line so the arrow is clickable */}
-                  <path d={d} fill="none"
-                    stroke="transparent" strokeWidth={14}
-                    style={{ pointerEvents: viewOnly ? 'none' : 'stroke', cursor: isSel ? 'move' : 'pointer', touchAction: isSel ? 'none' : undefined }}
-                    onPointerDown={isSel && !viewOnly ? (e => onLineBodyDown(e, saved)) : undefined}
-                    onPointerMove={isSel ? onLineHandleMove : undefined}
-                    onPointerUp={isSel ? onLineHandleUp : undefined}
-                    onPointerCancel={isSel ? onLineHandleUp : undefined}
-                    onClick={e => { e.stopPropagation(); setSelected(arrow.id) }}>
-                    {isSel && <title>Drag to move the line</title>}
-                  </path>
-                  <path d={d} fill="none"
-                    className={isSel ? 'stroke-accent-blue' : arrow.hex ? '' : ln ? 'stroke-foreground' : 'stroke-muted-foreground'}
-                    stroke={!isSel && arrow.hex ? arrow.hex : undefined}
-                    strokeWidth={isSel ? 1.75 : ln?.weight ? Math.max(1, ln.weight / 2) : 1.25}
-                    strokeDasharray={ln?.dashed ? '6 5' : undefined}
-                    strokeLinecap="round"
-                    markerEnd={endArrow ? marker : undefined}
-                    markerStart={startArrow ? marker : undefined}
-                    style={{ pointerEvents: 'none' }} />
-                  {isSel && !viewOnly && (() => {
-                    const m = lineMiddle({ x: a.cx, y: a.cy }, { x: b.cx, y: b.cy }, ln)
-                    const knob = (h: 'start' | 'end' | 'mid', x: number, y: number) => (
-                      <circle key={h} cx={x} cy={y} r={h === 'mid' ? 6 : 7} data-line-handle={h} data-card=""
-                        className={h === 'mid' ? 'fill-background stroke-accent-blue' : 'fill-accent-blue stroke-background'} strokeWidth={2}
-                        style={{ pointerEvents: 'all', cursor: h === 'mid' ? 'grab' : 'move', touchAction: 'none' }}
-                        onPointerDown={e => onLineHandleDown(e, saved, h)}
-                        onPointerMove={onLineHandleMove} onPointerUp={onLineHandleUp} onPointerCancel={onLineHandleUp}
-                        onDoubleClick={h === 'mid' ? (e => { e.stopPropagation(); if (saved.line?.cx !== undefined) saveLine({ ...saved, line: straightenLine(saved.line) }) }) : undefined}>
-                        <title>{h === 'mid' ? 'Drag to curve · double-click to straighten' : h === 'start' ? 'Drag the start' : 'Drag the end'}</title>
-                      </circle>
-                    )
-                    return <>{knob('start', a.cx, a.cy)}{knob('end', b.cx, b.cy)}{knob('mid', m.x, m.y)}</>
-                  })()}
-                  {ln?.label && (
-                    <text x={mid.x} y={mid.y} textAnchor="middle" dominantBaseline="middle"
-                      className="fill-foreground text-[13px]" stroke="var(--background, #fff)" strokeWidth={4} paintOrder="stroke"
-                      style={{ pointerEvents: 'none' }}>{ln.label}</text>
-                  )}
-                </g>
-              )
-            })}
+            {ordered.filter(c => c.kind === 'arrow' && c.id !== selected).map(drawArrow)}
+          </svg>
+          {/* THE SELECTED LINE DRAWS ABOVE THE CARDS (the owner, 6 Nov 2026: clicking a line "pops it behind" the
+              content) — so it and its handles can always be seen and grabbed */}
+          <svg className="absolute left-0 top-0" width={1} height={1}
+            style={{ overflow: 'visible', maxWidth: 'none', zIndex: 6000, position: 'absolute', pointerEvents: 'none' }} aria-hidden>
+            {ordered.filter(c => c.kind === 'arrow' && c.id === selected).map(drawArrow)}
           </svg>
           {ordered.filter(c => c.kind !== 'arrow').map(card => (
             <div

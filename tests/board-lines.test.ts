@@ -65,10 +65,11 @@ describe('editing keeps everything the handle does not own', () => {
 describe('the canvas writes a line only when somebody drags or changes it', () => {
   const src = readFileSync(join(__dirname, '..', 'app/dashboard/production/shoots/[id]/BriefCanvas.tsx'), 'utf8')
   it('an untouched line draws from what was saved', () => {
-    expect(src).toContain('const arrow = lineEdit?.id === saved.id ? lineEdit.card : saved')
+    expect(src).toContain('const arrow = saved')
   })
   it('a press on a handle without a move saves nothing', () => {
-    expect(src).toContain('if (before && JSON.stringify(before) === JSON.stringify(next)) return')
+    expect(src).toContain('if (!dr || !dr.live) return // a click: nothing moves, nothing is written')
+    expect(src).toContain('if (JSON.stringify(dr.base) === JSON.stringify(next)) return')
   })
   it('handles only for an editor, never on a view-only board', () => {
     expect(src).toContain('{isSel && !viewOnly && (() => {')
