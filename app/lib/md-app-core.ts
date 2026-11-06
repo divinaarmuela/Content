@@ -217,6 +217,31 @@ export function parseAssigned(kind: AssetKind, json: unknown): AssignedAsset[] {
   return out
 }
 
+/**
+ * The asset ids a token was granted, per kind, from `GET /debug_token` → `data.granular_scopes[].target_ids`.
+ * Why (6 Nov 2026, first live connect): with the BISU token `/me/adaccounts` answered "(#200) Missing
+ * Permissions" and `/me/assigned_instagram_accounts` answered an empty list, although Business Settings →
+ * Connected apps listed the ad account and the Instagram account as shared with MD App. The granted ids are
+ * read back here and each asset is then read by its own id. Ad account ids come back bare → `act_<id>`.
+ */
+export function parseGrantedTargets(json: unknown): Record<AssetKind, string[]> {
+  const scopes = Array.isArray((json as any)?.data?.granular_scopes) ? (json as any).data.granular_scopes : []
+  const out: Record<AssetKind, Set<string>> = { instagram: new Set(), page: new Set(), ad_account: new Set() }
+  for (const s of scopes) {
+    const scope = typeof s?.scope === 'string' ? s.scope : ''
+    const ids: unknown[] = Array.isArray(s?.target_ids) ? s.target_ids : []
+    const kind: AssetKind | null = scope.startsWith('instagram_') ? 'instagram'
+      : scope === 'ads_read' || scope === 'ads_management' ? 'ad_account'
+      : scope === 'pages_show_list' || scope === 'pages_read_engagement' ? 'page' : null
+    if (!kind) continue
+    for (const raw of ids) {
+      const id = kind === 'ad_account' && /^\d+$/.test(String(raw)) ? `act_${raw}` : String(raw)
+      if (isGraphAssetId(id)) out[kind].add(id)
+    }
+  }
+  return { instagram: [...out.instagram], page: [...out.page], ad_account: [...out.ad_account] }
+}
+
 /** Numeric Graph ids, or an ad account's `act_<digits>`. Anything else never becomes part of a path. */
 export function isGraphAssetId(v: unknown): v is string {
   return typeof v === 'string' && /^(act_)?\d{1,30}$/.test(v)

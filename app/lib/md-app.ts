@@ -8,7 +8,7 @@ import { fbMultiPhotoParams, fbPublishCall, fbUnpublishedPhotoParams, publishedP
 import {
   IG_ACCOUNT_METRICS, IG_MEDIA_METRICS, IG_WEBHOOK_FIELDS, MD_TESTS, PAGE_METRICS, PAGE_WEBHOOK_FIELDS_MD,
   assetRowId, mdAppReadiness, mdAppsecretProof, mdCodeExchangeUrl, mdErrorDetail, mdErrorMessage, mdGraphUrl,
-  mdMessageBody, mdRedactUrl, mdResumeDecision, parseAssigned, parseBisuToken, parseBusinessId, parseMdInsights,
+  mdMessageBody, mdRedactUrl, mdResumeDecision, parseAssigned, parseBisuToken, parseGrantedTargets, parseBusinessId, parseMdInsights,
   parseMdWebhook, readMdAppEnv, summariseTestResult, testNeeds, usesMdApp, validateMdPublish,
   type AssetKind, type AssignedAsset, type MdAppReady, type MdInsight, type MdPublishRequest, type MdTestId,
 } from './md-app-core'
@@ -35,7 +35,8 @@ export function mdAppReady(): MdAppReady {
 
 /* ── the Graph, on graph.facebook.com v27.0 ───────────────────────────── */
 
-type Auth = { token: string; appSecret: string }
+/** appId: needed only to read the token's granted accounts back (debug_token, see readAssigned) */
+type Auth = { token: string; appSecret: string; appId?: string }
 
 async function call(url: string, init?: RequestInit): Promise<any> {
   let res: Response
@@ -94,20 +95,44 @@ async function listAll(a: Auth, path: string, fields: string, kind: AssetKind): 
 export async function readAssigned(a: Auth): Promise<{ businessId: string | null; assets: AssignedAsset[]; errors: string[] }> {
   const errors: string[] = []
   const safe = async <T>(label: string, p: Promise<T>, fallback: T) => p.catch(e => { errors.push(`${label}: ${e instanceof Error ? e.message : 'failed'}`); return fallback })
+  const failed = new Set<AssetKind>()
+  const list = (label: string, kind: AssetKind, p: Promise<AssignedAsset[]>) =>
+    p.catch(e => { failed.add(kind); errors.push(`${label}: ${e instanceof Error ? e.message : 'failed'}`); return [] as AssignedAsset[] })
   const [me, ig, pages, ads] = await Promise.all([
     safe('business', get(a, 'me', { fields: 'client_business_id' }), null),
-    safe('Instagram', listAll(a, 'me/assigned_instagram_accounts', 'id,username', 'instagram'), []),
-    safe('Pages', listAll(a, 'me/accounts', 'id,name', 'page'), []),
-    safe('Ad accounts', listAll(a, 'me/adaccounts', 'id,account_id,name', 'ad_account'), []),
+    list('Instagram', 'instagram', listAll(a, 'me/assigned_instagram_accounts', 'id,username', 'instagram')),
+    list('Pages', 'page', listAll(a, 'me/accounts', 'id,name', 'page')),
+    list('Ad accounts', 'ad_account', listAll(a, 'me/adaccounts', 'id,account_id,name', 'ad_account')),
   ])
-  return { businessId: parseBusinessId(me), assets: [...ig, ...pages, ...ads], errors }
+  const found: Record<AssetKind, AssignedAsset[]> = { instagram: ig, page: pages, ad_account: ads }
+  // A list edge that failed or came back empty: read the granted ids from the token itself and fetch each asset
+  // by id (parseGrantedTargets says why). An asset that reads fine clears that list's error.
+  const missing = (Object.keys(found) as AssetKind[]).filter(k => found[k].length === 0)
+  if (missing.length && a.appId) {
+    const granted = await call(mdGraphUrl('debug_token', { input_token: a.token, access_token: `${a.appId}|${a.appSecret}` }))
+      .then(parseGrantedTargets).catch(e => { errors.push(`granted accounts: ${e instanceof Error ? e.message : 'failed'}`); return null })
+    for (const kind of granted ? missing : []) {
+      const fields = kind === 'instagram' ? 'id,username' : kind === 'ad_account' ? 'id,account_id,name' : 'id,name'
+      for (const id of granted![kind].slice(0, 50)) {
+        const one = await get(a, id, { fields }).then(j => parseAssigned(kind, { data: [j] })).catch(e => {
+          errors.push(`${kind} ${id}: ${e instanceof Error ? e.message : 'failed'}`); return [] as AssignedAsset[]
+        })
+        found[kind].push(...one)
+      }
+      if (found[kind].length && failed.has(kind)) {
+        const label = kind === 'instagram' ? 'Instagram' : kind === 'ad_account' ? 'Ad accounts' : 'Pages'
+        for (let i = errors.length - 1; i >= 0; i--) if (errors[i].startsWith(`${label}:`)) errors.splice(i, 1)
+      }
+    }
+  }
+  return { businessId: parseBusinessId(me), assets: [...found.instagram, ...found.page, ...found.ad_account], errors }
 }
 
 /** Code → BISU token (stored encrypted, one per client) → assigned assets stored for a super admin to pick. */
 export async function connectClient(ready: MdAppReady & { ok: true }, input: { code: string; clientId: string; userId: string; now: number }): Promise<{ assets: number; errors: string[] }> {
   const ex = parseBisuToken(await call(mdCodeExchangeUrl({ appId: ready.env.appId, appSecret: ready.env.appSecret, redirectUri: ready.env.redirectUri, code: input.code })))
   if (!ex.ok) throw new MdAppError(ex.error)
-  const auth = { token: ex.token, appSecret: ready.env.appSecret }
+  const auth = { token: ex.token, appSecret: ready.env.appSecret, appId: ready.env.appId }
   const found = await readAssigned(auth)
   const nowIso = new Date(input.now).toISOString()
   await connections().claim(input.clientId, cur => ({
@@ -170,7 +195,7 @@ export async function authFor(clientId: string): Promise<{ auth: Auth; picked: M
   const conn = await connections().get(clientId, { fresh: true })
   if (!conn || !conn.active) throw new MdAppError('This client is not connected to MD App yet. Press Connect first.', 409)
   const picked = (await assets().list({ by: { client_id: clientId }, fresh: true })).filter(r => r.picked)
-  return { auth: { token: decryptSecret(conn.token_encrypted), appSecret: ready.env.appSecret }, picked }
+  return { auth: { token: decryptSecret(conn.token_encrypted), appSecret: ready.env.appSecret, appId: ready.env.appId }, picked }
 }
 
 const pickedOf = (picked: MdAppAsset[], kind: AssetKind, id?: string) => {

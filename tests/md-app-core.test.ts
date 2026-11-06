@@ -150,3 +150,23 @@ describe('test buttons', () => {
     expect(summariseTestResult({ id: '1', access_token: 'EAAsecretsecretsecret' })).toBe('OK — id')
   })
 })
+
+describe('parseGrantedTargets (debug_token → granted asset ids, 6 Nov 2026 live connect)', () => {
+  it('maps scopes to kinds, prefixes ad accounts with act_, dedupes and drops junk', async () => {
+    const { parseGrantedTargets } = await import('../app/lib/md-app-core')
+    const r = parseGrantedTargets({ data: { granular_scopes: [
+      { scope: 'instagram_basic', target_ids: ['17841425316746644'] },
+      { scope: 'instagram_content_publish', target_ids: ['17841425316746644'] },
+      { scope: 'ads_read', target_ids: ['572733431883963'] },
+      { scope: 'ads_management', target_ids: ['572733431883963', 'act_1'] },
+      { scope: 'pages_show_list', target_ids: ['1421863377681320', '../evil'] },
+      { scope: 'business_management', target_ids: ['547794057746692'] },
+    ] } })
+    expect(r).toEqual({ instagram: ['17841425316746644'], page: ['1421863377681320'], ad_account: ['act_572733431883963', 'act_1'] })
+  })
+  it('anything that is not a debug_token answer → nothing', async () => {
+    const { parseGrantedTargets } = await import('../app/lib/md-app-core')
+    expect(parseGrantedTargets(null)).toEqual({ instagram: [], page: [], ad_account: [] })
+    expect(parseGrantedTargets({ data: {} })).toEqual({ instagram: [], page: [], ad_account: [] })
+  })
+})
