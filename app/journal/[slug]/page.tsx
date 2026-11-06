@@ -4,7 +4,7 @@ import { archivo, sometype } from '../../components/lama/fonts'
 import { Scramble } from '../../components/lama/Scramble'
 import Reveal from '../../components/lama/Reveal'
 import MdNav from '../../components/md-nav/MdNav'
-import LamaFooter from '../../components/lama/LamaFooter'
+import MdFooter from '../../components/md-footer/MdFooter'
 import ScrollObserver from '../../components/ScrollObserver'
 import SiteMedia from '../../components/SiteMedia'
 import { articles } from '../journalData'
@@ -170,7 +170,7 @@ export default async function ArticlePage({ params }: { params: Promise<{ slug: 
           </div>
         </section>
       </main>
-      <LamaFooter vol={`Journal · ${post.title}`} />
+      <MdFooter />
       <ScrollObserver />
     </div>
   )

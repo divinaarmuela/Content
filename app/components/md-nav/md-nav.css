@@ -41,3 +41,17 @@
 .mdnav-logo { display: inline-flex; align-items: center; padding: 10px 0; }
 .mdnav-logo img { display: block; height: 18px; width: auto; }
 @media (max-width: 860px) { .mdnav-logo img { height: 16px; } }
+
+/* scroll behaviour (MdNavScroll): fixed bar that slides away on scroll down and returns as glass on scroll up.
+   The glass and the dark band are painted on ::before, NOT on the bar itself — a backdrop-filter or transform on
+   the bar would trap the phone menu's position:fixed sheet inside the bar. The bar is only transformed while
+   hidden, when the menu cannot be open. */
+.mdnav-float { position: fixed; top: 0; left: 0; right: 0; z-index: 50; transition: transform 0.3s ease; }
+.mdnav-float::before { content: ''; position: absolute; inset: 0; z-index: -1; background: transparent; transition: background 0.3s, border-color 0.3s; border-bottom: 1px solid transparent; }
+.mdnav-float.is-band::before { background: #0b0b0b; }
+.mdnav-float.is-glass::before { background: rgba(11, 11, 11, 0.55); -webkit-backdrop-filter: blur(16px) saturate(140%); backdrop-filter: blur(16px) saturate(140%); border-bottom-color: rgba(249, 244, 235, 0.1); }
+.mdnav-float.is-hidden { transform: translateY(-100%); }
+.mdnav-float .mdnav { position: relative; }
+.mdnav-spacer { height: 64px; background: #0b0b0b; }
+.mdnav-float.is-band .mdnav { padding-top: 14px; padding-bottom: 14px; }
+@media (prefers-reduced-motion: reduce) { .mdnav-float, .mdnav-float::before { transition: none; } }

@@ -108,7 +108,13 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
               </motion.div>
             </AnimatePresence>
           </div>
-          <p className="auth-foot" style={s.leftFooter}>© 2026 MD Media Marketing · Melbourne</p>
+          <p className="auth-foot" style={s.leftFooter}>
+            © 2026 MD Media Marketing · Melbourne ·{' '}
+            {/* Meta's reviewer lands here first (6 Nov 2026): the legal pages must be one click away */}
+            <a href="https://www.mdmmarketing.com.au/privacy" style={{ color: 'inherit' }}>Privacy policy</a> ·{' '}
+            <a href="https://www.mdmmarketing.com.au/terms" style={{ color: 'inherit' }}>Terms</a> ·{' '}
+            <a href="https://www.mdmmarketing.com.au/data-deletion" style={{ color: 'inherit' }}>Data deletion</a>
+          </p>
         </div>
       </div>
 

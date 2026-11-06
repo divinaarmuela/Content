@@ -25,6 +25,8 @@ const nextConfig: NextConfig = {
       },
       // the studio pitch now lives with events
       { source: '/podcast-studio', destination: '/events', permanent: true },
+      // the footer's "Podcast bookings" (owner, 6 Nov 2026) — the bookings live at /book
+      { source: '/podcast-bookings', destination: '/book', permanent: false },
       // the personal-brand pitch now lives on the work page
       {
         source: '/:path*',

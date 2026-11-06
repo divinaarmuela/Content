@@ -1,6 +1,6 @@
 import { archivo, sometype } from '../components/lama/fonts'
 import MdNav from '../components/md-nav/MdNav'
-import LamaFooter from '../components/lama/LamaFooter'
+import MdFooter from '../components/md-footer/MdFooter'
 import LamaContact from '../components/lama/LamaContact'
 import ScrollObserver from '../components/ScrollObserver'
 import JournalIndex from './JournalIndex'
@@ -19,7 +19,7 @@ export default async function JournalPage() {
       <MdNav band />
       <JournalIndex posts={posts} />
       <LamaContact gate={false} />
-      <LamaFooter vol={`Journal · ${posts.length} entries`} />
+      <MdFooter />
       <ScrollObserver />
     </div>
   )

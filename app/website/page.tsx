@@ -5,7 +5,7 @@ import ServiceList from '../components/ServiceList'
 import ServiceShowcase from '../components/ServiceShowcase'
 import ServiceAbout from '../components/ServiceAbout'
 import ServiceCta from '../components/ServiceCta'
-import SiteFooter from '../components/SiteFooter'
+import MdFooter from '../components/md-footer/MdFooter'
 
 const ICON = { color: '#fff', strokeWidth: 1.6 } as const
 
@@ -80,10 +80,7 @@ export default function WebsitePage() {
         />
       </main>
 
-      <SiteFooter
-        vol="Vol. 05 // Website Optimisation"
-        tagline={<>Design. SEO. Copy. Conversion.<br />Built by the team that fills the site, not just ships it.</>}
-      />
+      <MdFooter />
 
       <ScrollObserver />
     </>

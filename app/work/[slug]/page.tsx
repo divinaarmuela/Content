@@ -4,11 +4,12 @@ import { archivo, sometype } from '../../components/lama/fonts'
 import { Scramble } from '../../components/lama/Scramble'
 import Reveal from '../../components/lama/Reveal'
 import MdNav from '../../components/md-nav/MdNav'
-import LamaFooter from '../../components/lama/LamaFooter'
+import MdFooter from '../../components/md-footer/MdFooter'
 import ScrollObserver from '../../components/ScrollObserver'
 import SiteMedia from '../../components/SiteMedia'
 import { clients } from '../../components/lama/workData'
 import { getSiteProject, getSiteProjects } from '../../lib/websiteData'
+import { CASE_NUMBERS } from '../caseNumbers'
 
 const CALENDLY = 'https://calendly.com/mdmmarketing-info/10-minute-content-subscription-discovery-call-m-clone?utm_source=website&utm_medium=book-a-call&utm_campaign=work-post'
 
@@ -92,6 +93,7 @@ export default async function CaseStudyPage({ params }: { params: Promise<{ slug
 
   const outcomes = project.study.outcome
   const rows = galleryRows(project.galleryUrls)
+  const numbers = CASE_NUMBERS[project.slug]
 
   return (
     <div className={`${archivo.variable} ${sometype.variable} bg-ink min-h-screen`}>
@@ -127,6 +129,43 @@ export default async function CaseStudyPage({ params }: { params: Promise<{ slug
             {project.desc}
           </p>
         </header>
+
+        {/* ── THE NUMBERS ── (app/work/caseNumbers.ts; only pages that have an entry) */}
+        {numbers && (
+          <section className="px-6 pb-[clamp(60px,9vh,100px)] sm:px-10">
+            <p className="m-0 mb-6 font-lamam text-[11px] uppercase tracking-[0.14em] text-cream/40">the numbers</p>
+            <h2 className="m-0 max-w-[22ch] font-lamah font-medium text-cream leading-[1.05] tracking-[-0.03em] text-[clamp(2rem,4.6vw,3.6rem)]">
+              {numbers.heading.map((line, i) => (
+                <span key={i} className={`block ${i > 0 ? 'text-cream/50' : ''}`}>{line}</span>
+              ))}
+            </h2>
+            <p className="mt-6 max-w-[60ch] font-lamah text-cream/65 text-[clamp(1.05rem,1.3vw,1.2rem)] leading-[1.6]">{numbers.intro}</p>
+
+            <div className="mt-12 grid gap-10 md:grid-cols-[1fr_auto_1fr_auto_1fr] md:items-end md:gap-6">
+              {numbers.headline.map((n, i) => (
+                <div key={n.label} className="contents">
+                  {i > 0 && <span aria-hidden className="hidden pb-12 font-lamam text-2xl text-cream/30 md:block">→</span>}
+                  <div>
+                    <p className={`m-0 font-lamah font-medium leading-none tracking-[-0.04em] text-[clamp(3.4rem,8vw,7rem)] ${i === numbers.headline.length - 1 ? 'text-accent' : 'text-cream'}`}>{n.value}</p>
+                    <div className="mt-4 h-px bg-cream/30" />
+                    <p className="m-0 mt-3 font-lamah text-cream/70 text-base">{n.label}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-12 grid grid-cols-2 gap-x-6 gap-y-8 rounded-2xl border border-cream/[0.14] bg-cream/[0.04] px-6 py-7 md:grid-cols-4 md:px-8">
+              {numbers.detail.map(n => (
+                <div key={n.label}>
+                  <p className="m-0 font-lamah font-medium text-cream leading-none tracking-[-0.02em] text-[clamp(1.8rem,3vw,2.6rem)]">{n.value}</p>
+                  <p className="m-0 mt-2 font-lamah text-cream/60 text-sm">{n.label}</p>
+                </div>
+              ))}
+            </div>
+
+            <p className="mt-6 max-w-[90ch] font-lamah text-cream/40 text-[13px] leading-[1.55]">{numbers.source}</p>
+          </section>
+        )}
 
         {/* ── HERO MEDIA ── */}
         <section className="px-6 pb-[clamp(60px,9vh,100px)] sm:px-10">
@@ -306,7 +345,7 @@ export default async function CaseStudyPage({ params }: { params: Promise<{ slug
           </div>
         </section>
       </main>
-      <LamaFooter vol={`Case study · ${project.name}`} />
+      <MdFooter />
       <ScrollObserver />
     </div>
   )

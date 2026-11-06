@@ -1,7 +1,7 @@
 import SiteNav from '../components/SiteNav'
 import ScrollObserver from '../components/ScrollObserver'
 import GradientHero from '../components/GradientHero'
-import SiteFooter from '../components/SiteFooter'
+import MdFooter from '../components/md-footer/MdFooter'
 import ScrambleEyebrow from '../components/ScrambleEyebrow'
 
 const CALENDLY = 'https://calendly.com/mdmmarketing-info/10-minute-content-subscription-discovery-call-m-clone?utm_source=website&utm_medium=book-a-call&utm_campaign=services'
@@ -137,7 +137,7 @@ export default function ServicesPage() {
         </section>
       </main>
 
-      <SiteFooter vol="Services index" />
+      <MdFooter />
       <ScrollObserver />
     </>
   )

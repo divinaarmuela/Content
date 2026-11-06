@@ -1,10 +1,11 @@
 import './md-footer.css'
+import { archivo, sometype } from '../lama/fonts'
 
-/** The site footer on the Oct 2026 pages (homepage, service pages). One component, so every page shows the same footer. */
+/** THE site footer — every public page uses this one (owner, 6 Nov 2026: one footer everywhere). It brings its own fonts so it looks the same on pages that do not load them. */
 /** `bar` replaces the bottom line — each page's copy names its own. */
 export default function MdFooter({ bar }: { bar?: React.ReactNode }) {
   return (
-    <div role="contentinfo" className="mdfoot">
+    <div role="contentinfo" className={`mdfoot ${archivo.variable} ${sometype.variable}`}>
       <div className="mdfoot-in">
         <div className="mdfoot-grid">
           <div>
@@ -15,6 +16,10 @@ export default function MdFooter({ bar }: { bar?: React.ReactNode }) {
           <div>
             <p className="mdfoot-mono mdfoot-label">Explore</p>
             <a href="/work">Work</a><a href="/about">About</a><a href="/journal">Journal</a><a href="/events">Events</a>
+          </div>
+          <div>
+            <p className="mdfoot-mono mdfoot-label">Services</p>
+            <a href="/content">Content</a><a href="/marketing">Marketing</a><a href="/website">Website</a><a href="/campaign-shoots">Campaign shoots</a><a href="/podcast-bookings">Podcast bookings</a>
           </div>
           <div>
             <p className="mdfoot-mono mdfoot-label">Contact</p>
@@ -36,6 +41,7 @@ export default function MdFooter({ bar }: { bar?: React.ReactNode }) {
             </>
           )}
         </div>
+        <p className="mdfoot-mono mdfoot-legal"><a href="/privacy">Privacy policy</a> · <a href="/terms">Terms of service</a> · <a href="/data-deletion">Data deletion</a></p>
       </div>
     </div>
   )

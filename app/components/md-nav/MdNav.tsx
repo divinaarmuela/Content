@@ -1,6 +1,7 @@
 import './md-nav.css'
 import { sometype } from '../lama/fonts'
 import MdNavMenu from './MdNavMenu'
+import MdNavScroll from './MdNavScroll'
 
 const CALENDLY = 'https://calendly.com/mdmmarketing-info/10-minute-content-subscription-discovery-call-m-clone?utm_source=website&utm_medium=book-a-call&utm_campaign=mdnav'
 
@@ -42,5 +43,6 @@ export default function MdNav({ band = false }: { band?: boolean } = {}) {
     </div>
   )
   // `band`: pages without a dark hero under the nav get a dark strip, so the light links stay readable.
-  return band ? <div className={`mdnav-band ${sometype.variable}`}>{nav}</div> : nav
+  // MdNavScroll: hides on scroll down, comes back as glass on scroll up (owner, 6 Nov 2026).
+  return <div className={sometype.variable}><MdNavScroll band={band}>{nav}</MdNavScroll></div>
 }

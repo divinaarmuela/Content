@@ -1,6 +1,6 @@
 import { spaceMono } from '../components/space-mono'
 import MdNav from '../components/md-nav/MdNav'
-import LamaFooter from '../components/lama/LamaFooter'
+import MdFooter from '../components/md-footer/MdFooter'
 import LamaContact from '../components/lama/LamaContact'
 import Reveal from '../components/lama/Reveal'
 import Rule from '../components/lama/Rule'
@@ -129,7 +129,7 @@ export default function AboutPage() {
       </section>
 
       <LamaContact gate={false} />
-      <LamaFooter vol="About · team of 13" />
+      <MdFooter />
     </div>
   )
 }

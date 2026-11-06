@@ -6,7 +6,7 @@ import ServiceShowcase from '../components/ServiceShowcase'
 import ServiceGallery from '../components/ServiceGallery'
 import ServiceAbout from '../components/ServiceAbout'
 import ServiceCta from '../components/ServiceCta'
-import SiteFooter from '../components/SiteFooter'
+import MdFooter from '../components/md-footer/MdFooter'
 
 const WIX = 'https://static.wixstatic.com/media/'
 const ICON = { color: '#fff', strokeWidth: 1.6 } as const
@@ -98,10 +98,7 @@ export default function ContentPage() {
         />
       </main>
 
-      <SiteFooter
-        vol="Vol. 03 // Content Production"
-        tagline={<>Photo. Video. Copy.<br />Produced in-house for businesses that want content worth watching.</>}
-      />
+      <MdFooter />
 
       <ScrollObserver />
     </>

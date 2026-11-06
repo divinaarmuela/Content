@@ -1,5 +1,7 @@
 import type { Metadata } from 'next'
 import { archivo, sometype } from '../components/lama/fonts'
+import MdNav from '../components/md-nav/MdNav'
+import MdFooter from '../components/md-footer/MdFooter'
 
 export const metadata: Metadata = {
   title: 'Book with MD Media',
@@ -45,19 +47,12 @@ export default function BookLayout({ children }: { children: React.ReactNode }) 
         .bk-scope input[type="time"]::-webkit-calendar-picker-indicator { filter: invert(1); }
       `}</style>
 
+      {/* the site's own navbar and footer (owner, 6 Nov 2026) — the nav carries the logo now */}
+      <MdNav band />
       <div className="mx-auto w-full max-w-3xl px-5 py-12 sm:px-8 sm:py-16">
-        {/* The mark is already white-on-transparent with the blue slash —
-            drawn for a dark ground. Use it as-is; a filter breaks it. */}
-        <a
-          href="https://www.mdmmarketing.com.au"
-          className="inline-block transition-opacity hover:opacity-80"
-          aria-label="MD Media"
-        >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/MDLogo-trim.png" alt="MD Media" className="h-7 w-auto" />
-        </a>
-        <div className="mt-12">{children}</div>
+        {children}
       </div>
+      <MdFooter />
     </div>
   )
 }

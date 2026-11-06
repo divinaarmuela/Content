@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import MdNav from '../md-nav/MdNav'
-import LamaFooter from '../lama/LamaFooter'
+import MdFooter from '../md-footer/MdFooter'
 import { archivo, sometype } from '../lama/fonts'
 import { LEGAL_UPDATED } from '../../lib/legal-pages'
 
@@ -43,7 +43,7 @@ export default function LegalShell({ eyebrow, title, intro, draft, vol, children
         </div>
       </main>
 
-      <LamaFooter vol={vol} />
+      <MdFooter />
     </div>
   )
 }
