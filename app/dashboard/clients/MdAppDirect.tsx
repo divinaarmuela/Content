@@ -105,7 +105,20 @@ export default function MdAppDirect({ clientId }: { clientId: string }) {
                   Connected {new Date(state.connection.connected_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}
                   {state.connection.business_id ? ` · business ${state.connection.business_id}` : ''}
                 </p>
-                {state.connection.last_error && <p className="text-xs text-amber-700">Some things could not be read: {state.connection.last_error}</p>}
+                {state.connection.last_error && (() => {
+                  // Plain words for the card (6 Nov 2026). Ads answer "(#200) Missing Permissions" on a client connection until
+                  // Meta approves ads_read / ads_management in App Review; the granted list is detail, shown small.
+                  const parts = state.connection.last_error.split(' · ')
+                  const granted = parts.find(x => x.startsWith('Meta granted:'))
+                  const lines = parts.filter(x => !x.startsWith('Meta granted:'))
+                    .map(x => /^Ad accounts:.*\(#200\)/.test(x) ? 'Ads: waiting for Meta’s approval (App Review).' : x)
+                  return (
+                    <>
+                      {lines.length > 0 && <p className="text-xs text-amber-700">{lines.join(' ')}</p>}
+                      {granted && <p className="text-[11px] text-muted-foreground">{granted.replace('Meta granted:', 'Permissions Meta gave this connection:')}</p>}
+                    </>
+                  )
+                })()}
 
                 <div>
                   <h3 className="text-sm font-medium mb-1">Accounts shared with us — tick the ones that belong to this client</h3>
