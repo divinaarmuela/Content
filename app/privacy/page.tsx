@@ -58,7 +58,6 @@ export default function PrivacyPage() {
         <UL>
           <LI>We keep a record of prospective clients: business name, contact name and role, email, phone, website, public social media handles, notes, and the history of our conversations (for example when we reached out, when you replied, and when a call was booked).</LI>
           <LI>To keep that record up to date, an AI assistant (Anthropic&rsquo;s Claude) reads the emails exchanged between you and our business inboxes and the Instagram direct messages exchanged between you and MD Media&rsquo;s own Instagram accounts, and notes events such as a reply or a booked call. A person on our team can review and correct what it records.</LI>
-          <LI>We may look up your business&rsquo;s <em>public</em> Instagram profile (such as bio, follower count and recent public posts) through ScrapeCreators, a third-party data service, to prepare for a conversation with you.</LI>
           <LI>We never send an automated message to a prospect. Every message to a prospect is written or approved by a person.</LI>
         </UL>
 
@@ -74,7 +73,7 @@ export default function PrivacyPage() {
         </UL>
 
         <H3>Our clients&rsquo; connected social media accounts</H3>
-        <P>When a client connects a social media account (for example Instagram, Facebook, LinkedIn or TikTok) so we can post and manage it for them, the connection is made through <strong>Zernio</strong>, a social media management service that acts as our processor. Zernio holds the access permissions; we store the account&rsquo;s name, username, profile picture, platform, connection status and the account ID Zernio gives us.</P>
+        <P>When a client connects a social media account (for example Instagram, Facebook, LinkedIn or TikTok) so we can post and manage it for them, the connection is made either through <strong>Zernio</strong>, a social media management service that acts as our processor, or, for Facebook, Instagram and Meta ads, directly with Meta through our own app, <strong>MD App</strong>. Through Zernio, Zernio holds the access permissions. Through MD App, the client chooses in Meta&rsquo;s own window exactly which Page, Instagram account and ad account to share, and we store the access key Meta gives us, encrypted. Either way we store the account&rsquo;s name, username, profile picture, platform, connection status and account ID.</P>
         <UL>
           <LI><strong>Posts:</strong> captions, images, videos, scheduled times, approval history and the published post&rsquo;s link. We use this to schedule and publish the client&rsquo;s content.</LI>
           <LI><strong>Post performance:</strong> figures such as views, reach, likes, comments, shares and saves, to report results to the client.</LI>
@@ -83,9 +82,8 @@ export default function PrivacyPage() {
         <H3>People who comment on, message or follow our clients&rsquo; accounts</H3>
         <P>If you interact with a business we manage, we may process some information about you on that business&rsquo;s behalf:</P>
         <UL>
-          <LI><strong>Comments and direct messages.</strong> Our team reads and answers comments and direct messages sent to our clients&rsquo; accounts through Zernio. These are shown live and are not copied into our database in bulk. We keep a short note that a person was in touch: their username, display name, whether it was a comment or a message, and when. We do not keep the words of the message in that note.</LI>
+          <LI><strong>Comments and direct messages.</strong> Our team reads and answers comments and direct messages sent to our clients&rsquo; accounts through Zernio or MD App. So the inbox opens quickly, we keep a copy of each conversation&rsquo;s latest details and of each post&rsquo;s comments (including the sender&rsquo;s username, display name and the text), which is refreshed from the network and replaced each time it is read; a message the sender unsends is not shown again. We also log each reply our team sends (who sent it, when, and the text), so the team can see who answered.</LI>
           <LI><strong>Comment-to-message automations.</strong> A client may switch on an automation for one specific post: if you comment a chosen keyword on that post, you receive a direct message (usually with a link) and a public reply to your comment. We keep a record of each one sent: your username and display name, your comment, the message we sent, and whether it was delivered. This record makes sure you are only ever messaged once per post. Nothing is sent unless a person switched the automation on for that post.</LI>
-          <LI><strong>Public post previews.</strong> To show a preview of a public Instagram post or video, we may fetch it through Apify (a third-party service) or Meta&rsquo;s oEmbed service.</LI>
         </UL>
 
         <H3>Our team</H3>
@@ -123,7 +121,6 @@ export default function PrivacyPage() {
           <LI><strong>Inngest</strong> — running scheduled background jobs (such as publishing a post at its time);</LI>
           <LI><strong>SMTP2GO</strong> — sending email;</LI>
           <LI><strong>Stripe</strong> — taking booking payments;</LI>
-          <LI><strong>Apify and ScrapeCreators</strong> — reading publicly available Instagram posts and profiles as described above;</LI>
           <LI><strong>Microsoft Clarity</strong> — website analytics;</LI>
           <LI><strong>Asana</strong> and <strong>Linktree</strong> — project tasks and link pages, where used for a client;</LI>
           <LI><strong>Meta, LinkedIn, TikTok and other social networks</strong> — when we publish or reply on a client&rsquo;s account, the content goes to that network.</LI>
@@ -136,6 +133,7 @@ export default function PrivacyPage() {
           <LI>Client and project information: for as long as we work together, then for 7 years.</LI>
           <LI>Leads and prospects who do not become clients: 2 years after our last contact.</LI>
           <LI>Comment and automation records for a client&rsquo;s account: while we manage that account, and deleted within 90 days after the client leaves us.</LI>
+          <LI>Information received from Meta for a client&rsquo;s account (inbox copies, ad results, lead form entries and Meta&rsquo;s notifications): while we manage that account, and deleted within 90 days after the client disconnects it or leaves us, or sooner if Meta or the person asks us to.</LI>
           <LI>Records of data deletion requests: kept so we can show the request was handled.</LI>
         </UL>
         <P>We do not yet delete data automatically on a timetable; a person on our team removes it. You can ask us to delete your information at any time (see below).</P>
@@ -144,7 +142,7 @@ export default function PrivacyPage() {
       <Section id="security" title="6. How we keep it safe">
         <UL>
           <LI>The app is only available to signed-in team members and clients, or through private links we send to a client, and each person sees only what their role needs.</LI>
-          <LI>Passwords and connection keys we hold are stored encrypted; social media access permissions are held by Zernio, not by us.</LI>
+          <LI>Passwords and connection keys we hold, including the access keys Meta gives MD App, are stored encrypted; for accounts connected through Zernio, the access permissions are held by Zernio, not by us.</LI>
           <LI>All data travels over encrypted (HTTPS) connections.</LI>
           <LI>No system is perfectly secure. If a data breach is likely to cause serious harm, we will notify you and the Office of the Australian Information Commissioner as the Notifiable Data Breaches scheme requires.</LI>
         </UL>
@@ -168,14 +166,19 @@ export default function PrivacyPage() {
 
       <Section id="meta" title="8. Facebook, Instagram and other Meta platforms">
         <P>
-          Meta&rsquo;s <A href="https://developers.facebook.com/terms/">Platform Terms</A> require us to explain how we handle information we receive from Meta&rsquo;s platforms (&ldquo;Platform Data&rdquo;). Today our access to Facebook and Instagram is through Zernio; if we connect to Meta directly through our own app, this section applies in the same way.
+          Meta&rsquo;s <A href="https://developers.facebook.com/terms/">Platform Terms</A> require us to explain how we handle information we receive from Meta&rsquo;s platforms (&ldquo;Platform Data&rdquo;). We receive Platform Data through Zernio and directly through our own Meta app, MD App; this section applies to both.
         </P>
         <H3>What Platform Data we process</H3>
         <UL>
           <LI>For accounts our clients connect: the account&rsquo;s ID, name, username and profile picture, and its connection status;</LI>
           <LI>the client&rsquo;s own posts and their performance figures (views, reach, likes, comments, shares, saves);</LI>
           <LI>comments on the client&rsquo;s posts and direct messages sent to the client&rsquo;s account, including the sender&rsquo;s username and display name;</LI>
-          <LI>for comment-to-message automations a client switched on: the commenter&rsquo;s username, display name, comment, and the message we sent them.</LI>
+          <LI>for comment-to-message automations a client switched on: the commenter&rsquo;s username, display name, comment, and the message we sent them;</LI>
+          <LI>the client&rsquo;s Facebook Page posts and Page performance figures, and Messenger conversations with the Page, including replies a team member sends within Meta&rsquo;s human-agent window;</LI>
+          <LI>the name and profile picture of people who comment on or message the client&rsquo;s Page or Instagram account, so our team can see who they are replying to;</LI>
+          <LI>for an ad account the client shares: the account&rsquo;s name and ID, campaign settings and results (such as spend, reach, clicks and leads), and the campaigns we create or change for the client at their request;</LI>
+          <LI>lead form entries submitted on the client&rsquo;s Facebook or Instagram lead ads (the details the person typed into the form), which go into the client&rsquo;s leads list;</LI>
+          <LI>notifications Meta sends us when something new happens on a connected account (a new comment, message, mention or lead).</LI>
         </UL>
         <H3>How and why we use it</H3>
         <UL>
@@ -187,7 +190,7 @@ export default function PrivacyPage() {
           <LI>Email <A href={MAIL}>{LEGAL_EMAIL}</A> with the subject &ldquo;Data deletion&rdquo; and your Instagram or Facebook username; or</LI>
           <LI>if you have used our app through Facebook, remove it in your Facebook settings (Settings &amp; privacy &rarr; Settings &rarr; Apps and websites) and choose to send a deletion request. You will get a confirmation code you can check on our <A href="/data-deletion">data deletion page</A>.</LI>
         </UL>
-        <P>A client can disconnect an account at any time, and we stop accessing it through Zernio from that point.</P>
+        <P>A client can disconnect an account at any time, from our app or by removing MD App in Meta Business Settings, and we stop accessing it from that point.</P>
       </Section>
 
       <Section id="children" title="9. Children">

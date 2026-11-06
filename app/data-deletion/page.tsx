@@ -32,7 +32,7 @@ export default function DataDeletionPage() {
         <UL>
           <LI>Email <A href={MAIL}>{LEGAL_EMAIL}</A> with the subject line <strong>&ldquo;Data deletion&rdquo;</strong>. Tell us your name, the email address you used with us, and any social media usernames (for example your Instagram handle) so we can find everything; or</LI>
           <LI>fill in the form below, which writes that email for you; or</LI>
-          <LI>if you used our app through Facebook or Instagram, remove it in your Facebook settings (Settings &amp; privacy &rarr; Settings &rarr; Apps and websites) and send a deletion request from there. You will be given a confirmation code to check below.</LI>
+          <LI>if you used our app (MD App) through Facebook or Instagram, remove it in your Facebook settings (Settings &amp; privacy &rarr; Settings &rarr; Apps and websites) and send a deletion request from there. You will be given a confirmation code to check below.</LI>
         </UL>
         <DeletionRequestForm to={LEGAL_EMAIL} />
       </Section>

@@ -16,7 +16,7 @@ export const APP_INFO_DRAFT = false
 export const SUPPORT_DRAFT = false
 
 /** "Last updated" on all three pages */
-export const LEGAL_UPDATED = '1 October 2026'
+export const LEGAL_UPDATED = '6 November 2026'
 
 export const LEGAL_EMAIL = 'hello@mdmmarketing.com.au'
 

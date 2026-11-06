@@ -109,8 +109,12 @@ export async function readAssigned(a: Auth): Promise<{ businessId: string | null
   // by id (parseGrantedTargets says why). An asset that reads fine clears that list's error.
   const missing = (Object.keys(found) as AssetKind[]).filter(k => found[k].length === 0)
   if (missing.length && a.appId) {
-    const granted = await call(mdGraphUrl('debug_token', { input_token: a.token, access_token: `${a.appId}|${a.appSecret}` }))
-      .then(parseGrantedTargets).catch(e => { errors.push(`granted accounts: ${e instanceof Error ? e.message : 'failed'}`); return null })
+    const debug = await call(mdGraphUrl('debug_token', { input_token: a.token, access_token: `${a.appId}|${a.appSecret}` }))
+      .catch(e => { errors.push(`granted accounts: ${e instanceof Error ? e.message : 'failed'}`); return null })
+    const granted = debug ? parseGrantedTargets(debug) : null
+    // Names only (never the token): which permissions Meta says this connection holds, so a missing one is visible.
+    const scopes: unknown = debug?.data?.scopes
+    if (Array.isArray(scopes)) errors.push(`Meta granted: ${scopes.filter(x => typeof x === 'string').join(', ') || 'nothing'}`)
     for (const kind of granted ? missing : []) {
       const fields = kind === 'instagram' ? 'id,username' : kind === 'ad_account' ? 'id,account_id,name' : 'id,name'
       for (const id of granted![kind].slice(0, 50)) {
@@ -138,7 +142,7 @@ export async function connectClient(ready: MdAppReady & { ok: true }, input: { c
   await connections().claim(input.clientId, cur => ({
     id: input.clientId, client_id: input.clientId, business_id: found.businessId ?? cur?.business_id ?? null,
     token_encrypted: encryptSecret(ex.token), connected_by: input.userId, connected_at: nowIso, active: true,
-    use_md_app: cur?.use_md_app === true, last_error: found.errors.length ? found.errors.join(' · ').slice(0, 300) : null,
+    use_md_app: cur?.use_md_app === true, last_error: found.errors.length ? found.errors.join(' · ').slice(0, 600) : null,
   }))
   await storeAssets(input.clientId, found.assets, nowIso)
   return { assets: found.assets.length, errors: found.errors }
@@ -157,6 +161,8 @@ export async function refreshAssets(clientId: string, now: number): Promise<{ as
   const c = await authFor(clientId)
   const found = await readAssigned(c.auth)
   await storeAssets(clientId, found.assets, new Date(now).toISOString())
+  // the card's "Some things could not be read" line is this check's answer, not the first connect's
+  await connections().claim(clientId, cur => (cur ? { ...cur, last_error: found.errors.length ? found.errors.join(' · ').slice(0, 600) : null } : null))
   return { assets: found.assets.length, errors: found.errors }
 }
 

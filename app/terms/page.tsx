@@ -37,7 +37,7 @@ export default function TermsPage() {
       <Section title="3. Connected social media accounts">
         <UL>
           <LI>When you connect a social media account, you confirm you are allowed to, and you authorise us to publish, read comments and messages, and reply on that account as agreed with you.</LI>
-          <LI>Connections are made through our provider, Zernio. You can disconnect an account at any time.</LI>
+          <LI>Connections are made through our provider, Zernio, or, for Facebook, Instagram and Meta ads, directly with Meta through our own app, MD App. You can disconnect an account at any time.</LI>
           <LI>Your use of each social network is also governed by that network&rsquo;s own terms (for example Meta&rsquo;s terms for Facebook and Instagram).</LI>
         </UL>
       </Section>
