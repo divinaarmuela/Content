@@ -25,6 +25,8 @@ const KIND_WORDS: Record<Asset['kind'], string> = { instagram: 'Instagram', page
 export default function MdAppDirect({ clientId }: { clientId: string }) {
   const { can } = useRole()
   const superAdmin = can('super_admin')
+  // the card: account managers (on their own client — the API checks) and up; tests, the switch and disconnect: super admin
+  const mayConnect = can('account_manager')
   const [state, setState] = useState<State | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [results, setResults] = useState<Record<string, { ok: boolean; text: string }>>({})
@@ -37,10 +39,10 @@ export default function MdAppDirect({ clientId }: { clientId: string }) {
     } catch { setState({ error: 'Could not reach the server' }) }
   }, [clientId])
 
-  useEffect(() => { if (superAdmin) void load() }, [superAdmin, load])
+  useEffect(() => { if (mayConnect) void load() }, [mayConnect, load])
 
   useEffect(() => {
-    if (!superAdmin) return
+    if (!mayConnect) return
     const params = new URLSearchParams(window.location.search)
     const result = params.get('md_app')
     if (!result) return
@@ -51,9 +53,9 @@ export default function MdAppDirect({ clientId }: { clientId: string }) {
     for (const k of ['md_app', 'reason']) params.delete(k)
     const qs = params.toString()
     window.history.replaceState({}, '', window.location.pathname + (qs ? `?${qs}` : ''))
-  }, [superAdmin])
+  }, [mayConnect])
 
-  if (!superAdmin) return null
+  if (!mayConnect) return null
 
   const act = async (key: string, body: Record<string, unknown>, ok: string) => {
     setBusy(key)
@@ -94,7 +96,7 @@ export default function MdAppDirect({ clientId }: { clientId: string }) {
               {state.connection && (
                 <>
                   <Button size="sm" variant="outline" disabled={!!busy} onClick={() => act('refresh', { action: 'refresh' }, 'Accounts read again')}>Check accounts again</Button>
-                  <Button size="sm" variant="outline" disabled={!!busy} onClick={() => { if (confirm('Disconnect Meta from this client?')) void act('disconnect', { action: 'disconnect' }, 'Disconnected') }}>Disconnect</Button>
+                  {superAdmin && <Button size="sm" variant="outline" disabled={!!busy} onClick={() => { if (confirm('Disconnect Meta from this client?')) void act('disconnect', { action: 'disconnect' }, 'Disconnected') }}>Disconnect</Button>}
                 </>
               )}
             </div>
@@ -138,12 +140,12 @@ export default function MdAppDirect({ clientId }: { clientId: string }) {
                   )}
                 </div>
 
-                <label className="flex items-center gap-3 text-sm">
+                {superAdmin && <label className="flex items-center gap-3 text-sm">
                   <Switch checked={state.usesMdApp} disabled={!!busy} onCheckedChange={on => act('use', { action: 'use', on }, on ? 'Posts, replies and reports for this client now go through Meta' : 'Switched off for this client')} />
                   <span>Post, reply and report through Meta for this client</span>
-                </label>
+                </label>}
 
-                <div>
+                {superAdmin && <div>
                   <h3 className="text-sm font-medium mb-1">Check each connection (each makes one real call)</h3>
                   <div className="grid gap-2 sm:grid-cols-2">
                     {state.tests.map(t => (
@@ -154,7 +156,7 @@ export default function MdAppDirect({ clientId }: { clientId: string }) {
                       </div>
                     ))}
                   </div>
-                </div>
+                </div>}
               </>
             )}
           </>

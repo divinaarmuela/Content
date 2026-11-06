@@ -45,10 +45,16 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  try { await requireRole('super_admin') } catch (e) { return fail(e) }
   const body = await req.json().catch(() => null) as Record<string, unknown> | null
   const clientId = typeof body?.clientId === 'string' ? body.clientId.trim() : ''
   if (!clientId) return NextResponse.json({ error: 'clientId is required' }, { status: 400 })
+  // Ticking the client's accounts and "check again" belong to whoever connects: an account manager on THEIR client
+  // (Meta's reviewer signs in as one — 6 Nov 2026). The switch and disconnect stay super admin.
+  const amActions = ['pick', 'unpick', 'refresh']
+  try {
+    if (amActions.includes(String(body?.action))) { const me = await requireRole('account_manager'); await assertMine(me, clientId) }
+    else await requireRole('super_admin')
+  } catch (e) { return fail(e) }
   try {
     switch (body?.action) {
       case 'pick': case 'unpick': {
