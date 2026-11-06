@@ -1880,8 +1880,10 @@ export default function BriefCanvas({
               return (
                 <g key={arrow.id} data-arrow={arrow.id}>
                   {/* wide invisible hit line so the arrow is clickable */}
-                  <path d={d} fill="none"
-                    stroke="transparent" strokeWidth={14}
+                  {/* data-card: the canvas pans on any press NOT on an item — without it, pressing the line panned the
+                      board instead of moving the line (tested 6 Nov 2026) */}
+                  <path d={d} fill="none" data-card=""
+                    stroke="transparent" strokeWidth={16}
                     style={{ pointerEvents: viewOnly ? 'none' : 'stroke', cursor: 'move', touchAction: 'none' }}
                     onPointerDown={!viewOnly ? (e => startLineDrag(e, saved, 'body')) : undefined}
                     onClick={e => { e.stopPropagation(); setSelected(arrow.id) }}>
