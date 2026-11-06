@@ -57,7 +57,7 @@ const connected = (extra: Record<string, unknown> = {}) => ({
 })
 beforeEach(() => {
   calls = []; answer = () => ({}); status = () => 200; who = null
-  vi.stubEnv('MD_APP_SECRET', MD_SECRET)
+  vi.stubEnv('MD_SECRET', MD_SECRET)
   vi.stubEnv('CREDENTIALS_KEY', 'test-credentials-key')
   vi.stubEnv('MD_APP_ID', ''); vi.stubEnv('MD_APP_CONFIG_ID', ''); vi.stubEnv('MD_APP_REDIRECT_URI', '')
   vi.stubEnv('MD_APP_WEBHOOK_VERIFY_TOKEN', 'md-verify')
@@ -92,11 +92,11 @@ describe('GET /api/meta/md-app/connect', () => {
     who = { id: 'u', role: 'editor' }; expect((await go('clientId=c1')).status).toBe(403)
     who = { id: 'u', role: 'account_manager' }; expect((await go('clientId=c2')).status).toBe(403)
   })
-  it('503 with a plain reason until MD_APP_SECRET is set', async () => {
-    setup(); vi.stubEnv('MD_APP_SECRET', ''); who = { id: 'u', role: 'super_admin' }
+  it('503 with a plain reason until MD_SECRET is set', async () => {
+    setup(); vi.stubEnv('MD_SECRET', ''); who = { id: 'u', role: 'super_admin' }
     const res = await go('clientId=c1')
     expect(res.status).toBe(503)
-    expect((await res.json()).error).toMatch(/MD_APP_SECRET/)
+    expect((await res.json()).error).toMatch(/MD_SECRET/)
   })
   it('redirects to the dialog with config_id and an MD App state', async () => {
     setup(); who = { id: 'u', role: 'account_manager' }

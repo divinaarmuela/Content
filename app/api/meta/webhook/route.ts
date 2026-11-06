@@ -24,7 +24,7 @@ import { readMdAppEnv } from '@/app/lib/md-app-core'
  *        Facebook Pages (6 Nov 2026): a body with object 'page' must be signed
  *        with META_APP_SECRET; its feed changes are stored in meta_fb_events
  *        (app/lib/meta-fb.ts recordPageWebhook) — again, nothing acts on them.
- *        MD App (Unified Login, 6 Nov 2026): a body signed with MD_APP_SECRET only (object 'instagram' or
+ *        MD App (Unified Login, 6 Nov 2026): a body signed with MD_SECRET only (object 'instagram' or
  *        'page') goes ONLY to md_app_events (app/lib/md-app.ts) — never the old tables, never Zernio's inbox
  *        copy. The handshake also accepts MD_APP_WEBHOOK_VERIFY_TOKEN.
  */

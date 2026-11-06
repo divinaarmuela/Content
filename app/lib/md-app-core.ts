@@ -77,7 +77,7 @@ export type MdAppEnv = { appId: string; appSecret: string | null; configId: stri
 export function readMdAppEnv(): MdAppEnv {
   return {
     appId: process.env.MD_APP_ID?.trim() || MD_APP_DEFAULT_APP_ID,
-    appSecret: process.env.MD_APP_SECRET?.trim() || null,
+    appSecret: process.env.MD_SECRET?.trim() || null, // the name set in Vercel (owner, 6 Nov 2026); MD_APP_SECRET is NOT read
     configId: process.env.MD_APP_CONFIG_ID?.trim() || MD_APP_DEFAULT_CONFIG_ID,
     redirectUri: process.env.MD_APP_REDIRECT_URI?.trim() || MD_APP_DEFAULT_REDIRECT_URI,
     verifyToken: process.env.MD_APP_WEBHOOK_VERIFY_TOKEN?.trim() || null,
@@ -87,7 +87,7 @@ export function readMdAppEnv(): MdAppEnv {
 export type MdAppReady = { ok: true; env: MdAppEnv & { appSecret: string } } | { ok: false; reason: string }
 
 export function mdAppReadiness(env: MdAppEnv, credentialsKeySet: boolean): MdAppReady {
-  if (!env.appSecret) return { ok: false, reason: 'MD App is not set up yet: MD_APP_SECRET is not set.' }
+  if (!env.appSecret) return { ok: false, reason: 'MD App is not set up yet: MD_SECRET is not set.' }
   if (!credentialsKeySet) return { ok: false, reason: 'MD App is not set up yet: CREDENTIALS_KEY is not set, so the token could not be stored safely.' }
   return { ok: true, env: { ...env, appSecret: env.appSecret } }
 }

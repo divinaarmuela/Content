@@ -13,21 +13,21 @@ webhook, inbox copy or account sync calls MD App code.
 
 | Name | Needed | Default |
 |---|---|---|
-| `MD_APP_SECRET` | **yes** (App secret from MD App → Settings → Basic) | — |
+| `MD_SECRET` | **yes** (App secret from MD App → Settings → Basic) | — |
 | `CREDENTIALS_KEY` | yes (already set for the old roads) | — |
 | `MD_APP_WEBHOOK_VERIFY_TOKEN` | for the webhook handshake (any long random string, same value typed into MD App's Webhooks settings) | — |
 | `MD_APP_ID` | no | `2326339324873915` |
 | `MD_APP_CONFIG_ID` | no | `1439306511741893` |
 | `MD_APP_REDIRECT_URI` | no | `https://app.mdmmarketing.com.au/api/meta/facebook/callback` |
 
-Until `MD_APP_SECRET` and `CREDENTIALS_KEY` are set, every MD App route answers 503 with a plain reason.
+Until `MD_SECRET` and `CREDENTIALS_KEY` are set, every MD App route answers 503 with a plain reason.
 
 ## Flow
 
 1. Super admin opens the client's **Social** page → card **"Direct via MD App (testing)"** → *Connect with
    Facebook / Instagram* → `GET /api/meta/md-app/connect?clientId=` (account manager+, client must be theirs).
 2. Redirect to `https://www.facebook.com/dialog/oauth?client_id&config_id&redirect_uri&response_type=code&state`
-   (no `scope`). The `state` is HMAC-signed with `MD_APP_SECRET`, 10-minute expiry, prefix `mdapp1.`.
+   (no `scope`). The `state` is HMAC-signed with `MD_SECRET`, 10-minute expiry, prefix `mdapp1.`.
 3. Meta returns to **`/api/meta/facebook/callback`** (already registered on MD App). That route is shared with
    the old Facebook app: a state starting `mdapp1.` goes to `app/lib/md-app-callback.ts`; anything else
    follows the old road exactly as before. No new redirect URI needs registering.
@@ -79,7 +79,7 @@ successful API call in the last 30 days. One press of each button above is meant
 
 Same callback URL: `https://app.mdmmarketing.com.au/api/meta/webhook`. GET handshake accepts
 `MD_APP_WEBHOOK_VERIFY_TOKEN` (as well as the old token). POST: a body signed (`X-Hub-Signature-256`) with
-`MD_APP_SECRET` only is stored in `md_app_events` (id = hash of object/account/field/payload, claimed once) —
+`MD_SECRET` only is stored in `md_app_events` (id = hash of object/account/field/payload, claimed once) —
 never in the old tables or Zernio's inbox copy, and nothing replies.
 
 ## Verified vs not (docs read 6 Nov 2026, developers.facebook.com/documentation/instagram-platform/*.md)

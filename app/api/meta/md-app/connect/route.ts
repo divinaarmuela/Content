@@ -14,7 +14,7 @@ async function assertMine(user: Parameters<typeof accessibleClientIds>[0], clien
 /**
  * GET /api/meta/md-app/connect?clientId= — start MD App's Unified Login (Facebook Login for Business,
  * config_id "Connect client accounts") for one client (6 Nov 2026). Account manager+, on a client of theirs.
- * 503 with a plain reason until MD_APP_SECRET and CREDENTIALS_KEY are set. The state carries the MD App
+ * 503 with a plain reason until MD_SECRET and CREDENTIALS_KEY are set. The state carries the MD App
  * prefix, so the shared callback (/api/meta/facebook/callback) hands it to the MD App handler.
  */
 export const dynamic = 'force-dynamic'
