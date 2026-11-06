@@ -816,6 +816,16 @@ export function moveLineEnd(line: LineShape | undefined, end: 'start' | 'end', p
   return end === 'start' ? { ...base, fx: Math.round(p.x), fy: Math.round(p.y) } : { ...base, tx: Math.round(p.x), ty: Math.round(p.y) }
 }
 
+/** a whole line moved by (dx, dy) from where its ends were (`a`, `b`): both ends become free points and the curve
+ *  moves with them (the owner, 6 Nov 2026: "I can't position the arrow anywhere else"). Labels, arrowheads,
+ *  dashes and weight are kept. */
+export function moveWholeLine(line: LineShape | undefined, a: LinePoint, b: LinePoint, dx: number, dy: number): LineShape {
+  const base = line ?? { end: 'arrow' as const }
+  const out: LineShape = { ...base, fx: Math.round(a.x + dx), fy: Math.round(a.y + dy), tx: Math.round(b.x + dx), ty: Math.round(b.y + dy) }
+  if (base.cx !== undefined && base.cy !== undefined) { out.cx = Math.round(base.cx + dx); out.cy = Math.round(base.cy + dy) }
+  return out
+}
+
 /** which arrowheads: the end, the start, both or none */
 export type ArrowHeads = 'end' | 'start' | 'both' | 'none'
 export function arrowHeadsOf(line: LineShape | undefined): ArrowHeads {

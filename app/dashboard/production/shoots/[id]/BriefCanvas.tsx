@@ -30,7 +30,7 @@ import {
   hasTextStyle, defaultAlignOf, textBoldOf, boldWordsIn, inBoldRun,
   CANVAS_FONTS, CANVAS_FONTS_HREF, FONT_LABEL, FONT_STACK, fontOf, hasFontChoice, type CanvasFont } from '../../../../lib/batch-brief-core'
 import { FONT_CLASS, fontVars } from './canvasFont'
-import { arrowHeadsOf, bendLine, lineMiddle, moveLineEnd, newFreeLine, straightenLine, withArrowHeads, type ArrowHeads, type LinePoint } from '../../../../lib/board-canvas-core'
+import { arrowHeadsOf, bendLine, lineMiddle, moveLineEnd, moveWholeLine, newFreeLine, straightenLine, withArrowHeads, type ArrowHeads, type LinePoint } from '../../../../lib/board-canvas-core'
 import { pastedTableWidth, tableFromClipboard } from '../../../../lib/canvas-paste-core'
 import { applyBold } from './BoldBox'
 import { holdPageScroll } from '../../../../lib/hold-page-scroll'
@@ -479,7 +479,7 @@ export default function BriefCanvas({
    *    its end and its middle. The middle bends it, an end moves it (and joins a card when dropped on one). The drag
    *    is drawn from local state and saved once, on release; only the fields that handle owns change. Nothing is
    *    written for a line nobody dragged. ── */
-  const [lineEdit, setLineEdit] = useState<{ id: string; handle: 'start' | 'end' | 'mid'; card: CanvasCard } | null>(null)
+  const [lineEdit, setLineEdit] = useState<{ id: string; handle: 'start' | 'end' | 'mid' | 'body'; card: CanvasCard; origin?: { p: LinePoint; a: LinePoint; b: LinePoint; base: CanvasCard } } | null>(null)
   const lineEnds = (arrow: CanvasCard): { a: LinePoint; b: LinePoint } | null => {
     const fromCard = arrow.from ? cards.find(c => c.id === arrow.from) : undefined
     const toCard = arrow.to ? cards.find(c => c.id === arrow.to) : undefined
@@ -502,16 +502,37 @@ export default function BriefCanvas({
     interactingRef.current = true
     setLineEdit({ id: arrow.id, handle, card: arrow })
   }
+  /** press on a selected line itself: the whole line follows the pointer */
+  const onLineBodyDown = (e: React.PointerEvent, arrow: CanvasCard) => {
+    const ends = lineEnds(arrow)
+    if (!ends) return
+    e.stopPropagation()
+    e.preventDefault()
+    ;(e.currentTarget as Element).setPointerCapture?.(e.pointerId)
+    interactingRef.current = true
+    setLineEdit({ id: arrow.id, handle: 'body', card: arrow, origin: { p: toWorld(e.clientX, e.clientY), a: ends.a, b: ends.b, base: arrow } })
+  }
   const onLineHandleMove = (e: React.PointerEvent) => {
     if (!lineEdit) return
     const p = toWorld(e.clientX, e.clientY)
     const cur = lineEdit.card
+    if (lineEdit.handle === 'body' && lineEdit.origin) {
+      const o = lineEdit.origin
+      const dx = p.x - o.p.x, dy = p.y - o.p.y
+      if (Math.abs(dx) < 2 && Math.abs(dy) < 2 && cur === o.base) return
+      // moved off its cards: both ends become free points where they now are
+      const rest: CanvasCard = { ...o.base }
+      delete rest.from; delete rest.to
+      setLineEdit({ ...lineEdit, card: { ...rest, line: moveWholeLine(o.base.line, o.a, o.b, dx, dy) } })
+      return
+    }
     if (lineEdit.handle === 'mid') {
       const ends = lineEnds(cur)
       if (!ends) return
       setLineEdit({ ...lineEdit, card: { ...cur, line: bendLine(cur.line, ends.a, ends.b, p) } })
       return
     }
+    if (lineEdit.handle === 'body') return
     // an end pulled off its card becomes a free point; the other end keeps where it is
     const other = lineEnds(cur)
     const rest: CanvasCard = { ...cur }
@@ -525,7 +546,7 @@ export default function BriefCanvas({
     if (!lineEdit) return
     interactingRef.current = false
     let next = lineEdit.card
-    if (lineEdit.handle !== 'mid') {
+    if (lineEdit.handle === 'start' || lineEdit.handle === 'end') {
       // dropped on a card: that end joins it
       const hits = typeof document.elementsFromPoint === 'function' ? document.elementsFromPoint(e.clientX, e.clientY) : []
       const hit = hits.map(el => (el as HTMLElement).closest?.('[data-cid]') as HTMLElement | null).find(el => el && el.dataset.kind !== 'arrow')
@@ -1940,8 +1961,14 @@ export default function BriefCanvas({
                   {/* wide invisible hit line so the arrow is clickable */}
                   <path d={d} fill="none"
                     stroke="transparent" strokeWidth={14}
-                    style={{ pointerEvents: viewOnly ? 'none' : 'stroke', cursor: 'pointer' }}
-                    onClick={e => { e.stopPropagation(); setSelected(arrow.id) }} />
+                    style={{ pointerEvents: viewOnly ? 'none' : 'stroke', cursor: isSel ? 'move' : 'pointer', touchAction: isSel ? 'none' : undefined }}
+                    onPointerDown={isSel && !viewOnly ? (e => onLineBodyDown(e, saved)) : undefined}
+                    onPointerMove={isSel ? onLineHandleMove : undefined}
+                    onPointerUp={isSel ? onLineHandleUp : undefined}
+                    onPointerCancel={isSel ? onLineHandleUp : undefined}
+                    onClick={e => { e.stopPropagation(); setSelected(arrow.id) }}>
+                    {isSel && <title>Drag to move the line</title>}
+                  </path>
                   <path d={d} fill="none"
                     className={isSel ? 'stroke-accent-blue' : arrow.hex ? '' : ln ? 'stroke-foreground' : 'stroke-muted-foreground'}
                     stroke={!isSel && arrow.hex ? arrow.hex : undefined}

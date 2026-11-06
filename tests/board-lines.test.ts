@@ -78,3 +78,14 @@ describe('the canvas writes a line only when somebody drags or changes it', () =
     expect(src).toContain('Line to…')
   })
 })
+
+import { moveWholeLine as _moveWhole } from '../app/lib/board-canvas-core'
+describe('moving a whole line (6 Nov 2026: "I can\'t position the arrow anywhere else")', () => {
+  it('shifts both ends and the curve, keeping arrowheads and label', () => {
+    const out = _moveWhole({ cx: 50, cy: 0, end: 'arrow', label: 'x', dashed: true }, { x: 0, y: 0 }, { x: 100, y: 0 }, 10, 20)
+    expect(out).toEqual({ fx: 10, fy: 20, tx: 110, ty: 20, cx: 60, cy: 20, end: 'arrow', label: 'x', dashed: true })
+  })
+  it('a card-to-card arrow with no shape becomes a free line that still points', () => {
+    expect(_moveWhole(undefined, { x: 5, y: 5 }, { x: 9, y: 9 }, 1, 1)).toEqual({ end: 'arrow', fx: 6, fy: 6, tx: 10, ty: 10 })
+  })
+})
