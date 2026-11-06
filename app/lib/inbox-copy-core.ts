@@ -60,6 +60,9 @@ export type InboxEvent = {
   participantName?: string | null
   participantUsername?: string | null
   participantPicture?: string | null
+  /** the other ids Zernio uses for this conversation (participant id, platform conversation id) — its list and its
+   *  webhooks name the same Instagram DM differently (6 Nov 2026: Elena Fensom shown twice) */
+  otherIds?: readonly string[]
 }
 
 /** A conversation row in the copy, before it is written. */
@@ -336,8 +339,13 @@ export function onePerPerson(list: readonly InboxConversation[]): InboxConversat
     const who = (x.participantUsername || x.participantName || '').trim().toLowerCase()
     if (!who) { out.push(c); continue }
     const key = `${c.accountId ?? ''}|${who}`
-    if (at.has(key)) continue // the older copy is dropped; its unread number is stale, not added (no double counting)
-    at.set(key, out.length); out.push(c)
+    const i = at.get(key)
+    if (i === undefined) { at.set(key, out.length); out.push(c); continue }
+    // a second row for the same person: keep Zernio's own row (its id is the person's id) with its unread count,
+    // and the newest message of the two (`list` is newest first, so out[i] has it). Nothing is added together.
+    const first = out[i] as InboxConversation & { participantId?: string | null }
+    const listRow = x.participantId && x.id === x.participantId ? x : first
+    out[i] = { ...listRow, lastMessage: first.lastMessage, updatedTime: first.updatedTime }
   }
   return out
 }

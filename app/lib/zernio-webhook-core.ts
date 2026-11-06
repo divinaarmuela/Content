@@ -157,6 +157,9 @@ export type ZernioAction =
       text?: string
       at?: string
       accountUsername?: string
+      /** the other ids Zernio gives the same conversation: its list names an Instagram DM by the person's own id */
+      participantId?: string
+      platformConversationId?: string
       participantName?: string
       participantUsername?: string
       participantPicture?: string
@@ -633,6 +636,8 @@ export function parseZernioEvent(body: unknown): ZernioEvent {
           ? (str(message.text) || str(message.message)).slice(0, 500) || undefined : undefined,
         at: str(message.createdAt) || str(message.sentAt) || str(message.timestamp) || str(root.timestamp) || undefined,
         accountUsername: str(account.username) || undefined,
+        participantId: str(conversation.participantId) || (str(message.direction) === 'incoming' ? str(asRecord(message.sender).id) : '') || undefined,
+        platformConversationId: str(conversation.platformConversationId) || undefined,
         participantName: str(conversation.participantName) || undefined,
         participantUsername: str(conversation.participantUsername) || undefined,
         participantPicture: str(conversation.participantPicture) || undefined,

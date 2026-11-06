@@ -278,6 +278,7 @@ export async function handleZernioWebhook(req: Request): Promise<Response> {
             incoming: action.incoming, platform: action.platform, accountUsername: action.accountUsername ?? null,
             participantName: action.participantName ?? null, participantUsername: action.participantUsername ?? null,
             participantPicture: action.participantPicture ?? null,
+            otherIds: [action.participantId, action.platformConversationId].filter((x): x is string => !!x),
           })
         } catch (e) { console.error('[zernio webhook] could not update the inbox copy:', e) }
       }

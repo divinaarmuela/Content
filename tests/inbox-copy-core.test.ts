@@ -227,3 +227,14 @@ describe('one row per person (6 Nov 2026: Elena Fensom shown twice)', () => {
     expect(out[0].lastMessage).toBe('new')
   })
 })
+
+describe("Zernio's own row wins (6 Nov 2026)", () => {
+  it('keeps the list row (id = person id) and its unread, with the newest message', () => {
+    const out = _one([
+      { id: 'internal', accountId: 'acc', participantName: 'Elena F', lastMessage: 'newest', updatedTime: '2026-11-06T02:13:00Z', unreadCount: 4 },
+      { id: '9292', participantId: '9292', accountId: 'acc', participantName: 'Elena F', lastMessage: 'old', updatedTime: '2026-11-06T02:12:00Z', unreadCount: 19 },
+    ] as never)
+    expect(out).toHaveLength(1)
+    expect(out[0]).toMatchObject({ id: '9292', unreadCount: 19, lastMessage: 'newest' })
+  })
+})

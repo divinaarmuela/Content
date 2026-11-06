@@ -332,7 +332,7 @@ describe('payload → action', () => {
         kind: 'inbox', accountId: 'acc_1', conversationId: 'conv_1',
         platform: 'instagram', detail: event,
         // the Inbox copy (6 Nov 2026): which message, and the account's handle
-        messageId: 'm', accountUsername: 'c',
+        messageId: 'm', accountUsername: 'c', platformConversationId: 'p',
       })
     }
   })

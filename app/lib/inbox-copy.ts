@@ -45,6 +45,16 @@ async function writeRow(accountId: string, conversationId: string, row: CopyRow)
 /** A webhook, folded into the copy. Uses claim() so two deliveries landing together both count. */
 export async function applyInboxEvent(ev: InboxEvent): Promise<boolean> {
   try {
+    // THE SAME CONVERSATION UNDER ANOTHER ID (6 Nov 2026): Zernio's list names an Instagram DM by the person's id,
+    // its webhook by its own internal id — so each new message made a second row. Fold into the row the list
+    // already has (participant id, then platform conversation id) when there is one; the webhook's own id otherwise.
+    let target = ev.conversationId
+    for (const alt of ev.otherIds ?? []) {
+      if (alt === ev.conversationId) continue
+      const hit = await convos().get(convoKey(ev.accountId, alt)).catch(() => null)
+      if (hit) { target = alt; break }
+    }
+    ev = { ...ev, conversationId: target }
     const id = convoKey(ev.accountId, ev.conversationId)
     let changed = false
     await convos().claim(id, current => {
