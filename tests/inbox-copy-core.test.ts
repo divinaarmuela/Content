@@ -213,3 +213,17 @@ describe('the page draws less (measured)', () => {
     for (const name of ['ConvoRow', 'Bubble', 'CommentRow', 'DmComposer']) expect(parts).toContain(`export const ${name} = memo(`)
   })
 })
+
+import { onePerPerson as _one } from '../app/lib/inbox-copy-core'
+describe('one row per person (6 Nov 2026: Elena Fensom shown twice)', () => {
+  it('merges two ids for the same person on the same account, newest kept with its own unread', () => {
+    const out = _one([
+      { id: 'a', accountId: 'acc', participantName: 'Elena F', lastMessage: 'new', updatedTime: '2026-11-06T02:00:00Z', unreadCount: 4 },
+      { id: '9292', accountId: 'acc', participantName: 'Elena F', lastMessage: 'old', updatedTime: '2026-11-06T01:00:00Z', unreadCount: 17 },
+      { id: 'b', accountId: 'other', participantName: 'Elena F', unreadCount: 1 },
+    ] as never)
+    expect(out.map(c => c.id)).toEqual(['a', 'b'])
+    expect(out[0].unreadCount).toBe(4)
+    expect(out[0].lastMessage).toBe('new')
+  })
+})

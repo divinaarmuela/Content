@@ -317,9 +317,28 @@ export function clientsToRecheck(
 
 /** Copy rows → the list the page shows: one per conversation, newest first. */
 export function copyToList(rows: readonly { data: unknown }[]): InboxConversation[] {
-  return rows
+  const list = rows
     .map(r => r.data as InboxConversation)
     .filter(c => c && typeof c.id === 'string')
     .sort((a, b) => t(b.updatedTime) - t(a.updatedTime))
+  return onePerPerson(list)
+}
+
+/** ONE ROW PER PERSON (the owner, 6 Nov 2026: "why are there two here" — Elena Fensom twice on @anthkodefinance).
+ *  Zernio has listed the same person under two conversation ids (its own, and one equal to the person's platform
+ *  id), so the copy held both. Rows for the same account and the same person are shown once: the newest message
+ *  and its own unread count. `list` must already be newest first. */
+export function onePerPerson(list: readonly InboxConversation[]): InboxConversation[] {
+  const out: InboxConversation[] = []
+  const at = new Map<string, number>()
+  for (const c of list) {
+    const x = c as InboxConversation & { participantId?: string | null }
+    const who = (x.participantUsername || x.participantName || '').trim().toLowerCase()
+    if (!who) { out.push(c); continue }
+    const key = `${c.accountId ?? ''}|${who}`
+    if (at.has(key)) continue // the older copy is dropped; its unread number is stale, not added (no double counting)
+    at.set(key, out.length); out.push(c)
+  }
+  return out
 }
 
