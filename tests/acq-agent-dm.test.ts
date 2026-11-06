@@ -6,7 +6,9 @@ import { parseZernioEvent } from '../app/lib/zernio-webhook-core'
 const v = (over = {}) => ({ is_potential_client: true, confidence: 0.9, business: 'Kode Finance', contact_name: 'Sam', wants: 'pricing for reels', reasoning: 'asks about working together', ...over })
 
 describe('an incoming DM wakes the acquisition agent at once (21 Sep 2026)', () => {
-  it('the webhook keeps who wrote and which way it went — never the text', () => {
+  // 6 Nov 2026: the words now travel to ONE place — the Inbox copy's preview (the owner: "fast, but kept current by
+  // webhooks"); the agent's wake-up event and the People touch still carry only who and which way
+  it('the agent is woken with who wrote and which way it went — never the text', () => {
     const { action } = parseZernioEvent({
       id: 'evt_1', event: 'message.received',
       data: {
@@ -16,8 +18,11 @@ describe('an incoming DM wakes the acquisition agent at once (21 Sep 2026)', () 
       },
     } as never) as { action: Record<string, unknown> }
     expect(action).toMatchObject({ kind: 'inbox', accountId: 'acc_1', conversationId: 'conv_1', senderUsername: 'kodefinance', senderName: 'Kode', incoming: true })
-    expect(JSON.stringify(action)).not.toContain('how much')
+    expect(action.text).toBe('how much for reels?') // for the Inbox preview only
     const hook = readFileSync('app/lib/zernio-webhook.ts', 'utf8')
+    const wake = hook.slice(hook.indexOf("name: 'app/acquisition.dm.received'"), hook.indexOf("name: 'app/acquisition.dm.received'") + 250)
+    expect(wake).not.toContain('text')
+    expect(hook).not.toMatch(/noteTouch\(\{[^}]*text/)
     expect(hook).toContain("if (action.detail === 'message.received' && action.incoming !== false && action.senderUsername && action.accountId) {")
     expect(hook).toContain("await inngest.send({ name: 'app/acquisition.dm.received',")
   })

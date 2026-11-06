@@ -1174,7 +1174,28 @@ export const driveScanFile = inngest.createFunction(
   },
 )
 
+/**
+ * THE INBOX RE-CHECK (the owner, 6 Nov 2026: "not a stale copy"). Every 10 minutes, for clients someone had open in
+ * the last 3 hours only: each account's newest conversations, and the saved comments of posts that are behind,
+ * read from Zernio and laid over the copy. Catches what no webhook says (a Facebook unsend, a deleted comment, a
+ * missed delivery). Gentle on Zernio: one call at a time, ~3 a second, at most 8 clients a run.
+ */
+export const inboxRecheck = inngest.createFunction(
+  {
+    id: 'inbox-recheck',
+    name: 'Re-check the Inbox copy',
+    triggers: [{ cron: '*/10 * * * *' }],
+    retries: 0,
+    concurrency: { limit: 1 },
+  },
+  async ({ step }) => step.run('recheck', async () => withRequestCache(async () => {
+    const { recheckRecentClients } = await import('../lib/inbox-copy')
+    return recheckRecentClients()
+  }))
+)
+
 export const functions = [
+  inboxRecheck,
   milanoteMediaCopy,
   acquisitionAgent,
   acquisitionDm,

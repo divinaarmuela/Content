@@ -822,6 +822,61 @@ const GHOST_TABLES = {
     ['rows', col('unknown', false, true, true)],
     ['fetched_at', col('string', false)],
   ],
+  // INBOX COPY (the owner, 6 Nov 2026: "fast, but not a stale copy — what if they unsent"). Zernio stays the source:
+  //   these rows are its answers kept, corrected by its webhooks (message.*), by every live open of one thread or one
+  //   post, and by the 10-minute re-check (inboxRecheck). app/lib/inbox-copy-core.ts holds the rules.
+  // inbox_conversations — one row per DM thread, id `<account id>__<encodeKey(conversation id)>`; `data` is the
+  //   conversation exactly as Zernio's list gives it (preview text corrected for unsends).
+  inbox_conversations: [
+    ['id', col('string', false)],
+    ['account_id', col('string', false)],
+    ['conversation_id', col('string', false)],
+    ['data', col('unknown', false, true)],
+    ['updated_time', col('string', true)],
+    ['last_message_id', col('string', true)],
+    ['unsent_ids', col('unknown', true, true, true)], // message ids the sender unsent — never shown again
+    ['fetched_at', col('string', false)],
+  ],
+  // inbox_account_sync — per provider account: where "Load older" continues, and when the copy was last read live
+  inbox_account_sync: [
+    ['id', col('string', false)],
+    ['cursor', col('string', true)],
+    ['fetched_at', col('string', true)],
+  ],
+  // inbox_comment_cache — one post's comments as Zernio last gave them, with the replied / needs-a-reply counts,
+  //   id `<account id>__<encodeKey(post id)>`. Shown at once on open, then replaced by the live read.
+  inbox_comment_cache: [
+    ['id', col('string', false)],
+    ['account_id', col('string', false)],
+    ['post_id', col('string', false)],
+    ['comments', col('unknown', false, true, true)],
+    ['needs_reply', col('number', false)],
+    ['replied', col('number', false)],
+    ['fetched_at', col('string', false)],
+  ],
+  // inbox_reply_log — EVERY REPLY SENT FROM THIS APP, a log (the owner, 6 Nov 2026: "show WHO on the team replied").
+  //   One row per send: a public comment reply or a DM. Nothing else in the app recorded these sends (checked: the
+  //   comments and messages routes called Zernio and kept nothing). Replies made in Instagram / Zernio directly are
+  //   not here — those are read off Zernio's comment replies (`from.isOwner`) and shown without a name.
+  inbox_reply_log: [
+    ['id', col('string', false)],
+    ['kind', col('string', false)],               // comment | private_reply | dm
+    ['team_user_id', col('string', true)],
+    ['by_name', col('string', true)],
+    ['at', col('string', false)],
+    ['platform', col('string', true)],
+    ['client_id', col('string', true)],
+    ['account_id', col('string', true)],
+    ['target_id', col('string', false)],          // the comment id, or the conversation id for a DM
+    ['post_id', col('string', true)],
+    ['text', col('string', false)],
+  ],
+  // inbox_client_sync — per client: when someone last looked at its Inbox, and when the re-check last ran
+  inbox_client_sync: [
+    ['id', col('string', false)],
+    ['viewed_at', col('string', true)],
+    ['checked_at', col('string', true)],
+  ],
   inbox_views: [
     ['id', col('string', false)],
     ['user_id', col('string', false)],

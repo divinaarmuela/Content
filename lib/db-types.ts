@@ -52,7 +52,12 @@ export type TableName =
   | 'drive_uploads'
   | 'email_ingest_log'
   | 'encode_jobs'
+  | 'inbox_account_sync'
+  | 'inbox_client_sync'
+  | 'inbox_comment_cache'
+  | 'inbox_conversations'
   | 'inbox_post_cache'
+  | 'inbox_reply_log'
   | 'inbox_touches'
   | 'inbox_views'
   | 'instagram_videos'
@@ -984,10 +989,57 @@ export interface EncodeJob {
   updated_at: string
 }
 
+export interface InboxAccountSync {
+  id: string
+  cursor: string | null
+  fetched_at: string | null
+}
+
+export interface InboxClientSync {
+  id: string
+  viewed_at: string | null
+  checked_at: string | null
+}
+
+export interface InboxCommentCache {
+  id: string
+  account_id: string
+  post_id: string
+  comments: unknown
+  needs_reply: number
+  replied: number
+  fetched_at: string
+}
+
+export interface InboxConversation {
+  id: string
+  account_id: string
+  conversation_id: string
+  data: unknown
+  updated_time: string | null
+  last_message_id: string | null
+  unsent_ids: unknown | null
+  fetched_at: string
+}
+
 export interface InboxPostCache {
   id: string
   rows: unknown
   fetched_at: string
+}
+
+export interface InboxReplyLog {
+  id: string
+  kind: string
+  team_user_id: string | null
+  by_name: string | null
+  at: string
+  platform: string | null
+  client_id: string | null
+  account_id: string | null
+  target_id: string
+  post_id: string | null
+  text: string
 }
 
 export interface InboxTouch {
@@ -1995,7 +2047,12 @@ export const TABLE_COLUMNS = {
   drive_uploads: ['id', 'upload_uri', 'name', 'parent_id', 'mime_type', 'size', 'received', 'client_id', 'status', 'drive_file_id', 'created_by', 'created_at', 'updated_at', 'purpose', 'item_id', 'version', 'copied_at', 'final_file_id', 'error', 'replaces'],
   email_ingest_log: ['id', 'created_at', 'gmail_message_id', 'mailbox', 'from_email', 'subject', 'received_at', 'status', 'is_lead', 'confidence', 'reasoning', 'lead_id', 'error'],
   encode_jobs: ['id', 'source_url', 'platform', 'kind', 'asset_id', 'version_id', 'slide_index', 'status', 'attempts', 'output_key', 'target_source', 'bytes', 'width', 'height', 'duration_sec', 'video_kbps', 'error', 'created_at', 'updated_at'],
+  inbox_account_sync: ['id', 'cursor', 'fetched_at'],
+  inbox_client_sync: ['id', 'viewed_at', 'checked_at'],
+  inbox_comment_cache: ['id', 'account_id', 'post_id', 'comments', 'needs_reply', 'replied', 'fetched_at'],
+  inbox_conversations: ['id', 'account_id', 'conversation_id', 'data', 'updated_time', 'last_message_id', 'unsent_ids', 'fetched_at'],
   inbox_post_cache: ['id', 'rows', 'fetched_at'],
+  inbox_reply_log: ['id', 'kind', 'team_user_id', 'by_name', 'at', 'platform', 'client_id', 'account_id', 'target_id', 'post_id', 'text'],
   inbox_touches: ['id', 'account_id', 'client_id', 'username', 'name', 'kind', 'first_at', 'last_at', 'conversation_id', 'post_id', 'updated_at'],
   inbox_views: ['id', 'user_id', 'client_id', 'seen_at'],
   instagram_videos: ['id', 'video', 'audio', 'audio_known', 'poster', 'caption', 'author', 'duration', 'fetched_at', 'expires_at', 'fail_count', 'last_error', 'updated_at'],
@@ -2109,7 +2166,12 @@ export const NULLABLE_COLUMNS = {
   drive_uploads: ['mime_type', 'size', 'client_id', 'drive_file_id', 'created_by', 'purpose', 'item_id', 'version', 'copied_at', 'final_file_id', 'error', 'replaces'],
   email_ingest_log: ['from_email', 'subject', 'received_at', 'is_lead', 'confidence', 'reasoning', 'lead_id', 'error'],
   encode_jobs: ['kind', 'asset_id', 'version_id', 'slide_index', 'output_key', 'bytes', 'width', 'height', 'duration_sec', 'video_kbps', 'error'],
+  inbox_account_sync: ['cursor', 'fetched_at'],
+  inbox_client_sync: ['viewed_at', 'checked_at'],
+  inbox_comment_cache: [],
+  inbox_conversations: ['updated_time', 'last_message_id', 'unsent_ids'],
   inbox_post_cache: [],
+  inbox_reply_log: ['team_user_id', 'by_name', 'platform', 'client_id', 'account_id', 'post_id'],
   inbox_touches: ['client_id', 'name', 'conversation_id', 'post_id'],
   inbox_views: [],
   instagram_videos: ['video', 'audio', 'poster', 'caption', 'author', 'duration', 'expires_at', 'last_error'],
@@ -2230,7 +2292,12 @@ export const JSON_COLUMNS = {
   drive_uploads: [],
   email_ingest_log: [],
   encode_jobs: [],
+  inbox_account_sync: [],
+  inbox_client_sync: [],
+  inbox_comment_cache: ['comments'],
+  inbox_conversations: ['data', 'unsent_ids'],
   inbox_post_cache: ['rows'],
+  inbox_reply_log: [],
   inbox_touches: [],
   inbox_views: [],
   instagram_videos: [],
@@ -2350,7 +2417,12 @@ export const JSON_ARRAY_COLUMNS = {
   drive_uploads: [],
   email_ingest_log: [],
   encode_jobs: [],
+  inbox_account_sync: [],
+  inbox_client_sync: [],
+  inbox_comment_cache: ['comments'],
+  inbox_conversations: ['unsent_ids'],
   inbox_post_cache: ['rows'],
+  inbox_reply_log: [],
   inbox_touches: [],
   inbox_views: [],
   instagram_videos: [],

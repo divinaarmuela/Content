@@ -24,6 +24,10 @@ describe('the Inbox’s person card and its wiring', () => {
   it('the comments call carries the account the provider requires', () => {
     expect(readFileSync('app/lib/publisher.ts', 'utf8')).toContain('&accountId=${encodeURIComponent(accountId)}')
     expect(readFileSync('app/lib/post-analytics.ts', 'utf8')).toContain('publisher.postComments(id, commentAccountOf(job.targets))')
-    expect(readFileSync('app/api/social/comments/route.ts', 'utf8')).toContain("postComments(postId, params.get('accountId'))")
+    // the live read moved into inbox-copy.liveComments (6 Nov 2026); the route still hands it the account
+    const route = readFileSync('app/api/social/comments/route.ts', 'utf8')
+    expect(route).toContain("const accountId = params.get('accountId')")
+    expect(route).toContain('liveComments(postId, accountId)')
+    expect(readFileSync('app/lib/inbox-copy.ts', 'utf8')).toContain('postComments(postId, accountId)')
   })
 })

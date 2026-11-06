@@ -8,6 +8,7 @@ import { assertClientAccess } from '@/app/lib/social-schedule'
 import { accessibleClientIds } from '@/app/lib/production-access'
 import { nextCursor } from '@/app/lib/inbox-core'
 import { getPublisher } from '@/app/lib/publisher'
+import { needsReplyByPost, noteClientViewed } from '@/app/lib/inbox-copy'
 
 /** Keep only comments from a currently-connected account (the owner, 14 Sep
  *  2026: a disconnected account's comments were still showing). A comment
@@ -77,8 +78,16 @@ export async function GET(req: Request) {
     ])
     const seenFor = new Map(views.map(v => [v.client_id, v.seen_at]))
     const dayAgo = new Date(Date.now() - FIRST_VISIT_WINDOW_MS).toISOString()
-    const data = byLatestComment(unique, touches, c => (c && seenFor.get(c)) || dayAgo)
-    return NextResponse.json({ data, configured: true, partial })
+    // "N need a reply" per post, from each post's comments as last read (opening a post, or the 10-minute re-check)
+    const counts = await needsReplyByPost(scope.map(a => String(a.provider_account_id)))
+    const data = byLatestComment(unique, touches, c => (c && seenFor.get(c)) || dayAgo).map(p => {
+      const n = counts.get(`${p.accountId ?? ''}:${p.id}`)
+      return n ? { ...p, needs_reply: n.needs_reply, replied: n.replied } : p
+    })
+    if (clientId !== 'all') void noteClientViewed(clientId)
+    const times = scope.map(a => postFetchedAt.get(String(a.provider_account_id))).filter((t): t is string => !!t)
+    const checkedAt = times.length ? times.reduce((a, b) => (a < b ? a : b)) : null
+    return NextResponse.json({ data, configured: true, partial, checkedAt })
   } catch (e) {
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })
@@ -97,6 +106,8 @@ function beforeDeadline<T>(p: Promise<T>, deadline: number): Promise<T | null> {
 }
 
 const FRESH_MS = 60_000
+/** when each account's post list was last read from Zernio, for the "Updated N min ago" line (per request) */
+const postFetchedAt = new Map<string, string>()
 const postCache = () => table<InboxPostCache>('inbox_post_cache')
 
 /** One account's newest posts: our copy at once (refreshed after the answer when over a minute old), or — when there
@@ -104,6 +115,7 @@ const postCache = () => table<InboxPostCache>('inbox_post_cache')
 async function cachedPosts(publisher: ReturnType<typeof getPublisher>, accountId: string, deadline: number): Promise<PostRow[]> {
   const copy = await postCache().get(accountId).catch(() => null)
   const rows = Array.isArray(copy?.rows) ? copy.rows as PostRow[] : null
+  if (copy?.fetched_at) postFetchedAt.set(accountId, copy.fetched_at)
   if (rows) {
     if (Date.now() - (Date.parse(copy?.fetched_at ?? '') || 0) > FRESH_MS) after(() => refreshPosts(publisher, accountId, Date.now() + 60_000))
     return rows
@@ -116,7 +128,9 @@ async function refreshPosts(publisher: ReturnType<typeof getPublisher>, accountI
   const page = await beforeDeadline(publisher.listComments({ accountId, limit: 100 }), deadline) as { data?: PostRow[] } | null
   if (!page) return null
   const rows = page.data ?? []
-  await postCache().upsert({ id: accountId, rows, fetched_at: new Date().toISOString() }).catch(() => {})
+  const fetched_at = new Date().toISOString()
+  postFetchedAt.set(accountId, fetched_at)
+  await postCache().upsert({ id: accountId, rows, fetched_at }).catch(() => {})
   return rows
 }
 

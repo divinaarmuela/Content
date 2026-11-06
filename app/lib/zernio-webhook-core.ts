@@ -151,6 +151,15 @@ export type ZernioAction =
       senderUsername?: string
       senderName?: string
       incoming?: boolean
+      /** for the Inbox copy (6 Nov 2026): the message's id and time, and its words on received / sent / edited ONLY —
+       *  never on message.deleted, whose payload keeps the pre-delete text (Zernio docs) that must not be shown */
+      messageId?: string
+      text?: string
+      at?: string
+      accountUsername?: string
+      participantName?: string
+      participantUsername?: string
+      participantPicture?: string
     }
   /** a review landed — somebody's account manager should hear about it */
   | {
@@ -619,6 +628,14 @@ export function parseZernioEvent(body: unknown): ZernioEvent {
         senderUsername: str(asRecord(message.sender).username) || str(conversation.participantUsername) || undefined,
         senderName: str(asRecord(message.sender).name) || str(conversation.participantName) || undefined,
         incoming: str(message.direction) ? str(message.direction) === 'incoming' : undefined,
+        messageId: str(message.id) || str(message._id) || str(message.platformMessageId) || undefined,
+        text: ['message.received', 'message.sent', 'message.edited'].includes(event)
+          ? (str(message.text) || str(message.message)).slice(0, 500) || undefined : undefined,
+        at: str(message.createdAt) || str(message.sentAt) || str(message.timestamp) || str(root.timestamp) || undefined,
+        accountUsername: str(account.username) || undefined,
+        participantName: str(conversation.participantName) || undefined,
+        participantUsername: str(conversation.participantUsername) || undefined,
+        participantPicture: str(conversation.participantPicture) || undefined,
       },
     }
   }

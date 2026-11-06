@@ -260,11 +260,27 @@ export async function handleZernioWebhook(req: Request): Promise<Response> {
       if (action.authorUsername && action.accountId && !action.own) {
         await noteTouch({ username: action.authorUsername, name: action.authorName ?? null, kind: 'comment', account_id: action.accountId, conversation_id: null, post_id: action.platformPostId })
       }
+      // the post's saved comments are now behind: the next open reads live (6 Nov 2026, the Inbox copy)
+      try { await (await import('./inbox-copy')).commentArrived(action.accountId, action.platformPostId) } catch { /* best effort */ }
       return done(
         NextResponse.json({ ok: true, comment: action.commentId }), true,
         action.text ? action.text.slice(0, 200) : undefined,
       )
     case 'inbox':
+      // THE INBOX COPY FOLLOWS ZERNIO (6 Nov 2026): received / sent / edited / unsent folded in as they happen — an
+      // unsent message's words are never kept (inbox-copy-core.foldInboxEvent). Best effort, never fails the delivery.
+      if (action.accountId && action.conversationId) {
+        try {
+          const { applyInboxEvent } = await import('./inbox-copy')
+          await applyInboxEvent({
+            detail: action.detail, accountId: action.accountId, conversationId: action.conversationId,
+            messageId: action.messageId ?? null, text: action.text ?? null, at: action.at ?? null,
+            incoming: action.incoming, platform: action.platform, accountUsername: action.accountUsername ?? null,
+            participantName: action.participantName ?? null, participantUsername: action.participantUsername ?? null,
+            participantPicture: action.participantPicture ?? null,
+          })
+        } catch (e) { console.error('[zernio webhook] could not update the inbox copy:', e) }
+      }
       // AN INCOMING DM WAKES THE ACQUISITION AGENT AT ONCE (21 Sep 2026; acq-agent.ts). Only the fact and
       // the handle travel: the job checks the account is MD Media's own, and reads the thread itself.
       // Best effort — a webhook is never failed because a job could not be queued.
