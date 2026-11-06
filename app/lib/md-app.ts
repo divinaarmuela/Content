@@ -105,6 +105,16 @@ export async function readAssigned(a: Auth): Promise<{ businessId: string | null
     list('Ad accounts', 'ad_account', listAll(a, 'me/adaccounts', 'id,account_id,name', 'ad_account')),
   ])
   const found: Record<AssetKind, AssignedAsset[]> = { instagram: ig, page: pages, ad_account: ads }
+  // Instagram through its linked Page — Meta's documented road for Instagram API with Facebook Login:
+  // GET /{page-id}?fields=instagram_business_account (6 Nov 2026: the assigned-accounts edge came back empty).
+  if (found.instagram.length === 0) {
+    for (const p of found.page.slice(0, 50)) {
+      const one = await get(a, p.id, { fields: 'instagram_business_account{id,username}' })
+        .then(j => parseAssigned('instagram', { data: j?.instagram_business_account ? [j.instagram_business_account] : [] }))
+        .catch(e => { errors.push(`Instagram via Page ${p.id}: ${e instanceof Error ? e.message : 'failed'}`); return [] as AssignedAsset[] })
+      for (const x of one) if (!found.instagram.some(y => y.id === x.id)) found.instagram.push(x)
+    }
+  }
   // A list edge that failed or came back empty: read the granted ids from the token itself and fetch each asset
   // by id (parseGrantedTargets says why). An asset that reads fine clears that list's error.
   const missing = (Object.keys(found) as AssetKind[]).filter(k => found[k].length === 0)
