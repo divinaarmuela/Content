@@ -64,6 +64,9 @@ describe('pickPushdown', () => {
     }
     walk(rules)
     expect(declared.size).toBeGreaterThan(0)
+    // board_id is declared in the file but NOT in the rules published on the live database (probed 6 Nov 2026:
+    // 400 "Index not defined"), so it is deliberately left out of the pushed-down set — see lib/db-indexes.ts
+    declared.delete('board_id')
     expect([...INDEXED_COLUMNS].sort()).toEqual([...declared].sort())
   })
 })

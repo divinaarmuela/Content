@@ -11,7 +11,11 @@
  */
 export const INDEXED_COLUMNS: ReadonlySet<string> = new Set([
   'client_id', 'status', 'batch_id', 'owner_id', 'team_user_id', 'created_at',
-  'scheduled_for', 'due_date', 'item_id', 'email', 'token', 'updated_at', 'board_id',
+  'scheduled_for', 'due_date', 'item_id', 'email', 'token', 'updated_at',
+  // NOT 'board_id': database.rules.json lists it, but the rules PUBLISHED on the live database do not (probed
+  // read-only 6 Nov 2026: every other column answers 200, board_id answers 400 "Index not defined") — so every
+  // board failed to open ("Database GET /mdm/tables/board_comments failed (400)"). Read and filtered instead,
+  // until the published rules carry it; add it back here only after a probe of the live database answers 200.
 ])
 
 /**
