@@ -670,13 +670,13 @@ function HowItWorks() {
   // brought up to date with the rebuilt report (5 Nov 2026)
   const steps: { title: string; body: string }[] = [
     { title: '1. The figures are read from the client’s own accounts',
-      body: 'Every number comes from the client’s connected Instagram, Facebook, TikTok and LinkedIn, through Zernio. Nothing is typed in by hand and nothing is posted or changed. “Read the figures again” fetches them fresh.' },
+      body: 'Every number comes from the client’s connected Instagram, Facebook, TikTok and LinkedIn accounts. Nothing is typed in by hand and nothing is posted or changed. “Read the figures again” fetches them fresh.' },
     { title: 'Followers',
-      body: 'Instagram: its own follows minus unfollows for the month, the same number as Instagram’s app (e.g. 82 follows − 38 unfollows = +44). Facebook, TikTok and LinkedIn: Zernio’s daily follower count, first day of the month to the last. Zernio only has counts from the day an account was connected, so the card says “first day tracked” when that was mid-month, and “not available” when it was less than a week.' },
+      body: 'Instagram: its own follows minus unfollows for the month, the same number as Instagram’s app (e.g. 82 follows − 38 unfollows = +44). Facebook, TikTok and LinkedIn: the daily follower count, first day of the month to the last. Counts only exist from the day an account was connected, so the card says “first day tracked” when that was mid-month, and “not available” when it was less than a week.' },
     { title: 'Views, reach and interactions',
       body: 'What happened during the month, on any post, including older posts and stories. “Last month” is the calendar month before. Views count every time something was seen; reach counts different people. Interactions are broken into likes, comments, shares, saves and anything else the platform counted.' },
     { title: 'Every number says what it is',
-      body: 'A number, “not tracked yet” (before the account was connected), “not given by this platform” (e.g. Facebook gives no views on images), or “couldn’t read, try again” (Zernio didn’t answer). A missing number is never shown as 0, and there is no % change against a month with no figure.' },
+      body: 'A number, “not tracked yet” (before the account was connected), “not given by this platform” (e.g. Facebook gives no views on images), or “couldn’t read, try again” (the platform didn’t answer). A missing number is never shown as 0, and there is no % change against a month with no figure.' },
     { title: '2. Which posts the report is about',
       body: 'In Build report, the posts MD Media published are ticked to start. Tick any other post from the month to add it, or untick one to leave it out. The explanations and the written report are about the ticked posts; the account totals stay as context. Below the figures, all the month’s posts can be filtered by account, type and who posted them, nine at a time.' },
     { title: '3. The posts are explained',

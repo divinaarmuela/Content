@@ -3,8 +3,6 @@ import { useParams } from 'next/navigation'
 import SocialChannels from '../../SocialChannels'
 import InstagramLocations from '../../InstagramLocations'
 import ClientApproval from '../../ClientApproval'
-import MetaDirectInstagram from '../../MetaDirectInstagram'
-import MetaDirectFacebook from '../../MetaDirectFacebook'
 import MdAppDirect from '../../MdAppDirect'
 import { useRole } from '../../../useRole'
 
@@ -24,12 +22,8 @@ export default function ClientSocialPage() {
           because it is the same kind of thing — a setting about this client's
           accounts that the composer then just uses. */}
       <InstagramLocations clientId={id} />
-      {/* The agency's own Instagram Login, for testing (1 Oct 2026). Last,
-          and drawn for super admins only, so it stays out of the way of the
-          channels above, which is where posting still happens. */}
-      <MetaDirectInstagram clientId={id} />
-      {/* …and its Facebook Page twin (6 Nov 2026). */}
-      <MetaDirectFacebook clientId={id} />
+      {/* The two cards for the OLD Meta app (MetaDirectInstagram, MetaDirectFacebook) are no longer drawn
+          (6 Nov 2026): Meta's reviewer must see one Meta card only. Their files and routes stay. */}
       {/* MD App, Meta's new app with Unified Login (6 Nov 2026) — super admins only, opt-in per client. */}
       <MdAppDirect clientId={id} />
     </div>

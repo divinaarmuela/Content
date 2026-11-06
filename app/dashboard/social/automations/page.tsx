@@ -66,7 +66,7 @@ const STATS: [keyof AutomationStats, string][] = [
 const APP_UNKNOWN: readonly (keyof AutomationStats)[] = ['delivered', 'read', 'linkClicks']
 
 const RUNNER_WORDS: Record<'zernio' | 'app', string> = {
-  zernio: 'Zernio sends it',
+  zernio: 'Sent by the scheduler',
   app: 'Our app sends it',
 }
 
@@ -164,7 +164,7 @@ export default function AutomationsPage() {
         if (!res.ok) throw new Error(json.error ?? 'Could not load the posts')
         if (!live) return
         setPosts(json.posts ?? [])
-        if (json.account_posts_read === false) setPostsNote('Zernio did not answer for this account\'s own posts, so only posts made here are listed.')
+        if (json.account_posts_read === false) setPostsNote('This account\'s own posts could not be read just now, so only posts made here are listed.')
       } catch (e) {
         if (!live) return
         setPosts([])
@@ -283,7 +283,7 @@ export default function AutomationsPage() {
 
       {!zernioRead && (
         <p className="rounded-inner border border-border bg-tint-amber px-3 py-2 text-secondary-13">
-          Zernio did not answer, so the on/off state and numbers below may be out of date.
+          Could not read the latest state just now, so the on/off state and numbers below may be out of date.
         </p>
       )}
 
@@ -408,10 +408,10 @@ export default function AutomationsPage() {
                   </Select>
                   <span className="text-secondary-13 text-muted-foreground">
                     {draft.runner === 'app'
-                      ? 'Our app hears every comment and sends the DM itself. It counts DMs sent and failed; Zernio’s delivered, read and click counts are not available this way.'
+                      ? 'Our app hears every comment and sends the DM itself. It counts DMs sent and failed; delivered, read and click counts are not available this way.'
                       : chosenPost.state === 'booked'
-                        ? 'This post is not out yet, so only Zernio can run it — it starts when the post goes out.'
-                        : 'Zernio hears the comment and sends the DM, and counts delivered, read and clicks.'}
+                        ? 'This post is not out yet, so only the scheduler can run it — it starts when the post goes out.'
+                        : 'The scheduler hears the comment and sends the DM, and counts delivered, read and clicks.'}
                   </span>
                 </label>
 
@@ -603,7 +603,7 @@ export default function AutomationsPage() {
         <section className="grid gap-3">
           <h2 className="text-body-15 font-semibold">Made outside this page</h2>
           <p className="text-secondary-13 text-muted-foreground">
-            These were set up on Zernio directly or before this page. They can be switched off or deleted here; one that
+            These were set up before this page existed. They can be switched off or deleted here; one that
             answers every comment on the account cannot be switched back on from here.
           </p>
           {outside.map(o => (
@@ -644,7 +644,7 @@ export default function AutomationsPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete &ldquo;{confirmDelete?.name ?? 'this automation'}&rdquo;?</AlertDialogTitle>
             <AlertDialogDescription>
-              It stops answering at once, and Zernio deletes its history with it. Switching it off keeps the history.
+              It stops answering at once, and its history is deleted with it. Switching it off keeps the history.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

@@ -355,7 +355,7 @@ const LOG_WORDS: Record<PostLogEntry['status'], { words: string; tone: string }>
 /** an account's month, post by post, as Zernio's own list (the owner, 29 Oct 2026: "can we make a proper log maybe caption
  *  like how zernio dashboard is … it should show … which social platforms it published") */
 function PostLog({ entries, clientId }: { entries: PostLogEntry[]; clientId?: string | null }) {
-  if (entries.length === 0) return <p className="mt-2 text-[12px] text-muted-foreground">No posts through Zernio this month.</p>
+  if (entries.length === 0) return <p className="mt-2 text-[12px] text-muted-foreground">No posts published this month.</p>
   return (
     <ul className="mt-2 flex flex-col divide-y divide-border rounded-inner border border-border bg-background">
       {entries.map(e => (

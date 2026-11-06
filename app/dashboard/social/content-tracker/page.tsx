@@ -94,7 +94,7 @@ export default function ContentTrackerPage() {
             <button type="button" onClick={() => setMonth(shiftMonth(month, 1))} aria-label="Next month"
               className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-muted"><ChevronRight className="h-4 w-4" /></button>
           </div>
-          <button type="button" onClick={() => void load(month, true)} disabled={loading} aria-label="Refresh from Zernio"
+          <button type="button" onClick={() => void load(month, true)} disabled={loading} aria-label="Refresh"
             className="inline-flex h-11 items-center gap-2 rounded-full border border-border bg-surface px-4 text-[13px] font-semibold hover:bg-muted disabled:opacity-50">
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />} Refresh
           </button>
@@ -138,7 +138,7 @@ export default function ContentTrackerPage() {
         </div>
       ) : boards.length === 0 ? (
         <p className="rounded-inner border border-dashed border-border p-10 text-center text-[14px] text-muted-foreground">
-          {all.length === 0 ? `Nothing in Zernio for ${monthWords(month)}.` : 'No client matches.'}
+          {all.length === 0 ? `Nothing scheduled or published for ${monthWords(month)}.` : 'No client matches.'}
         </p>
       ) : (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 2xl:grid-cols-3">
@@ -150,8 +150,8 @@ export default function ContentTrackerPage() {
 
       {data && (data.unlinked > 0 || !data.complete) && (
         <p className="text-[12px] text-muted-foreground">
-          {data.unlinked > 0 && `${data.unlinked} post${data.unlinked === 1 ? '' : 's'} in Zernio this month ${data.unlinked === 1 ? 'is' : 'are'} on an account not linked to a client. `}
-          {!data.complete && 'Zernio did not send everything in one go — press Refresh.'}
+          {data.unlinked > 0 && `${data.unlinked} post${data.unlinked === 1 ? '' : 's'} this month ${data.unlinked === 1 ? 'is' : 'are'} on an account not linked to a client. `}
+          {!data.complete && 'Not everything loaded in one go — press Refresh.'}
         </p>
       )}
 
@@ -239,7 +239,7 @@ function FormatTable({ board, target }: { board: ClientBoard; target: Target | u
   const nets = platformsIn(Object.keys(per).map(platform => ({ platform })))
   const all = overall(board.items)
   const formats = FORMATS.filter(f => f !== 'story' || all.story.published + all.story.scheduled > 0)
-  if (nets.length === 0) return <p className="text-[13px] text-muted-foreground">Nothing in Zernio this month.</p>
+  if (nets.length === 0) return <p className="text-[13px] text-muted-foreground">Nothing scheduled or published this month.</p>
   return (
     <table className="w-full text-[12px]">
       <thead>
@@ -348,13 +348,13 @@ function ClientDetail({ board, client, month, target, onSaved }: {
 
       <section className="flex flex-col gap-2">
         <h3 className="flex items-center gap-2 text-[14px] font-semibold"><Clock className="h-4 w-4" />Still to go · {coming.length}</h3>
-        {coming.length === 0 ? <p className="text-[13px] text-muted-foreground">Nothing waiting in Zernio this month.</p>
+        {coming.length === 0 ? <p className="text-[13px] text-muted-foreground">Nothing waiting to publish this month.</p>
           : coming.map(i => <ItemRow key={i.key} item={i} />)}
       </section>
 
       <section className="flex flex-col gap-2">
         <h3 className="flex items-center gap-2 text-[14px] font-semibold"><CheckCircle2 className="h-4 w-4" />Went out · {out.length}</h3>
-        {out.length === 0 ? <p className="text-[13px] text-muted-foreground">Nothing published through Zernio yet this month.</p>
+        {out.length === 0 ? <p className="text-[13px] text-muted-foreground">Nothing published yet this month.</p>
           : out.map(i => <ItemRow key={i.key} item={i} />)}
       </section>
     </div>

@@ -44,7 +44,7 @@ export default function MdAppDirect({ clientId }: { clientId: string }) {
     const params = new URLSearchParams(window.location.search)
     const result = params.get('md_app')
     if (!result) return
-    if (result === 'connected') toast.success('Connected through MD App — now tick the accounts that belong to this client')
+    if (result === 'connected') toast.success('Connected — now tick the accounts that belong to this client')
     else if (result === 'empty') toast.error('Connected, but no accounts were shared. Connect again and choose the accounts.')
     else if (result === 'denied') toast.error('Connect was cancelled')
     else toast.error(`Connect failed: ${params.get('reason') ?? 'unknown reason'}`)
@@ -77,8 +77,8 @@ export default function MdAppDirect({ clientId }: { clientId: string }) {
     <section className="rounded-xl border border-border bg-card p-4 space-y-4">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h2 className="text-base font-semibold">Direct via MD App <span className="ml-1 rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-800">testing</span></h2>
-          <p className="text-sm text-muted-foreground">Meta&apos;s new app. Nothing changes for this client until you turn on &ldquo;Use MD App&rdquo;. Zernio stays as it is.</p>
+          <h2 className="text-base font-semibold">Meta: Facebook, Instagram &amp; Ads</h2>
+          <p className="text-sm text-muted-foreground">Connect this client&apos;s Facebook Page, Instagram account and ad account.</p>
         </div>
       </div>
 
@@ -94,7 +94,7 @@ export default function MdAppDirect({ clientId }: { clientId: string }) {
               {state.connection && (
                 <>
                   <Button size="sm" variant="outline" disabled={!!busy} onClick={() => act('refresh', { action: 'refresh' }, 'Accounts read again')}>Check accounts again</Button>
-                  <Button size="sm" variant="outline" disabled={!!busy} onClick={() => { if (confirm('Disconnect MD App from this client?')) void act('disconnect', { action: 'disconnect' }, 'Disconnected') }}>Disconnect</Button>
+                  <Button size="sm" variant="outline" disabled={!!busy} onClick={() => { if (confirm('Disconnect Meta from this client?')) void act('disconnect', { action: 'disconnect' }, 'Disconnected') }}>Disconnect</Button>
                 </>
               )}
             </div>
@@ -126,12 +126,12 @@ export default function MdAppDirect({ clientId }: { clientId: string }) {
                 </div>
 
                 <label className="flex items-center gap-3 text-sm">
-                  <Switch checked={state.usesMdApp} disabled={!!busy} onCheckedChange={on => act('use', { action: 'use', on }, on ? 'This client now uses MD App' : 'This client is back on the usual road')} />
-                  <span>Use MD App for this client</span>
+                  <Switch checked={state.usesMdApp} disabled={!!busy} onCheckedChange={on => act('use', { action: 'use', on }, on ? 'Posts, replies and reports for this client now go through Meta' : 'Switched off for this client')} />
+                  <span>Post, reply and report through Meta for this client</span>
                 </label>
 
                 <div>
-                  <h3 className="text-sm font-medium mb-1">Test calls for Meta&apos;s review (each makes one real call)</h3>
+                  <h3 className="text-sm font-medium mb-1">Check each connection (each makes one real call)</h3>
                   <div className="grid gap-2 sm:grid-cols-2">
                     {state.tests.map(t => (
                       <div key={t.id} className="rounded-md border border-border p-2">

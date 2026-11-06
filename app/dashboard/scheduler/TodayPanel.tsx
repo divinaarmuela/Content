@@ -76,7 +76,7 @@ export default function TodayPanel({ clientId }: { clientId: string }) {
   return (
     <TintCard tone={needs > 0 ? 'amber' : 'surface'} title={title}>
       <div className="-mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-muted-foreground">
-        <span>Latest time first · status checked with Zernio{checkedAt ? ` at ${time(checkedAt)}` : ''}</span>
+        <span>Latest time first · status checked{checkedAt ? ` at ${time(checkedAt)}` : ''}</span>
         <button type="button" onClick={load} disabled={busy}
           className="inline-flex min-h-9 items-center font-semibold text-foreground underline-offset-4 hover:underline disabled:opacity-50">
           {busy ? 'Checking…' : 'Check again'}
@@ -121,8 +121,8 @@ export default function TodayPanel({ clientId }: { clientId: string }) {
                       r.approvedBy && `approved by ${r.approvedBy}`,
                       r.bookedBy && `booked by ${r.bookedBy}${r.bookedAt ? ` (${when(r.bookedAt)})` : ''}`,
                     ].filter(Boolean).join(' · ') || 'Nobody has booked it yet'}
-                    {r.zernio && !r.zernio.checked && ' · Zernio did not answer'}
-                    {!r.zernio && !r.state.needsAction && r.state.label !== 'Posted' && ' · not with Zernio yet'}
+                    {r.zernio && !r.zernio.checked && ' · status could not be checked, try again'}
+                    {!r.zernio && !r.state.needsAction && r.state.label !== 'Posted' && ' · not sent for publishing yet'}
                   </p>
                 </div>
               </a>
