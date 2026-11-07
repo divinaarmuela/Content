@@ -66,7 +66,8 @@ export const SECTORS: Sector[] = [
     name: 'Hospitality',
     tags: ['Editorial photography', 'Campaigns', 'Venues & events'],
     clients: [
-      { name: 'The Emerald — Reception venue', current: true, media: { video: '/videos/work/emerald' } },
+      // its clip (/videos/work/emerald) was Releeph footage, not the venue (owner, 7 Nov 2026) — no media until a real Emerald clip exists
+      { name: 'The Emerald — Reception venue', current: true },
       { name: 'Cecconi’s Toorak & Flinders Street', slug: 'cecconis', desc: 'Editorial photography and content for two of Melbourne’s most recognised fine dining venues. Visual storytelling that earns reservations.', media: { video: '/videos/content-visibility/cecconis' } },
       { name: 'Death & Co Melbourne — CBD', media: { video: '/videos/work/death-co' } },
       { name: 'Quarterhouse — Docklands', media: { video: '/videos/content-visibility/hero' } },
