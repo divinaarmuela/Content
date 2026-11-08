@@ -187,7 +187,21 @@ export function ShootStageBoard({
             )}
             {s.shoot_date && <Chip><CalendarDays className="h-3.5 w-3.5" aria-hidden />{whenShort(s.shoot_date)}</Chip>}
             {overrideWords(s) && <Chip tone="amber">{overrideWords(s)}</Chip>}
-            {clientPlanWords(s) && <Chip tone={s.client_decision === 'approved' ? 'green' : s.client_decision === 'changes' ? 'amber' : 'blue'} className="h-auto whitespace-normal text-left">{clientPlanWords(s)}</Chip>}
+            {(() => {
+              // the client's answer (9 Nov 2026): a long comment in a round chip had its words cut off by the
+              // corners, so a comment gets a small quote box of its own — status on top, the words under it
+              const line = clientPlanWords(s)
+              if (!line) return null
+              const tone = s.client_decision === 'approved' ? 'green' : s.client_decision === 'changes' ? 'amber' : 'blue'
+              const cut = line.indexOf(': ')
+              if (cut < 0) return <Chip tone={tone} className="h-auto whitespace-normal text-left">{line}</Chip>
+              return (
+                <div className="basis-full rounded-xl border border-black/10 bg-white/60 px-3 py-2 text-left dark:border-white/10 dark:bg-white/5">
+                  <p className={`text-[12px] font-semibold ${tone === 'amber' ? 'text-amber-800 dark:text-amber-300' : 'text-foreground'}`}>{line.slice(0, cut)}</p>
+                  <p className="mt-0.5 line-clamp-3 text-[13px] leading-snug text-foreground/80" title={line.slice(cut + 2)}>“{line.slice(cut + 2)}”</p>
+                </div>
+              )
+            })()}
             {(() => {
               // the quality review gate (13 Sep 2026): a plan written or held
               // by anyone but a super admin

@@ -62,7 +62,6 @@ export default function CustomWebsitesPage() {
         ['What does ongoing care include?', 'Hosting, security monitoring, regular backups, software updates, speed checks and small content changes each month. If something breaks, we fix it.'],
         ['Do you offer SEO?', 'Every site launches with SEO foundations in place. Ongoing SEO is optional: keyword research, content updates and monthly reporting to grow your search traffic.'],
         ['Who owns the website?', 'You do. The site, the domain and the content are yours, whether you stay with us or not.'],
-        ['Can I edit it myself?', 'Yes. We set it up so you can change text and images without calling us.'],
       ]}
     />
   )
