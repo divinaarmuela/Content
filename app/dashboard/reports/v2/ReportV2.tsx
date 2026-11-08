@@ -127,6 +127,13 @@ export function ReportV2Body({ clientId, month, showShareBox = false, onChecks }
           <section className="flex flex-col gap-3">
             <h2 className="text-[20px] font-semibold">Posts in {monthLabel(month)}</h2>
             <div className="flex flex-wrap gap-3">
+              {/* the platform beside the other post filters (owner, 9 Nov 2026) — the same choice as the tabs up top */}
+              {platforms.length > 1 && (
+                <label className="flex flex-col gap-1 text-[12px] text-muted-foreground">Platform
+                  <Pick label="Platform" value={view.account} onChange={v => setView({ account: v, type: 'all' })}
+                    options={[{ value: 'all', label: `All platforms (${platforms.reduce((n, p) => n + p.posts.length, 0)})` }, ...platforms.map(p => ({ value: p.platform as string, label: `${platformLabel(p.platform)} (${p.posts.length})` }))]} />
+                </label>
+              )}
               <label className="flex flex-col gap-1 text-[12px] text-muted-foreground">Type
                 <Pick label="Type" value={view.type} onChange={v => setView({ type: v as V2View['type'] })}
                   options={[{ value: 'all', label: `All types (${allPosts.length})` }, ...typesPresent(allPosts).map(t => ({ value: t.type, label: `${t.type[0].toUpperCase()}${t.type.slice(1)}s (${t.count})` }))]} />
