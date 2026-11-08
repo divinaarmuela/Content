@@ -9,7 +9,7 @@
  *
  * Pure: middleware.ts calls it with the Clerk user id and the URL.
  */
-export const REVIEWER_CLERK_IDS: readonly string[] = ['user_3KFf2RcRERoLqtpWTvwkbwBIlj9']
+export const REVIEWER_CLERK_IDS: readonly string[] = ['user_3KFf2RcRERoLqtpWTvwkbwBIlj9', 'user_3LqUErloJO1148GwLyWXe8lhOzE'] // Meta Login (Oct), Meta App Review (mdmedia.metareview@, 9 Nov)
 export const REVIEWER_CLIENT_ID = '459e2564-1089-45ed-abd7-56d5f53c2cf6'
 export const REVIEWER_HOME = `/dashboard/clients/${REVIEWER_CLIENT_ID}/social`
 

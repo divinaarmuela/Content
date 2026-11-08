@@ -4,6 +4,7 @@ import { REVIEWER_CLIENT_ID as T, isReviewer, reviewerVerdict } from '../app/lib
 describe('the Meta reviewer login sees only the test client (9 Nov 2026)', () => {
   it('knows the reviewer and nobody else', () => {
     expect(isReviewer('user_3KFf2RcRERoLqtpWTvwkbwBIlj9')).toBe(true)
+    expect(isReviewer('user_3LqUErloJO1148GwLyWXe8lhOzE')).toBe(true)
     expect(isReviewer('user_someoneElse')).toBe(false)
     expect(isReviewer(null)).toBe(false)
   })
