@@ -12,6 +12,7 @@ import HoverClip from '../media/HoverClip'
 import { hlsManifestUrl, useHlsSource } from '../media/useHlsSource'
 import { assetLine, changedAtRound, clipsAtRound, pieceWords } from '../../lib/editing-portal-core'
 import { baseName, folderSections } from '../../lib/drive-folder-files-core'
+import { LinkedText } from '@/app/components/LinkedText'
 
 /**
  * THE EDITING PORTAL (the owner, 16 Sep 2026: "a new look where the videos
@@ -442,7 +443,7 @@ export default function EditingReview({ data, approved: clientApproved = false }
                       <span className="text-[13px] font-semibold text-foreground">{c.author_name}</span>
                       <span className="text-[12px] text-muted-foreground">{when(c.created_at)}</span>
                     </div>
-                    <p className="mt-1 whitespace-pre-wrap break-words text-[14px] text-foreground/90">{c.body}</p>
+                    <p className="mt-1 whitespace-pre-wrap break-words text-[14px] text-foreground/90"><LinkedText text={c.body} /></p>
                   </li>
                 ))}
               </ul>
@@ -461,7 +462,7 @@ export default function EditingReview({ data, approved: clientApproved = false }
                   <span className="text-[13px] font-semibold text-foreground">{c.author_name}</span>
                   <span className="text-[12px] text-muted-foreground">{when(c.created_at)}</span>
                 </div>
-                <p className="mt-1 whitespace-pre-wrap break-words text-[14px] text-foreground/90">{c.body}</p>
+                <p className="mt-1 whitespace-pre-wrap break-words text-[14px] text-foreground/90"><LinkedText text={c.body} /></p>
               </li>
             ))}
           </ul>

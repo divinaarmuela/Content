@@ -3,6 +3,7 @@
 import { CheckCircle2, CircleDashed } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { formatInZone } from '../../lib/timezone-core'
+import { LinkedText } from '@/app/components/LinkedText'
 
 /** One comment as the item API sends it. */
 export type ThreadComment = {
@@ -67,7 +68,7 @@ export default function CommentThread({
                 : <CircleDashed className="h-4 w-4 text-muted-foreground" />}
             </button>
             <div className="min-w-0 flex-1">
-              <p className={`whitespace-pre-wrap text-body-15 ${c.resolved ? 'text-muted-foreground line-through' : ''}`}>{c.body}</p>
+              <p className={`whitespace-pre-wrap text-body-15 ${c.resolved ? 'text-muted-foreground line-through' : ''}`}><LinkedText text={c.body} /></p>
               <p className="mt-0.5 flex flex-wrap items-center gap-2 text-[12px] text-muted-foreground">
                 {c.author_name && <span className="text-muted-foreground">{c.author_name}</span>}
                 <span suppressHydrationWarning>{viewerTz ? formatInZone(c.created_at, viewerTz, 'short') : ''}</span>

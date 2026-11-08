@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server'
+import { REVIEWER_HOME, isReviewer, reviewerVerdict } from './app/lib/reviewer-lock-core'
 
 // The public marketing site (/, /content, /marketing, /podcast-studio, /branding,
 // /personal-brand, /work …) must stay open to everyone. Only the authenticated app
@@ -105,6 +106,14 @@ export default clerkMiddleware(async (auth, req) => {
       if (req.nextUrl.pathname.startsWith('/api/')) { await auth.protect(); return }
       return redirectToSignIn({ returnBackUrl: req.url })
     }
+  }
+
+  // THE META REVIEWER'S LOGIN sees the test client only (reviewer-lock-core.ts, 9 Nov 2026)
+  const { userId: who } = await auth()
+  if (isReviewer(who)) {
+    const verdict = reviewerVerdict(req.nextUrl.pathname, req.nextUrl.search)
+    if (verdict === 'refuse') return NextResponse.json({ error: 'Not available on this account' }, { status: 403 })
+    if (verdict === 'home') return NextResponse.redirect(new URL(REVIEWER_HOME, req.url))
   }
 })
 

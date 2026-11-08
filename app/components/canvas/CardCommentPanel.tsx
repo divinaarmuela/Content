@@ -250,7 +250,7 @@ function CardThread({ t, viewer, onSend, onResolve, replyName }: {
           <span className={cn('rounded px-1.5 py-px text-[10px] font-semibold uppercase tracking-wider', tone.chip)}>{tone.label}</span>
           <span suppressHydrationWarning>{when(c.created_at)}</span>
         </p>
-        <p className="mt-1 whitespace-pre-wrap break-words text-[14px] leading-[1.45]">{c.body}</p>
+        <p className="mt-1 whitespace-pre-wrap break-words text-[14px] leading-[1.45]"><LinkedText text={c.body} /></p>
       </div>
     )
   }

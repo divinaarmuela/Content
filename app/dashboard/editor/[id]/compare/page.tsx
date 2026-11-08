@@ -23,6 +23,7 @@ import { commentsOnClip, formatStamp, reviewPath } from '../../../../lib/video-r
 import { canReadClientComments, visibleComments } from '../../../../lib/comment-access-core'
 import { useRole } from '../../../useRole'
 import type { Role } from '../../../../lib/identity-core'
+import { LinkedText } from '@/app/components/LinkedText'
 
 /**
  * SIDE BY SIDE (the owner, 16 Sep 2026: "a new feature called select view
@@ -125,7 +126,7 @@ function ClipPanel({ itemId, file, src, streamBase, comments, nameOf, fromClient
                   </span>
                   {c.created_at && <span className="ml-auto text-[11px] text-muted-foreground">{new Date(c.created_at).toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}</span>}
                 </div>
-                <p className="mt-1 whitespace-pre-wrap break-words">{c.body}</p>
+                <p className="mt-1 whitespace-pre-wrap break-words"><LinkedText text={c.body} /></p>
               </li>
             ))}
           </ul>

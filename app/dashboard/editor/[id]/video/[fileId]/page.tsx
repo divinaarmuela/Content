@@ -26,6 +26,7 @@ import {
 import Chip from '../../../../ui/Chip'
 import CommentReactions from '../../../../board/CommentReactions'
 import { useRole } from '../../../../useRole'
+import { LinkedText } from '@/app/components/LinkedText'
 
 /**
  * A CLIP'S OWN REVIEW PAGE (the owner, 15 Sep 2026: "once a video is clicked
@@ -298,7 +299,7 @@ export default function VideoReviewPage() {
                     {/* WHEN IT WAS SAID (the owner, 17 Sep 2026: "add the date alongside the timestamped comments") — the team's and the client's alike */}
                     {c.created_at && <span className="text-[12px] text-muted-foreground">{formatInZone(String(c.created_at), DEFAULT_TZ, 'full') ?? ''}</span>}
                   </div>
-                  <p className="mt-1 whitespace-pre-wrap break-words">{c.body}</p>
+                  <p className="mt-1 whitespace-pre-wrap break-words"><LinkedText text={c.body} /></p>
                   <CommentReactions itemId={id} commentId={c.id} reactions={(c as { reactions?: unknown }).reactions} meId={me?.id} nameOf={uid => nameOf(uid)} />
                 </li>
               ))}

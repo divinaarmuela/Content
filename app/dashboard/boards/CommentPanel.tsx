@@ -10,6 +10,7 @@ import {
   commentsFor, KIND_LABEL, plainText, whenLabel, type CanvasComment, type ItemKind,
 } from '@/app/lib/board-canvas-core'
 import type { LiveItem } from './useBoard'
+import { LinkedText } from '@/app/components/LinkedText'
 
 /**
  * The comments on ONE item — who, when, and the words — with a box to add
@@ -61,7 +62,7 @@ export default function CommentPanel({ item, comments, onAdd, onResolve, onClose
               <span className="text-[13px] font-semibold">{c.author_name}</span>
               <span className="text-[12px] text-muted-foreground">{roleLabel(c.author_role)} · {whenLabel(c.created_at)}</span>
             </div>
-            <p className="mt-1 whitespace-pre-wrap text-[14px] leading-[1.45]">{c.body}</p>
+            <p className="mt-1 whitespace-pre-wrap text-[14px] leading-[1.45]"><LinkedText text={c.body} /></p>
             {c.resolved_at ? (
               <p className="mt-1 text-[12px] text-muted-foreground">Done</p>
             ) : (

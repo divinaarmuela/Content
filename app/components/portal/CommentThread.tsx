@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Send } from 'lucide-react'
 import type { PortalComment } from '../../lib/portal-thread'
 import { onCardLine } from '../../lib/canvas-comments-core'
+import { LinkedText } from '@/app/components/LinkedText'
 
 const when = (iso: string) =>
   new Date(iso).toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })
@@ -84,7 +85,7 @@ export default function CommentThread({
                 <span className="opacity-40">{when(c.created_at)}</span>
                 {onCardLine(c.card_label) && <span className="italic opacity-70">{onCardLine(c.card_label)}</span>}
               </p>
-              <p className="mt-1.5 whitespace-pre-wrap break-words text-sm leading-relaxed">{c.body}</p>
+              <p className="mt-1.5 whitespace-pre-wrap break-words text-sm leading-relaxed"><LinkedText text={c.body} /></p>
             </div>
           </div>
         ))}
