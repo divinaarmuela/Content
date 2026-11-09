@@ -190,6 +190,7 @@ import SiteShell from './components/SiteShell'
 import localFont from 'next/font/local'
 import { cn } from "@/lib/utils";
 import Clarity from "./Clarity";
+import MetaPixel from "./MetaPixel";
 
 // shipped with the app, not fetched from Google at build time (30 Sep 2026 — see components/lama/fonts.ts)
 const geist = localFont({ src: '../node_modules/geist/dist/fonts/geist-sans/Geist-Variable.woff2', weight: '100 900', variable: '--font-sans', display: 'swap' })
@@ -214,6 +215,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <body>
           <SiteShell>{children}</SiteShell>
           <Clarity />
+          <MetaPixel />
         </body>
       </html>
   )

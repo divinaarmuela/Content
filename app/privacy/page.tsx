@@ -43,6 +43,7 @@ export default function PrivacyPage() {
         <H3>Visitors to our website</H3>
         <UL>
           <LI>We use Microsoft Clarity on the public marketing pages to understand how visitors use the site (pages viewed, clicks, scrolling, device and browser type). Clarity uses cookies. It is switched off on the signed-in app, the client portal and our intake forms.</LI>
+          <LI>We use the Meta Pixel on the same public marketing pages to measure visits and the results of our own Facebook and Instagram advertising. It sends Meta the page viewed and information about your browser, and uses cookies. It is switched off on the signed-in app, the client portal and our intake forms. You can control ad personalisation in your Facebook or Instagram ad settings.</LI>
           <LI>Our hosting provider keeps standard server logs (such as IP address and the page requested) for security and troubleshooting.</LI>
         </UL>
 
