@@ -9,6 +9,8 @@ import MdAppAds from './MdAppAds'
 import MdAppInbox from './MdAppInbox'
 import MdAppPublish from './MdAppPublish'
 import MdAppInsights from './MdAppInsights'
+import MdAppLeads from './MdAppLeads'
+import MdAppLive from './MdAppLive'
 import { useUser } from '@clerk/nextjs'
 import { isReviewer } from '@/app/lib/reviewer-lock-core'
 
@@ -39,7 +41,7 @@ export default function MdAppDirect({ clientId }: { clientId: string }) {
   const [busy, setBusy] = useState<string | null>(null)
   const [results, setResults] = useState<Record<string, { ok: boolean; text: string }>>({})
   // the card's tabs (9 Nov 2026): each is a real screen Meta's App Review watches
-  const [tab, setTab] = useState<'inbox' | 'publish' | 'insights' | 'ads'>('inbox')
+  const [tab, setTab] = useState<'inbox' | 'publish' | 'insights' | 'leads' | 'ads'>('inbox')
 
   const load = useCallback(async () => {
     try {
@@ -139,9 +141,11 @@ export default function MdAppDirect({ clientId }: { clientId: string }) {
                   )}
                 </div>}
 
+                <MdAppLive clientId={clientId} />
+
                 <div className="space-y-3">
                   <div role="tablist" className="flex gap-1 border-b border-border">
-                    {([['inbox', 'Inbox'], ['publish', 'Publish'], ['insights', 'Insights'], ['ads', 'Ads']] as const).map(([k, label]) => (
+                    {([['inbox', 'Inbox'], ['publish', 'Publish'], ['insights', 'Insights'], ['leads', 'Leads'], ['ads', 'Ads']] as const).map(([k, label]) => (
                       <button key={k} role="tab" aria-selected={tab === k} type="button" onClick={() => setTab(k)}
                         className={`-mb-px min-h-11 border-b-2 px-4 text-[14px] font-medium transition-colors ${tab === k ? 'border-foreground text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>
                         {label}
@@ -151,6 +155,7 @@ export default function MdAppDirect({ clientId }: { clientId: string }) {
                   {tab === 'inbox' && <MdAppInbox clientId={clientId} />}
                   {tab === 'publish' && <MdAppPublish clientId={clientId} />}
                   {tab === 'insights' && <MdAppInsights clientId={clientId} />}
+                  {tab === 'leads' && <MdAppLeads clientId={clientId} />}
                   {tab === 'ads' && <MdAppAds clientId={clientId} />}
                 </div>
 
