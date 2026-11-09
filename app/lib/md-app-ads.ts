@@ -6,7 +6,7 @@ import { mdAppReady, MdAppError, saveConnection } from './md-app'
 import { mdAppsecretProof, mdCodeExchangeUrl, mdErrorMessage, mdGraphUrl, mdRedactUrl, type MdAppReady } from './md-app-core'
 import {
   INSIGHT_FIELDS, grantedPermissions, isAdAccountId, isCampaignId, longLivedParams, mayDeleteCampaign, monthTimeRange,
-  allowedAdAccounts, eighteenMonthRange, latestMonthWithSpend, parseAdAccounts, parseCampaignInsights, parseCampaigns, parseUserToken, recordedIds, testCampaignParams, totalsOf,
+  allowedAdAccounts, visibleAdAccounts, eighteenMonthRange, latestMonthWithSpend, parseAdAccounts, parseCampaignInsights, parseCampaigns, parseUserToken, recordedIds, testCampaignParams, totalsOf,
   type AdAccount, type Campaign, type CampaignResult,
 } from './md-app-ads-core'
 
@@ -57,7 +57,7 @@ export async function connectAds(ready: MdAppReady & { ok: true }, input: { code
     id: input.clientId, client_id: input.clientId, token_encrypted: encryptSecret(tok.token),
     fb_user_name: typeof me?.name === 'string' ? me.name : null, granted: granted as never,
     connected_by: input.userId, connected_at: nowIso, expires_at: tok.expiresAt,
-    ad_account_id: input.reviewer ? null : cur?.ad_account_id ?? null, test_campaign_ids: (cur?.test_campaign_ids ?? []) as never,
+    ad_account_id: cur?.ad_account_id ?? null, test_campaign_ids: (cur?.test_campaign_ids ?? []) as never,
     all_accounts: input.reviewer === true,
   }))
   // THE ONE LOGIN (9 Nov 2026): the same token is the client's connection for Instagram and Pages too
@@ -80,7 +80,7 @@ export async function adsStatus(clientId: string): Promise<{ connection: PublicA
     const { auth } = await authOf(clientId)
     // our team's login: our own ad account only; Meta's reviewer's own login: their own test ad accounts (9 Nov 2026)
     const all = parseAdAccounts(await get(auth, 'me/adaccounts', { fields: 'id,name,account_status,currency', limit: 50 }))
-    const accounts = row.all_accounts === true ? all : allowedAdAccounts(all)
+    const accounts = visibleAdAccounts(all, row.all_accounts === true)
     // READ ONLY: which month to open on (latestMonthWithSpend); a failure just opens on last month
     const latestMonth = row.ad_account_id && isAdAccountId(row.ad_account_id)
       ? await get(auth, `${row.ad_account_id}/insights`, { fields: 'spend', time_increment: 'monthly', time_range: JSON.stringify(eighteenMonthRange(new Date())), limit: 30 })
@@ -96,7 +96,7 @@ export async function adsStatus(clientId: string): Promise<{ connection: PublicA
 async function assertAccount(auth: Auth, accountId: string, all = false) {
   if (!isAdAccountId(accountId)) throw new MdAppError('Pick an ad account', 400)
   const seen = parseAdAccounts(await get(auth, 'me/adaccounts', { fields: 'id,name', limit: 50 }))
-  const accounts = all ? seen : allowedAdAccounts(seen)
+  const accounts = visibleAdAccounts(seen, all)
   if (!accounts.some(x => x.id === accountId)) throw new MdAppError('That ad account is not one this Facebook login can see', 403)
 }
 

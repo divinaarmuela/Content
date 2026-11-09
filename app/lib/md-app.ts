@@ -12,7 +12,7 @@ import {
   parseMdWebhook, readMdAppEnv, summariseTestResult, testNeeds, usesMdApp, validateMdPublish,
   type AssetKind, type AssignedAsset, type MdAppReady, type MdInsight, type MdPublishRequest, type MdTestId,
 } from './md-app-core'
-import { allowedAdAccounts } from './md-app-ads-core'
+import { visibleAdAccounts } from './md-app-ads-core'
 
 /**
  * MD APP — the I/O half (6 Nov 2026). Pure rules and the doc quotes: md-app-core.ts. Read docs/MD_APP_SETUP.md.
@@ -161,7 +161,9 @@ export async function connectClient(ready: MdAppReady & { ok: true }, input: { c
 export async function saveConnection(ready: MdAppReady & { ok: true }, input: { token: string; clientId: string; userId: string; now: number; allAdAccounts?: boolean }): Promise<{ assets: number; errors: string[] }> {
   const auth = { token: input.token, appSecret: ready.env.appSecret, appId: ready.env.appId }
   const found = await readAssigned(auth)
-  const kept = found.assets.filter(x => x.kind !== 'ad_account' || input.allAdAccounts === true || allowedAdAccounts([{ id: x.id.startsWith('act_') ? x.id : `act_${x.id}` }]).length > 0)
+  const adIds = found.assets.filter(x => x.kind === 'ad_account').map(x => ({ id: x.id.startsWith('act_') ? x.id : `act_${x.id}` }))
+  const showAds = new Set(visibleAdAccounts(adIds, input.allAdAccounts === true).map(a => a.id))
+  const kept = found.assets.filter(x => x.kind !== 'ad_account' || showAds.has(x.id.startsWith('act_') ? x.id : `act_${x.id}`))
   const nowIso = new Date(input.now).toISOString()
   await connections().claim(input.clientId, cur => ({
     id: input.clientId, client_id: input.clientId, business_id: found.businessId ?? cur?.business_id ?? null,

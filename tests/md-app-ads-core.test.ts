@@ -97,3 +97,18 @@ describe('the connect link remembers a reviewer start (9 Nov 2026)', () => {
     expect(v2.ok && v2.payload.rv).toBeUndefined()
   })
 })
+
+describe('which ad accounts a connection lists (9 Nov 2026)', () => {
+  it('our Facebook (MDM Marketing visible) lists only ours, even when the reviewer login connected', async () => {
+    const { visibleAdAccounts } = await import('../app/lib/md-app-ads-core')
+    const martin = [{ id: 'act_572733431883963' }, { id: 'act_111' }, { id: 'act_222' }]
+    expect(visibleAdAccounts(martin, false).map(a => a.id)).toEqual(['act_572733431883963'])
+    expect(visibleAdAccounts(martin, true).map(a => a.id)).toEqual(['act_572733431883963'])
+  })
+  it("Meta's own test account (none of ours) lists its own only when the reviewer login connected", async () => {
+    const { visibleAdAccounts } = await import('../app/lib/md-app-ads-core')
+    const meta = [{ id: 'act_9' }]
+    expect(visibleAdAccounts(meta, true).map(a => a.id)).toEqual(['act_9'])
+    expect(visibleAdAccounts(meta, false)).toEqual([])
+  })
+})

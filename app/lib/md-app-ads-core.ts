@@ -88,6 +88,16 @@ export function eighteenMonthRange(now: Date): { since: string; until: string } 
   return { since: since.toISOString().slice(0, 10), until: now.toISOString().slice(0, 10) }
 }
 
+/**
+ * Which ad accounts a connection may list (9 Nov 2026). Our own MDM Marketing whenever the login can see it — that is
+ * every connect made with our team's Facebook, the reviewer login included. Only a login that sees NONE of ours AND
+ * was started by Meta's reviewer login (their own Meta test account) lists its own accounts instead.
+ */
+export function visibleAdAccounts<T extends { id: string }>(all: readonly T[], reviewerConnect: boolean): T[] {
+  const ours = allowedAdAccounts(all)
+  return ours.length > 0 || !reviewerConnect ? ours : [...all]
+}
+
 export const isAdAccountId = (v: unknown): v is string => typeof v === 'string' && /^act_\d{1,30}$/.test(v)
 export const isCampaignId = (v: unknown): v is string => typeof v === 'string' && /^\d{1,30}$/.test(v)
 
