@@ -57,7 +57,18 @@ export function parseAdAccounts(json: unknown): AdAccount[] {
     .map((r: any) => ({ id: r.id, name: typeof r.name === 'string' && r.name ? r.name : r.id, status: Number.isFinite(Number(r.account_status)) ? Number(r.account_status) : null, currency: typeof r.currency === 'string' ? r.currency : null }))
 }
 
-export const isAdAccountId = (v: unknown): v is string => typeof v === 'string' && /^act_\d{1,30}$/.test(v)
+/**
+ * THE ONLY AD ACCOUNTS THIS APP SHOWS (9 Nov 2026, owner: the card listed 19 accounts, most of them real clients').
+ * The ads login is a person's own Facebook, which sees every account that person manages; until App Review is
+ * approved and clients connect their own, only our own MDM Marketing account is listed, picked or touched.
+ */
+export const ALLOWED_AD_ACCOUNTS: readonly string[] = ['act_572733431883963']
+
+export function allowedAdAccounts<T extends { id: string }>(accounts: readonly T[]): T[] {
+  return accounts.filter(a => ALLOWED_AD_ACCOUNTS.includes(a.id))
+}
+
+export const isAdAccountId =(v: unknown): v is string => typeof v === 'string' && /^act_\d{1,30}$/.test(v)
 export const isCampaignId = (v: unknown): v is string => typeof v === 'string' && /^\d{1,30}$/.test(v)
 
 /** 'YYYY-MM' → Meta's time_range (since/until inclusive). null for anything else. */

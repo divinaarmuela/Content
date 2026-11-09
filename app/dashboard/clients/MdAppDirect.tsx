@@ -94,40 +94,29 @@ export default function MdAppDirect({ clientId }: { clientId: string }) {
               <Button asChild size="sm" disabled={!state.configured}>
                 <a href={`/api/meta/md-app/connect?clientId=${encodeURIComponent(clientId)}`}>{state.connection ? 'Connect again' : 'Connect with Facebook / Instagram'}</a>
               </Button>
-              {state.connection && (
-                <>
-                  <Button size="sm" variant="outline" disabled={!!busy} onClick={() => act('refresh', { action: 'refresh' }, 'Accounts read again')}>Check accounts again</Button>
-                  {superAdmin && <Button size="sm" variant="outline" disabled={!!busy} onClick={() => { if (confirm('Disconnect Meta from this client?')) void act('disconnect', { action: 'disconnect' }, 'Disconnected') }}>Disconnect</Button>}
-                </>
+              {state.connection && superAdmin && (
+                <Button size="sm" variant="outline" disabled={!!busy} onClick={() => { if (confirm('Disconnect Meta from this client?')) void act('disconnect', { action: 'disconnect' }, 'Disconnected') }}>Disconnect</Button>
               )}
             </div>
 
-            {state.connection && (
+            {state.connection && (() => {
+              // CLEAN CARD (9 Nov 2026, owner: "too many things here"). What a person — and Meta's reviewer — sees: what is
+              // connected, in one line, and Ads. The account ticks only appear while something shared is still unticked;
+              // the system-user connection's "(#200) ads" note, the granted list, the business id, the switch and the
+              // per-permission checks live under "Connection details" (super admins, closed by default).
+              const picked = state.assets.filter(a => a.picked)
+              const unpicked = state.assets.filter(a => !a.picked)
+              return (
               <>
-                <p className="text-xs text-muted-foreground">
-                  Connected {new Date(state.connection.connected_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}
-                  {state.connection.business_id ? ` · business ${state.connection.business_id}` : ''}
+                <p className="text-sm">
+                  Connected{picked.length > 0 ? ' · ' : ''}{picked.map(a => `${KIND_WORDS[a.kind]} ${a.kind === 'instagram' ? '@' : ''}${a.name ?? a.asset_id}`).join(' · ')}
                 </p>
-                {state.connection.last_error && (() => {
-                  // Plain words for the card (6 Nov 2026). Ads answer "(#200) Missing Permissions" on a client connection until
-                  // Meta approves ads_read / ads_management in App Review; the granted list is detail, shown small.
-                  const parts = state.connection.last_error.split(' · ')
-                  const granted = parts.find(x => x.startsWith('Meta granted:'))
-                  const lines = parts.filter(x => !x.startsWith('Meta granted:'))
-                    .map(x => /^Ad accounts:.*\(#200\)/.test(x) ? 'Ads: waiting for Meta’s approval (App Review).' : x)
-                  return (
-                    <>
-                      {lines.length > 0 && <p className="text-xs text-amber-700">{lines.join(' ')}</p>}
-                      {granted && <p className="text-[11px] text-muted-foreground">{granted.replace('Meta granted:', 'Permissions Meta gave this connection:')}</p>}
-                    </>
-                  )
-                })()}
 
-                <div>
-                  <h3 className="text-sm font-medium mb-1">Accounts shared with us — tick the ones that belong to this client</h3>
-                  {state.assets.length === 0 ? <p className="text-sm text-muted-foreground">None shared yet.</p> : (
+                {unpicked.length > 0 && <div>
+                  <h3 className="text-sm font-medium mb-1">Tick the accounts that belong to this client</h3>
+                  {(
                     <ul className="divide-y divide-border rounded-md border border-border">
-                      {state.assets.map(a => (
+                      {unpicked.map(a => (
                         <li key={a.id} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
                           <span><span className="text-muted-foreground">{KIND_WORDS[a.kind]}:</span> {a.name ?? a.asset_id}</span>
                           <label className="flex items-center gap-2">
@@ -139,16 +128,28 @@ export default function MdAppDirect({ clientId }: { clientId: string }) {
                       ))}
                     </ul>
                   )}
-                </div>
+                </div>}
 
                 <MdAppAds clientId={clientId} />
 
-                {superAdmin && <label className="flex items-center gap-3 text-sm">
-                  <Switch checked={state.usesMdApp} disabled={!!busy} onCheckedChange={on => act('use', { action: 'use', on }, on ? 'Posts, replies and reports for this client now go through Meta' : 'Switched off for this client')} />
-                  <span>Post, reply and report through Meta for this client</span>
-                </label>}
-
-                {superAdmin && <div>
+                {superAdmin && <details className="rounded-md border border-border p-3 text-sm">
+                  <summary className="cursor-pointer text-muted-foreground">Connection details</summary>
+                  <div className="mt-3 space-y-3">
+                  <p className="text-xs text-muted-foreground">
+                    Connected {new Date(state.connection.connected_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}
+                    {state.connection.business_id ? ` · business ${state.connection.business_id}` : ''}
+                  </p>
+                  {state.connection.last_error && <p className="text-xs text-muted-foreground break-words">{state.connection.last_error}</p>}
+                  <div className="flex flex-wrap gap-2">
+                    <Button size="sm" variant="outline" disabled={!!busy} onClick={() => act('refresh', { action: 'refresh' }, 'Accounts read again')}>Check accounts again</Button>
+                  </div>
+                  {picked.length > 0 && <ul className="text-xs text-muted-foreground">
+                    {picked.map(a => <li key={a.id}>{KIND_WORDS[a.kind]}: {a.name ?? a.asset_id} · <button className="underline" disabled={!!busy} onClick={() => act(a.id, { action: 'unpick', kind: a.kind, assetId: a.asset_id }, 'Unticked')}>not this client</button></li>)}
+                  </ul>}
+                  <label className="flex items-center gap-3 text-sm">
+                    <Switch checked={state.usesMdApp} disabled={!!busy} onCheckedChange={on => act('use', { action: 'use', on }, on ? 'Posts, replies and reports for this client now go through Meta' : 'Switched off for this client')} />
+                    <span>Post, reply and report through Meta for this client</span>
+                  </label>
                   <h3 className="text-sm font-medium mb-1">Check each connection (each makes one real call)</h3>
                   <div className="grid gap-2 sm:grid-cols-2">
                     {state.tests.map(t => (
@@ -159,9 +160,11 @@ export default function MdAppDirect({ clientId }: { clientId: string }) {
                       </div>
                     ))}
                   </div>
-                </div>}
+                  </div>
+                </details>}
               </>
-            )}
+              )
+            })()}
           </>
         )}
     </section>

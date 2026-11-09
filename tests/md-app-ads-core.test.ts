@@ -66,3 +66,11 @@ describe('the ads code can delete ONE test campaign and nothing else (owner, 9 N
     expect(src).not.toMatch(/\/campaigns`[^\n]*DELETE|delete_strategy|adsets|\/ads`/)
   })
 })
+
+describe('only our own ad account is listed (9 Nov 2026)', () => {
+  it('keeps MDM Marketing and drops every client account', async () => {
+    const { allowedAdAccounts } = await import('../app/lib/md-app-ads-core')
+    const out = allowedAdAccounts([{ id: 'act_572733431883963' }, { id: 'act_111' }, { id: 'act_222' }])
+    expect(out.map(a => a.id)).toEqual(['act_572733431883963'])
+  })
+})

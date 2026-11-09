@@ -6,7 +6,7 @@ import { mdAppReady, MdAppError } from './md-app'
 import { mdAppsecretProof, mdCodeExchangeUrl, mdErrorMessage, mdGraphUrl, mdRedactUrl, type MdAppReady } from './md-app-core'
 import {
   INSIGHT_FIELDS, grantedPermissions, isAdAccountId, isCampaignId, longLivedParams, mayDeleteCampaign, monthTimeRange,
-  parseAdAccounts, parseCampaignInsights, parseCampaigns, parseUserToken, recordedIds, testCampaignParams, totalsOf,
+  allowedAdAccounts, parseAdAccounts, parseCampaignInsights, parseCampaigns, parseUserToken, recordedIds, testCampaignParams, totalsOf,
   type AdAccount, type Campaign, type CampaignResult,
 } from './md-app-ads-core'
 
@@ -75,7 +75,7 @@ export async function adsStatus(clientId: string): Promise<{ connection: PublicA
   if (!row) return { connection: null, accounts: [], error: null }
   try {
     const { auth } = await authOf(clientId)
-    const accounts = parseAdAccounts(await get(auth, 'me/adaccounts', { fields: 'id,name,account_status,currency', limit: 50 }))
+    const accounts = allowedAdAccounts(parseAdAccounts(await get(auth, 'me/adaccounts', { fields: 'id,name,account_status,currency', limit: 50 })))
     return { connection: publicRow(row), accounts, error: null }
   } catch (e) {
     return { connection: publicRow(row), accounts: [], error: e instanceof Error ? e.message : 'Could not read the ad accounts' }
@@ -85,7 +85,7 @@ export async function adsStatus(clientId: string): Promise<{ connection: PublicA
 /** the ad account must be one this login can see — never an id typed in from outside */
 async function assertAccount(auth: Auth, accountId: string) {
   if (!isAdAccountId(accountId)) throw new MdAppError('Pick an ad account', 400)
-  const accounts = parseAdAccounts(await get(auth, 'me/adaccounts', { fields: 'id,name', limit: 50 }))
+  const accounts = allowedAdAccounts(parseAdAccounts(await get(auth, 'me/adaccounts', { fields: 'id,name', limit: 50 })))
   if (!accounts.some(x => x.id === accountId)) throw new MdAppError('That ad account is not one this Facebook login can see', 403)
 }
 
