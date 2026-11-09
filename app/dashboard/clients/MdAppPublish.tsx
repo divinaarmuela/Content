@@ -146,7 +146,7 @@ export default function MdAppPublish({ clientId }: { clientId: string }) {
         {!posts ? <p className="text-sm text-muted-foreground">Loading…</p>
           : posts[platform].length === 0 ? <p className="text-sm text-muted-foreground">Nothing posted yet.</p>
           : (
-            <ul className="divide-y divide-border rounded-inner border border-border bg-surface">
+            <ul className="divide-y divide-border overflow-hidden rounded-inner border border-border bg-surface">
               {posts[platform].slice(0, 8).map(p => (
                 <li key={p.id} className="flex flex-wrap items-start gap-3 p-3">
                   {p.thumb

@@ -60,7 +60,7 @@ export default function MdAppLeads({ clientId }: { clientId: string }) {
           </div>
         ) : (
           <div className="grid gap-4 md:grid-cols-[minmax(0,260px)_minmax(0,1fr)]">
-            <ul className="divide-y divide-border self-start rounded-inner border border-border bg-surface">
+            <ul className="divide-y divide-border self-start overflow-hidden rounded-inner border border-border bg-surface">
               {forms.map(f => (
                 <li key={f.id}>
                   <button type="button" onClick={() => setFormId(f.id)}

@@ -121,7 +121,7 @@ export default function MdAppInbox({ clientId }: { clientId: string }) {
 
       <div className="grid gap-4 md:grid-cols-[minmax(0,300px)_minmax(0,1fr)]">
         {/* ── left: posts or conversations ── */}
-        <div className="rounded-inner border border-border bg-surface">
+        <div className="overflow-hidden rounded-inner border border-border bg-surface">
           {mode === 'comments' ? (
             !list ? <p className="p-4 text-sm text-muted-foreground">Loading posts…</p>
               : list.length === 0 ? <p className="p-4 text-sm text-muted-foreground">No posts on this {platform === 'instagram' ? 'Instagram account' : 'Page'} yet.</p>
@@ -168,7 +168,7 @@ export default function MdAppInbox({ clientId }: { clientId: string }) {
         </div>
 
         {/* ── right: the comments on a post, or one conversation ── */}
-        <div className="min-h-[320px] rounded-inner border border-border bg-surface">
+        <div className="min-h-[320px] overflow-hidden rounded-inner border border-border bg-surface">
           {mode === 'comments' ? (
             !post ? <EmptyPane text="Pick a post to see its comments." />
               : (

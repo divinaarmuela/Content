@@ -117,7 +117,7 @@ export default function MdAppInsights({ clientId }: { clientId: string }) {
       <section className="space-y-2">
         <h4 className="text-[14px] font-semibold">Facebook Pages on this connection</h4>
         {data.pages.length === 0 ? <p className="text-sm text-muted-foreground">No Pages were shared with this connection.</p> : (
-          <ul className="divide-y divide-border rounded-inner border border-border bg-surface">
+          <ul className="divide-y divide-border overflow-hidden rounded-inner border border-border bg-surface">
             {data.pages.map(p => (
               <li key={p.id} className="flex min-h-14 items-center gap-3 px-3 py-2">
                 {p.picture

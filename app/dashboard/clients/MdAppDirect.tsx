@@ -122,7 +122,7 @@ export default function MdAppDirect({ clientId }: { clientId: string }) {
                 {unpicked.length > 0 && <div>
                   <h3 className="text-sm font-medium mb-1">Tick the accounts that belong to this client</h3>
                   {(
-                    <ul className="divide-y divide-border rounded-md border border-border">
+                    <ul className="divide-y divide-border overflow-hidden rounded-md border border-border">
                       {unpicked.map(a => (
                         <li key={a.id} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
                           <span><span className="text-muted-foreground">{KIND_WORDS[a.kind]}:</span> {a.name ?? a.asset_id}</span>
