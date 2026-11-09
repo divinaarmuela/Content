@@ -6,7 +6,7 @@ import type { TemplateDefinition } from '../app/lib/intake-core'
  * is told, a good draft, a model that answered in prose instead of using the
  * tool, and a model that says the document is not a form.
  *
- * NO NETWORK. The Anthropic SDK is replaced with a stub whose next reply each
+ * NO NETWORK. The AI SDK (gateway) call is replaced with a stub whose next reply each
  * test sets, so the route's own handling — the tool result, the repair path,
  * the refusals, the failure sentences — is what is under test.
  */
@@ -24,27 +24,32 @@ vi.mock('../app/lib/authz', () => ({
     ? { error: e.message, status: e.status } : { error: String(e), status: 500 },
 }))
 
-type Reply = { content: unknown[] } | Error
-let nextReply: Reply = { content: [] }
+// a reply is the structured object, prose the model wrote instead (the SDK's NoObjectGeneratedError), or a thrown error
+type Reply = { object: unknown } | { text: string } | Error
+let nextReply: Reply = { object: {} }
 let lastRequest: Record<string, unknown> | null = null
 
-vi.mock('@anthropic-ai/sdk', () => {
-  class FakeAnthropic {
-    messages = {
-      create: async (body: Record<string, unknown>) => {
-        lastRequest = body
-        if (nextReply instanceof Error) throw nextReply
-        return nextReply
-      },
-    }
-  }
-  return { default: FakeAnthropic }
-})
+class NoObjectGeneratedError extends Error {
+  constructor(public text: string) { super('No object generated') }
+  static isInstance(e: unknown): e is NoObjectGeneratedError { return e instanceof NoObjectGeneratedError }
+}
+
+vi.mock('ai', () => ({
+  gateway: (id: string) => ({ modelId: id }),
+  jsonSchema: (s: unknown) => s,
+  NoObjectGeneratedError,
+  generateObject: async (body: Record<string, unknown>) => {
+    lastRequest = body
+    if (nextReply instanceof Error) throw nextReply
+    if ('text' in nextReply) throw new NoObjectGeneratedError(nextReply.text)
+    return { object: nextReply.object }
+  },
+}))
 
 const { POST } = await import('../app/api/intake-templates/scan/route')
 
-const toolReply = (input: unknown) => ({ content: [{ type: 'tool_use', name: 'draft_intake_form', input }] })
-const textReply = (text: string) => ({ content: [{ type: 'text', text }] })
+const toolReply = (input: unknown) => ({ object: input })
+const textReply = (text: string) => ({ text })
 
 const GOOD = {
   is_form: true,
@@ -139,11 +144,11 @@ describe('POST /api/intake-templates/scan — a good draft', () => {
     expect(json.uncertain).toEqual([])
   })
 
-  it('sends a PDF as a document block and an image as an image block', async () => {
+  it('sends a PDF as a file part and an image as an image part, through the gateway (not Anthropic)', async () => {
     await post({ name: 'form.pdf', type: 'application/pdf' })
     let content = (lastRequest!.messages as { content: { type: string }[] }[])[0].content
-    expect(content[0].type).toBe('document')
-    expect(lastRequest!.model).toBe('claude-sonnet-5')
+    expect(content[0].type).toBe('file')
+    expect((lastRequest!.model as { modelId: string }).modelId).toBe('google/gemini-3-flash')
 
     await post({ name: 'page.png', type: 'image/png' })
     content = (lastRequest!.messages as { content: { type: string }[] }[])[0].content
@@ -192,7 +197,7 @@ describe('POST /api/intake-templates/scan — when the model misbehaves', () => 
   })
 
   it('turns a missing API key into a sentence an admin can act on', async () => {
-    nextReply = Object.assign(new Error('401 authentication_error'), { status: 401 })
+    nextReply = Object.assign(new Error('Invalid API key'), { statusCode: 401 })
     const { status, json } = await post({ name: 'form.pdf', type: 'application/pdf' })
     expect(status).toBe(503)
     expect(json.error).toMatch(/not set up/)
