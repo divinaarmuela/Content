@@ -1234,6 +1234,7 @@ export interface MdAppAd {
   expires_at: string | null
   ad_account_id: string | null
   test_campaign_ids: unknown | null
+  all_accounts: boolean | null
 }
 
 export interface MdAppAsset {
@@ -2130,7 +2131,7 @@ export const TABLE_COLUMNS = {
   leads: ['source', 'id', 'created_at', 'fname', 'lname', 'email', 'phone', 'biz', 'model', 'need', 'budget', 'timeline', 'stage', 'stage_entered_at', 'owner_id', 'tier', 'source_tag', 'partner', 'next_action', 'next_action_at', 'qualifiers', 'exit_ticks', 'call_at', 'proposal_sent_at', 'walkthrough_at', 'signed_at', 'deposit_at', 'vs_delivered_at', 'objection', 'deal_value', 'not_now_at', 'reopen_at', 'touches', 'pipeline_notes'],
   linktree_connections: ['id', 'client_id', 'access_token_enc', 'refresh_token_enc', 'expires_at', 'profile_username', 'profile_url', 'profile_name', 'connected_by', 'connected_at', 'updated_at', 'last_error'],
   linktree_states: ['id', 'client_id', 'user_id', 'verifier_enc', 'used_at', 'created_at'],
-  md_app_ads: ['id', 'client_id', 'token_encrypted', 'fb_user_name', 'granted', 'connected_by', 'connected_at', 'expires_at', 'ad_account_id', 'test_campaign_ids'],
+  md_app_ads: ['id', 'client_id', 'token_encrypted', 'fb_user_name', 'granted', 'connected_by', 'connected_at', 'expires_at', 'ad_account_id', 'test_campaign_ids', 'all_accounts'],
   md_app_assets: ['id', 'client_id', 'kind', 'asset_id', 'name', 'picked', 'seen_at'],
   md_app_connections: ['id', 'client_id', 'business_id', 'token_encrypted', 'connected_by', 'connected_at', 'active', 'use_md_app', 'last_error'],
   md_app_events: ['id', 'object', 'account_id', 'client_id', 'field', 'payload', 'occurred_at', 'received_at'],
@@ -2254,7 +2255,7 @@ export const NULLABLE_COLUMNS = {
   leads: ['source', 'fname', 'lname', 'email', 'phone', 'biz', 'model', 'need', 'budget', 'timeline', 'stage', 'stage_entered_at', 'owner_id', 'tier', 'source_tag', 'partner', 'next_action', 'next_action_at', 'qualifiers', 'exit_ticks', 'call_at', 'proposal_sent_at', 'walkthrough_at', 'signed_at', 'deposit_at', 'vs_delivered_at', 'objection', 'deal_value', 'not_now_at', 'reopen_at', 'touches', 'pipeline_notes'],
   linktree_connections: ['access_token_enc', 'refresh_token_enc', 'expires_at', 'profile_username', 'profile_url', 'profile_name', 'connected_by', 'connected_at', 'updated_at', 'last_error'],
   linktree_states: ['used_at'],
-  md_app_ads: ['fb_user_name', 'granted', 'connected_by', 'expires_at', 'ad_account_id', 'test_campaign_ids'],
+  md_app_ads: ['fb_user_name', 'granted', 'connected_by', 'expires_at', 'ad_account_id', 'test_campaign_ids', 'all_accounts'],
   md_app_assets: ['name'],
   md_app_connections: ['business_id', 'connected_by', 'last_error'],
   md_app_events: ['client_id', 'occurred_at'],

@@ -86,3 +86,14 @@ describe('the card opens on the latest month with spend (9 Nov 2026)', () => {
     expect(eighteenMonthRange(new Date('2026-11-09T00:00:00Z'))).toEqual({ since: '2025-06-01', until: '2026-11-09' })
   })
 })
+
+describe('the connect link remembers a reviewer start (9 Nov 2026)', () => {
+  it('signs rv only when asked, and verifies it back', async () => {
+    const { signMdAppState, verifyMdAppState } = await import('../app/lib/md-app-core')
+    const s1 = signMdAppState({ clientId: 'c', userId: 'u', now: 1000, kind: 'ads', rv: true }, 'secret')
+    const s2 = signMdAppState({ clientId: 'c', userId: 'u', now: 1000, kind: 'ads' }, 'secret')
+    const v1 = verifyMdAppState(s1, 'secret', 2000); const v2 = verifyMdAppState(s2, 'secret', 2000)
+    expect(v1.ok && v1.payload.rv).toBe(true)
+    expect(v2.ok && v2.payload.rv).toBeUndefined()
+  })
+})

@@ -158,10 +158,10 @@ export async function connectClient(ready: MdAppReady & { ok: true }, input: { c
  * Page token on demand (pageAuth), so the same token works for every road. Ad accounts are kept to our own
  * (allowedAdAccounts) — a person's login sees every account they manage.
  */
-export async function saveConnection(ready: MdAppReady & { ok: true }, input: { token: string; clientId: string; userId: string; now: number }): Promise<{ assets: number; errors: string[] }> {
+export async function saveConnection(ready: MdAppReady & { ok: true }, input: { token: string; clientId: string; userId: string; now: number; allAdAccounts?: boolean }): Promise<{ assets: number; errors: string[] }> {
   const auth = { token: input.token, appSecret: ready.env.appSecret, appId: ready.env.appId }
   const found = await readAssigned(auth)
-  const kept = found.assets.filter(x => x.kind !== 'ad_account' || allowedAdAccounts([{ id: x.id.startsWith('act_') ? x.id : `act_${x.id}` }]).length > 0)
+  const kept = found.assets.filter(x => x.kind !== 'ad_account' || input.allAdAccounts === true || allowedAdAccounts([{ id: x.id.startsWith('act_') ? x.id : `act_${x.id}` }]).length > 0)
   const nowIso = new Date(input.now).toISOString()
   await connections().claim(input.clientId, cur => ({
     id: input.clientId, client_id: input.clientId, business_id: found.businessId ?? cur?.business_id ?? null,

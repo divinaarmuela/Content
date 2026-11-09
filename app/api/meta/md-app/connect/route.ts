@@ -4,6 +4,7 @@ import { table } from '@/lib/db'
 import { mdAppReady } from '@/app/lib/md-app'
 import { mdAppDialogUrl, signMdAppState } from '@/app/lib/md-app-core'
 import { accessibleClientIds } from '@/app/lib/production-access'
+import { isReviewer } from '@/app/lib/reviewer-lock-core'
 
 /** the client must be one this person works on — the same rule as the Instagram / Facebook connects */
 async function assertMine(user: Parameters<typeof accessibleClientIds>[0], clientId: string) {
@@ -22,9 +23,11 @@ export const dynamic = 'force-dynamic'
 export async function GET(req: NextRequest) {
   const clientId = req.nextUrl.searchParams.get('clientId')?.trim()
   let userId: string
+  let rv = false
   try {
     const me = await requireRole('account_manager')
     userId = me.id
+    rv = isReviewer(me.clerk_user_id)
     // Meta's reviewer MAY press Connect with Meta's own test accounts (App Review guide: "We will test your app using our
     // own test accounts") — so the reviewer login is allowed to connect, on the test client only (assertMine). 9 Nov 2026.
     if (clientId) await assertMine(me, clientId)
@@ -42,6 +45,6 @@ export async function GET(req: NextRequest) {
   // one Facebook screen. ?kind=business keeps the old system-user configuration reachable for after App Review.
   const ads = req.nextUrl.searchParams.get('kind') !== 'business' && !!ready.env.adsConfigId
   if (ads && !ready.env.adsConfigId) return NextResponse.json({ error: 'The ads login is not set up yet (MD_APP_ADS_CONFIG_ID is missing).' }, { status: 503 })
-  const state = signMdAppState({ clientId, userId, now: Date.now(), ...(ads ? { kind: 'ads' as const } : {}) }, ready.env.appSecret)
+  const state = signMdAppState({ clientId, userId, now: Date.now(), ...(ads ? { kind: 'ads' as const } : {}), rv }, ready.env.appSecret)
   return NextResponse.redirect(mdAppDialogUrl({ appId: ready.env.appId, configId: ads ? ready.env.adsConfigId! : ready.env.configId, redirectUri: ready.env.redirectUri, state }), 302)
 }

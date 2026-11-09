@@ -40,7 +40,7 @@ export type PublicAds = Omit<MdAppAd, 'token_encrypted'>
 const publicRow = (r: MdAppAd): PublicAds => { const { token_encrypted: _t, ...rest } = r; void _t; return rest }
 
 /** The ads connect's callback: code → short user token → long-lived user token → stored for this client. */
-export async function connectAds(ready: MdAppReady & { ok: true }, input: { code: string; clientId: string; userId: string; now: number }): Promise<{ missing: string[] }> {
+export async function connectAds(ready: MdAppReady & { ok: true }, input: { code: string; clientId: string; userId: string; now: number; reviewer?: boolean }): Promise<{ missing: string[] }> {
   const short = parseUserToken(await call(mdCodeExchangeUrl({ appId: ready.env.appId, appSecret: ready.env.appSecret, redirectUri: ready.env.redirectUri, code: input.code })), input.now)
   if (!short.ok) throw new MdAppError(short.error)
   // the long-lived swap is a nicety: a failure keeps the short token rather than failing the connect
@@ -57,10 +57,11 @@ export async function connectAds(ready: MdAppReady & { ok: true }, input: { code
     id: input.clientId, client_id: input.clientId, token_encrypted: encryptSecret(tok.token),
     fb_user_name: typeof me?.name === 'string' ? me.name : null, granted: granted as never,
     connected_by: input.userId, connected_at: nowIso, expires_at: tok.expiresAt,
-    ad_account_id: cur?.ad_account_id ?? null, test_campaign_ids: (cur?.test_campaign_ids ?? []) as never,
+    ad_account_id: input.reviewer ? null : cur?.ad_account_id ?? null, test_campaign_ids: (cur?.test_campaign_ids ?? []) as never,
+    all_accounts: input.reviewer === true,
   }))
   // THE ONE LOGIN (9 Nov 2026): the same token is the client's connection for Instagram and Pages too
-  await saveConnection(ready, { token: tok.token, clientId: input.clientId, userId: input.userId, now: input.now })
+  await saveConnection(ready, { token: tok.token, clientId: input.clientId, userId: input.userId, now: input.now, allAdAccounts: input.reviewer === true })
   return { missing: ['ads_read', 'ads_management'].filter(p => !granted.includes(p)) }
 }
 
@@ -77,7 +78,9 @@ export async function adsStatus(clientId: string): Promise<{ connection: PublicA
   if (!row) return { connection: null, accounts: [], latestMonth: null, error: null }
   try {
     const { auth } = await authOf(clientId)
-    const accounts = allowedAdAccounts(parseAdAccounts(await get(auth, 'me/adaccounts', { fields: 'id,name,account_status,currency', limit: 50 })))
+    // our team's login: our own ad account only; Meta's reviewer's own login: their own test ad accounts (9 Nov 2026)
+    const all = parseAdAccounts(await get(auth, 'me/adaccounts', { fields: 'id,name,account_status,currency', limit: 50 }))
+    const accounts = row.all_accounts === true ? all : allowedAdAccounts(all)
     // READ ONLY: which month to open on (latestMonthWithSpend); a failure just opens on last month
     const latestMonth = row.ad_account_id && isAdAccountId(row.ad_account_id)
       ? await get(auth, `${row.ad_account_id}/insights`, { fields: 'spend', time_increment: 'monthly', time_range: JSON.stringify(eighteenMonthRange(new Date())), limit: 30 })
@@ -90,15 +93,16 @@ export async function adsStatus(clientId: string): Promise<{ connection: PublicA
 }
 
 /** the ad account must be one this login can see — never an id typed in from outside */
-async function assertAccount(auth: Auth, accountId: string) {
+async function assertAccount(auth: Auth, accountId: string, all = false) {
   if (!isAdAccountId(accountId)) throw new MdAppError('Pick an ad account', 400)
-  const accounts = allowedAdAccounts(parseAdAccounts(await get(auth, 'me/adaccounts', { fields: 'id,name', limit: 50 })))
+  const seen = parseAdAccounts(await get(auth, 'me/adaccounts', { fields: 'id,name', limit: 50 }))
+  const accounts = all ? seen : allowedAdAccounts(seen)
   if (!accounts.some(x => x.id === accountId)) throw new MdAppError('That ad account is not one this Facebook login can see', 403)
 }
 
 export async function pickAccount(clientId: string, accountId: string): Promise<void> {
-  const { auth } = await authOf(clientId)
-  await assertAccount(auth, accountId)
+  const { auth, row } = await authOf(clientId)
+  await assertAccount(auth, accountId, row.all_accounts === true)
   await rows().claim(clientId, cur => (cur ? { ...cur, ad_account_id: accountId } : null))
 }
 
@@ -122,7 +126,7 @@ export async function createTestCampaign(clientId: string): Promise<{ id: string
   const { auth, row } = await authOf(clientId)
   const accountId = row.ad_account_id
   if (!accountId || !isAdAccountId(accountId)) throw new MdAppError('Pick an ad account first', 409)
-  await assertAccount(auth, accountId)
+  await assertAccount(auth, accountId, row.all_accounts === true)
   const json = await call(signed(`${accountId}/campaigns`, auth), {
     method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams(testCampaignParams()).toString(),
   })

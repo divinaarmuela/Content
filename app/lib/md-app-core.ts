@@ -97,15 +97,17 @@ export function mdAppReadiness(env: MdAppEnv, credentialsKeySet: boolean): MdApp
 /* ── signed state (own prefix + own HMAC label, so no other app's state passes) ── */
 
 /** kind 'ads': the ads connect (a user token, md-app-ads.ts); absent: the client connect (a BISU token) */
-export type MdAppStatePayload = { clientId: string; userId: string; exp: number; n: string; kind?: 'ads' }
+export type MdAppStatePayload = { clientId: string; userId: string; exp: number; n: string; kind?: 'ads'; rv?: true }
 const b64url = (b: Buffer | string) => Buffer.from(b).toString('base64url')
 const stateSig = (body: string, secret: string) => b64url(createHmac('sha256', secret).update(`mdapp-state.${body}`).digest())
 
-export function signMdAppState(input: { clientId: string; userId: string; now: number; ttlMs?: number; nonce?: string; kind?: 'ads' }, secret: string): string {
+/** rv: the connect was started by Meta's reviewer login (9 Nov 2026) — their own test ad accounts are then listed */
+export function signMdAppState(input: { clientId: string; userId: string; now: number; ttlMs?: number; nonce?: string; kind?: 'ads'; rv?: boolean }, secret: string): string {
   const payload: MdAppStatePayload = {
     clientId: input.clientId, userId: input.userId,
     exp: input.now + (input.ttlMs ?? MD_APP_STATE_TTL_MS), n: input.nonce ?? randomBytes(8).toString('hex'),
     ...(input.kind ? { kind: input.kind } : {}),
+    ...(input.rv ? { rv: true as const } : {}),
   }
   const body = b64url(JSON.stringify(payload))
   return `${MD_APP_STATE_PREFIX}${body}.${stateSig(body, secret)}`

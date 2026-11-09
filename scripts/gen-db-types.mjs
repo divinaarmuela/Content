@@ -123,6 +123,8 @@ const GHOST_TABLES = {
     ['expires_at', col('string', true)],
     ['ad_account_id', col('string', true)],
     ['test_campaign_ids', col('unknown', true, true, false)],
+    // true when Meta's reviewer login connected (9 Nov 2026): their own test ad accounts are listed, not only ours
+    ['all_accounts', col('boolean', true)],
   ],
   // What the client's system user was assigned: id = "<client_id>__<kind>__<asset_id>" (md-app-core assetRowId).
   // picked = a super admin said it belongs to this client. Page tokens are never stored.
