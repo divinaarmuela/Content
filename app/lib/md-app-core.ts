@@ -72,7 +72,7 @@ export const MD_APP_PERMISSIONS = [
 
 /* ── env (every name spelled out — CLAUDE.md trap 7) ──────────────────── */
 
-export type MdAppEnv = { appId: string; appSecret: string | null; configId: string; redirectUri: string; verifyToken: string | null }
+export type MdAppEnv = { appId: string; appSecret: string | null; configId: string; redirectUri: string; verifyToken: string | null; adsConfigId?: string | null }
 
 export function readMdAppEnv(): MdAppEnv {
   return {
@@ -81,6 +81,8 @@ export function readMdAppEnv(): MdAppEnv {
     configId: process.env.MD_APP_CONFIG_ID?.trim() || MD_APP_DEFAULT_CONFIG_ID,
     redirectUri: process.env.MD_APP_REDIRECT_URI?.trim() || MD_APP_DEFAULT_REDIRECT_URI,
     verifyToken: process.env.MD_APP_WEBHOOK_VERIFY_TOKEN?.trim() || null,
+    // the second Login for Business configuration: USER access token with the ads permissions (9 Nov 2026)
+    adsConfigId: process.env.MD_APP_ADS_CONFIG_ID?.trim() || null,
   }
 }
 
@@ -94,14 +96,16 @@ export function mdAppReadiness(env: MdAppEnv, credentialsKeySet: boolean): MdApp
 
 /* ── signed state (own prefix + own HMAC label, so no other app's state passes) ── */
 
-export type MdAppStatePayload = { clientId: string; userId: string; exp: number; n: string }
+/** kind 'ads': the ads connect (a user token, md-app-ads.ts); absent: the client connect (a BISU token) */
+export type MdAppStatePayload = { clientId: string; userId: string; exp: number; n: string; kind?: 'ads' }
 const b64url = (b: Buffer | string) => Buffer.from(b).toString('base64url')
 const stateSig = (body: string, secret: string) => b64url(createHmac('sha256', secret).update(`mdapp-state.${body}`).digest())
 
-export function signMdAppState(input: { clientId: string; userId: string; now: number; ttlMs?: number; nonce?: string }, secret: string): string {
+export function signMdAppState(input: { clientId: string; userId: string; now: number; ttlMs?: number; nonce?: string; kind?: 'ads' }, secret: string): string {
   const payload: MdAppStatePayload = {
     clientId: input.clientId, userId: input.userId,
     exp: input.now + (input.ttlMs ?? MD_APP_STATE_TTL_MS), n: input.nonce ?? randomBytes(8).toString('hex'),
+    ...(input.kind ? { kind: input.kind } : {}),
   }
   const body = b64url(JSON.stringify(payload))
   return `${MD_APP_STATE_PREFIX}${body}.${stateSig(body, secret)}`

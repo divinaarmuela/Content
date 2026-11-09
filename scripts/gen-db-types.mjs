@@ -108,6 +108,22 @@ const GHOST_TABLES = {
     ['use_md_app', col('boolean', false)],
     ['last_error', col('string', true)],
   ],
+  // MD APP ADS (9 Nov 2026 — app/lib/md-app-ads*.ts). One row per client, id = client_id. A USER access token from
+  // Facebook Login for Business's ads configuration (MD_APP_ADS_CONFIG_ID), long-lived, encrypted with CREDENTIALS_KEY.
+  // Before App Review only a person with a role on MD App gets ads_read / ads_management on it (Meta "Standard access").
+  // test_campaign_ids: the PAUSED campaigns this app created — the only ones it will ever delete.
+  md_app_ads: [
+    ['id', col('string', false)],
+    ['client_id', col('string', false)],
+    ['token_encrypted', col('string', false)],
+    ['fb_user_name', col('string', true)],
+    ['granted', col('unknown', true, true, false)],
+    ['connected_by', col('string', true)],
+    ['connected_at', col('string', false)],
+    ['expires_at', col('string', true)],
+    ['ad_account_id', col('string', true)],
+    ['test_campaign_ids', col('unknown', true, true, false)],
+  ],
   // What the client's system user was assigned: id = "<client_id>__<kind>__<asset_id>" (md-app-core assetRowId).
   // picked = a super admin said it belongs to this client. Page tokens are never stored.
   md_app_assets: [

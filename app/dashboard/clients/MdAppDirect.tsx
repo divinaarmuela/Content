@@ -5,6 +5,7 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { useRole } from '../useRole'
+import MdAppAds from './MdAppAds'
 
 /**
  * "Direct via MD App (testing)" (6 Nov 2026) — super admins only. MD App is Meta's new app with Unified Login;
@@ -139,6 +140,8 @@ export default function MdAppDirect({ clientId }: { clientId: string }) {
                     </ul>
                   )}
                 </div>
+
+                <MdAppAds clientId={clientId} />
 
                 {superAdmin && <label className="flex items-center gap-3 text-sm">
                   <Switch checked={state.usesMdApp} disabled={!!busy} onCheckedChange={on => act('use', { action: 'use', on }, on ? 'Posts, replies and reports for this client now go through Meta' : 'Switched off for this client')} />

@@ -35,6 +35,9 @@ export async function GET(req: NextRequest) {
   if (!clientId) return NextResponse.json({ error: 'clientId is required' }, { status: 400 })
   const client = await table('clients').get(clientId)
   if (!client) return NextResponse.json({ error: 'No such client' }, { status: 404 })
-  const state = signMdAppState({ clientId, userId, now: Date.now() }, ready.env.appSecret)
-  return NextResponse.redirect(mdAppDialogUrl({ appId: ready.env.appId, configId: ready.env.configId, redirectUri: ready.env.redirectUri, state }), 302)
+  // ?kind=ads — the ads connect: the second configuration, a USER access token with ads_read / ads_management (9 Nov 2026)
+  const ads = req.nextUrl.searchParams.get('kind') === 'ads'
+  if (ads && !ready.env.adsConfigId) return NextResponse.json({ error: 'The ads login is not set up yet (MD_APP_ADS_CONFIG_ID is missing).' }, { status: 503 })
+  const state = signMdAppState({ clientId, userId, now: Date.now(), ...(ads ? { kind: 'ads' as const } : {}) }, ready.env.appSecret)
+  return NextResponse.redirect(mdAppDialogUrl({ appId: ready.env.appId, configId: ads ? ready.env.adsConfigId! : ready.env.configId, redirectUri: ready.env.redirectUri, state }), 302)
 }

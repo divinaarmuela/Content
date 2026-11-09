@@ -1,6 +1,7 @@
 import 'server-only'
 import { NextRequest, NextResponse } from 'next/server'
 import { connectClient, mdAppReady } from './md-app'
+import { connectAds } from './md-app-ads'
 import { verifyMdAppState } from './md-app-core'
 
 /**
@@ -33,6 +34,17 @@ export async function mdAppCallback(req: NextRequest): Promise<NextResponse> {
   if (q.get('error')) return back(req, clientId, { md_app: 'denied' })
   const code = q.get('code')
   if (!code) return back(req, clientId, { md_app: 'error', reason: 'Meta sent no code back' })
+  // the ads connect (a user token, md-app-ads.ts — 9 Nov 2026)
+  if (state.payload.kind === 'ads') {
+    try {
+      const out = await connectAds(ready, { code, clientId, userId, now: Date.now() })
+      return back(req, clientId, out.missing.length ? { md_ads: 'missing', reason: out.missing.join(', ') } : { md_ads: 'connected' })
+    } catch (e) {
+      const reason = (e instanceof Error ? e.message : 'failed').slice(0, 160)
+      console.warn('[md-app] ads connect failed:', reason)
+      return back(req, clientId, { md_ads: 'error', reason })
+    }
+  }
   try {
     const out = await connectClient(ready, { code, clientId, userId, now: Date.now() })
     return back(req, clientId, { md_app: out.assets ? 'connected' : 'empty' })

@@ -12,10 +12,10 @@ afterEach(() => vi.unstubAllEnvs())
 
 describe('env + readiness', () => {
   it('defaults the ids and redirect, reads the secret', () => {
-    vi.stubEnv('MD_APP_ID', ''); vi.stubEnv('MD_APP_CONFIG_ID', ''); vi.stubEnv('MD_APP_REDIRECT_URI', '')
+    vi.stubEnv('MD_APP_ID', ''); vi.stubEnv('MD_APP_CONFIG_ID', ''); vi.stubEnv('MD_APP_REDIRECT_URI', ''); vi.stubEnv('MD_APP_ADS_CONFIG_ID', '')
     vi.stubEnv('MD_SECRET', ' s '); vi.stubEnv('MD_APP_WEBHOOK_VERIFY_TOKEN', '')
     const env = readMdAppEnv()
-    expect(env).toEqual({ appId: '2326339324873915', configId: '1439306511741893', redirectUri: MD_APP_DEFAULT_REDIRECT_URI, appSecret: 's', verifyToken: null })
+    expect(env).toEqual({ appId: '2326339324873915', configId: '1439306511741893', redirectUri: MD_APP_DEFAULT_REDIRECT_URI, appSecret: 's', verifyToken: null, adsConfigId: null })
     expect(MD_APP_DEFAULT_APP_ID).toBe('2326339324873915'); expect(MD_APP_DEFAULT_CONFIG_ID).toBe('1439306511741893')
   })
   it('needs the secret AND the credentials key', () => {
