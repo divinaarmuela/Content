@@ -64,7 +64,7 @@ export async function inboxComments(clientId: string, platform: 'instagram' | 'f
     const got = parseIgComments(json, typeof me?.username === 'string' ? me.username : null)
     // the ones hidden from here: Instagram no longer lists them, we still do — marked Hidden, with Show
     const kept = await table<MdAppHiddenComment>('md_app_hidden_comments').list({ by: { client_id: clientId, post_id: postId }, fresh: true }).catch(() => [])
-    const extra = kept.map(k => k.comment as InboxComment).filter(c => c && typeof c.id === 'string' && !got.some(g => g.id === c.id)).map(c => ({ ...c, hidden: true }))
+    const extra = kept.map(k => k.comment as InboxComment).filter(c => c && typeof c.id === 'string' && !got.some(g => g.id === c.id)).map(c => ({ ...c, text: c.text ?? '', author: c.author ?? 'Someone', mine: false, replies: Array.isArray(c.replies) ? c.replies : [], hidden: true }))  // the database drops empty lists: put `replies` back or the page crashes drawing it (10 Nov 2026, live)
     return [...got, ...extra]
   }
   const pid = need(page, 'Facebook Page')
