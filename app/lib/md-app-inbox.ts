@@ -76,10 +76,14 @@ export async function commentAction(clientId: string, platform: 'instagram' | 'f
 export async function inboxThreads(clientId: string, platform: 'instagram' | 'facebook'): Promise<InboxThread[]> {
   const { auth, ig, page } = await ctx(clientId)
   if (platform === 'instagram') {
+    // Instagram DMs with Facebook Login are read on the LINKED PAGE with the Page token (9 Nov 2026: the same call on
+    // the Instagram account with the user token answered an empty list, not an error)
     const id = need(ig, 'Instagram account')
-    const threads = parseThreads(await get(auth, `${id}/conversations`, { platform: 'instagram', fields: MSG_FIELDS, limit: 20 }), id)
+    const pid = need(page, 'Facebook Page (the one linked to the Instagram account)')
+    const pa = await pageAuth(auth, pid)
+    const threads = parseThreads(await get(pa, `${pid}/conversations`, { platform: 'instagram', fields: MSG_FIELDS, limit: 20 }), id)
     return Promise.all(threads.map(async t => t.withId
-      ? withProfile(t, await get(auth, t.withId, { fields: 'name,username,profile_pic' }).catch(() => null)) : t))
+      ? withProfile(t, await get(pa, t.withId, { fields: 'name,username,profile_pic' }).catch(() => null)) : t))
   }
   const pid = need(page, 'Facebook Page')
   const pa = await pageAuth(auth, pid)
@@ -92,7 +96,8 @@ export async function inboxThreads(clientId: string, platform: 'instagram' | 'fa
 export async function sendMessage(clientId: string, platform: 'instagram' | 'facebook', to: string, text: string): Promise<void> {
   const { auth, ig, page } = await ctx(clientId)
   const body = { recipient: { id: to }, message: { text }, messaging_type: 'RESPONSE' }
-  if (platform === 'instagram') { await postJson(auth, `${need(ig, 'Instagram account')}/messages`, body); return }
+  // Instagram replies go out from the linked Page with the Page token too (the recipient is the Instagram-scoped id)
+  if (platform === 'instagram') { need(ig, 'Instagram account'); const pid = need(page, 'Facebook Page'); await postJson(await pageAuth(auth, pid), `${pid}/messages`, body); return }
   const pid = need(page, 'Facebook Page')
   await postJson(await pageAuth(auth, pid), `${pid}/messages`, body)
 }
