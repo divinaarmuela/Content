@@ -999,6 +999,18 @@ const GHOST_TABLES = {
     ['row', col('unknown', false, true)],          // the whole row as it was
     ['retired_at', col('string', false)],
   ],
+  // lead_events — A LEAD'S TIMELINE (owner, 9 Nov 2026: "their timeline … their first time and what they have done").
+  //   Append-only, one row per thing that happened: their first visit, a form fill, a Calendly booking, a cancel.
+  //   Emails come from email_ingest_log and are not copied here. app/lib/lead-timeline-core.ts builds the page.
+  lead_events: [
+    ['id', col('string', false)],
+    ['lead_id', col('string', false)],
+    ['at', col('string', false)],
+    ['kind', col('string', false)],             // first_visit | form | booked | rebooked | cancelled
+    ['title', col('string', false)],
+    ['detail', col('string', true)],
+    ['meta', col('unknown', true, true, false)],
+  ],
   inbox_touches: [
     ['id', col('string', false)],
     ['account_id', col('string', false)],       // the provider's account id

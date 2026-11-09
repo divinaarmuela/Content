@@ -69,7 +69,7 @@ const COLS: { key: SortKey; label: string }[] = [
   { key: 'call_at',      label: 'Booked' },
   { key: 'created_at',   label: 'When' },
 ]
-const STATUS_TONE: Record<string, 'green' | 'amber' | 'red' | 'blue' | 'muted'> = { 'Call booked': 'green', 'New lead': 'blue', 'Emailed in': 'muted', Cancelled: 'red' }
+const STATUS_TONE: Record<string, 'green' | 'amber' | 'red' | 'blue' | 'muted'> = { 'Call booked': 'green', 'New lead': 'blue', 'Emailed in': 'muted', Cancelled: 'red', 'Missed call': 'red' }
 const statusWords = (l: Lead) => leadStatus(l, k => STAGES.find(s => s.key === k)?.label ?? k)
 const sourceWords = (l: Lead) => sourceLabel(l.source)
 

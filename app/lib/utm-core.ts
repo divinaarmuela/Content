@@ -47,6 +47,30 @@ export function readStoredUtm(now = Date.now()): Utm {
   } catch { return {} }
 }
 
+/**
+ * THEIR FIRST TIME HERE (owner, 9 Nov 2026: "their first time and what they have done"). Written once per browser and
+ * never replaced: when, the page they landed on, the site that sent them, and the ad tags if an ad did.
+ */
+export type FirstVisit = { at: string; landing: string; referrer: string | null; utm: Utm }
+const FIRST = 'mdm_first_visit'
+export function rememberFirstVisit(v: FirstVisit) {
+  try { if (!localStorage.getItem(FIRST)) localStorage.setItem(FIRST, JSON.stringify(v)) } catch {}
+}
+export function readFirstVisit(): FirstVisit | null {
+  try { const v = JSON.parse(localStorage.getItem(FIRST) || 'null'); return v && typeof v.at === 'string' ? v as FirstVisit : null } catch { return null }
+}
+
+/** a first visit as sent by a browser → safe, short fields; null when it is not one */
+export function cleanFirstVisit(raw: unknown): FirstVisit | null {
+  if (!raw || typeof raw !== 'object') return null
+  const r = raw as Record<string, unknown>
+  const s = (v: unknown, n = 300) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, n) : null)
+  const at = s(r.at, 40)
+  if (!at || Number.isNaN(Date.parse(at))) return null
+  const landing = s(r.landing) ?? '/'
+  return { at, landing: landing.startsWith('/') ? landing : '/', referrer: s(r.referrer), utm: utmFrom(new URLSearchParams(Object.entries((r.utm ?? {}) as Record<string, string>).filter(([, v]) => typeof v === 'string')).toString()) }
+}
+
 /** the visit's tags, for the contact forms to send with the enquiry */
 export function visitUtm(): Utm {
   try { return { ...readStoredUtm(), ...utmFrom(window.location.search) } } catch { return {} }

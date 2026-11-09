@@ -101,3 +101,14 @@ describe('booked from', () => {
     expect(parseBooking({ event: 'invitee.created', payload: { uri: 'u', email: 'a@b.co', tracking: { salesforce_uuid: 'abc' } } })!.page).toBeNull()
   })
 })
+
+describe('no-shows', () => {
+  it('a no-show mark finds the booking by its invitee and reads Missed call', () => {
+    const b = parseBooking({ event: 'invitee_no_show.created', payload: { invitee: 'https://api.calendly.com/scheduled_events/E/invitees/I' } })!
+    expect(b.kind).toBe('no_show'); expect(b.inviteeUri).toContain('/invitees/I')
+    expect(bookingPatch(b, null, 'now')).toEqual({ booking_status: 'no_show' })
+    expect(leadStatus({ booking_status: 'no_show', stage: 'qualified' }, k => k)).toBe('Missed call')
+    const un = parseBooking({ event: 'invitee_no_show.deleted', payload: { invitee: { uri: 'u', email: 'a@b.co' } } })!
+    expect(bookingPatch(un, null, 'now')).toEqual({ booking_status: 'booked' })
+  })
+})

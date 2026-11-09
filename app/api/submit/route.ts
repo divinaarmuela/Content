@@ -1,4 +1,5 @@
-import { adFieldsFromUtm } from '@/app/lib/utm-core'
+import { adFieldsFromUtm, cleanFirstVisit } from '@/app/lib/utm-core'
+import { logLeadEvent } from '@/app/lib/lead-events'
 import { NextRequest, NextResponse } from 'next/server'
 import { table, withRequestCache } from '@/lib/db'
 import { sendSystemEmail } from '../../lib/mailer'
@@ -101,6 +102,12 @@ export async function POST(req: NextRequest) {
   let dbError: unknown = null
   try {
     savedLead = await table('leads').insert(leadInput) as typeof leadInput & { id: string }
+    // the lead's timeline (9 Nov 2026): their first visit, if this browser remembered one, then this form fill
+    const first = cleanFirstVisit(body.first_visit)
+    const u = (body.utm ?? {}) as Record<string, unknown>
+    const pageSent = typeof body.page === 'string' && body.page.startsWith('/') ? body.page.slice(0, 200) : null
+    if (first) await logLeadEvent({ leadId: savedLead.id, kind: 'first_visit', title: 'First visit to the website', at: first.at, key: `first|${savedLead.id}`, meta: { ...first.utm, landing: first.landing, referrer: first.referrer } })
+    await logLeadEvent({ leadId: savedLead.id, kind: 'form', title: 'Filled in the website form', detail: [model, need].filter(Boolean).join(' · ') || null, key: `form|${savedLead.id}`, meta: { ...u, page: pageSent } })
   } catch (e) {
     dbError = e
     console.error('lead insert error:', e)

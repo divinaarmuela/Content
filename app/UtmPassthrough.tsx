@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect } from 'react'
-import { utmFrom, withUtm, readStoredUtm, storeUtm } from './lib/utm-core'
+import { utmFrom, withUtm, readStoredUtm, storeUtm, rememberFirstVisit } from './lib/utm-core'
 
 /**
  * Keeps the ad's utm_* tags and puts them on any Calendly link clicked. See app/lib/utm-core.ts.
@@ -12,6 +12,9 @@ export default function UtmPassthrough() {
   useEffect(() => {
     const fresh = utmFrom(window.location.search)
     if (Object.keys(fresh).length) storeUtm(fresh)
+    let referrer: string | null = null
+    try { const r = document.referrer ? new URL(document.referrer) : null; referrer = r && r.hostname !== window.location.hostname ? r.hostname : null } catch {}
+    rememberFirstVisit({ at: new Date().toISOString(), landing: window.location.pathname, referrer, utm: fresh })
     const onClick = (e: MouseEvent) => {
       const a = (e.target as Element | null)?.closest?.('a[href*="calendly.com"]') as HTMLAnchorElement | null
       if (!a) return

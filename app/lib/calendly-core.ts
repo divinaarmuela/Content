@@ -21,7 +21,7 @@ export const META_URL_PARAMS =
 export type Utm = { source: string | null; medium: string | null; campaign: string | null; term: string | null; content: string | null }
 
 export type Booking = {
-  kind: 'booked' | 'cancelled'
+  kind: 'booked' | 'cancelled' | 'no_show' | 'showed'
   inviteeUri: string
   email: string
   fname: string | null
@@ -73,8 +73,16 @@ function phoneFrom(p: Record<string, any>): string | null {
 /** the webhook body → a Booking; null for any other event or a body missing the invitee's email */
 export function parseBooking(json: unknown): Booking | null {
   const j = (json ?? {}) as Record<string, any>
-  const kind = j.event === 'invitee.created' ? 'booked' : j.event === 'invitee.canceled' ? 'cancelled' : null
-  const p = (j.payload ?? {}) as Record<string, any>
+  const kind = j.event === 'invitee.created' ? 'booked' : j.event === 'invitee.canceled' ? 'cancelled'
+    : j.event === 'invitee_no_show.created' ? 'no_show' : j.event === 'invitee_no_show.deleted' ? 'showed' : null
+  let p = (j.payload ?? {}) as Record<string, any>
+  // a no-show body is the mark itself; the person is under payload.invitee (an object, or only its uri)
+  if (kind === 'no_show' || kind === 'showed') {
+    const inv = p.invitee
+    p = typeof inv === 'object' && inv
+      ? { ...inv, uri: inv.uri ?? p.invitee_uri, email: inv.email ?? 'unknown@no-show.invalid' }
+      : { uri: typeof inv === 'string' ? inv : p.invitee_uri, email: 'unknown@no-show.invalid' }
+  }
   const email = str(p.email, 200)?.toLowerCase() ?? null
   const inviteeUri = str(p.uri, 500)
   if (!kind || !email || !inviteeUri || !email.includes('@')) return null
@@ -134,6 +142,7 @@ export function placementLabel(p: string | null | undefined): string | null {
 /** what the Leads page Status chip says */
 export function leadStatus(l: { booking_status?: string | null; stage?: string | null; source?: string | null }, stageLabel: (k: string) => string): string {
   if (l.booking_status === 'cancelled') return 'Cancelled'
+  if (l.booking_status === 'no_show') return 'Missed call'
   if (l.booking_status === 'booked' && (!l.stage || l.stage === 'new' || l.stage === 'qualified')) return 'Call booked'
   // "New lead" is the website form's word alone (owner, 9 Nov 2026); a lead the inbox scanner found says so
   if ((!l.stage || l.stage === 'new') && l.source && l.source !== 'web_form') return l.source === 'email_ingest' || l.source === 'email' ? 'Emailed in' : 'New lead'
@@ -145,6 +154,7 @@ type Existing = { model?: string | null; budget?: string | null; need?: string |
 
 /** the lead fields a booking writes. Existing name/phone are kept unless empty; status always follows the booking. */
 export function bookingPatch(b: Booking, existing: Existing | null, nowIso: string): Record<string, unknown> {
+  if (b.kind === 'no_show' || b.kind === 'showed') return { booking_status: b.kind === 'no_show' ? 'no_show' : 'booked' }
   const patch: Record<string, unknown> = {
     booking_status: b.kind, booking_uri: b.inviteeUri,
     fname: existing?.fname || b.fname, lname: existing?.lname || b.lname, phone: existing?.phone || b.phone,

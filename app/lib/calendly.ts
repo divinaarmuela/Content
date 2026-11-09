@@ -3,6 +3,8 @@ import { createHash } from 'node:crypto'
 import { table } from '@/lib/db'
 import type { Lead } from '@/lib/db-types'
 import { bookingPatch, signingKey, type Booking } from './calendly-core'
+import { logLeadEvent } from './lead-events'
+import { callWords } from './lead-timeline-core'
 
 /**
  * CALENDLY → LEADS, the I/O half (9 Nov 2026). Pure rules: calendly-core.ts.
@@ -40,7 +42,7 @@ export async function connectCalendly(origin: string): Promise<{ created: boolea
   }
   await cal('/webhook_subscriptions', {
     method: 'POST',
-    body: JSON.stringify({ url, events: ['invitee.created', 'invitee.canceled'], organization: me.current_organization, user: me.uri, scope: 'user', signing_key: key }),
+    body: JSON.stringify({ url, events: ['invitee.created', 'invitee.canceled', 'invitee_no_show.created', 'invitee_no_show.deleted'], organization: me.current_organization, user: me.uri, scope: 'user', signing_key: key }),
   })
   return { created: true, url }
 }
@@ -52,10 +54,22 @@ export async function connectCalendly(origin: string): Promise<{ created: boolea
 export async function applyBooking(b: Booking, now = new Date()): Promise<{ id: string; created: boolean }> {
   const leads = table<Lead>('leads')
   const byUri = await leads.list({ by: { booking_uri: b.inviteeUri }, fresh: true })
+  if (b.kind === 'no_show' || b.kind === 'showed') {
+    // a no-show mark only names the booking; the lead is the one holding it
+    const lead = byUri[0]
+    if (!lead) return { id: '', created: false }
+    await leads.update(lead.id, bookingPatch(b, lead, now.toISOString()) as Partial<Lead>)
+    await logLeadEvent({
+      leadId: lead.id, kind: b.kind, at: now.toISOString(), key: `${b.kind}|${b.inviteeUri}|${now.toISOString().slice(0, 16)}`,
+      title: b.kind === 'no_show' ? `Missed ${lead.booking_event ?? 'their call'}` : 'No-show mark removed: they did attend',
+    })
+    return { id: lead.id, created: false }
+  }
   const byEmail = byUri.length ? [] : await leads.list({ where: l => (l.email ?? '').toLowerCase() === b.email, orderBy: [['created_at', 'desc']], fresh: true })
   const found = byUri[0] ?? byEmail[0]
   if (found) {
     await leads.update(found.id, bookingPatch(b, found, now.toISOString()) as Partial<Lead>)
+    await logBooking(found.id, b, !!found.booking_status && found.booking_uri !== b.inviteeUri, now)
     return { id: found.id, created: false }
   }
   // plain letters and digits only — an id with `@`/`%` in it broke the lead's page URL (9 Nov 2026)
@@ -64,5 +78,18 @@ export async function applyBooking(b: Booking, now = new Date()): Promise<{ id: 
     const base = current ?? ({ id, created_at: now.toISOString(), email: b.email } as Lead)
     return { ...base, ...bookingPatch(b, current, now.toISOString()) } as Lead
   })
+  await logBooking(id, b, false, now)
   return { id, created: res.claimed && !byEmail.length }
+}
+
+/** the booking's line on the lead's timeline; one per Calendly invitee per kind, however often Calendly retries */
+async function logBooking(leadId: string, b: Booking, again: boolean, now: Date) {
+  const kind = b.kind === 'cancelled' ? 'cancelled' : again ? 'rebooked' : 'booked'
+  const what = b.event ?? 'a call'
+  await logLeadEvent({
+    leadId, kind, at: now.toISOString(), key: `${kind}|${b.inviteeUri}`,
+    title: kind === 'cancelled' ? `Cancelled ${what}` : kind === 'rebooked' ? `Booked again: ${what}` : `Booked ${what}`,
+    detail: b.startsAt ? `For ${callWords(b.startsAt)}` : null,
+    meta: { utm_source: b.utm.source, utm_medium: b.utm.medium, utm_campaign: b.utm.campaign, utm_term: b.utm.term, utm_content: b.utm.content, page: b.page },
+  })
 }

@@ -67,6 +67,7 @@ export type TableName =
   | 'intake_templates'
   | 'item_comments'
   | 'journal_posts'
+  | 'lead_events'
   | 'leads'
   | 'linktree_connections'
   | 'linktree_states'
@@ -1162,6 +1163,16 @@ export interface JournalPost {
   published: boolean
 }
 
+export interface LeadEvent {
+  id: string
+  lead_id: string
+  at: string
+  kind: string
+  title: string
+  detail: string | null
+  meta: unknown | null
+}
+
 export interface Lead {
   source: string | null
   booking_status: string | null
@@ -2136,6 +2147,7 @@ export const TABLE_COLUMNS = {
   intake_templates: ['key', 'definition', 'updated_at', 'updated_by', 'id'],
   item_comments: ['id', 'created_at', 'item_id', 'parent_id', 'author_id', 'visibility', 'body', 'video_timestamp_sec', 'assigned_to', 'resolved', 'reactions', 'video_file_id', 'video_file_name'],
   journal_posts: ['id', 'created_at', 'updated_at', 'slug', 'title', 'standfirst', 'category', 'cover_url', 'read_mins', 'published_at', 'featured', 'sections', 'sort_order', 'published'],
+  lead_events: ['id', 'lead_id', 'at', 'kind', 'title', 'detail', 'meta'],
   leads: ['source', 'booking_status', 'booking_event', 'booking_uri', 'ad_campaign', 'ad_set', 'ad_name', 'ad_placement', 'booked_from', 'id', 'created_at', 'fname', 'lname', 'email', 'phone', 'biz', 'model', 'need', 'budget', 'timeline', 'stage', 'stage_entered_at', 'owner_id', 'tier', 'source_tag', 'partner', 'next_action', 'next_action_at', 'qualifiers', 'exit_ticks', 'call_at', 'proposal_sent_at', 'walkthrough_at', 'signed_at', 'deposit_at', 'vs_delivered_at', 'objection', 'deal_value', 'not_now_at', 'reopen_at', 'touches', 'pipeline_notes'],
   linktree_connections: ['id', 'client_id', 'access_token_enc', 'refresh_token_enc', 'expires_at', 'profile_username', 'profile_url', 'profile_name', 'connected_by', 'connected_at', 'updated_at', 'last_error'],
   linktree_states: ['id', 'client_id', 'user_id', 'verifier_enc', 'used_at', 'created_at'],
@@ -2260,6 +2272,7 @@ export const NULLABLE_COLUMNS = {
   intake_templates: ['updated_by'],
   item_comments: ['parent_id', 'author_id', 'video_timestamp_sec', 'assigned_to', 'reactions', 'video_file_id', 'video_file_name'],
   journal_posts: ['published_at'],
+  lead_events: ['detail', 'meta'],
   leads: ['source', 'booking_status', 'booking_event', 'booking_uri', 'ad_campaign', 'ad_set', 'ad_name', 'ad_placement', 'booked_from', 'fname', 'lname', 'email', 'phone', 'biz', 'model', 'need', 'budget', 'timeline', 'stage', 'stage_entered_at', 'owner_id', 'tier', 'source_tag', 'partner', 'next_action', 'next_action_at', 'qualifiers', 'exit_ticks', 'call_at', 'proposal_sent_at', 'walkthrough_at', 'signed_at', 'deposit_at', 'vs_delivered_at', 'objection', 'deal_value', 'not_now_at', 'reopen_at', 'touches', 'pipeline_notes'],
   linktree_connections: ['access_token_enc', 'refresh_token_enc', 'expires_at', 'profile_username', 'profile_url', 'profile_name', 'connected_by', 'connected_at', 'updated_at', 'last_error'],
   linktree_states: ['used_at'],
@@ -2391,6 +2404,7 @@ export const JSON_COLUMNS = {
   intake_templates: ['definition'],
   item_comments: ['reactions'],
   journal_posts: ['sections'],
+  lead_events: ['meta'],
   leads: [],
   linktree_connections: [],
   linktree_states: [],
@@ -2521,6 +2535,7 @@ export const JSON_ARRAY_COLUMNS = {
   intake_templates: [],
   item_comments: [],
   journal_posts: ['sections'],
+  lead_events: [],
   leads: [],
   linktree_connections: [],
   linktree_states: [],

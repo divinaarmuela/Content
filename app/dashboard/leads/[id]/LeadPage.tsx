@@ -15,6 +15,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import PageTitle from '../../ui/PageTitle'
+import LeadTimeline from './LeadTimeline'
 import Chip from '../../ui/Chip'
 import { LoadFailed } from '../../NotSetUp'
 import { useRole } from '../../useRole'
@@ -121,6 +122,8 @@ export default function LeadPage({ id }: { id: string }) {
           {prospect.stage ? ` · ${acqStageByKey(prospect.stage).n}. ${acqStageByKey(prospect.stage).label}` : ''}
         </p>
       )}
+
+      <LeadTimeline id={id} refreshKey={JSON.stringify(lead)} />
 
       <section aria-label="What they wrote" className="rounded-card border border-border bg-card">
         <h2 className={`border-b border-border px-4 py-3 ${H}`}>What they wrote</h2>
