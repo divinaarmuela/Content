@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button'
  */
 
 type Account = { id: string; name: string; currency: string | null }
-type Status = { ready: boolean; connection: { fb_user_name: string | null; connected_at: string; ad_account_id: string | null; granted: string[] | null } | null; accounts: Account[]; error: string | null }
+type Status = { ready: boolean; latestMonth?: string | null; connection: { fb_user_name: string | null; connected_at: string; ad_account_id: string | null; granted: string[] | null } | null; accounts: Account[]; error: string | null }
 type Row = { campaignId: string; name: string; impressions: number; reach: number; clicks: number; spend: number; conversions: number }
 type Campaign = { id: string; name: string; status: string; objective: string | null }
 type Results = { rows: Row[]; totals: Omit<Row, 'campaignId' | 'name'>; campaigns: Campaign[]; testIds: string[] }
@@ -49,6 +49,11 @@ export default function MdAppAds({ clientId }: { clientId: string }) {
   }, [clientId, month, account])
 
   useEffect(() => { void loadStatus() }, [loadStatus])
+  // open on the latest month that had spend (9 Nov 2026), once — a month the person picks is kept
+  const [monthTouched, setMonthTouched] = useState(false)
+  useEffect(() => {
+    if (!monthTouched && status && !('loadError' in status) && status.latestMonth) setMonth(status.latestMonth)
+  }, [status, monthTouched])
   useEffect(() => { void loadResults() }, [loadResults])
 
   useEffect(() => {
@@ -99,7 +104,7 @@ export default function MdAppAds({ clientId }: { clientId: string }) {
                 </label>
                 {account && (
                   <label className="flex flex-col gap-1 text-xs text-muted-foreground">Month
-                    <select className="h-9 rounded-md border border-border bg-background px-2 text-sm text-foreground" value={month} onChange={e => setMonth(e.target.value)}>
+                    <select className="h-9 rounded-md border border-border bg-background px-2 text-sm text-foreground" value={month} onChange={e => { setMonthTouched(true); setMonth(e.target.value) }}>
                       {months().map(m => <option key={m} value={m}>{monthWords(m)}</option>)}
                     </select>
                   </label>

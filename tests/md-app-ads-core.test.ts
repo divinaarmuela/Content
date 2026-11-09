@@ -74,3 +74,15 @@ describe('only our own ad account is listed (9 Nov 2026)', () => {
     expect(out.map(a => a.id)).toEqual(['act_572733431883963'])
   })
 })
+
+describe('the card opens on the latest month with spend (9 Nov 2026)', () => {
+  it('picks the newest month whose spend is above zero', async () => {
+    const { latestMonthWithSpend, eighteenMonthRange } = await import('../app/lib/md-app-ads-core')
+    expect(latestMonthWithSpend({ data: [
+      { date_start: '2025-09-01', spend: '1110.02' }, { date_start: '2026-04-01', spend: '29.39' }, { date_start: '2026-05-01', spend: '0' },
+    ] })).toBe('2026-04')
+    expect(latestMonthWithSpend({ data: [] })).toBeNull()
+    expect(latestMonthWithSpend(null)).toBeNull()
+    expect(eighteenMonthRange(new Date('2026-11-09T00:00:00Z'))).toEqual({ since: '2025-06-01', until: '2026-11-09' })
+  })
+})

@@ -6,7 +6,7 @@ import { mdAppReady, MdAppError, saveConnection } from './md-app'
 import { mdAppsecretProof, mdCodeExchangeUrl, mdErrorMessage, mdGraphUrl, mdRedactUrl, type MdAppReady } from './md-app-core'
 import {
   INSIGHT_FIELDS, grantedPermissions, isAdAccountId, isCampaignId, longLivedParams, mayDeleteCampaign, monthTimeRange,
-  allowedAdAccounts, parseAdAccounts, parseCampaignInsights, parseCampaigns, parseUserToken, recordedIds, testCampaignParams, totalsOf,
+  allowedAdAccounts, eighteenMonthRange, latestMonthWithSpend, parseAdAccounts, parseCampaignInsights, parseCampaigns, parseUserToken, recordedIds, testCampaignParams, totalsOf,
   type AdAccount, type Campaign, type CampaignResult,
 } from './md-app-ads-core'
 
@@ -72,15 +72,20 @@ async function authOf(clientId: string): Promise<{ auth: Auth; row: MdAppAd }> {
   return { auth: { token: decryptSecret(row.token_encrypted), appSecret: ready.env.appSecret }, row }
 }
 
-export async function adsStatus(clientId: string): Promise<{ connection: PublicAds | null; accounts: AdAccount[]; error: string | null }> {
+export async function adsStatus(clientId: string): Promise<{ connection: PublicAds | null; accounts: AdAccount[]; latestMonth: string | null; error: string | null }> {
   const row = await rows().get(clientId, { fresh: true }).catch(() => null)
-  if (!row) return { connection: null, accounts: [], error: null }
+  if (!row) return { connection: null, accounts: [], latestMonth: null, error: null }
   try {
     const { auth } = await authOf(clientId)
     const accounts = allowedAdAccounts(parseAdAccounts(await get(auth, 'me/adaccounts', { fields: 'id,name,account_status,currency', limit: 50 })))
-    return { connection: publicRow(row), accounts, error: null }
+    // READ ONLY: which month to open on (latestMonthWithSpend); a failure just opens on last month
+    const latestMonth = row.ad_account_id && isAdAccountId(row.ad_account_id)
+      ? await get(auth, `${row.ad_account_id}/insights`, { fields: 'spend', time_increment: 'monthly', time_range: JSON.stringify(eighteenMonthRange(new Date())), limit: 30 })
+        .then(latestMonthWithSpend).catch(() => null)
+      : null
+    return { connection: publicRow(row), accounts, latestMonth, error: null }
   } catch (e) {
-    return { connection: publicRow(row), accounts: [], error: e instanceof Error ? e.message : 'Could not read the ad accounts' }
+    return { connection: publicRow(row), accounts: [], latestMonth: null, error: e instanceof Error ? e.message : 'Could not read the ad accounts' }
   }
 }
 

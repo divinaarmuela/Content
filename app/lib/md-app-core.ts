@@ -390,7 +390,6 @@ export const MD_TESTS = {
   page_subscribe: { label: 'Subscribe Page to webhooks', permissions: ['pages_manage_metadata'] },
   page_leadforms: { label: 'List lead forms', permissions: ['leads_retrieval'] },
   ad_accounts: { label: 'List ad accounts', permissions: ['ads_read'] },
-  business: { label: 'Read business portfolio', permissions: ['business_management'] },
 } as const satisfies Record<string, { label: string; permissions: readonly string[] }>
 
 export type MdTestId = keyof typeof MD_TESTS

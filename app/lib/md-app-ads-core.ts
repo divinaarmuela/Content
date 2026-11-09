@@ -68,7 +68,27 @@ export function allowedAdAccounts<T extends { id: string }>(accounts: readonly T
   return accounts.filter(a => ALLOWED_AD_ACCOUNTS.includes(a.id))
 }
 
-export const isAdAccountId =(v: unknown): v is string => typeof v === 'string' && /^act_\d{1,30}$/.test(v)
+/**
+ * The latest month that had spend, from /{act}/insights?time_increment=monthly&fields=spend (9 Nov 2026). The card opens
+ * on it, so nobody — Meta's reviewer included — lands on a month of zeros because the account's ads are paused today.
+ */
+export function latestMonthWithSpend(json: unknown): string | null {
+  const data = ((json ?? {}) as { data?: unknown }).data
+  if (!Array.isArray(data)) return null
+  const months = data
+    .filter((r: any) => r && typeof r.date_start === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(r.date_start) && Number(r.spend) > 0)
+    .map((r: any) => (r.date_start as string).slice(0, 7))
+    .sort()
+  return months.length ? months[months.length - 1] : null
+}
+
+/** the last 18 whole months up to today, as Meta's time_range */
+export function eighteenMonthRange(now: Date): { since: string; until: string } {
+  const since = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 17, 1))
+  return { since: since.toISOString().slice(0, 10), until: now.toISOString().slice(0, 10) }
+}
+
+export const isAdAccountId = (v: unknown): v is string => typeof v === 'string' && /^act_\d{1,30}$/.test(v)
 export const isCampaignId = (v: unknown): v is string => typeof v === 'string' && /^\d{1,30}$/.test(v)
 
 /** 'YYYY-MM' → Meta's time_range (since/until inclusive). null for anything else. */

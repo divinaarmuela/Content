@@ -100,7 +100,8 @@ export async function readAssigned(a: Auth): Promise<{ businessId: string | null
   const list = (label: string, kind: AssetKind, p: Promise<AssignedAsset[]>) =>
     p.catch(e => { failed.add(kind); errors.push(`${label}: ${e instanceof Error ? e.message : 'failed'}`); return [] as AssignedAsset[] })
   const [me, ig, pages, ads] = await Promise.all([
-    safe('business', get(a, 'me', { fields: 'client_business_id' }), null),
+    // client_business_id answers only a system-user token; the one-login (personal) token gets #190 — not an error worth showing (9 Nov 2026)
+    get(a, 'me', { fields: 'client_business_id' }).catch(() => null),
     list('Instagram', 'instagram', listAll(a, 'me/assigned_instagram_accounts', 'id,username', 'instagram')),
     list('Pages', 'page', listAll(a, 'me/accounts', 'id,name', 'page')),
     list('Ad accounts', 'ad_account', listAll(a, 'me/adaccounts', 'id,account_id,name', 'ad_account')),
@@ -303,7 +304,6 @@ export async function runTest(clientId: string, id: MdTestId): Promise<{ ok: tru
     case 'page_subscribe': json = await pageApi.subscribe(auth, target!); break
     case 'page_leadforms': json = await pageApi.leadForms(auth, target!); break
     case 'ad_accounts': json = await get(auth, 'me/adaccounts', { fields: 'id,name' }); break
-    case 'business': json = await get(auth, 'me', { fields: 'client_business_id' }); break
   }
   return { ok: true, summary: summariseTestResult(json), permissions: MD_TESTS[id].permissions }
 }
