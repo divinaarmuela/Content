@@ -2,7 +2,7 @@ import 'server-only'
 import { table } from '@/lib/db'
 import type { MdAppAd } from '@/lib/db-types'
 import { decryptSecret, encryptSecret } from './secret-box'
-import { mdAppReady, MdAppError } from './md-app'
+import { mdAppReady, MdAppError, saveConnection } from './md-app'
 import { mdAppsecretProof, mdCodeExchangeUrl, mdErrorMessage, mdGraphUrl, mdRedactUrl, type MdAppReady } from './md-app-core'
 import {
   INSIGHT_FIELDS, grantedPermissions, isAdAccountId, isCampaignId, longLivedParams, mayDeleteCampaign, monthTimeRange,
@@ -59,6 +59,8 @@ export async function connectAds(ready: MdAppReady & { ok: true }, input: { code
     connected_by: input.userId, connected_at: nowIso, expires_at: tok.expiresAt,
     ad_account_id: cur?.ad_account_id ?? null, test_campaign_ids: (cur?.test_campaign_ids ?? []) as never,
   }))
+  // THE ONE LOGIN (9 Nov 2026): the same token is the client's connection for Instagram and Pages too
+  await saveConnection(ready, { token: tok.token, clientId: input.clientId, userId: input.userId, now: input.now })
   return { missing: ['ads_read', 'ads_management'].filter(p => !granted.includes(p)) }
 }
 

@@ -132,7 +132,8 @@ describe('the shared callback, MD App half', () => {
     const conn = fake.rows('md_app_connections')[0] as any
     expect(conn).toMatchObject({ client_id: 'c1', business_id: '777', active: true, use_md_app: false })
     expect(JSON.stringify(fake.rows('md_app_connections'))).not.toContain(TOKEN)
-    expect(fake.rows('md_app_assets').map((r: any) => r.id).sort()).toEqual(['c1__ad_account__act_9', 'c1__instagram__17', 'c1__page__55'])
+    // act_9 is not our own ad account, so it is never stored (allowedAdAccounts, 9 Nov 2026)
+    expect(fake.rows('md_app_assets').map((r: any) => r.id).sort()).toEqual(['c1__instagram__17', 'c1__page__55'])
     expect(fake.rows('md_app_assets').every((r: any) => r.picked === false)).toBe(true)
     expect(res.headers.get('location')).not.toContain(TOKEN)
   })

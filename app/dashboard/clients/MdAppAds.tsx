@@ -56,7 +56,7 @@ export default function MdAppAds({ clientId }: { clientId: string }) {
     const r = params.get('md_ads')
     if (!r) return
     if (r === 'connected') toast.success('Ads connected — pick the ad account')
-    else if (r === 'missing') toast.error(`Connected, but Facebook did not give: ${params.get('reason')}. Connect ads again and allow everything.`)
+    else if (r === 'missing') toast.error(`Connected, but Facebook did not give: ${params.get('reason')}. Press Connect again and allow everything.`)
     else toast.error(`Ads connect failed: ${params.get('reason') ?? 'unknown reason'}`)
     for (const k of ['md_ads', 'reason']) params.delete(k)
     const qs = params.toString()
@@ -83,12 +83,8 @@ export default function MdAppAds({ clientId }: { clientId: string }) {
         : 'loadError' in status ? <p className="text-sm text-destructive">{status.loadError}</p>
         : (
           <>
-            <div className="flex flex-wrap items-center gap-2">
-              <Button asChild size="sm" variant={status.connection ? 'outline' : 'default'} disabled={!status.ready}>
-                <a href={`/api/meta/md-app/connect?clientId=${encodeURIComponent(clientId)}&kind=ads`}>{status.connection ? 'Connect ads again' : 'Connect ads with Facebook'}</a>
-              </Button>
-              {status.connection && <span className="text-xs text-muted-foreground">Connected{status.connection.fb_user_name ? ` as ${status.connection.fb_user_name}` : ''} · {new Date(status.connection.connected_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}</span>}
-            </div>
+            {/* ONE LOGIN (9 Nov 2026): the card's Connect button carries Ads too — no second button here */}
+            {!status.connection && <p className="text-xs text-muted-foreground">Press Connect above and include the ad account.</p>}
             {!status.ready && <p className="text-xs text-amber-700">The ads login is not set up yet.</p>}
             {status.error && <p className="text-xs text-destructive">{status.error}</p>}
 

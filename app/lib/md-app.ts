@@ -12,6 +12,7 @@ import {
   parseMdWebhook, readMdAppEnv, summariseTestResult, testNeeds, usesMdApp, validateMdPublish,
   type AssetKind, type AssignedAsset, type MdAppReady, type MdInsight, type MdPublishRequest, type MdTestId,
 } from './md-app-core'
+import { allowedAdAccounts } from './md-app-ads-core'
 
 /**
  * MD APP — the I/O half (6 Nov 2026). Pure rules and the doc quotes: md-app-core.ts. Read docs/MD_APP_SETUP.md.
@@ -146,16 +147,28 @@ export async function readAssigned(a: Auth): Promise<{ businessId: string | null
 export async function connectClient(ready: MdAppReady & { ok: true }, input: { code: string; clientId: string; userId: string; now: number }): Promise<{ assets: number; errors: string[] }> {
   const ex = parseBisuToken(await call(mdCodeExchangeUrl({ appId: ready.env.appId, appSecret: ready.env.appSecret, redirectUri: ready.env.redirectUri, code: input.code })))
   if (!ex.ok) throw new MdAppError(ex.error)
-  const auth = { token: ex.token, appSecret: ready.env.appSecret, appId: ready.env.appId }
+  return saveConnection(ready, { token: ex.token, clientId: input.clientId, userId: input.userId, now: input.now })
+}
+
+/**
+ * Store a token as the client's connection and read what it reaches. Used by the system-user connect above AND by
+ * the ONE-LOGIN connect (9 Nov 2026, md-app-ads.ts connectAds): before App Review, Meta gives ads permissions only to a
+ * person's own login, so one user-token login now carries Instagram, Pages and Ads together. Page calls already read a
+ * Page token on demand (pageAuth), so the same token works for every road. Ad accounts are kept to our own
+ * (allowedAdAccounts) — a person's login sees every account they manage.
+ */
+export async function saveConnection(ready: MdAppReady & { ok: true }, input: { token: string; clientId: string; userId: string; now: number }): Promise<{ assets: number; errors: string[] }> {
+  const auth = { token: input.token, appSecret: ready.env.appSecret, appId: ready.env.appId }
   const found = await readAssigned(auth)
+  const kept = found.assets.filter(x => x.kind !== 'ad_account' || allowedAdAccounts([{ id: x.id.startsWith('act_') ? x.id : `act_${x.id}` }]).length > 0)
   const nowIso = new Date(input.now).toISOString()
   await connections().claim(input.clientId, cur => ({
     id: input.clientId, client_id: input.clientId, business_id: found.businessId ?? cur?.business_id ?? null,
-    token_encrypted: encryptSecret(ex.token), connected_by: input.userId, connected_at: nowIso, active: true,
+    token_encrypted: encryptSecret(input.token), connected_by: input.userId, connected_at: nowIso, active: true,
     use_md_app: cur?.use_md_app === true, last_error: found.errors.length ? found.errors.join(' · ').slice(0, 600) : null,
   }))
-  await storeAssets(input.clientId, found.assets, nowIso)
-  return { assets: found.assets.length, errors: found.errors }
+  await storeAssets(input.clientId, kept, nowIso)
+  return { assets: kept.length, errors: found.errors }
 }
 
 async function storeAssets(clientId: string, list: AssignedAsset[], nowIso: string) {

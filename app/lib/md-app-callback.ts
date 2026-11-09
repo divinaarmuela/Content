@@ -38,7 +38,7 @@ export async function mdAppCallback(req: NextRequest): Promise<NextResponse> {
   if (state.payload.kind === 'ads') {
     try {
       const out = await connectAds(ready, { code, clientId, userId, now: Date.now() })
-      return back(req, clientId, out.missing.length ? { md_ads: 'missing', reason: out.missing.join(', ') } : { md_ads: 'connected' })
+      return back(req, clientId, out.missing.length ? { md_ads: 'missing', reason: out.missing.join(', ') } : { md_app: 'connected' })
     } catch (e) {
       const reason = (e instanceof Error ? e.message : 'failed').slice(0, 160)
       console.warn('[md-app] ads connect failed:', reason)
