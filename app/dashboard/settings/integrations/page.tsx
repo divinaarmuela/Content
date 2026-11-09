@@ -2,6 +2,7 @@
 
 import DriveFolderCard from '../DriveFolderCard'
 import IntegrationsSettings from '../IntegrationsSettings'
+import CalendlyCard from '../CalendlyCard'
 
 export default function IntegrationsPage() {
   return (
@@ -9,6 +10,7 @@ export default function IntegrationsPage() {
       <IntegrationsSettings />
       {/* where Drive files land — shown under the connection it belongs to */}
       <DriveFolderCard />
+      <CalendlyCard />
     </div>
   )
 }

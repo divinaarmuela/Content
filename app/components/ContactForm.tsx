@@ -1,5 +1,6 @@
 'use client'
 
+import { visitUtm } from '@/app/lib/utm-core'
 import { useEffect, useRef, useState } from 'react'
 
 const CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ!@#$&*()-_+=/0123456789'
@@ -201,7 +202,7 @@ export default function ContactForm() {
       const res = await fetch('/api/submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
+        body: JSON.stringify({ ...data, utm: visitUtm() }),
       })
 
       if (!res.ok) {

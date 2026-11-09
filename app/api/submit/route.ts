@@ -1,3 +1,4 @@
+import { adFieldsFromUtm } from '@/app/lib/utm-core'
 import { NextRequest, NextResponse } from 'next/server'
 import { table, withRequestCache } from '@/lib/db'
 import { sendSystemEmail } from '../../lib/mailer'
@@ -6,7 +7,7 @@ import { announceAfter } from '@/lib/live'
 
 export async function POST(req: NextRequest) {
  return withRequestCache(async () => {
-  let body: Record<string, string>
+  let body: Record<string, any>
   try {
     body = await req.json()
   } catch {
@@ -93,6 +94,8 @@ export async function POST(req: NextRequest) {
     need:  need ?? null,
     budget: budget ?? null,
     timeline: timeline ?? null,
+    // the ad that brought them (9 Nov 2026) — campaign, ad set, ad, placement; nothing when no ad did
+    ...adFieldsFromUtm(body.utm),
   }
   let savedLead: (typeof leadInput & { id: string }) | null = null
   let dbError: unknown = null

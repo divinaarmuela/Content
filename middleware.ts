@@ -141,6 +141,7 @@ export const config = {
     // the middleware ran (live: "Clerk can't detect usage of
     // clerkMiddleware()", 10 Sep 2026)
     '/api/act-as/:path*',
+    '/api/calendly/connect',
     '/api/asana/:path*',
     '/api/assets/:path*',
     '/api/audience/:path*',

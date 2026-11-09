@@ -1,5 +1,6 @@
 'use client'
 
+import { visitUtm } from '@/app/lib/utm-core'
 import { useEffect, useRef, useState } from 'react'
 
 const FIELD =
@@ -154,7 +155,7 @@ export default function LamaContactForm() {
       const res = await fetch('/api/submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
+        body: JSON.stringify({ ...data, utm: visitUtm() }),
       })
       if (!res.ok) {
         const json = await res.json().catch(() => ({}))

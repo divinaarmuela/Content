@@ -30,6 +30,8 @@ import { LoadFailed } from '../NotSetUp'
 import PageTitle from '../ui/PageTitle'
 import { copyText } from '../../lib/copy-text-client'
 import { acqStageByKey } from '../../lib/acquisition-core'
+import { leadStatus, sourceLabel, placementLabel } from '../../lib/calendly-core'
+import { STAGES } from '../../lib/pipeline-core'
 import {
   LEADS_SUMMARY, leadBusiness, leadFromWords, leadName, leadPath, prospectForLead, prospectPagePath,
   type LeadLike, type ProspectLink,
@@ -43,20 +45,33 @@ import {
  * road a deal travels, and "Bring into acquisition" is how an enquiry gets
  * on it. A row opens a page, /dashboard/leads/<id>, not a drawer.
  */
-type Lead = LeadLike & { id: string; created_at: string }
+type Lead = LeadLike & {
+  id: string; created_at: string
+  booking_status?: string | null; booking_event?: string | null; call_at?: string | null; stage?: string | null; source_tag?: string | null
+  ad_campaign?: string | null; ad_set?: string | null; ad_name?: string | null; ad_placement?: string | null
+}
 
 /** newest first, as the leads API always ordered them — module-level so the
  *  live query stays referentially stable across renders */
 const BY_NEWEST: ['created_at', 'desc'][] = [['created_at', 'desc']]
 
-type SortKey = 'created_at' | 'fname' | 'biz' | 'source' | 'model'
+/** 9 Nov 2026, owner: "redesign the column" + "put it in each column" (campaign, ad set, ad, placement). */
+type SortKey = 'fname' | 'phone' | 'status' | 'source' | 'ad_campaign' | 'ad_set' | 'ad_name' | 'ad_placement' | 'call_at' | 'created_at'
 const COLS: { key: SortKey; label: string }[] = [
-  { key: 'created_at', label: 'When' },
-  { key: 'fname',      label: 'Who' },
-  { key: 'biz',        label: 'Business' },
-  { key: 'source',     label: 'From' },
-  { key: 'model',      label: 'Asked for' },
+  { key: 'fname',        label: 'Who' },
+  { key: 'phone',        label: 'Phone' },
+  { key: 'status',       label: 'Status' },
+  { key: 'source',       label: 'Source' },
+  { key: 'ad_campaign',  label: 'Campaign' },
+  { key: 'ad_set',       label: 'Ad set' },
+  { key: 'ad_name',      label: 'Ad' },
+  { key: 'ad_placement', label: 'Placement' },
+  { key: 'call_at',      label: 'Booked' },
+  { key: 'created_at',   label: 'When' },
 ]
+const STATUS_TONE: Record<string, 'green' | 'amber' | 'red' | 'blue' | 'muted'> = { 'Call booked': 'green', 'New lead': 'blue', Cancelled: 'red' }
+const statusWords = (l: Lead) => leadStatus(l, k => STAGES.find(s => s.key === k)?.label ?? k)
+const sourceWords = (l: Lead) => l.source === 'web_form' || !l.source ? leadFromWords(l.source) : sourceLabel(l.source)
 
 type TodayLead = { id: string; created_at: string; name: string; biz: string | null; source: string; reason: string }
 
@@ -175,8 +190,8 @@ export default function LeadsPage() {
 
   const sortValue = (l: Lead, key: SortKey): string => {
     if (key === 'fname') return leadName(l).toLowerCase()
-    if (key === 'biz') return leadBusiness(l).toLowerCase()
-    if (key === 'source') return leadFromWords(l.source)
+    if (key === 'status') return statusWords(l)
+    if (key === 'source') return sourceWords(l)
     return String(l[key] ?? '').toLowerCase()
   }
 
@@ -184,7 +199,7 @@ export default function LeadsPage() {
     .filter(l => {
       if (!search) return true
       const q = search.toLowerCase()
-      return [l.fname, l.lname, l.email, l.biz, l.need].some(v => v?.toLowerCase().includes(q))
+      return [l.fname, l.lname, l.email, l.phone, l.biz, l.need, l.ad_campaign, l.ad_name].some(v => v?.toLowerCase().includes(q))
     })
     .sort((a, b) => {
       const av = sortValue(a, sort.key), bv = sortValue(b, sort.key)
@@ -195,7 +210,7 @@ export default function LeadsPage() {
     const rows = filtered.map(l => ({
       Date: l.created_at ? new Date(l.created_at).toLocaleString('en-AU') : '',
       'First name': l.fname, 'Last name': l.lname, Email: l.email, Phone: l.phone,
-      Business: l.biz, From: leadFromWords(l.source), Service: l.model, Needs: l.need, Budget: l.budget, Timeline: l.timeline,
+      Business: l.biz, Status: statusWords(l), Source: sourceWords(l), Campaign: l.ad_campaign ?? '', 'Ad set': l.ad_set ?? '', Ad: l.ad_name ?? '', Placement: placementLabel(l.ad_placement) ?? '', 'Call booked': l.booking_event ?? '', 'Call time': l.call_at ? new Date(l.call_at).toLocaleString('en-AU', { timeZone: 'Australia/Melbourne' }) : '', Service: l.model, Needs: l.need, Budget: l.budget, Timeline: l.timeline,
       'In acquisition': prospectForLead(l, prospects) ? 'Yes' : '',
     }))
     const ws = XLSX.utils.json_to_sheet(rows)
@@ -214,11 +229,18 @@ export default function LeadsPage() {
 
   /** the one chip that says where the enquiry stands */
   const status = (l: Lead) => {
+    const words = statusWords(l)
     const p = prospectForLead(l, prospects)
-    if (p) return <Chip tone="green">{`In acquisition · ${acqStageByKey(p.stage).label}`}</Chip>
-    if (l.next_action) return <Chip tone="amber">{l.next_action}</Chip>
-    return <Chip tone="muted">Not brought in</Chip>
+    return (
+      <div className="flex flex-col items-start gap-1">
+        <Chip tone={STATUS_TONE[words] ?? 'amber'}>{words}</Chip>
+        {p && <span className="whitespace-nowrap text-[12px] text-muted-foreground">{`In acquisition · ${acqStageByKey(p.stage).label}`}</span>}
+      </div>
+    )
   }
+  const timeWords = (iso?: string | null) => iso ? new Date(iso).toLocaleString('en-AU', { timeZone: 'Australia/Melbourne', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }) : null
+  const dash = <span className="text-muted-foreground">—</span>
+  const textCell = (v?: string | null) => <TableCell className="max-w-[180px] truncate text-secondary-13" title={v ?? undefined}>{v || dash}</TableCell>
 
   const open = (l: Lead) => router.push(leadPath(l.id))
 
@@ -365,7 +387,8 @@ export default function LeadsPage() {
                   <p className="truncate text-secondary-13 text-muted-foreground">
                     {[leadName(l), l.model].filter(Boolean).join(' · ')}
                   </p>
-                  <p className="mt-0.5 font-mono text-[12px] text-muted-foreground">{dateWords(l.created_at)} · {leadFromWords(l.source)}</p>
+                  <p className="mt-0.5 font-mono text-[12px] text-muted-foreground">{dateWords(l.created_at)} · {sourceWords(l)}{l.ad_campaign ? ` · ${l.ad_campaign}` : ''}</p>
+                  {l.phone && <p className="text-secondary-13">{l.phone}</p>}
                   <div className="mt-1.5">{status(l)}</div>
                 </button>
                 {actions(l)}
@@ -390,14 +413,13 @@ export default function LeadsPage() {
                       </button>
                     </TableHead>
                   ))}
-                  <TableHead>Where it stands</TableHead>
                   <TableHead className="w-12" />
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filtered.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={COLS.length + 2} className="py-12 text-center text-body-15 text-muted-foreground">
+                    <TableCell colSpan={COLS.length + 1} className="py-12 text-center text-body-15 text-muted-foreground">
                       {emptyMessage}
                     </TableCell>
                   </TableRow>
@@ -405,18 +427,26 @@ export default function LeadsPage() {
                   filtered.map(l => (
                     // the row is the click target and opens the lead's page
                     <TableRow key={l.id} onClick={() => open(l)} className="cursor-pointer">
-                      <TableCell className="whitespace-nowrap font-mono text-secondary-13 text-muted-foreground">{dateWords(l.created_at)}</TableCell>
-                      <TableCell className="max-w-[220px] text-body-15">
+                      <TableCell className="max-w-[240px] text-body-15">
                         <p className="truncate font-medium">{leadName(l)}</p>
                         {l.email && <a href={`mailto:${l.email}`} onClick={e => e.stopPropagation()} className="block truncate text-secondary-13 text-accent-blue-deep hover:underline">{l.email}</a>}
                       </TableCell>
-                      <TableCell className="max-w-[220px] truncate text-body-15" title={leadBusiness(l)}>{leadBusiness(l)}</TableCell>
-                      <TableCell className="whitespace-nowrap text-secondary-13 text-muted-foreground">{leadFromWords(l.source)}</TableCell>
-                      <TableCell className="max-w-[320px] text-body-15">
-                        <p className="truncate">{l.model || '—'}</p>
-                        {l.need && <p className="truncate text-secondary-13 text-muted-foreground" title={l.need}>{l.need}</p>}
+                      <TableCell className="whitespace-nowrap text-secondary-13">
+                        {l.phone ? <a href={`tel:${l.phone.replace(/[^\d+]/g, '')}`} onClick={e => e.stopPropagation()} className="hover:underline">{l.phone}</a> : dash}
                       </TableCell>
                       <TableCell>{status(l)}</TableCell>
+                      <TableCell className="whitespace-nowrap text-secondary-13">{sourceWords(l)}</TableCell>
+                      {textCell(l.ad_campaign)}
+                      {textCell(l.ad_set)}
+                      {textCell(l.ad_name)}
+                      {textCell(placementLabel(l.ad_placement))}
+                      <TableCell className="max-w-[200px] text-secondary-13">
+                        {l.booking_event || l.call_at ? <>
+                          <p className="truncate">{l.booking_event ?? 'Call'}</p>
+                          {l.call_at && <p className={`whitespace-nowrap text-muted-foreground ${l.booking_status === 'cancelled' ? 'line-through' : ''}`}>{timeWords(l.call_at)}</p>}
+                        </> : dash}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap font-mono text-secondary-13 text-muted-foreground">{dateWords(l.created_at)}</TableCell>
                       <TableCell onClick={e => e.stopPropagation()}>{actions(l)}</TableCell>
                     </TableRow>
                   ))
