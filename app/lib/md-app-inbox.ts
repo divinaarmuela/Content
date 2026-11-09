@@ -20,14 +20,24 @@ async function ctx(clientId: string) {
   const page = picked.some(r => r.kind === 'page') ? pickedOf(picked, 'page') : null
   return { auth, ig, page }
 }
+/**
+ * Instagram calls go out with the LINKED PAGE's token when there is one (10 Nov 2026, live: replying to an Instagram
+ * comment with the user token failed "A Page access token is required for this call for the new Pages experience").
+ * The DMs already did this (9 Nov). No Page ticked → the user token, as before.
+ */
+async function igAuth(auth: Awaited<ReturnType<typeof authFor>>['auth'], page: string | null) {
+  if (!page) return auth
+  try { return await pageAuth(auth, page) } catch { return auth }
+}
 const need = <T>(v: T | null, what: string): T => { if (!v) throw new MdAppError(`Tick this client's ${what} first.`, 409); return v }
 
 /** Both platforms' recent posts with their comment counts — the left column of the Comments view. */
 export async function inboxPosts(clientId: string): Promise<{ instagram: InboxPost[]; facebook: InboxPost[]; igUsername: string | null; pageName: string | null }> {
   const { auth, ig, page } = await ctx(clientId)
+  const ia = ig ? await igAuth(auth, page) : auth
   const [igMedia, igMe, pa] = await Promise.all([
-    ig ? get(auth, `${ig}/media`, { fields: 'id,caption,timestamp,permalink,comments_count,media_type,media_url,thumbnail_url', limit: 12 }) : null,
-    ig ? get(auth, ig, { fields: 'username' }).catch(() => null) : null,
+    ig ? get(ia, `${ig}/media`, { fields: 'id,caption,timestamp,permalink,comments_count,media_type,media_url,thumbnail_url', limit: 12 }) : null,
+    ig ? get(ia, ig, { fields: 'username' }).catch(() => null) : null,
     page ? pageAuth(auth, page) : null,
   ])
   const [feed, pageMe] = pa && page ? await Promise.all([
@@ -44,9 +54,10 @@ export async function inboxComments(clientId: string, platform: 'instagram' | 'f
   const { auth, ig, page } = await ctx(clientId)
   if (platform === 'instagram') {
     const id = need(ig, 'Instagram account')
+    const ia = await igAuth(auth, page)
     const [json, me] = await Promise.all([
-      get(auth, `${postId}/comments`, { fields: 'id,text,username,timestamp,hidden,from{id,username},replies{id,text,username,timestamp}', limit: 50 }),
-      get(auth, id, { fields: 'username' }).catch(() => null),
+      get(ia, `${postId}/comments`, { fields: 'id,text,username,timestamp,hidden,from{id,username},replies{id,text,username,timestamp}', limit: 50 }),
+      get(ia, id, { fields: 'username' }).catch(() => null),
     ])
     return parseIgComments(json, typeof me?.username === 'string' ? me.username : null)
   }
@@ -61,9 +72,10 @@ export async function commentAction(clientId: string, platform: 'instagram' | 'f
   const { auth, ig, page } = await ctx(clientId)
   if (platform === 'instagram') {
     need(ig, 'Instagram account')
-    if (action === 'reply') await post(auth, `${commentId}/replies`, { message: text! })
-    else if (action === 'delete') await del(auth, commentId)
-    else await post(auth, commentId, { hide: String(action === 'hide') })
+    const ia = await igAuth(auth, page)
+    if (action === 'reply') await post(ia, `${commentId}/replies`, { message: text! })
+    else if (action === 'delete') await del(ia, commentId)
+    else await post(ia, commentId, { hide: String(action === 'hide') })
     return
   }
   const pa = await pageAuth(auth, need(page, 'Facebook Page'))
