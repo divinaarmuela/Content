@@ -1002,6 +1002,17 @@ const GHOST_TABLES = {
   // lead_events — A LEAD'S TIMELINE (owner, 9 Nov 2026: "their timeline … their first time and what they have done").
   //   Append-only, one row per thing that happened: their first visit, a form fill, a Calendly booking, a cancel.
   //   Emails come from email_ingest_log and are not copied here. app/lib/lead-timeline-core.ts builds the page.
+  // md_app_hidden_comments — INSTAGRAM COMMENTS HIDDEN FROM THE DASHBOARD (10 Nov 2026, owner: "how are we supposed to
+  //   unhide it when it's not showing"). Instagram leaves a hidden comment out of the post's comment list, so the Inbox
+  //   keeps its own copy, taken just before hiding, and draws it marked Hidden with Show until shown again or deleted.
+  //   id `<client id>__<comment id>`.
+  md_app_hidden_comments: [
+    ['id', col('string', false)],
+    ['client_id', col('string', false)],
+    ['post_id', col('string', false)],
+    ['comment', col('unknown', false, true, false)],
+    ['hidden_at', col('string', false)],
+  ],
   lead_events: [
     ['id', col('string', false)],
     ['lead_id', col('string', false)],

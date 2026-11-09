@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { EyeOff, Eye, Trash2, Reply, Send, RefreshCw, MessageCircle, MessagesSquare } from 'lucide-react'
 import PlatformIcon from '../social/PlatformIcon'
@@ -17,6 +17,9 @@ import type { InboxComment, InboxPost, InboxThread } from '@/app/lib/md-app-inbo
 
 type Platform = 'instagram' | 'facebook'
 type Mode = 'comments' | 'messages'
+
+/** comments hidden in this browser tab, by comment id — see loadComments */
+const HIDDEN_HERE = new Map<string, InboxComment>()
 type Posts = { instagram: InboxPost[]; facebook: InboxPost[]; igUsername: string | null; pageName: string | null }
 
 const when = (t: string | null) => t ? new Date(t).toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }) : ''
@@ -69,7 +72,9 @@ export default function MdAppInbox({ clientId }: { clientId: string }) {
   // Comments hidden here, kept on screen (10 Nov 2026, live): Instagram leaves a hidden comment OUT of the post's
   // comment list, so after Hide it vanished and Show could never be pressed. The ones hidden in this visit stay drawn,
   // marked Hidden, until shown again or deleted.
-  const hiddenHere = useRef(new Map<string, InboxComment>())
+  // kept OUTSIDE the component: the Meta card redraws its tabs while it re-reads the connection (Live updates), which
+  // threw a component-held list away and the hidden comment vanished again (10 Nov 2026, live)
+  const hiddenHere = useMemo(() => ({ current: HIDDEN_HERE }), [])
   const loadComments = useCallback(async () => {
     if (!postId) { setComments(null); return }
     const r = await read<{ comments: InboxComment[] }>(`view=comments&platform=${platform}&postId=${encodeURIComponent(postId)}`)

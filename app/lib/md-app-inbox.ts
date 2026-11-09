@@ -1,5 +1,7 @@
 import 'server-only'
 import { MdAppError, authFor, mdGraph } from './md-app'
+import { table } from '@/lib/db'
+import type { MdAppHiddenComment } from '@/lib/db-types'
 import {
   parseIgComments, parseIgPosts, parsePageComments, parsePagePosts, parseThreads, withProfile,
   type InboxComment, type InboxPost, type InboxThread,
@@ -59,7 +61,11 @@ export async function inboxComments(clientId: string, platform: 'instagram' | 'f
       get(ia, `${postId}/comments`, { fields: 'id,text,username,timestamp,hidden,from{id,username},replies{id,text,username,timestamp}', limit: 50 }),
       get(ia, id, { fields: 'username' }).catch(() => null),
     ])
-    return parseIgComments(json, typeof me?.username === 'string' ? me.username : null)
+    const got = parseIgComments(json, typeof me?.username === 'string' ? me.username : null)
+    // the ones hidden from here: Instagram no longer lists them, we still do — marked Hidden, with Show
+    const kept = await table<MdAppHiddenComment>('md_app_hidden_comments').list({ by: { client_id: clientId, post_id: postId }, fresh: true }).catch(() => [])
+    const extra = kept.map(k => k.comment as InboxComment).filter(c => c && typeof c.id === 'string' && !got.some(g => g.id === c.id)).map(c => ({ ...c, hidden: true }))
+    return [...got, ...extra]
   }
   const pid = need(page, 'Facebook Page')
   const pa = await pageAuth(auth, pid)
@@ -73,9 +79,18 @@ export async function commentAction(clientId: string, platform: 'instagram' | 'f
   if (platform === 'instagram') {
     need(ig, 'Instagram account')
     const ia = await igAuth(auth, page)
+    const keep = table<MdAppHiddenComment>('md_app_hidden_comments')
+    const keyId = `${clientId}__${commentId}`
     if (action === 'reply') await post(ia, `${commentId}/replies`, { message: text! })
-    else if (action === 'delete') await del(ia, commentId)
-    else await post(ia, commentId, { hide: String(action === 'hide') })
+    else if (action === 'delete') { await del(ia, commentId); await keep.remove(keyId).catch(() => {}) }
+    else if (action === 'hide') {
+      // copy it BEFORE hiding: afterwards Instagram stops listing it
+      const raw = await get(ia, commentId, { fields: 'id,text,username,timestamp,hidden,from{id,username},media{id},replies{id,text,username,timestamp}' })
+      await post(ia, commentId, { hide: 'true' })
+      const postId = typeof raw?.media?.id === 'string' ? raw.media.id : null
+      const [c] = parseIgComments({ data: [raw] }, null)
+      if (postId && c) await keep.claim(keyId, () => ({ id: keyId, client_id: clientId, post_id: postId, comment: { ...c, hidden: true }, hidden_at: new Date().toISOString() }))
+    } else { await post(ia, commentId, { hide: 'false' }); await keep.remove(keyId).catch(() => {}) }
     return
   }
   const pa = await pageAuth(auth, need(page, 'Facebook Page'))

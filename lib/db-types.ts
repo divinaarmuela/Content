@@ -75,6 +75,7 @@ export type TableName =
   | 'md_app_assets'
   | 'md_app_connections'
   | 'md_app_events'
+  | 'md_app_hidden_comments'
   | 'md_app_publishes'
   | 'meta_fb_events'
   | 'meta_fb_pages'
@@ -1289,6 +1290,14 @@ export interface MdAppEvent {
   received_at: string
 }
 
+export interface MdAppHiddenComment {
+  id: string
+  client_id: string
+  post_id: string
+  comment: unknown
+  hidden_at: string
+}
+
 export interface MdAppPublish {
   id: string
   client_id: string
@@ -2155,6 +2164,7 @@ export const TABLE_COLUMNS = {
   md_app_assets: ['id', 'client_id', 'kind', 'asset_id', 'name', 'picked', 'seen_at'],
   md_app_connections: ['id', 'client_id', 'business_id', 'token_encrypted', 'connected_by', 'connected_at', 'active', 'use_md_app', 'last_error'],
   md_app_events: ['id', 'object', 'account_id', 'client_id', 'field', 'payload', 'occurred_at', 'received_at'],
+  md_app_hidden_comments: ['id', 'client_id', 'post_id', 'comment', 'hidden_at'],
   md_app_publishes: ['id', 'client_id', 'network', 'account_id', 'request', 'container_id', 'sending_at', 'post_id', 'published_at', 'error', 'created_at'],
   meta_fb_events: ['id', 'page_id', 'client_id', 'kind', 'item', 'payload', 'occurred_at', 'received_at', 'delivery_id'],
   meta_fb_pages: ['id', 'client_id', 'page_id', 'name', 'category', 'picture', 'access_token_encrypted', 'tasks', 'connected_by', 'connected_at', 'active', 'last_error'],
@@ -2280,6 +2290,7 @@ export const NULLABLE_COLUMNS = {
   md_app_assets: ['name'],
   md_app_connections: ['business_id', 'connected_by', 'last_error'],
   md_app_events: ['client_id', 'occurred_at'],
+  md_app_hidden_comments: [],
   md_app_publishes: ['container_id', 'sending_at', 'post_id', 'published_at', 'error'],
   meta_fb_events: ['client_id', 'item', 'occurred_at', 'delivery_id'],
   meta_fb_pages: ['name', 'category', 'picture', 'connected_by', 'last_error'],
@@ -2412,6 +2423,7 @@ export const JSON_COLUMNS = {
   md_app_assets: [],
   md_app_connections: [],
   md_app_events: ['payload'],
+  md_app_hidden_comments: ['comment'],
   md_app_publishes: ['request'],
   meta_fb_events: ['payload'],
   meta_fb_pages: ['tasks'],
@@ -2543,6 +2555,7 @@ export const JSON_ARRAY_COLUMNS = {
   md_app_assets: [],
   md_app_connections: [],
   md_app_events: [],
+  md_app_hidden_comments: [],
   md_app_publishes: [],
   meta_fb_events: [],
   meta_fb_pages: ['tasks'],
