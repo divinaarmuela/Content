@@ -12,6 +12,22 @@ const body = (event: string, extra: Record<string, unknown> = {}) => ({
 })
 
 describe('calendly booking', () => {
+  it('stores the booking form answers: service, budget, the rest as notes', () => {
+    const b = parseBooking(body('invitee.created', { questions_and_answers: [
+      { question: 'Phone number', answer: '+61 423 262 136' },
+      { question: 'Which service are you after?', answer: 'Ongoing Marketing Services' },
+      { question: 'Tell me about your business', answer: 'Property' },
+      { question: "What's your #1 goal in the next 90 days?", answer: 'More leads' },
+      { question: 'What is your current monthly marketing budget?', answer: '$4,000 – $7,500/month' },
+      { question: 'How did you find MD Marketing?', answer: 'Instagram' },
+    ] }))!
+    expect(b.phone).toBe('+61 423 262 136')
+    const p = bookingPatch(b, null, 'now')
+    expect(p.model).toBe('Ongoing Marketing Services'); expect(p.budget).toBe('$4,000 – $7,500/month')
+    expect(p.need).toContain('More leads'); expect(p.need).toContain('Instagram'); expect(p.need).not.toContain('423')
+    const kept = bookingPatch(b, { model: 'Website', need: 'From the form' }, 'now')
+    expect(kept.model).toBeUndefined(); expect(kept.need).toContain('From the form'); expect(kept.need).toContain('More leads')
+  })
   it('parses a booking: lowercased email, split name, phone from answers', () => {
     const b = parseBooking(body('invitee.created'))!
     expect(b).toMatchObject({ kind: 'booked', email: 'jo@example.com', fname: 'Jo', lname: 'Bloggs Smith', phone: '0412 345 678', event: 'Discovery call' })

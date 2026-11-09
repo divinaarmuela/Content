@@ -30,6 +30,10 @@ export type Booking = {
   event: string | null
   startsAt: string | null
   utm: Utm
+  /** the booking form's answers: "Which service" → service, the budget question → budget, the rest → notes */
+  service: string | null
+  budget: string | null
+  notes: string | null
 }
 
 const str = (v: unknown, max = 300): string | null => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : null)
@@ -75,7 +79,18 @@ export function parseBooking(json: unknown): Booking | null {
   }
   const ev = (p.scheduled_event ?? {}) as Record<string, any>
   const tr = (p.tracking ?? {}) as Record<string, any>
+  const qa: any[] = Array.isArray(p.questions_and_answers) ? p.questions_and_answers : []
+  let service: string | null = null; let budget: string | null = null; const rest: string[] = []
+  for (const q of qa) {
+    const question = str(q?.question, 300); const answer = str(q?.answer, 2000)
+    if (!question || !answer) continue
+    if (/phone|mobile/i.test(question)) continue
+    if (!service && /service/i.test(question)) { service = answer.slice(0, 300); continue }
+    if (!budget && /budget/i.test(question)) { budget = answer.slice(0, 300); continue }
+    rest.push(`${question}\n${answer}`)
+  }
   return {
+    service, budget, notes: rest.length ? rest.join('\n\n').slice(0, 8000) : null,
     kind, inviteeUri, email, fname, lname, phone: phoneFrom(p),
     event: str(ev.name, 200), startsAt: str(ev.start_time, 40),
     utm: { source: str(tr.utm_source, 200), medium: str(tr.utm_medium, 200), campaign: str(tr.utm_campaign, 200), term: str(tr.utm_term, 200), content: str(tr.utm_content, 200) },
@@ -108,7 +123,7 @@ export function leadStatus(l: { booking_status?: string | null; stage?: string |
   return stageLabel(l.stage)
 }
 
-type Existing = { fname?: string | null; lname?: string | null; phone?: string | null; stage?: string | null; source?: string | null; ad_campaign?: string | null }
+type Existing = { model?: string | null; budget?: string | null; need?: string | null; fname?: string | null; lname?: string | null; phone?: string | null; stage?: string | null; source?: string | null; ad_campaign?: string | null }
 
 /** the lead fields a booking writes. Existing name/phone are kept unless empty; status always follows the booking. */
 export function bookingPatch(b: Booking, existing: Existing | null, nowIso: string): Record<string, unknown> {
@@ -117,6 +132,10 @@ export function bookingPatch(b: Booking, existing: Existing | null, nowIso: stri
     fname: existing?.fname || b.fname, lname: existing?.lname || b.lname, phone: existing?.phone || b.phone,
   }
   if (b.event) patch.booking_event = b.event
+  // what they typed into the booking form; a form lead's own answers are never overwritten
+  if (b.service && !existing?.model) patch.model = b.service
+  if (b.budget && !existing?.budget) patch.budget = b.budget
+  if (b.notes) patch.need = existing?.need ? (existing.need.includes(b.notes) ? existing.need : `${existing.need}\n\nFrom the Calendly booking:\n${b.notes}`) : b.notes
   if (b.kind === 'booked') {
     patch.call_at = b.startsAt
     if (!existing?.stage || existing.stage === 'new') { patch.stage = 'qualified'; patch.stage_entered_at = nowIso }
