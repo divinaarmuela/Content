@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 
@@ -38,14 +38,19 @@ export default function MdAppAds({ clientId }: { clientId: string }) {
 
   const account = status && !('loadError' in status) ? status.connection?.ad_account_id ?? null : null
 
+  // Only the answer for the month on screen is shown (9 Nov 2026): the tab opens on last month and then switches to the
+  // latest month with spend, and a late answer for the first month used to overwrite the second with zeros.
+  const latestAsk = useRef(0)
   const loadResults = useCallback(async () => {
+    const ask = ++latestAsk.current
     if (!account) { setResults(null); return }
     setResults(null)
     try {
       const res = await fetch(`/api/meta/md-app/ads?clientId=${encodeURIComponent(clientId)}&month=${month}`)
       const json = await res.json().catch(() => ({}))
+      if (ask !== latestAsk.current) return
       setResults(res.ok ? json as Results : { error: (json as { error?: string }).error ?? 'Could not read the results' })
-    } catch { setResults({ error: 'Could not reach the server' }) }
+    } catch { if (ask === latestAsk.current) setResults({ error: 'Could not reach the server' }) }
   }, [clientId, month, account])
 
   useEffect(() => { void loadStatus() }, [loadStatus])
