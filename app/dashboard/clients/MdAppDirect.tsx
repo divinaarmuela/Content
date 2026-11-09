@@ -11,8 +11,6 @@ import MdAppPublish from './MdAppPublish'
 import MdAppInsights from './MdAppInsights'
 import MdAppLeads from './MdAppLeads'
 import MdAppLive from './MdAppLive'
-import { useUser } from '@clerk/nextjs'
-import { isReviewer } from '@/app/lib/reviewer-lock-core'
 
 /**
  * "Direct via MD App (testing)" (6 Nov 2026) — super admins only. MD App is Meta's new app with Unified Login;
@@ -35,8 +33,6 @@ export default function MdAppDirect({ clientId }: { clientId: string }) {
   const superAdmin = can('super_admin')
   // the card: account managers (on their own client — the API checks) and up; tests, the switch and disconnect: super admin
   const mayConnect = can('account_manager')
-  // Meta's reviewer sees the connected card but no Connect button (9 Nov 2026); the route refuses it too
-  const reviewer = isReviewer(useUser().user?.id)
   const [state, setState] = useState<State | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [results, setResults] = useState<Record<string, { ok: boolean; text: string }>>({})
@@ -102,9 +98,9 @@ export default function MdAppDirect({ clientId }: { clientId: string }) {
           <>
             {!state.configured && <p className="text-sm text-destructive">{state.reason}</p>}
             <div className="flex flex-wrap items-center gap-2">
-              {!reviewer && <Button asChild size="sm" disabled={!state.configured}>
+              <Button asChild size="sm" disabled={!state.configured}>
                 <a href={`/api/meta/md-app/connect?clientId=${encodeURIComponent(clientId)}`}>{state.connection ? 'Connect again' : 'Connect with Facebook / Instagram'}</a>
-              </Button>}
+              </Button>
               {state.connection && superAdmin && (
                 <Button size="sm" variant="outline" disabled={!!busy} onClick={() => { if (confirm('Disconnect Meta from this client?')) void act('disconnect', { action: 'disconnect' }, 'Disconnected') }}>Disconnect</Button>
               )}

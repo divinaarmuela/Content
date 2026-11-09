@@ -29,3 +29,10 @@ describe('MD App Leads — reading Meta (9 Nov 2026)', () => {
     expect(fieldLabel('preferred_contact_method')).toBe('Preferred contact method')
   })
 })
+
+describe('archived forms are left out (9 Nov 2026)', () => {
+  it('keeps active forms only', async () => {
+    const { parseLeadForms } = await import('../app/lib/md-app-leads-core')
+    expect(parseLeadForms({ data: [{ id: '1', name: 'Table booking', status: 'ACTIVE' }, { id: '2', name: 'Book a table', status: 'ARCHIVED' }] }).map(f => f.id)).toEqual(['1'])
+  })
+})

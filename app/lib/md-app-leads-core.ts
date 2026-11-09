@@ -15,8 +15,9 @@ export type Lead = {
 const str = (v: unknown): string | null => (typeof v === 'string' && v ? v : null)
 const arr = (v: unknown): any[] => (Array.isArray(v) ? v : Array.isArray((v as any)?.data) ? (v as any).data : [])
 
+/** An archived form is left out (9 Nov 2026): it takes no new leads and only confuses the list. */
 export function parseLeadForms(json: unknown): LeadForm[] {
-  return arr(json).filter(r => str(r?.id)).map(r => ({
+  return arr(json).filter(r => str(r?.id) && r.status !== 'ARCHIVED' && r.status !== 'DELETED').map(r => ({
     id: r.id, name: str(r.name) ?? 'Untitled form', status: str(r.status) ?? 'UNKNOWN',
     leads: Number.isFinite(Number(r.leads_count)) ? Number(r.leads_count) : null, created: str(r.created_time),
   }))

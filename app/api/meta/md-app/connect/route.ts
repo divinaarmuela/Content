@@ -4,7 +4,6 @@ import { table } from '@/lib/db'
 import { mdAppReady } from '@/app/lib/md-app'
 import { mdAppDialogUrl, signMdAppState } from '@/app/lib/md-app-core'
 import { accessibleClientIds } from '@/app/lib/production-access'
-import { isReviewer } from '@/app/lib/reviewer-lock-core'
 
 /** the client must be one this person works on — the same rule as the Instagram / Facebook connects */
 async function assertMine(user: Parameters<typeof accessibleClientIds>[0], clientId: string) {
@@ -26,8 +25,8 @@ export async function GET(req: NextRequest) {
   try {
     const me = await requireRole('account_manager')
     userId = me.id
-    // Meta's reviewer watches the login in the screencast; pressing Connect would only replace the test client's working connection (9 Nov 2026)
-    if (isReviewer(me.clerk_user_id)) throw new AuthzError('The test client is already connected. The login is shown in the screencast.', 403)
+    // Meta's reviewer MAY press Connect with Meta's own test accounts (App Review guide: "We will test your app using our
+    // own test accounts") — so the reviewer login is allowed to connect, on the test client only (assertMine). 9 Nov 2026.
     if (clientId) await assertMine(me, clientId)
   } catch (e) {
     const { error, status } = authzErrorResponse(e)
