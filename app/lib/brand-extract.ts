@@ -1,5 +1,5 @@
 import 'server-only'
-import Anthropic, { toFile } from '@anthropic-ai/sdk'
+import { gateway, generateObject, jsonSchema } from 'ai'
 import { PDFDocument } from 'pdf-lib'
 import { mergeProfiles, planChunks, type BrandProfile } from './brand-core'
 
@@ -21,7 +21,13 @@ export type { BrandProfile } from './brand-core'
  * document. Everything downstream reads the stored JSON, never the PDF.
  */
 
-const FILES_BETA = ['files-api-2025-04-14']
+/**
+ * WHICH AI READS BRAND DOCUMENTS (the owner, 9 Nov 2026: "move the brand scanner to the Vercel AI Gateway… I don't want
+ * to use Anthropic for this"). The PDF is sent inside the request through Vercel's AI Gateway (AI_GATEWAY_API_KEY), to
+ * Gemini 3 Flash by default — it reads PDFs natively and returns the profile as structured output. Overridable with
+ * BRAND_SCAN_MODEL (any gateway model tagged file-input + structured-output, e.g. alibaba/qwen3.7-plus).
+ */
+const brandModel = () => process.env.BRAND_SCAN_MODEL?.trim() || 'google/gemini-3-flash'
 const MAX_PAGES_PER_REQUEST = 100
 
 const PROFILE_SCHEMA = {
@@ -110,48 +116,31 @@ async function splitByPages(bytes: Buffer, pageCount: number): Promise<Buffer[]>
   return out
 }
 
-/** Upload once, read once, delete. The uploaded copy is scratch: the document
- *  itself already lives in our own storage. */
+/** One part of the document, read in one request through the AI Gateway (no upload, nothing left behind). */
 async function scanOnePart(
-  anthropic: Anthropic, part: Buffer, name: string, previous: BrandProfile | null,
+  part: Buffer, previous: BrandProfile | null,
   prompt: string = PROMPT,
 ): Promise<BrandProfile> {
-  const uploaded = await anthropic.beta.files.upload({
-    file: await toFile(part, name, { type: 'application/pdf' }),
-    betas: FILES_BETA,
+  const mergeNote = previous && Object.keys(previous).length > 0
+    ? `
+
+The profile from earlier pages follows; report what these pages add or correct.
+${JSON.stringify(previous)}`
+    : ''
+  const { object } = await generateObject({
+    model: gateway(brandModel()),
+    schema: jsonSchema<BrandProfile>(PROFILE_SCHEMA as never),
+    schemaName: 'record_brand_profile',
+    schemaDescription: 'Record the structured brand profile extracted from the document',
+    messages: [{
+      role: 'user',
+      content: [
+        { type: 'file', data: new Uint8Array(part), mediaType: 'application/pdf' },
+        { type: 'text', text: prompt + mergeNote },
+      ],
+    }],
   })
-
-  try {
-    const mergeNote = previous && Object.keys(previous).length > 0
-      ? `\n\nThe profile from earlier pages follows; report what these pages add or correct.\n${JSON.stringify(previous)}`
-      : ''
-
-    const res = await anthropic.beta.messages.create({
-      model: 'claude-haiku-4-5',
-      max_tokens: 4096,
-      betas: FILES_BETA,
-      tools: [{
-        name: 'record_brand_profile',
-        description: 'Record the structured brand profile extracted from the document',
-        input_schema: PROFILE_SCHEMA,
-      }],
-      tool_choice: { type: 'tool', name: 'record_brand_profile' },
-      messages: [{
-        role: 'user',
-        content: [
-          { type: 'document', source: { type: 'file', file_id: uploaded.id } },
-          { type: 'text', text: prompt + mergeNote },
-        ],
-      }],
-    })
-
-    const tool = res.content.find(b => b.type === 'tool_use')
-    return tool && tool.type === 'tool_use' ? (tool.input as BrandProfile) : {}
-  } finally {
-    // never leave scratch files behind on the account
-    await anthropic.beta.files.delete(uploaded.id, { betas: FILES_BETA })
-      .catch(e => console.error('brand scratch file delete failed:', e))
-  }
+  return (object ?? {}) as BrandProfile
 }
 
 /** Laser-focused second pass for when the main extraction comes back with no
@@ -177,15 +166,12 @@ export async function extractBrandProfile(
   previous: BrandProfile | null,
   onProgress?: (done: number, total: number) => void | Promise<void>,
 ): Promise<BrandProfile> {
-  const anthropic = new Anthropic()
   const pages = await pdfPageCount(bytes)
   const parts = await splitByPages(bytes, pages)
 
   let profile: BrandProfile | null = previous
   for (let i = 0; i < parts.length; i++) {
-    const extracted = await scanOnePart(
-      anthropic, parts[i], `brand-${i + 1}.pdf`, profile,
-    )
+    const extracted = await scanOnePart(parts[i], profile)
     profile = mergeProfiles(profile, extracted)
     await onProgress?.(i + 1, parts.length)
   }
@@ -198,7 +184,7 @@ export async function extractBrandProfile(
   const noFonts = (profile?.fonts?.length ?? 0) === 0
   if ((noColours || noFonts) && parts.length > 0) {
     try {
-      const palette = await scanOnePart(anthropic, parts[0], 'brand-palette.pdf', profile, PALETTE_PROMPT)
+      const palette = await scanOnePart(parts[0], profile, PALETTE_PROMPT)
       profile = mergeProfiles(profile, palette)
     } catch (e) {
       console.error('brand palette fallback pass failed:', e)
