@@ -30,7 +30,8 @@ export function reviewerVerdict(path: string, search = ''): ReviewerVerdict {
     if (p.includes(REVIEWER_CLIENT_ID) || search.includes(REVIEWER_CLIENT_ID)) return 'allow'
     return 'refuse'
   }
-  if (p === `/dashboard/clients/${REVIEWER_CLIENT_ID}` || p.startsWith(`/dashboard/clients/${REVIEWER_CLIENT_ID}/`)) return 'allow'
+  // ONLY the test client's Social page (9 Nov 2026): its other tabs (Credentials, Contacts, Notes…) are not part of the review
+  if (p === REVIEWER_HOME) return 'allow'
   if (p === '/dashboard' || p.startsWith('/dashboard/')) return 'home'
   return 'allow' // the public site, sign-in and the legal pages
 }

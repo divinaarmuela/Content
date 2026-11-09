@@ -4,6 +4,7 @@ import Link from 'next/link'
 import GlobalSearch from './GlobalSearch'
 import { useMemo, useState, type CSSProperties } from 'react'
 import { UserButton, useUser } from '@clerk/nextjs'
+import { isReviewer } from '@/app/lib/reviewer-lock-core'
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/sheet'
 import {
   LayoutGrid, Inbox, Users, Globe, Kanban, Activity, Camera, CalendarCheck,
@@ -386,6 +387,8 @@ export default function Shell({
   // `allowed` is false for every account but the one address, and the API
   // refuses regardless of what is rendered here
   const actAs = useActAs()
+  // Meta's reviewer (9 Nov 2026): no sidebar links, search or notifications — one page, the test client's Social tab
+  const reviewer = isReviewer(useUser().user?.id)
 
   return (
     // `--dbx-chrome` is what the header and <main>'s own padding take out of
@@ -403,10 +406,10 @@ export default function Shell({
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-[232px] flex-col bg-ink text-cream md:flex dark:bg-surface">
         <SidebarHeader />
         <div className="min-h-0 flex-1 overflow-y-auto">
-          <NavLinks nav={nav} part="groups" />
+          {!reviewer && <NavLinks nav={nav} part="groups" />}
         </div>
         <div className="shrink-0 border-t border-cream/10 pb-2 pt-2">
-          <NavLinks nav={nav} part="pinned" />
+          {!reviewer && <NavLinks nav={nav} part="pinned" />}
           <a
             href="https://www.mdmmarketing.com.au"
             target="_blank"
@@ -445,10 +448,10 @@ export default function Shell({
               <SheetTitle className="sr-only">Navigation</SheetTitle>
               <SidebarHeader />
               <div className="min-h-0 flex-1 overflow-y-auto">
-                <NavLinks nav={nav} part="groups" onNavigate={() => setMobileOpen(false)} />
+                {!reviewer && <NavLinks nav={nav} part="groups" onNavigate={() => setMobileOpen(false)} />}
               </div>
               <div className="shrink-0 border-t border-cream/10 py-2">
-                <NavLinks nav={nav} part="pinned" onNavigate={() => setMobileOpen(false)} />
+                {!reviewer && <NavLinks nav={nav} part="pinned" onNavigate={() => setMobileOpen(false)} />}
               </div>
             </SheetContent>
           </Sheet>
@@ -457,7 +460,7 @@ export default function Shell({
               per-page titles land. */}
           <h1 className="shrink-0 text-[15px] font-semibold tracking-tight md:hidden">{pageTitle(path)}</h1>
 
-          <GlobalSearch />
+          {!reviewer && <GlobalSearch />}
 
           <div className="ml-auto flex items-center gap-2">
             {/* Beta: this is in daily use while still being built, so the state
@@ -492,7 +495,7 @@ export default function Shell({
                 onPick={id => void actAs.start(id)}
               />
             )}
-            <NotificationBell />
+            {!reviewer && <NotificationBell />}
             <AvatarPill />
           </div>
         </header>

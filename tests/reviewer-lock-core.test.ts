@@ -10,7 +10,8 @@ describe('the Meta reviewer login sees only the test client (9 Nov 2026)', () =>
   })
   it('opens the test client pages', () => {
     expect(reviewerVerdict(`/dashboard/clients/${T}/social`)).toBe('allow')
-    expect(reviewerVerdict(`/dashboard/clients/${T}`)).toBe('allow')
+    expect(reviewerVerdict(`/dashboard/clients/${T}`)).toBe('home')
+    expect(reviewerVerdict(`/dashboard/clients/${T}/credentials`)).toBe('home')
   })
   it('sends every other dashboard page to the test client', () => {
     for (const p of ['/dashboard', '/dashboard/', '/dashboard/leads', '/dashboard/clients', '/dashboard/clients/other-id/social', '/dashboard/reports', '/dashboard/social/content-tracker'])

@@ -12,6 +12,8 @@ import {
   ArrowLeft, CalendarDays, ChevronRight, ClipboardList, Copy, KeyRound, MessageSquare, Palette, FileText, Share2, Users } from 'lucide-react'
 import { publicUrl } from '@/app/lib/public-url'
 import { useRole } from '../../useRole'
+import { useUser } from '@clerk/nextjs'
+import { isReviewer } from '@/app/lib/reviewer-lock-core'
 import { canSeeSubpage } from '@/app/lib/page-access-core'
 import PageTitle from '../../ui/PageTitle'
 
@@ -38,6 +40,7 @@ const STATUS: Record<string, string> = {
 
 export default function ClientLayout({ children }: { children: React.ReactNode }) {
   const params = useParams<{ id: string }>()
+  const reviewer = isReviewer(useUser().user?.id)
   const clientId = params.id
   const path = usePathname()
   const { role } = useRole()
@@ -96,7 +99,8 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
     { key: '/dashboard/clients/:id/monthly', href: `${base}/monthly`, label: 'Monthly', icon: CalendarDays },
     { key: '/dashboard/clients/:id/credentials', href: `${base}/credentials`, label: 'Credentials', icon: KeyRound },
   ]
-  const TABS = ALL_TABS.filter(t => t.key === null || canSeeSubpage(role, t.key, granted))
+  // Meta's reviewer sees the Social tab only (9 Nov 2026); middleware sends any other tab back to it
+  const TABS = reviewer ? ALL_TABS.filter(t => t.label === 'Social') : ALL_TABS.filter(t => t.key === null || canSeeSubpage(role, t.key, granted))
 
   const portalUrl = client?.share_token ? publicUrl(`/portal/${client.share_token}`) : null
 
@@ -104,21 +108,21 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
     <div className="flex flex-col gap-5">
       {/* ── header ── */}
       <div>
-        <Button variant="ghost" size="sm" asChild className="-ml-2 mb-2">
+        {!reviewer && <Button variant="ghost" size="sm" asChild className="-ml-2 mb-2">
           <Link href="/dashboard/clients">
             <ArrowLeft className="h-4 w-4" /> All clients
           </Link>
-        </Button>
+        </Button>}
 
         {client ? (
           <PageTitle
             title={client.name}
-            summary={`${client.industry || 'No industry set'} · /${client.slug}`}
+            summary={reviewer ? (client.industry || '') : `${client.industry || 'No industry set'} · /${client.slug}`}
             actions={<>
               <Badge variant="outline" className={`${STATUS[client.status] ?? STATUS.archived} capitalize`}>
                 {client.status}
               </Badge>
-              {portalUrl && (
+              {portalUrl && !reviewer && (
                 <Button variant="outline" size="sm"
                   onClick={() => { navigator.clipboard.writeText(portalUrl); toast.success('Portal link copied') }}>
                   <Copy className="h-3.5 w-3.5" /> Portal link
