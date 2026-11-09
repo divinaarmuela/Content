@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { useRole } from '../useRole'
 import MdAppAds from './MdAppAds'
+import MdAppInbox from './MdAppInbox'
 import { useUser } from '@clerk/nextjs'
 import { isReviewer } from '@/app/lib/reviewer-lock-core'
 
@@ -35,6 +36,8 @@ export default function MdAppDirect({ clientId }: { clientId: string }) {
   const [state, setState] = useState<State | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [results, setResults] = useState<Record<string, { ok: boolean; text: string }>>({})
+  // the card's tabs (9 Nov 2026): each is a real screen Meta's App Review watches
+  const [tab, setTab] = useState<'inbox' | 'ads'>('inbox')
 
   const load = useCallback(async () => {
     try {
@@ -134,7 +137,18 @@ export default function MdAppDirect({ clientId }: { clientId: string }) {
                   )}
                 </div>}
 
-                <MdAppAds clientId={clientId} />
+                <div className="space-y-3">
+                  <div role="tablist" className="flex gap-1 border-b border-border">
+                    {([['inbox', 'Inbox'], ['ads', 'Ads']] as const).map(([k, label]) => (
+                      <button key={k} role="tab" aria-selected={tab === k} type="button" onClick={() => setTab(k)}
+                        className={`-mb-px min-h-11 border-b-2 px-4 text-[14px] font-medium transition-colors ${tab === k ? 'border-foreground text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                  {tab === 'inbox' && <MdAppInbox clientId={clientId} />}
+                  {tab === 'ads' && <MdAppAds clientId={clientId} />}
+                </div>
 
                 {superAdmin && <details className="rounded-md border border-border p-3 text-sm">
                   <summary className="cursor-pointer text-muted-foreground">Connection details</summary>

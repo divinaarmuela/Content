@@ -1,0 +1,98 @@
+import 'server-only'
+import { MdAppError, authFor, mdGraph } from './md-app'
+import {
+  parseIgComments, parseIgPosts, parsePageComments, parsePagePosts, parseThreads, withProfile,
+  type InboxComment, type InboxPost, type InboxThread,
+} from './md-app-inbox-core'
+
+/**
+ * MD APP INBOX — the I/O half (9 Nov 2026). Pure shapes: md-app-inbox-core.ts. Every call uses the client's own
+ * connection (authFor) and the accounts ticked for the client, so nothing outside the client's Page and Instagram
+ * account can be read or changed. No token is logged or returned.
+ */
+
+const { get, post, postJson, del, pageAuth, pickedOf } = mdGraph
+const MSG_FIELDS = 'id,updated_time,participants,messages.limit(25){id,created_time,from,to,message}'
+
+async function ctx(clientId: string) {
+  const { auth, picked } = await authFor(clientId)
+  const ig = picked.some(r => r.kind === 'instagram') ? pickedOf(picked, 'instagram') : null
+  const page = picked.some(r => r.kind === 'page') ? pickedOf(picked, 'page') : null
+  return { auth, ig, page }
+}
+const need = <T>(v: T | null, what: string): T => { if (!v) throw new MdAppError(`Tick this client's ${what} first.`, 409); return v }
+
+/** Both platforms' recent posts with their comment counts — the left column of the Comments view. */
+export async function inboxPosts(clientId: string): Promise<{ instagram: InboxPost[]; facebook: InboxPost[]; igUsername: string | null; pageName: string | null }> {
+  const { auth, ig, page } = await ctx(clientId)
+  const [igMedia, igMe, pa] = await Promise.all([
+    ig ? get(auth, `${ig}/media`, { fields: 'id,caption,timestamp,permalink,comments_count,media_type,media_url,thumbnail_url', limit: 12 }) : null,
+    ig ? get(auth, ig, { fields: 'username' }).catch(() => null) : null,
+    page ? pageAuth(auth, page) : null,
+  ])
+  const [feed, pageMe] = pa && page ? await Promise.all([
+    get(pa, `${page}/posts`, { fields: 'id,message,created_time,permalink_url,full_picture,comments.summary(true).limit(0)', limit: 12 }),
+    get(pa, page, { fields: 'name' }).catch(() => null),
+  ]) : [null, null]
+  return {
+    instagram: igMedia ? parseIgPosts(igMedia) : [], facebook: feed ? parsePagePosts(feed) : [],
+    igUsername: typeof igMe?.username === 'string' ? igMe.username : null, pageName: typeof pageMe?.name === 'string' ? pageMe.name : null,
+  }
+}
+
+export async function inboxComments(clientId: string, platform: 'instagram' | 'facebook', postId: string): Promise<InboxComment[]> {
+  const { auth, ig, page } = await ctx(clientId)
+  if (platform === 'instagram') {
+    const id = need(ig, 'Instagram account')
+    const [json, me] = await Promise.all([
+      get(auth, `${postId}/comments`, { fields: 'id,text,username,timestamp,hidden,from{id,username},replies{id,text,username,timestamp}', limit: 50 }),
+      get(auth, id, { fields: 'username' }).catch(() => null),
+    ])
+    return parseIgComments(json, typeof me?.username === 'string' ? me.username : null)
+  }
+  const pid = need(page, 'Facebook Page')
+  const pa = await pageAuth(auth, pid)
+  // from{picture}: the commenter's name and picture — Business Asset User Profile Access
+  const json = await get(pa, `${postId}/comments`, { fields: 'id,message,created_time,is_hidden,from{id,name,picture},comments{id,message,created_time,from{id,name}}', filter: 'toplevel', limit: 50 })
+  return parsePageComments(json, pid)
+}
+
+export async function commentAction(clientId: string, platform: 'instagram' | 'facebook', action: 'reply' | 'hide' | 'unhide' | 'delete', commentId: string, text?: string): Promise<void> {
+  const { auth, ig, page } = await ctx(clientId)
+  if (platform === 'instagram') {
+    need(ig, 'Instagram account')
+    if (action === 'reply') await post(auth, `${commentId}/replies`, { message: text! })
+    else if (action === 'delete') await del(auth, commentId)
+    else await post(auth, commentId, { hide: String(action === 'hide') })
+    return
+  }
+  const pa = await pageAuth(auth, need(page, 'Facebook Page'))
+  if (action === 'reply') await post(pa, `${commentId}/comments`, { message: text! })
+  else if (action === 'delete') await del(pa, commentId)
+  else await post(pa, commentId, { is_hidden: String(action === 'hide') })
+}
+
+/** Instagram DMs and Messenger conversations, each with the person's name and picture. */
+export async function inboxThreads(clientId: string, platform: 'instagram' | 'facebook'): Promise<InboxThread[]> {
+  const { auth, ig, page } = await ctx(clientId)
+  if (platform === 'instagram') {
+    const id = need(ig, 'Instagram account')
+    const threads = parseThreads(await get(auth, `${id}/conversations`, { platform: 'instagram', fields: MSG_FIELDS, limit: 20 }), id)
+    return Promise.all(threads.map(async t => t.withId
+      ? withProfile(t, await get(auth, t.withId, { fields: 'name,username,profile_pic' }).catch(() => null)) : t))
+  }
+  const pid = need(page, 'Facebook Page')
+  const pa = await pageAuth(auth, pid)
+  const threads = parseThreads(await get(pa, `${pid}/conversations`, { platform: 'messenger', fields: MSG_FIELDS, limit: 20 }), pid)
+  return Promise.all(threads.map(async t => t.withId
+    ? withProfile(t, await get(pa, t.withId, { fields: 'name,profile_pic' }).catch(() => null)) : t))
+}
+
+/** A standard reply inside the 24-hour window (RESPONSE). No message tags: those are not for this. */
+export async function sendMessage(clientId: string, platform: 'instagram' | 'facebook', to: string, text: string): Promise<void> {
+  const { auth, ig, page } = await ctx(clientId)
+  const body = { recipient: { id: to }, message: { text }, messaging_type: 'RESPONSE' }
+  if (platform === 'instagram') { await postJson(auth, `${need(ig, 'Instagram account')}/messages`, body); return }
+  const pid = need(page, 'Facebook Page')
+  await postJson(await pageAuth(auth, pid), `${pid}/messages`, body)
+}

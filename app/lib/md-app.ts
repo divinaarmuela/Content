@@ -241,6 +241,9 @@ async function pageAuth(a: Auth, pageId: string): Promise<Auth> {
   return { token: j.access_token, appSecret: a.appSecret }
 }
 
+/** For the Meta card's tabs (md-app-inbox.ts, 9 Nov 2026): the same signed Graph calls, the client's picked accounts, a Page token. */
+export const mdGraph = { get, post, postJson, del, pageAuth, pickedOf }
+
 /* ── Instagram ────────────────────────────────────────────────────────── */
 
 export const igApi = {
