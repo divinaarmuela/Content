@@ -28,6 +28,12 @@ describe('calendly booking', () => {
     const kept = bookingPatch(b, { model: 'Website', need: 'From the form' }, 'now')
     expect(kept.model).toBeUndefined(); expect(kept.need).toContain('From the form'); expect(kept.need).toContain('More leads')
   })
+  it('reads the phone from a phone-call location when no question holds it', () => {
+    const b = parseBooking(body('invitee.created', { questions_and_answers: [], scheduled_event: { name: 'Inquiry call', start_time: 'x', location: { type: 'outbound_call', location: '+61 423 262 136' } } }))!
+    expect(b.phone).toBe('+61 423 262 136')
+    const z = parseBooking(body('invitee.created', { questions_and_answers: [], scheduled_event: { name: 'Zoom', location: { type: 'zoom', location: 'https://zoom.us/j/1' } } }))!
+    expect(z.phone).toBeNull()
+  })
   it('parses a booking: lowercased email, split name, phone from answers', () => {
     const b = parseBooking(body('invitee.created'))!
     expect(b).toMatchObject({ kind: 'booked', email: 'jo@example.com', fname: 'Jo', lname: 'Bloggs Smith', phone: '0412 345 678', event: 'Discovery call' })

@@ -1,5 +1,6 @@
 import 'server-only'
-import { table, encodeKey } from '@/lib/db'
+import { createHash } from 'node:crypto'
+import { table } from '@/lib/db'
 import type { Lead } from '@/lib/db-types'
 import { bookingPatch, signingKey, type Booking } from './calendly-core'
 
@@ -57,7 +58,8 @@ export async function applyBooking(b: Booking, now = new Date()): Promise<{ id: 
     await leads.update(found.id, bookingPatch(b, found, now.toISOString()) as Partial<Lead>)
     return { id: found.id, created: false }
   }
-  const id = `cal_${encodeKey(b.email)}`
+  // plain letters and digits only — an id with `@`/`%` in it broke the lead's page URL (9 Nov 2026)
+  const id = `cal_${createHash('sha256').update(b.email).digest('hex').slice(0, 24)}`
   const res = await leads.claim(id, current => {
     const base = current ?? ({ id, created_at: now.toISOString(), email: b.email } as Lead)
     return { ...base, ...bookingPatch(b, current, now.toISOString()) } as Lead

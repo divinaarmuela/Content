@@ -59,6 +59,10 @@ export function verifySignature(header: string | null, body: string, key: string
 function phoneFrom(p: Record<string, any>): string | null {
   const direct = str(p.text_reminder_number, 40)
   if (direct) return direct
+  // a "phone call" event: the number the invitee typed is the call's location, not a question (live, 9 Nov 2026)
+  const loc = p.scheduled_event?.location
+  const where = str(loc?.location, 40)
+  if (where && (loc?.type === 'outbound_call' || loc?.type === 'inbound_call' || /^\+?[\d\s()-]{6,}$/.test(where))) return where
   const qa: any[] = Array.isArray(p.questions_and_answers) ? p.questions_and_answers : []
   const hit = qa.find(q => /phone|mobile|number|contact/i.test(String(q?.question ?? '')) && String(q?.answer ?? '').replace(/\D/g, '').length >= 6)
   return hit ? str(hit.answer, 40) : null
