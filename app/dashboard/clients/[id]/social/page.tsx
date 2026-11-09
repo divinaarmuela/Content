@@ -5,10 +5,16 @@ import InstagramLocations from '../../InstagramLocations'
 import ClientApproval from '../../ClientApproval'
 import MdAppDirect from '../../MdAppDirect'
 import { useRole } from '../../../useRole'
+import { useUser } from '@clerk/nextjs'
+import { isReviewer } from '@/app/lib/reviewer-lock-core'
 
 export default function ClientSocialPage() {
   const { id } = useParams<{ id: string }>()
   const { can } = useRole()
+  // Meta's reviewer sees the Meta card and nothing else (owner, 10 Nov 2026: hide the channels, approvals and places
+  // below it — they belong to our other posting tool and would only confuse the review)
+  const reviewer = isReviewer(useUser().user?.id)
+  if (reviewer) return <div className="flex flex-col gap-5"><MdAppDirect clientId={id} /></div>
   return (
     <div className="flex flex-col gap-5">
       {/* MD App, Meta's app with one login (6 Nov 2026) — first on the page (9 Nov 2026): it is what Meta's reviewer opens. */}
