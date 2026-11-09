@@ -14,7 +14,7 @@ export const REVIEWER_CLIENT_ID = '459e2564-1089-45ed-abd7-56d5f53c2cf6'
 export const REVIEWER_HOME = `/dashboard/clients/${REVIEWER_CLIENT_ID}/social`
 
 /** APIs the reviewer's pages call that hold no other client's data (who am I, which pages, the Meta card) */
-const OPEN_API = ['/api/meta/', '/api/team/me', '/api/team/page-access', '/api/team/getting-started']
+const OPEN_API = ['/api/meta/', '/api/website/upload', '/api/team/me', '/api/team/page-access', '/api/team/getting-started']
 
 export type ReviewerVerdict = 'allow' | 'home' | 'refuse'
 
