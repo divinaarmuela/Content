@@ -29,3 +29,9 @@ describe('form ad fields', () => {
     expect(adFieldsFromUtm('x')).toEqual({})
   })
 })
+
+describe('booked-from page', () => {
+  it('rides in salesforce_uuid even with no ad tags', () => {
+    expect(new URL(withUtm('https://calendly.com/x/y', {}, '/campaign-shoots')).searchParams.get('salesforce_uuid')).toBe('/campaign-shoots')
+  })
+})

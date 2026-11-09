@@ -83,3 +83,21 @@ describe('calendly booking', () => {
     expect(verifySignature(null, raw, key, now)).toBe(false)
   })
 })
+
+describe('status words by source', () => {
+  it('only the website form is New lead; the scanner says Emailed in', () => {
+    expect(leadStatus({ source: 'web_form', stage: null }, k => k)).toBe('New lead')
+    expect(leadStatus({ source: 'email_ingest', stage: null }, k => k)).toBe('Emailed in')
+    expect(sourceLabel('email_ingest')).toBe('Email')
+  })
+})
+
+import { pageLabel } from '@/app/lib/calendly-core'
+describe('booked from', () => {
+  it('reads the page back and names it plainly', () => {
+    const b = parseBooking({ event: 'invitee.created', payload: { uri: 'u', email: 'a@b.co', tracking: { salesforce_uuid: '/campaign-shoots' } } })!
+    expect(bookingPatch(b, null, 'now').booked_from).toBe('/campaign-shoots')
+    expect(pageLabel('/')).toBe('Home'); expect(pageLabel('/campaign-shoots')).toBe('Campaign shoots')
+    expect(parseBooking({ event: 'invitee.created', payload: { uri: 'u', email: 'a@b.co', tracking: { salesforce_uuid: 'abc' } } })!.page).toBeNull()
+  })
+})

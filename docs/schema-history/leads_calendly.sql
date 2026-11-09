@@ -10,3 +10,5 @@ alter table public.leads add column if not exists ad_campaign text;
 alter table public.leads add column if not exists ad_set text;
 alter table public.leads add column if not exists ad_name text;
 alter table public.leads add column if not exists ad_placement text;
+-- 9 Nov 2026, owner: "there is no specification which page they booked from". The site page the Book button was on.
+alter table public.leads add column if not exists booked_from text;

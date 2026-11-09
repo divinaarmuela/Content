@@ -27,7 +27,7 @@ export type LeadLike = {
   next_action?: string | null
 }
 
-export const LEADS_SUMMARY = 'Every enquiry through the website form and the mailboxes the scanner reads, newest first. Open one to answer it, bring it into acquisition or make it a client.'
+export const LEADS_SUMMARY = 'Every website form fill and Calendly booking, newest first. Click one to see everything about them.'
 
 /** the page's address */
 export const leadPath = (id: string) => `/dashboard/leads/${encodeURIComponent(id)}`

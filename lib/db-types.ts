@@ -1171,6 +1171,7 @@ export interface Lead {
   ad_set: string | null
   ad_name: string | null
   ad_placement: string | null
+  booked_from: string | null
   id: string
   created_at: string
   fname: string | null
@@ -2135,7 +2136,7 @@ export const TABLE_COLUMNS = {
   intake_templates: ['key', 'definition', 'updated_at', 'updated_by', 'id'],
   item_comments: ['id', 'created_at', 'item_id', 'parent_id', 'author_id', 'visibility', 'body', 'video_timestamp_sec', 'assigned_to', 'resolved', 'reactions', 'video_file_id', 'video_file_name'],
   journal_posts: ['id', 'created_at', 'updated_at', 'slug', 'title', 'standfirst', 'category', 'cover_url', 'read_mins', 'published_at', 'featured', 'sections', 'sort_order', 'published'],
-  leads: ['source', 'booking_status', 'booking_event', 'booking_uri', 'ad_campaign', 'ad_set', 'ad_name', 'ad_placement', 'id', 'created_at', 'fname', 'lname', 'email', 'phone', 'biz', 'model', 'need', 'budget', 'timeline', 'stage', 'stage_entered_at', 'owner_id', 'tier', 'source_tag', 'partner', 'next_action', 'next_action_at', 'qualifiers', 'exit_ticks', 'call_at', 'proposal_sent_at', 'walkthrough_at', 'signed_at', 'deposit_at', 'vs_delivered_at', 'objection', 'deal_value', 'not_now_at', 'reopen_at', 'touches', 'pipeline_notes'],
+  leads: ['source', 'booking_status', 'booking_event', 'booking_uri', 'ad_campaign', 'ad_set', 'ad_name', 'ad_placement', 'booked_from', 'id', 'created_at', 'fname', 'lname', 'email', 'phone', 'biz', 'model', 'need', 'budget', 'timeline', 'stage', 'stage_entered_at', 'owner_id', 'tier', 'source_tag', 'partner', 'next_action', 'next_action_at', 'qualifiers', 'exit_ticks', 'call_at', 'proposal_sent_at', 'walkthrough_at', 'signed_at', 'deposit_at', 'vs_delivered_at', 'objection', 'deal_value', 'not_now_at', 'reopen_at', 'touches', 'pipeline_notes'],
   linktree_connections: ['id', 'client_id', 'access_token_enc', 'refresh_token_enc', 'expires_at', 'profile_username', 'profile_url', 'profile_name', 'connected_by', 'connected_at', 'updated_at', 'last_error'],
   linktree_states: ['id', 'client_id', 'user_id', 'verifier_enc', 'used_at', 'created_at'],
   md_app_ads: ['id', 'client_id', 'token_encrypted', 'fb_user_name', 'granted', 'connected_by', 'connected_at', 'expires_at', 'ad_account_id', 'test_campaign_ids', 'all_accounts'],
@@ -2259,7 +2260,7 @@ export const NULLABLE_COLUMNS = {
   intake_templates: ['updated_by'],
   item_comments: ['parent_id', 'author_id', 'video_timestamp_sec', 'assigned_to', 'reactions', 'video_file_id', 'video_file_name'],
   journal_posts: ['published_at'],
-  leads: ['source', 'booking_status', 'booking_event', 'booking_uri', 'ad_campaign', 'ad_set', 'ad_name', 'ad_placement', 'fname', 'lname', 'email', 'phone', 'biz', 'model', 'need', 'budget', 'timeline', 'stage', 'stage_entered_at', 'owner_id', 'tier', 'source_tag', 'partner', 'next_action', 'next_action_at', 'qualifiers', 'exit_ticks', 'call_at', 'proposal_sent_at', 'walkthrough_at', 'signed_at', 'deposit_at', 'vs_delivered_at', 'objection', 'deal_value', 'not_now_at', 'reopen_at', 'touches', 'pipeline_notes'],
+  leads: ['source', 'booking_status', 'booking_event', 'booking_uri', 'ad_campaign', 'ad_set', 'ad_name', 'ad_placement', 'booked_from', 'fname', 'lname', 'email', 'phone', 'biz', 'model', 'need', 'budget', 'timeline', 'stage', 'stage_entered_at', 'owner_id', 'tier', 'source_tag', 'partner', 'next_action', 'next_action_at', 'qualifiers', 'exit_ticks', 'call_at', 'proposal_sent_at', 'walkthrough_at', 'signed_at', 'deposit_at', 'vs_delivered_at', 'objection', 'deal_value', 'not_now_at', 'reopen_at', 'touches', 'pipeline_notes'],
   linktree_connections: ['access_token_enc', 'refresh_token_enc', 'expires_at', 'profile_username', 'profile_url', 'profile_name', 'connected_by', 'connected_at', 'updated_at', 'last_error'],
   linktree_states: ['used_at'],
   md_app_ads: ['fb_user_name', 'granted', 'connected_by', 'expires_at', 'ad_account_id', 'test_campaign_ids', 'all_accounts'],

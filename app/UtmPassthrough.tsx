@@ -1,24 +1,22 @@
 'use client'
 
 import { useEffect } from 'react'
-import { utmFrom, withUtm, type Utm } from './lib/utm-core'
+import { utmFrom, withUtm, readStoredUtm, storeUtm } from './lib/utm-core'
 
-/** Keeps the ad's utm_* tags for the visit and puts them on any Calendly link clicked. See app/lib/utm-core.ts. */
-const KEY = 'mdm_utm'
-
-function stored(): Utm {
-  try { return JSON.parse(sessionStorage.getItem(KEY) || '{}') as Utm } catch { return {} }
-}
-
+/**
+ * Keeps the ad's utm_* tags and puts them on any Calendly link clicked. See app/lib/utm-core.ts.
+ * The tags leave the address bar on the next page — that is normal; they are remembered here (30 days, every tab,
+ * owner 9 Nov 2026: "when i go … to strategy consulting page params are gone") and added at the moment of the click.
+ */
 export default function UtmPassthrough() {
   useEffect(() => {
     const fresh = utmFrom(window.location.search)
-    if (Object.keys(fresh).length) { try { sessionStorage.setItem(KEY, JSON.stringify(fresh)) } catch {} }
+    if (Object.keys(fresh).length) storeUtm(fresh)
     const onClick = (e: MouseEvent) => {
       const a = (e.target as Element | null)?.closest?.('a[href*="calendly.com"]') as HTMLAnchorElement | null
       if (!a) return
-      const utm = { ...stored(), ...utmFrom(window.location.search) }
-      const next = withUtm(a.href, utm)
+      const utm = { ...readStoredUtm(), ...utmFrom(window.location.search) }
+      const next = withUtm(a.href, utm, window.location.pathname)
       if (next !== a.href) a.href = next
     }
     document.addEventListener('click', onClick, true)

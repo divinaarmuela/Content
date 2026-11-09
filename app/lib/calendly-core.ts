@@ -30,6 +30,8 @@ export type Booking = {
   event: string | null
   startsAt: string | null
   utm: Utm
+  /** the site page the Book button was on (utm-core PAGE_PARAM) */
+  page: string | null
   /** the booking form's answers: "Which service" → service, the budget question → budget, the rest → notes */
   service: string | null
   budget: string | null
@@ -94,6 +96,7 @@ export function parseBooking(json: unknown): Booking | null {
     rest.push(`${question}\n${answer}`)
   }
   return {
+    page: (() => { const v = str(tr.salesforce_uuid, 200); return v && v.startsWith('/') ? v : null })(),
     service, budget, notes: rest.length ? rest.join('\n\n').slice(0, 8000) : null,
     kind, inviteeUri, email, fname, lname, phone: phoneFrom(p),
     event: str(ev.name, 200), startsAt: str(ev.start_time, 40),
@@ -102,7 +105,7 @@ export function parseBooking(json: unknown): Booking | null {
 }
 
 const NAMED: Record<string, string> = {
-  web_form: 'Website form', website: 'Website', facebook: 'Facebook', fb: 'Facebook', instagram: 'Instagram', ig: 'Instagram',
+  web_form: 'Website form', website: 'Website', email_ingest: 'Email', facebook: 'Facebook', fb: 'Facebook', instagram: 'Instagram', ig: 'Instagram',
   msg: 'Messenger', an: 'Audience Network', google: 'Google', email: 'Email', 'lead-email': 'Email', tiktok: 'TikTok',
   linkedin: 'LinkedIn', calendly: 'Calendly', referral: 'Referral',
 }
@@ -114,15 +117,26 @@ export function sourceLabel(source: string | null | undefined, sourceTag?: strin
   return sourceTag ? `${base} · ${sourceTag}` : base
 }
 
+/** a page path in plain words: / → Home, /campaign-shoots → Campaign shoots */
+export function pageLabel(path: string | null | undefined): string | null {
+  if (!path) return null
+  if (path === '/') return 'Home'
+  const last = path.split('?')[0].split('/').filter(Boolean).pop() ?? ''
+  const w = last.split('-').join(' ')
+  return w ? w.charAt(0).toUpperCase() + w.slice(1) : path
+}
+
 /** Meta's placement codes in plain words (Facebook_Mobile_Feed → Facebook mobile feed) */
 export function placementLabel(p: string | null | undefined): string | null {
   return p ? p.split('_').join(' ').toLowerCase().replace(/^\w/, c => c.toUpperCase()) : null
 }
 
 /** what the Leads page Status chip says */
-export function leadStatus(l: { booking_status?: string | null; stage?: string | null }, stageLabel: (k: string) => string): string {
+export function leadStatus(l: { booking_status?: string | null; stage?: string | null; source?: string | null }, stageLabel: (k: string) => string): string {
   if (l.booking_status === 'cancelled') return 'Cancelled'
   if (l.booking_status === 'booked' && (!l.stage || l.stage === 'new' || l.stage === 'qualified')) return 'Call booked'
+  // "New lead" is the website form's word alone (owner, 9 Nov 2026); a lead the inbox scanner found says so
+  if ((!l.stage || l.stage === 'new') && l.source && l.source !== 'web_form') return l.source === 'email_ingest' || l.source === 'email' ? 'Emailed in' : 'New lead'
   if (!l.stage || l.stage === 'new') return 'New lead'
   return stageLabel(l.stage)
 }
@@ -136,6 +150,7 @@ export function bookingPatch(b: Booking, existing: Existing | null, nowIso: stri
     fname: existing?.fname || b.fname, lname: existing?.lname || b.lname, phone: existing?.phone || b.phone,
   }
   if (b.event) patch.booking_event = b.event
+  if (b.page) patch.booked_from = b.page
   // what they typed into the booking form; a form lead's own answers are never overwritten
   if (b.service && !existing?.model) patch.model = b.service
   if (b.budget && !existing?.budget) patch.budget = b.budget

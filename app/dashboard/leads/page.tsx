@@ -23,14 +23,13 @@ import {
 import {
   ArrowRight, ArrowUpDown, Copy, Download, Mail, MoreHorizontal, RefreshCw, Trash2, UserPlus,
 } from 'lucide-react'
-import ScanPanel from './ScanPanel'
 import Chip from '../ui/Chip'
 import { useRole } from '../useRole'
 import { LoadFailed } from '../NotSetUp'
 import PageTitle from '../ui/PageTitle'
 import { copyText } from '../../lib/copy-text-client'
 import { acqStageByKey } from '../../lib/acquisition-core'
-import { leadStatus, sourceLabel, placementLabel } from '../../lib/calendly-core'
+import { leadStatus, sourceLabel, placementLabel, pageLabel } from '../../lib/calendly-core'
 import { STAGES } from '../../lib/pipeline-core'
 import {
   LEADS_SUMMARY, leadBusiness, leadFromWords, leadName, leadPath, prospectForLead, prospectPagePath,
@@ -48,7 +47,7 @@ import {
 type Lead = LeadLike & {
   id: string; created_at: string
   booking_status?: string | null; booking_event?: string | null; call_at?: string | null; stage?: string | null; source_tag?: string | null
-  ad_campaign?: string | null; ad_set?: string | null; ad_name?: string | null; ad_placement?: string | null
+  booked_from?: string | null; ad_campaign?: string | null; ad_set?: string | null; ad_name?: string | null; ad_placement?: string | null
 }
 
 /** newest first, as the leads API always ordered them — module-level so the
@@ -56,7 +55,7 @@ type Lead = LeadLike & {
 const BY_NEWEST: ['created_at', 'desc'][] = [['created_at', 'desc']]
 
 /** 9 Nov 2026, owner: "redesign the column" + "put it in each column" (campaign, ad set, ad, placement). */
-type SortKey = 'fname' | 'phone' | 'status' | 'source' | 'ad_campaign' | 'ad_set' | 'ad_name' | 'ad_placement' | 'call_at' | 'created_at'
+type SortKey = 'fname' | 'phone' | 'status' | 'source' | 'ad_campaign' | 'ad_set' | 'ad_name' | 'ad_placement' | 'booked_from' | 'call_at' | 'created_at'
 const COLS: { key: SortKey; label: string }[] = [
   { key: 'fname',        label: 'Who' },
   { key: 'phone',        label: 'Phone' },
@@ -66,22 +65,20 @@ const COLS: { key: SortKey; label: string }[] = [
   { key: 'ad_set',       label: 'Ad set' },
   { key: 'ad_name',      label: 'Ad' },
   { key: 'ad_placement', label: 'Placement' },
+  { key: 'booked_from',  label: 'Booked from' },
   { key: 'call_at',      label: 'Booked' },
   { key: 'created_at',   label: 'When' },
 ]
-const STATUS_TONE: Record<string, 'green' | 'amber' | 'red' | 'blue' | 'muted'> = { 'Call booked': 'green', 'New lead': 'blue', Cancelled: 'red' }
+const STATUS_TONE: Record<string, 'green' | 'amber' | 'red' | 'blue' | 'muted'> = { 'Call booked': 'green', 'New lead': 'blue', 'Emailed in': 'muted', Cancelled: 'red' }
 const statusWords = (l: Lead) => leadStatus(l, k => STAGES.find(s => s.key === k)?.label ?? k)
-const sourceWords = (l: Lead) => l.source === 'web_form' || !l.source ? leadFromWords(l.source) : sourceLabel(l.source)
+const sourceWords = (l: Lead) => sourceLabel(l.source)
 
-type TodayLead = { id: string; created_at: string; name: string; biz: string | null; source: string; reason: string }
 
 export default function LeadsPage() {
   const router = useRouter()
   const { can } = useRole()
-  const canScan = can('account_manager')
   const manager = can('account_manager')
   const scheduler = can('scheduler')
-  const [today, setToday] = useState<TodayLead[]>([])
   const [search, setSearch]   = useState('')
   const [sort, setSort]       = useState<{ key: SortKey; dir: 'asc' | 'desc' }>({ key: 'created_at', dir: 'desc' })
   const [deleting, setDeleting] = useState<Lead | null>(null)
@@ -160,15 +157,6 @@ export default function LeadsPage() {
   const { rows: leads, loading, error } = useTable<Lead>('leads', { orderBy: BY_NEWEST })
   const { rows: prospects } = useTable<ProspectLink & { id: string }>('prospects')
 
-  /** today's leads carry WHY they exist — the classifier's reasoning, which
-   *  lives in the ingest log — so that one banner is still its own fetch */
-  const loadToday = useCallback(() => {
-    void fetch('/api/leads/today')
-      .then(async r => { if (r.ok) setToday((await r.json()).leads ?? []) })
-      .catch(() => { /* the banner is a bonus; the table is the page */ })
-  }, [])
-  useEffect(() => { loadToday() }, [loadToday])
-
   /**
    * A new lead announces itself the moment it is created. The table does not
    * need telling — its own listener has already drawn the row — so the hint
@@ -178,11 +166,10 @@ export default function LeadsPage() {
     const d = hint as { id?: string; label?: string; source?: string }
     if (d.id) {
       toast.success(`New lead — ${d.label}`, {
-        description: d.source === 'web_form' ? 'From the website form' : 'Found in the inbox',
+        description: d.source === 'web_form' ? 'From the website form' : undefined,
       })
     }
-    loadToday()
-  }, [loadToday])
+  }, [])
   useLive('leads', onLeadChange)
 
   const toggleSort = (key: SortKey) =>
@@ -210,7 +197,7 @@ export default function LeadsPage() {
     const rows = filtered.map(l => ({
       Date: l.created_at ? new Date(l.created_at).toLocaleString('en-AU') : '',
       'First name': l.fname, 'Last name': l.lname, Email: l.email, Phone: l.phone,
-      Business: l.biz, Status: statusWords(l), Source: sourceWords(l), Campaign: l.ad_campaign ?? '', 'Ad set': l.ad_set ?? '', Ad: l.ad_name ?? '', Placement: placementLabel(l.ad_placement) ?? '', 'Call booked': l.booking_event ?? '', 'Call time': l.call_at ? new Date(l.call_at).toLocaleString('en-AU', { timeZone: 'Australia/Melbourne' }) : '', Service: l.model, Needs: l.need, Budget: l.budget, Timeline: l.timeline,
+      Business: l.biz, Status: statusWords(l), Source: sourceWords(l), Campaign: l.ad_campaign ?? '', 'Ad set': l.ad_set ?? '', Ad: l.ad_name ?? '', Placement: placementLabel(l.ad_placement) ?? '', 'Booked from': l.booked_from ?? '', 'Call booked': l.booking_event ?? '', 'Call time': l.call_at ? new Date(l.call_at).toLocaleString('en-AU', { timeZone: 'Australia/Melbourne' }) : '', Service: l.model, Needs: l.need, Budget: l.budget, Timeline: l.timeline,
       'In acquisition': prospectForLead(l, prospects) ? 'Yes' : '',
     }))
     const ws = XLSX.utils.json_to_sheet(rows)
@@ -223,7 +210,7 @@ export default function LeadsPage() {
    *  name that isn't there told you the business had no enquiries at all. */
   const emptyMessage = search.trim()
     ? `No leads match “${search.trim()}”. Clear the search to see all ${leads.length}.`
-    : 'No enquiries yet — the website form and the inbox scanner put them here by themselves.'
+    : 'No leads yet. Website form fills and Calendly bookings land here by themselves.'
 
   const dateWords = (iso: string) => iso ? new Date(iso).toLocaleDateString('en-AU', { timeZone: 'Australia/Melbourne', day: 'numeric', month: 'short', year: 'numeric' }) : '—'
 
@@ -289,48 +276,11 @@ export default function LeadsPage() {
 
   return (
     <div className="flex flex-col gap-4" data-leads-inbox>
-      {today.length > 0 && (
-        <div className="rounded-inner border border-accent-green/30 bg-tint-green p-4">
-          <div className="flex items-center gap-2">
-            <span className="flex h-6 min-w-6 items-center justify-center rounded-full bg-accent-green px-1.5 font-mono text-secondary-13 font-semibold text-white">
-              +{today.length}
-            </span>
-            <h3 className="text-body-15 font-semibold text-foreground">
-              New lead{today.length === 1 ? '' : 's'} today
-            </h3>
-          </div>
-          <ul className="mt-2.5 flex flex-col gap-1.5">
-            {today.map(t => (
-              <li key={t.id} className="flex flex-wrap items-baseline gap-x-2 text-body-15 text-foreground">
-                <span className="font-mono text-secondary-13 tabular-nums text-foreground">
-                  {new Date(t.created_at).toLocaleTimeString('en-AU', { timeZone: 'Australia/Melbourne', hour: '2-digit', minute: '2-digit' })}
-                </span>
-                <button type="button" onClick={() => router.push(leadPath(t.id))} className="font-medium underline-offset-4 hover:underline">{t.name}</button>
-                {t.biz && <span className="text-foreground">({t.biz})</span>}
-                <span className={
-                  'rounded-full px-1.5 py-px font-mono text-[12px] uppercase tracking-wide ' +
-                  (t.source === 'web_form'
-                    ? 'bg-accent-green text-foreground'
-                    : 'bg-accent-blue text-accent-blue-deep')
-                }>
-                  {t.source === 'web_form' ? 'web form' : 'scanner'}
-                </span>
-                <span className="basis-full text-secondary-13 text-foreground">{t.reason}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
       <PageTitle
         title="Leads"
         summary={LEADS_SUMMARY}
         actions={<>
           <div className="flex items-center gap-2">
-            {/* the table is live, so this refreshes the one thing that is not:
-                today's leads and the reason each of them exists */}
-            <Button variant="outline" size="sm" onClick={() => loadToday()}>
-              <RefreshCw className="h-4 w-4" /> Refresh
-            </Button>
             {/* Export is a monthly reporting job. It used to be the only filled
                 button on the page, so the page looked like it was FOR exporting
                 — the daily work is opening a lead and contacting it. */}
@@ -341,10 +291,6 @@ export default function LeadsPage() {
         </>}
       />
 
-      {/* Scanning reads the agency mailbox and creates leads — account_manager
-          and above. The API enforces the same rule; this only stops the
-          control being offered to people it would reject. */}
-      {canScan && <ScanPanel onLeadsCreated={loadToday} />}
 
       <div className="flex items-center gap-3">
         <Input
@@ -440,6 +386,7 @@ export default function LeadsPage() {
                       {textCell(l.ad_set)}
                       {textCell(l.ad_name)}
                       {textCell(placementLabel(l.ad_placement))}
+                      <TableCell className="max-w-[160px] truncate text-secondary-13" title={l.booked_from ?? undefined}>{pageLabel(l.booked_from) ?? dash}</TableCell>
                       <TableCell className="max-w-[200px] text-secondary-13">
                         {l.booking_event || l.call_at ? <>
                           <p className="truncate">{l.booking_event ?? 'Call'}</p>
