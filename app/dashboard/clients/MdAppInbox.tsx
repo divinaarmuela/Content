@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useRef, useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { EyeOff, Eye, Trash2, Reply, Send, RefreshCw, MessageCircle, MessagesSquare } from 'lucide-react'
 import PlatformIcon from '../social/PlatformIcon'
@@ -66,10 +66,16 @@ export default function MdAppInbox({ clientId }: { clientId: string }) {
   }, [api])
 
   const loadPosts = useCallback(async () => { const p = await read<Posts>('view=posts'); if (p) setPosts(p) }, [read])
+  // Comments hidden here, kept on screen (10 Nov 2026, live): Instagram leaves a hidden comment OUT of the post's
+  // comment list, so after Hide it vanished and Show could never be pressed. The ones hidden in this visit stay drawn,
+  // marked Hidden, until shown again or deleted.
+  const hiddenHere = useRef(new Map<string, InboxComment>())
   const loadComments = useCallback(async () => {
     if (!postId) { setComments(null); return }
     const r = await read<{ comments: InboxComment[] }>(`view=comments&platform=${platform}&postId=${encodeURIComponent(postId)}`)
-    setComments(r?.comments ?? [])
+    const got = r?.comments ?? []
+    const kept = [...hiddenHere.current.values()].filter(h => (h as InboxComment & { postId?: string }).postId === postId && !got.some(c => c.id === h.id))
+    setComments([...got, ...kept])
   }, [read, platform, postId])
   const loadThreads = useCallback(async () => {
     setThreads(null)
@@ -206,11 +212,15 @@ export default function MdAppInbox({ clientId }: { clientId: string }) {
                                   <div className="mt-2 flex flex-wrap gap-1.5">
                                     <Button size="sm" variant="outline" disabled={!!busy} onClick={() => setReplyingTo(replyingTo === c.id ? null : c.id)}><Reply className="h-3.5 w-3.5" /> Reply</Button>
                                     <Button size="sm" variant="outline" disabled={!!busy}
-                                      onClick={() => void act(`h:${c.id}`, { action: c.hidden ? 'unhide' : 'hide', commentId: c.id }, c.hidden ? 'Comment shown again' : 'Comment hidden', loadComments)}>
+                                      onClick={() => void act(`h:${c.id}`, { action: c.hidden ? 'unhide' : 'hide', commentId: c.id }, c.hidden ? 'Comment shown again' : 'Comment hidden', async () => {
+                                        if (c.hidden) hiddenHere.current.delete(c.id)
+                                        else hiddenHere.current.set(c.id, { ...c, hidden: true, postId } as InboxComment)
+                                        await loadComments()
+                                      })}>
                                       {c.hidden ? <><Eye className="h-3.5 w-3.5" /> Show</> : <><EyeOff className="h-3.5 w-3.5" /> Hide</>}
                                     </Button>
                                     <Button size="sm" variant="outline" disabled={!!busy}
-                                      onClick={() => { if (confirm(`Delete ${c.author}'s comment? This cannot be undone.`)) void act(`d:${c.id}`, { action: 'delete', commentId: c.id }, 'Comment deleted', async () => { await loadComments(); await loadPosts() }) }}>
+                                      onClick={() => { if (confirm(`Delete ${c.author}'s comment? This cannot be undone.`)) void act(`d:${c.id}`, { action: 'delete', commentId: c.id }, 'Comment deleted', async () => { hiddenHere.current.delete(c.id); await loadComments(); await loadPosts() }) }}>
                                       <Trash2 className="h-3.5 w-3.5" /> Delete
                                     </Button>
                                   </div>
