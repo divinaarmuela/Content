@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
+import { useLive } from '@/lib/db-client'
 import { EyeOff, Eye, Trash2, Reply, Send, RefreshCw, MessageCircle, MessagesSquare } from 'lucide-react'
 import PlatformIcon from '../social/PlatformIcon'
 import { Button } from '@/components/ui/button'
@@ -97,6 +98,16 @@ export default function MdAppInbox({ clientId }: { clientId: string }) {
   const post = list?.find(p => p.id === postId) ?? null
   const thread = threads?.find(t => t.id === threadId) ?? null
   const own = platform === 'instagram' ? (posts?.igUsername ? `@${posts.igUsername}` : 'Instagram') : (posts?.pageName ?? 'Facebook Page')
+
+  // LIVE UPDATES (10 Nov 2026): Meta's webhook → /mdm/live/meta → a notice here and the open list reloads by itself.
+  // Only this client's events; the periodic tick useLive also sends (no clientId) is ignored.
+  const onLive = useCallback((hint: Record<string, unknown> & { ts: number }) => {
+    if (hint.clientId !== clientId || typeof hint.label !== 'string') return
+    toast.message(hint.label)
+    if (hint.area === 'comments' && mode === 'comments') { void loadPosts(); if (hint.platform === platform) void loadComments() }
+    if (hint.area === 'messages' && mode === 'messages' && hint.platform === platform) void loadThreads()
+  }, [clientId, mode, platform, loadPosts, loadComments, loadThreads])
+  useLive('meta', onLive)
 
   const act = async (key: string, body: Record<string, unknown>, ok: string, after: () => Promise<void>) => {
     setBusy(key)

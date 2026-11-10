@@ -375,6 +375,30 @@ export function parseMdWebhook(body: unknown): MdWebhookEvent[] {
   return out
 }
 
+/**
+ * LIVE UPDATES ON SCREEN (10 Nov 2026, owner: "will comment here update if i comment"). One webhook event → the line the
+ * Meta card shows and which part of the Inbox to reload; null for events nobody needs to see (edits, removals, likes).
+ */
+export type MdLiveNotice = { label: string; area: 'comments' | 'messages' | 'leads'; platform: 'instagram' | 'facebook' }
+export function liveNotice(ev: Pick<MdWebhookEvent, 'object' | 'field' | 'payload'>): MdLiveNotice | null {
+  const v = (ev.payload ?? {}) as Record<string, any>
+  const name = (x: unknown) => (typeof x === 'string' && x.trim() ? x.trim().slice(0, 80) : null)
+  if (ev.object === 'page' && ev.field === 'feed') {
+    if (v.item === 'comment' && v.verb === 'add') return { label: `New Facebook comment from ${name(v.from?.name) ?? 'someone'}`, area: 'comments', platform: 'facebook' }
+    return null
+  }
+  if (ev.object === 'page' && ev.field === 'leadgen') return { label: 'New lead from a Facebook form', area: 'leads', platform: 'facebook' }
+  if (ev.object === 'instagram' && (ev.field === 'comments' || ev.field === 'live_comments')) {
+    return { label: `New Instagram comment from ${name(v.from?.username) ?? 'someone'}`, area: 'comments', platform: 'instagram' }
+  }
+  if (ev.field === 'messages') {
+    if (v.message?.is_echo || v.read || v.delivery) return null
+    if (!v.message) return null
+    return { label: ev.object === 'instagram' ? 'New Instagram message' : 'New Messenger message', area: 'messages', platform: ev.object === 'instagram' ? 'instagram' : 'facebook' }
+  }
+  return null
+}
+
 /* ── the test buttons: ONE real call each, for Meta's "successful API calls" before App Review ── */
 
 export const MD_TESTS = {

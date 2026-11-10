@@ -15,7 +15,7 @@ import { rtdbFetch } from './db'
  * every open production board refetch, and an approval — which matters to
  * both — announces on each.
  */
-export type LiveChannel = 'production' | 'leads' | 'brand' | 'intake' | 'monthly' | 'tracker' | 'comments' | 'schedule'
+export type LiveChannel = 'production' | 'leads' | 'brand' | 'intake' | 'monthly' | 'tracker' | 'comments' | 'schedule' | 'meta'
 
 export function announce(channel: LiveChannel, hint: Record<string, unknown>): Promise<void> {
   return rtdbFetch(`/mdm/live/${channel}`, { method: 'PUT', body: JSON.stringify({ ...hint, ts: Date.now() }) })

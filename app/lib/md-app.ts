@@ -1,4 +1,5 @@
 import 'server-only'
+import { announce } from '@/lib/live'
 import { table } from '@/lib/db'
 import type { MdAppAsset, MdAppConnection, MdAppEvent, MdAppPublish } from '@/lib/db-types'
 import { credentialsKeyConfigured, decryptSecret, encryptSecret } from './secret-box'
@@ -9,7 +10,7 @@ import {
   IG_ACCOUNT_METRICS, IG_MEDIA_METRICS, IG_WEBHOOK_FIELDS, MD_TESTS, PAGE_METRICS, PAGE_WEBHOOK_FIELDS_MD,
   assetRowId, mdAppReadiness, mdAppsecretProof, mdCodeExchangeUrl, mdErrorDetail, mdErrorMessage, mdGraphUrl,
   mdMessageBody, mdRedactUrl, mdResumeDecision, parseAssigned, parseBisuToken, parseGrantedTargets, parseBusinessId, parseMdInsights,
-  parseMdWebhook, readMdAppEnv, summariseTestResult, testNeeds, usesMdApp, validateMdPublish,
+  liveNotice, parseMdWebhook, readMdAppEnv, summariseTestResult, testNeeds, usesMdApp, validateMdPublish,
   type AssetKind, type AssignedAsset, type MdAppReady, type MdInsight, type MdPublishRequest, type MdTestId,
 } from './md-app-core'
 import { visibleAdAccounts } from './md-app-ads-core'
@@ -419,7 +420,13 @@ export async function recordMdAppWebhook(body: unknown, now: number): Promise<{ 
       id: ev.key, object: ev.object, account_id: ev.accountId, client_id: owners.get(ev.accountId) ?? null,
       field: ev.field, payload: ev.payload, occurred_at: ev.occurredAt, received_at: receivedAt,
     })
-    if (res.claimed) stored++
+    if (res.claimed) {
+      stored++
+      // tell the open Meta card straight away (lib/live.ts): the Inbox shows a notice and reloads by itself
+      const n = liveNotice(ev)
+      const clientId = owners.get(ev.accountId)
+      if (n && clientId) await announce('meta', { clientId, ...n })
+    }
   }
   return { stored }
 }
