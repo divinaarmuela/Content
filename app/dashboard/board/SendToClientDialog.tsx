@@ -6,6 +6,7 @@ import { Link2, Mail, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { defaultRecipients, type ClientRecipient } from '../../lib/client-recipients-core'
+import AddContactInline from '../clients/AddContactInline'
 
 /**
  * SEND TO CLIENT — confirm who gets it, then send (the owner, 28 Sep 2026: "at With client it should be sent to the
@@ -16,6 +17,7 @@ import { defaultRecipients, type ClientRecipient } from '../../lib/client-recipi
 export default function SendToClientDialog({ itemId, onClose }: { itemId: string; onClose: () => void }) {
   const [recipients, setRecipients] = useState<ClientRecipient[] | null>(null)
   const [clientName, setClientName] = useState('')
+  const [clientId, setClientId] = useState('')
   const [picked, setPicked] = useState<Set<string>>(new Set())
   const [note, setNote] = useState('')
   const [problem, setProblem] = useState<string | null>(null)
@@ -33,6 +35,7 @@ export default function SendToClientDialog({ itemId, onClose }: { itemId: string
         const list = (j.recipients ?? []) as ClientRecipient[]
         setRecipients(list)
         setClientName(String(j.client_name ?? ''))
+        setClientId(String(j.client_id ?? ''))
         // the client's own address, ticked by itself — the one rule, with the owner's reason (client-recipients-core)
         setPicked(new Set(defaultRecipients(list)))
         if (!j.has_portal) setProblem('This client has no portal link yet — make one on the client first')
@@ -118,8 +121,12 @@ export default function SendToClientDialog({ itemId, onClose }: { itemId: string
             <fieldset className="flex flex-col gap-1.5">
               <legend className="mb-1 text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">Who gets it</legend>
               {recipients === null && <p className="text-[13px] text-muted-foreground">Loading…</p>}
-              {recipients !== null && recipients.length === 0 && (
+              {recipients !== null && recipients.length === 0 && !clientId && (
                 <p className="text-[13px] text-muted-foreground">No email address on this client yet — add one on the client’s page.</p>
+              )}
+              {recipients !== null && clientId && (
+                <AddContactInline clientId={clientId} title={recipients.length === 0 ? undefined : 'Someone else?'}
+                  onAdded={r => { setRecipients(l => [...(l ?? []).filter(x => x.email !== r.email), r]); setPicked(p => new Set([...p, r.email])) }} />
               )}
               {(recipients ?? []).map(r => (
                 <label key={r.email} className="flex min-h-11 cursor-pointer items-center gap-3 rounded-inner border border-border px-3 py-2 hover:bg-muted">

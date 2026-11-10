@@ -1,3 +1,4 @@
+import { cleanEmail } from '@/app/lib/client-recipients-core'
 import { NextResponse } from 'next/server'
 import { table, withRequestCache } from '@/lib/db'
 import type { Client, ClientContact, SocialPost } from '@/lib/db-types'
@@ -64,8 +65,22 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       await assertClientAccess(user, id)
       const body = await req.json().catch(() => ({}))
       const note = typeof body.note === 'string' ? body.note.slice(0, 1000) : null
+      // SOMEONE NEW (10 Nov 2026, owner: "we should be able to add the email if it's not found … and save it under
+      // contacts"): typed in the dialog, saved on the client's Contacts, then sent to like any other contact
+      let emails: unknown = body.emails
+      if (body.new_contact && typeof body.new_contact === 'object') {
+        const email = cleanEmail(body.new_contact.email)
+        const name = String(body.new_contact.name ?? '').trim().slice(0, 120)
+        if (!email) return NextResponse.json({ error: 'That email address does not look right.' }, { status: 400 })
+        const contacts = table<ClientContact>('client_contacts')
+        const existing = await contacts.list({ by: { client_id: id }, fresh: true })
+        if (!existing.some(c => cleanEmail(c.email) === email)) {
+          await contacts.insert({ id: crypto.randomUUID(), client_id: id, name: name || email, role: '', email, phone: '', is_primary: false, notes: `Added from Send the preview by ${user.name ?? user.email}` } as ClientContact)
+        }
+        emails = [...(Array.isArray(body.emails) ? body.emails : []), email]
+      }
       const result = await sendSchedulingPreview({
-        clientId: id, emails: body.emails, note,
+        clientId: id, emails, note,
         pressedBy: { id: user.id, name: user.name ?? null, email: user.email },
       })
       if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status })

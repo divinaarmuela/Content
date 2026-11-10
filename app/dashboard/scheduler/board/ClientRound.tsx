@@ -8,6 +8,7 @@ import { STAGE_LABEL, type NowLike, type PostState } from '../../../lib/post-sta
 import { roundCandidates } from '../../../lib/post-board-core'
 import { defaultRecipients, type ClientRecipient } from '../../../lib/client-recipients-core'
 import type { BoardPost } from './usePostBoard'
+import AddContactInline from '../../clients/AddContactInline'
 
 /**
  * SEND SEVERAL POSTS TO ONE CLIENT IN ONE EMAIL (the owner's decision 15:
@@ -67,7 +68,7 @@ function RoundForClient({ group, choices }: {
   const send = async () => {
     setAnswer(null)
     if (chosen.length === 0) { setAnswer({ tone: 'error', text: 'Tick at least one post.' }); return }
-    if (choices.length === 0) { setAnswer({ tone: 'error', text: 'This client has no email address yet. Add one on the client’s page first.' }); return }
+    if (choices.length === 0 && picks.length === 0) { setAnswer({ tone: 'error', text: 'This client has nobody to email yet. Add them in the box above.' }); return }
     if (picks.length === 0) { setAnswer({ tone: 'error', text: 'Tick at least one person to send it to.' }); return }
     setBusy(true)
     try {
@@ -122,9 +123,9 @@ function RoundForClient({ group, choices }: {
           </fieldset>
           <fieldset className="flex flex-col gap-1.5">
             <legend className="mb-1 text-[13px] font-semibold">Email it to</legend>
-            {choices.length === 0 ? (
-              <p className="text-[13px] text-muted-foreground">This client has no email address yet. Add one on the client’s page first.</p>
-            ) : choices.map(c => (
+            <AddContactInline clientId={group.clientId} title={choices.length === 0 ? undefined : 'Someone else?'}
+              onAdded={r => setPicks(p => p.includes(r.email) ? p : [...p, r.email])} />
+            {choices.map(c => (
               <label key={c.email} className="flex min-h-11 cursor-pointer items-center gap-3 rounded-inner border border-border bg-surface px-3">
                 <input type="checkbox" className="h-4 w-4 accent-foreground" checked={picks.includes(c.email)}
                   onChange={e => setPicks(p => (e.target.checked ? [...p, c.email] : p.filter(x => x !== c.email)))} />

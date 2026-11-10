@@ -6,6 +6,7 @@ import { Bell, Link2, Mail, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { defaultRecipients, type ClientRecipient } from '../../lib/client-recipients-core'
+import AddContactInline from '../clients/AddContactInline'
 
 export type NotifyTab = 'editing' | 'designing' | 'shoot' | 'boards' | 'forms' | 'scheduling'
 
@@ -95,7 +96,10 @@ export default function NotifyClientDialog({ clientId, tab, id, onClose }: { cli
             <fieldset className="flex flex-col gap-1.5">
               <legend className="mb-1 text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">Who gets it</legend>
               {recipients === null && <p className="text-[13px] text-muted-foreground">Loading…</p>}
-              {recipients !== null && recipients.length === 0 && <p className="text-[13px] text-muted-foreground">No email address on this client yet — add one on the client’s page.</p>}
+              {recipients !== null && (
+                <AddContactInline clientId={clientId} title={recipients.length === 0 ? undefined : 'Someone else?'}
+                  onAdded={r => { setRecipients(l => [...(l ?? []).filter(x => x.email !== r.email), r]); setPicked(p => new Set([...p, r.email])) }} />
+              )}
               {(recipients ?? []).map(r => (
                 <label key={r.email} className="flex min-h-11 cursor-pointer items-center gap-3 rounded-inner border border-border px-3 py-2 hover:bg-muted">
                   <input type="checkbox" className="h-4 w-4" checked={picked.has(r.email)} onChange={() => toggle(r.email)} />

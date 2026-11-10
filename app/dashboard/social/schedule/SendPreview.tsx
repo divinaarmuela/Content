@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
+import { Input } from '@/components/ui/input'
 
 /**
  * SEND THE PREVIEW (docs/ONE_PORTAL_SPEC.md R12) — on the Schedule page's toolbar, for a client on the one
@@ -27,6 +28,9 @@ export default function SendPreview({ clientId, className }: { clientId: string 
   const [picked, setPicked] = useState<string[]>([])
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
+  const [adding, setAdding] = useState(false)
+  const [newName, setNewName] = useState('')
+  const [newEmail, setNewEmail] = useState('')
 
   const load = async () => {
     if (!clientId) { setInfo(null); return }
@@ -45,13 +49,14 @@ export default function SendPreview({ clientId, className }: { clientId: string 
     try {
       const res = await fetch(`/api/clients/${clientId}/send-preview`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ emails: picked, note: note.trim() || null }),
+        body: JSON.stringify({ emails: picked, note: note.trim() || null, ...(newEmail.trim() ? { new_contact: { name: newName.trim(), email: newEmail.trim() } } : {}) }),
       })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(json.error ?? 'The preview could not be sent')
       toast.success(json.message ?? 'Preview sent')
       setOpen(false)
       setNote('')
+      setNewName(''); setNewEmail(''); setAdding(false)
       void load()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'The preview could not be sent')
@@ -79,9 +84,15 @@ export default function SendPreview({ clientId, className }: { clientId: string 
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col gap-3">
-            {info.recipients.length === 0 ? (
-              <p className="text-[14px]" role="alert">This client has nobody to send to — add a contact on the client&apos;s page first.</p>
-            ) : (
+            {(info.recipients.length === 0 || adding) && (
+              <fieldset className="flex flex-col gap-2 rounded-lg border border-border p-3">
+                <legend className="px-1 text-[13px] font-semibold">{info.recipients.length === 0 ? 'Nobody to send to yet — who should get it?' : 'Someone else'}</legend>
+                <Input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Their name" aria-label="Their name" />
+                <Input type="email" value={newEmail} onChange={e => setNewEmail(e.target.value)} placeholder="Their email" aria-label="Their email" />
+                <p className="text-[12px] text-muted-foreground">They are saved to this client&apos;s Contacts, so next time they are already here.</p>
+              </fieldset>
+            )}
+            {info.recipients.length > 0 && (
               <fieldset className="flex flex-col gap-1">
                 <legend className="mb-1 text-[13px] font-semibold">Who gets it</legend>
                 {info.recipients.map(r => (
@@ -91,6 +102,7 @@ export default function SendPreview({ clientId, className }: { clientId: string 
                     <span>{r.name !== r.email ? `${r.name} · ` : ''}{r.email}</span>
                   </label>
                 ))}
+                {!adding && <button type="button" className="mt-1 w-fit text-[13px] font-semibold underline-offset-4 hover:underline" onClick={() => setAdding(true)}>+ Someone else</button>}
               </fieldset>
             )}
             <Textarea value={note} onChange={e => setNote(e.target.value)} rows={3} placeholder="A note for the client (optional)" aria-label="A note for the client" />
@@ -100,8 +112,8 @@ export default function SendPreview({ clientId, className }: { clientId: string 
           </div>
           <DialogFooter>
             <Button variant="outline" className="rounded-full" disabled={busy} onClick={() => setOpen(false)}>Cancel</Button>
-            <Button className="rounded-full" disabled={busy || picked.length === 0 || !info.link} onClick={() => void send()}>
-              {busy ? 'Sending…' : `Send to ${picked.length === 1 ? '1 person' : `${picked.length} people`}`}
+            <Button className="rounded-full" disabled={busy || (picked.length === 0 && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(newEmail.trim())) || !info.link} onClick={() => void send()}>
+              {busy ? 'Sending…' : (() => { const n = picked.length + (newEmail.trim() ? 1 : 0); return `Send to ${n === 1 ? '1 person' : `${n} people`}` })()}
             </Button>
           </DialogFooter>
         </DialogContent>

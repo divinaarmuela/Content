@@ -18,6 +18,7 @@ import { rebookPost } from './rebook'
 import { defaultRecipients, type ClientRecipient } from '../../../lib/client-recipients-core'
 import { SCHEDULE_PAGE } from '../../../lib/page-access-core'
 import { DEFAULT_TZ, fromZonedInput, toZonedInput } from '../../../lib/timezone-core'
+import AddContactInline from '../../clients/AddContactInline'
 
 /**
  * PRESSING A POST'S BUTTON — the one place a move is sent, on this page.
@@ -246,7 +247,7 @@ function PostActDialog({ pending, busy, error, deps, onClose, onSubmit }: {
       if (byLink && !reminder) {
         extra.via = 'link'
       } else {
-        if (choices.length === 0) { setLocal('This client has nobody to email. Copy the link instead, or add a contact on the client’s page first.'); return }
+        if (choices.length === 0 && picks.length === 0) { setLocal('This client has nobody to email yet. Add them in the box above, or copy the link instead.'); return }
         if (picks.length === 0) { setLocal('Tick at least one person to send it to.'); return }
         extra.send_to = picks
         extra.via = 'email'
@@ -297,9 +298,9 @@ function PostActDialog({ pending, busy, error, deps, onClose, onSubmit }: {
           {needs.has('recipients') && (
             <fieldset className="flex flex-col gap-2">
               <legend className="mb-1 text-[13px] font-semibold">Email it to</legend>
-              {choices.length === 0 ? (
-                <p className="text-[13px] text-muted-foreground">This client has no email address yet. Copy the link instead, or add one on the client’s page.</p>
-              ) : choices.map(c => (
+              {post && <AddContactInline clientId={post.client_id} title={choices.length === 0 ? undefined : 'Someone else?'}
+                onAdded={r => setPicks(p => p.includes(r.email) ? p : [...p, r.email])} />}
+              {choices.map(c => (
                 <label key={c.email} className="flex min-h-11 cursor-pointer items-center gap-3 rounded-inner border border-border bg-surface px-3">
                   <input type="checkbox" className="h-4 w-4 accent-foreground" checked={picks.includes(c.email)} disabled={byLink}
                     onChange={e => setPicks(p => (e.target.checked ? [...p, c.email] : p.filter(x => x !== c.email)))} />

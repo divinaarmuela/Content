@@ -64,6 +64,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       return NextResponse.json({
         recipients,
         client_name: client.name,
+        client_id: item.client_id,
         // the edit is sendable at With client; a post is sent from its own window
         sendable: item.status === 'client_review',
         stage: item.status === 'client_review' ? 'card' : null,
