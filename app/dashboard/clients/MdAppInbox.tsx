@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { useLive } from '@/lib/db-client'
 import { EyeOff, Eye, Trash2, Reply, Send, RefreshCw, MessageCircle, MessagesSquare } from 'lucide-react'
@@ -75,17 +75,25 @@ export default function MdAppInbox({ clientId }: { clientId: string }) {
   // marked Hidden, until shown again or deleted.
   // kept OUTSIDE the component: the Meta card redraws its tabs while it re-reads the connection (Live updates), which
   // threw a component-held list away and the hidden comment vanished again (10 Nov 2026, live)
+  const threadAsk = useRef(0)
+  const commentAsk = useRef(0)
   const hiddenHere = useMemo(() => ({ current: HIDDEN_HERE }), [])
   const loadComments = useCallback(async () => {
+    const ask = ++commentAsk.current
     if (!postId) { setComments(null); return }
     const r = await read<{ comments: InboxComment[] }>(`view=comments&platform=${platform}&postId=${encodeURIComponent(postId)}`)
+    if (ask !== commentAsk.current) return
     const got = r?.comments ?? []
     const kept = [...hiddenHere.current.values()].filter(h => (h as InboxComment & { postId?: string }).postId === postId && !got.some(c => c.id === h.id))
     setComments([...got, ...kept])
   }, [read, platform, postId])
+  // the newest ask wins (10 Nov 2026, live: Instagram's slower answer landed after Facebook's and the Facebook tab
+  // showed Instagram's conversations) — an answer to an older ask is dropped
   const loadThreads = useCallback(async () => {
+    const ask = ++threadAsk.current
     setThreads(null)
     const r = await read<{ threads: InboxThread[] }>(`view=threads&platform=${platform}`)
+    if (ask !== threadAsk.current) return
     setThreads(r?.threads ?? [])
   }, [read, platform])
 
