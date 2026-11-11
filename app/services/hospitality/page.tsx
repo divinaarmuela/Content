@@ -20,7 +20,7 @@ import { bookCallHref } from '../../lib/book-call-core'
  */
 export const metadata: Metadata = {
   title: 'Hospitality marketing — MD Media, Melbourne',
-  description: 'Content, social and ads that fill Melbourne venues. Book a free 10-minute call.',
+  description: 'Content, social and ads that fill Melbourne venues. Explore your options in a free 10-minute call.',
   robots: 'index, follow', // in the site's Services menu since 11 Nov 2026, so searchable too
   alternates: { canonical: 'https://www.mdmmarketing.com.au/services/hospitality' },
 }
@@ -126,7 +126,7 @@ export default function HospitalityPage() {
           <div>
             <h1 className="cv-h1">Content that <em>fills</em> Melbourne venues.</h1>
             <p className="cv-lead">We shoot, post and advertise for Melbourne restaurants, bars and venues, so locals see you and book a table.</p>
-            <a href={BOOK} className="hx-btn">Book a free 10-min call</a>
+            <a href={BOOK} className="hx-btn">Explore your options</a>
             <p className="hx-note">Free · 10 minutes · no obligation</p>
           </div>
           <div className="hx-hero-film">
@@ -183,14 +183,6 @@ export default function HospitalityPage() {
                   <h3 className="hx-story-venue">{s.venue}</h3>
                   <p className="hx-story-line">{s.line}</p>
                   <ul className="hx-story-made">{s.made.map(m => <li key={m}>{m}</li>)}</ul>
-                  {s.thumbs.length > 0 && (
-                    <div className="hx-story-thumbs">
-                      {s.thumbs.map(t => (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img key={t.src} src={`${M}/${t.src}.jpg`} alt={t.alt} loading="lazy" decoding="async" />
-                      ))}
-                    </div>
-                  )}
                 </div>
               </article>
             ))}
@@ -205,7 +197,7 @@ export default function HospitalityPage() {
           <LazyLoop className="hx-fill" src={`${M}/${LONG_LUNCH.src}`} label={LONG_LUNCH.title} />
           <div className="hx-wide-text cv-wrap">
             <p className="hx-wide-line">The room people book for.</p>
-            <a href={BOOK} className="hx-btn hx-btn-light">Get the same for your venue</a>
+            <a href={BOOK} className="hx-btn hx-btn-light">See what we’d do for your venue</a>
           </div>
         </section>
 
@@ -251,17 +243,14 @@ export default function HospitalityPage() {
 
         {/* 8. LAST CALL TO ACTION: a button to /book-call, not a calendar (one booking page for the whole site) */}
         <section className="cv-wrap hx-sec hx-book">
-          <h2 className="cv-h1 hx-book-h">Book a free 10-minute call.</h2>
+          <h2 className="cv-h1 hx-book-h">Let’s talk about your venue.</h2>
           <p className="cv-lead">Tell us about your venue. We’ll tell you honestly what we’d do and what it would cost.</p>
-          <a href={BOOK} className="hx-btn">Book a free 10-min call</a>
+          <a href={BOOK} className="hx-btn">Explore your options</a>
           <p className="hx-note">Free · 10 minutes · no obligation</p>
         </section>
 
         <div className="cv-wrap hx-foot">© MD Media Marketing Pty Ltd · ABN 75 681 730 512 · <a href="/privacy">Privacy</a></div>
       </main>
-
-      {/* phones: the menu's place is a booking bar */}
-      <a href={BOOK} className="hx-bar">Book a free 10-min call</a>
     </div>
   )
 }
