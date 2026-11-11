@@ -131,7 +131,10 @@ export function pageLabel(path: string | null | undefined): string | null {
   if (path === '/') return 'Home'
   const last = path.split('?')[0].split('/').filter(Boolean).pop() ?? ''
   const w = last.split('-').join(' ')
-  return w ? w.charAt(0).toUpperCase() + w.slice(1) : path
+  if (!w) return path
+  const name = w.charAt(0).toUpperCase() + w.slice(1)
+  // the ad-only /landing pages share their names with the menu pages: say which one (owner, 11 Nov 2026)
+  return path.startsWith('/landing/') ? `${name} (ad page)` : name
 }
 
 /** Meta's placement codes in plain words (Facebook_Mobile_Feed → Facebook mobile feed) */
