@@ -270,28 +270,30 @@
   .hx-collage-wide .hx-col-still { width: 44%; right: 2% !important; bottom: 4%; }
 }
 
-/* ── PALETTE v2 (11 Nov 2026, owner's reference Reel: "one accent colour that catches you off guard") ───────────────
-   neutral base (clean warm white + midnight black) and ONE bold accent, hot pink, used sparingly, with a soft blurred
-   glow behind the hero film. Overrides the cream + wine tokens above. */
+/* ── PALETTE v2 (11 Nov 2026): the owner's reference Reel ("one accent colour that catches you off guard") in MD's own
+   blue (the slash in the logo, #1838E0, owner: "not pink, it's blue MD"). Neutral warm white + midnight black, the blue
+   used sparingly. Overrides the cream + wine tokens above. */
 .cv.hx {
   --cv-bg: #faf8f5;
   --cv-ink: #0d0d12;
   --cv-dim: rgba(13, 13, 18, 0.58);
   --cv-line: rgba(13, 13, 18, 0.1);
   --hx-paper: #ffffff;
-  --hx-wine: #e0338b; /* the one accent: hot pink */
+  --hx-wine: #1838e0; /* the one accent: MD blue */
 }
-.hx-hero { position: relative; }
-.hx-hero-film { position: relative; }
-.hx-hero-film::before { content: ''; position: absolute; inset: -18% -22%; z-index: -1; background: radial-gradient(40% 45% at 35% 40%, rgba(224, 51, 139, 0.45), transparent 70%), radial-gradient(38% 40% at 70% 70%, rgba(255, 153, 51, 0.35), transparent 70%); filter: blur(40px); pointer-events: none; }
-.hx-hero-film video { position: relative; }
 .hx-btn { background: var(--cv-ink); }
 .hx-btn:hover { background: var(--hx-wine); }
 .hx-quote-wrap { background: #0d0d12; }
-.hx-slot { background: repeating-linear-gradient(135deg, #f0edf0 0 12px, #ebe7ec 12px 24px); }
+.hx-slot { background: repeating-linear-gradient(135deg, #eeeef3 0 12px, #e8e8ef 12px 24px); }
 .hx-quote .hx-slot { background: repeating-linear-gradient(135deg, #17171d 0 12px, #1c1c23 12px 24px); }
 .hx-story-made li { background: #fff; }
+
+/* DESKTOP ONLY: a soft MD-blue glow behind the hero film. Scoped, because the same selectors unscoped broke the
+   phone hero (its film must stay position:absolute behind the words). */
+@media (min-width: 861px) {
+  .hx-hero-film { position: relative; isolation: isolate; }
+  .hx-hero-film::before { content: ''; position: absolute; inset: -16% -20%; z-index: -1; background: radial-gradient(42% 46% at 35% 40%, rgba(24, 56, 224, 0.38), transparent 70%), radial-gradient(36% 40% at 72% 72%, rgba(120, 150, 255, 0.32), transparent 70%); filter: blur(42px); pointer-events: none; }
+}
 @media (max-width: 860px) {
-  .hx-hero-film::before { display: none; }
-  .hx-hero .cv-h1 em { color: #ff6fb5; }
+  .hx-hero .cv-h1 em { color: #8fa3ff; } /* MD blue, lifted so it reads on the dark film */
 }
