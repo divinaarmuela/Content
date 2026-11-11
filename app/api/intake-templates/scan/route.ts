@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { NoObjectGeneratedError, gateway, generateObject, jsonSchema } from 'ai'
+import Anthropic from '@anthropic-ai/sdk'
 import { requireRole, authzErrorResponse } from '../../../lib/authz'
 import {
   classifyUpload, isRefusal, normaliseScan, repairJson, truncateDocument,
@@ -40,7 +40,7 @@ import type { TemplateKey } from '../../../lib/intake-core'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
-// the model: intakeModel() below (Gemini 3 Flash through the AI Gateway since 9 Nov 2026)
+const MODEL = 'claude-sonnet-5'
 const MAX_OUTPUT_TOKENS = 8000
 const CALL_TIMEOUT_MS = 50_000
 
@@ -135,19 +135,15 @@ const PROMPT =
 
 type ContentBlock =
   | { type: 'text'; text: string }
-  | { type: 'image'; image: Uint8Array; mediaType: string }
-  | { type: 'file'; data: Uint8Array; mediaType: 'application/pdf' }
-
-/** Which AI reads the document (the owner, 9 Nov 2026: through the Vercel AI Gateway, not Anthropic). Overridable. */
-const intakeModel = () => process.env.INTAKE_SCAN_MODEL?.trim() || 'google/gemini-3-flash'
+  | { type: 'image'; source: { type: 'base64'; media_type: string; data: string } }
+  | { type: 'document'; source: { type: 'base64'; media_type: 'application/pdf'; data: string } }
 
 /** One plain sentence for anything that goes wrong out there, so the builder
  *  never sees a stack trace or a raw API error. */
 function readerFailure(e: unknown): { error: string; status: number } {
   const message = e instanceof Error ? e.message : String(e)
   const name = e instanceof Error ? e.name : ''
-  // the AI SDK carries the HTTP status as statusCode; keep reading status too
-  const status = (e as { status?: number; statusCode?: number })?.status ?? (e as { statusCode?: number })?.statusCode
+  const status = (e as { status?: number })?.status
 
   if (name === 'AbortError' || name === 'TimeoutError' || status === 408
     || /timed? ?out/i.test(message)) {
@@ -216,33 +212,42 @@ export async function POST(req: Request) {
       if (note) notes.push(note)
       content.push({ type: 'text', text: `Document (${file.name}):\n\n${text}` })
     } else if (verdict.kind === 'pdf') {
-      // the model reads PDFs natively — pages, layout and scanned images — so
+      // Anthropic reads PDFs natively — pages, layout and scanned images — so
       // there is no PDF parser in this project to keep working
-      content.push({ type: 'file', data: new Uint8Array(bytes), mediaType: 'application/pdf' })
+      content.push({
+        type: 'document',
+        source: { type: 'base64', media_type: 'application/pdf', data: bytes.toString('base64') },
+      })
     } else {
-      content.push({ type: 'image', image: new Uint8Array(bytes), mediaType: verdict.mediaType })
+      content.push({
+        type: 'image',
+        source: { type: 'base64', media_type: verdict.mediaType, data: bytes.toString('base64') },
+      })
     }
     content.push({ type: 'text', text: PROMPT })
 
-    // through Vercel's AI Gateway (AI_GATEWAY_API_KEY), read per request so a missing key fails this request, not the build
-    let raw: unknown
-    try {
-      const { object } = await generateObject({
-        model: gateway(intakeModel()),
-        schema: jsonSchema(FORM_SCHEMA as never),
-        schemaName: 'draft_intake_form',
-        schemaDescription: 'Record the questions found in the document, or say it is not a form',
-        maxOutputTokens: MAX_OUTPUT_TOKENS,
-        maxRetries: 1,
-        abortSignal: AbortSignal.timeout(CALL_TIMEOUT_MS),
-        messages: [{ role: 'user', content: content as never }],
-      })
-      raw = object
-    } catch (e) {
-      // a model that answered with almost-right JSON still gets it pulled out and repaired rather than thrown away
-      if (NoObjectGeneratedError.isInstance(e) && e.text) raw = repairJson(e.text)
-      else throw e
-    }
+    // built per request, not at module load: a missing key must fail this
+    // request rather than the build (CLAUDE.md trap 7)
+    const anthropic = new Anthropic({ maxRetries: 1 })
+
+    const res = await anthropic.messages.create({
+      model: MODEL,
+      max_tokens: MAX_OUTPUT_TOKENS,
+      tools: [{
+        name: 'draft_intake_form',
+        description: 'Record the questions found in the document, or say it is not a form',
+        input_schema: FORM_SCHEMA,
+      }],
+      tool_choice: { type: 'tool', name: 'draft_intake_form' },
+      messages: [{ role: 'user', content: content as never }],
+    }, { timeout: CALL_TIMEOUT_MS })
+
+    // the tool result is the happy path; a model that answered in prose instead
+    // still gets its JSON pulled out and repaired rather than thrown away
+    const tool = res.content.find(b => b.type === 'tool_use')
+    const raw: unknown = tool && tool.type === 'tool_use'
+      ? tool.input
+      : repairJson(res.content.filter(b => b.type === 'text').map(b => (b as { text: string }).text).join('\n'))
 
     const outcome = normaliseScan(raw, key, { notes })
     if (!outcome.ok) return NextResponse.json({ error: outcome.message }, { status: 422 })
