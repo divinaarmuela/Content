@@ -11,6 +11,7 @@ const SERVICES = [
   ['Custom Websites', '/services/custom-websites'],
   ['Content & Visibility', '/services/content-visibility'],
   ['Campaign Shoots', '/campaign-shoots'],
+  ['Hospitality', '/services/hospitality'], // the venue-owner landing page (owner, 11 Nov 2026: "add services like hospitality")
 ] as const
 
 const LINKS = [

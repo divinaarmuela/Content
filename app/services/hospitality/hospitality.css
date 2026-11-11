@@ -236,3 +236,24 @@
 @media (prefers-reduced-motion: reduce) { .hx-logos-track { animation: none; } .hx-logos { overflow-x: auto; } }
 .hx-wide-text .hx-btn-light { margin-top: 24px; background: #f6f1e8; color: #17130f !important; }
 .hx-wide-text .hx-btn-light:hover { background: #fff; }
+
+/* ── PHONES (11 Nov 2026, owner feedback) ─────────────────────────────────────────────── */
+@media (max-width: 860px) {
+  /* the zigzag: the desktop side-swap rule was beating the one-column rule on even rows (The Glass Den gap) */
+  .hx-zig-row, .hx-zig-row:nth-child(even) { grid-template-columns: 1fr; }
+
+  /* hero: the film fills the screen, the words sit over it */
+  .hx-hero { position: relative; display: flex; flex-direction: column; justify-content: flex-end; min-height: calc(100svh - 52px); max-width: none; margin: 0; padding: 0 20px 28px; overflow: hidden; color: #f6f1e8; }
+  .hx-hero-film { position: absolute; inset: 0; width: 100%; z-index: 0; order: 0; }
+  .hx-hero-film video { width: 100%; height: 100%; aspect-ratio: auto; border-radius: 0; box-shadow: none; }
+  .hx-hero-film::after { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(23,19,15,.05) 25%, rgba(23,19,15,.55) 55%, rgba(23,19,15,.9)); }
+  .hx-hero > div:first-child { position: relative; z-index: 1; }
+  .hx-hero .cv-h1 { color: #f6f1e8; font-size: clamp(40px, 11vw, 52px); margin-bottom: 14px; }
+  .hx-hero .cv-h1 em { color: #e8b4ab; }
+  .hx-hero .cv-lead { color: rgba(246,241,232,.9); font-size: 17px; margin-bottom: 22px; }
+  .hx-hero .hx-btn { background: #f6f1e8; color: #17130f !important; }
+  .hx-hero .hx-note { color: rgba(246,241,232,.72); }
+}
+/* the site navbar sits above .cv.hx; links in the booking bar never underline (a site-wide link style leaked in) */
+.hx-bar, .hx-bar:visited, .hx-btn, .hx-btn:visited { text-decoration: none !important; }
+@media (max-width: 860px) { .hx-hero { min-height: calc(100svh - 64px); } }

@@ -23,6 +23,8 @@ const nextConfig: NextConfig = {
         destination: 'https://www.mdmmarketing.com.au/:path*',
         permanent: true,
       },
+      // the hospitality landing page moved under services (owner, 11 Nov 2026: "should be services/hospitality")
+      { source: '/hospitality', destination: '/services/hospitality', permanent: true },
       // the studio pitch now lives with events
       { source: '/podcast-studio', destination: '/events', permanent: true },
       // the footer's "Podcast bookings" (owner, 6 Nov 2026) — the bookings live at /book

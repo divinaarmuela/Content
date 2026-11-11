@@ -1,14 +1,15 @@
 import type { Metadata } from 'next'
-import { archivo, sometype } from '../components/lama/fonts'
-import LazyLoop from '../components/lazy-loop/LazyLoop'
-import { logoFile } from '../components/logo-wall/LogoWall'
+import { archivo, sometype } from '../../components/lama/fonts'
+import LazyLoop from '../../components/lazy-loop/LazyLoop'
+import MdNav from '../../components/md-nav/MdNav'
+import { logoFile } from '../../components/logo-wall/LogoWall'
 import SmileStrip from './SmileStrip'
-import '../components/service-page/service-page.css'
+import '../../components/service-page/service-page.css'
 import './hospitality.css'
-import { bookCallHref } from '../lib/book-call-core'
+import { bookCallHref } from '../../lib/book-call-core'
 
 /**
- * /hospitality — the landing page Meta ads for venue owners point at (11 Nov 2026, the owner: "the best structure for a
+ * /services/hospitality — the landing page Meta ads for venue owners point at (11 Nov 2026, the owner: "the best structure for a
  * hospitality landing page, my team will run ads and we will be using this page to showcase the hospitality").
  * One goal: book the 10-minute call. No site menu, no footer links; every button goes to /book-call (the one booking
  * page). Structure from the research (Unbounce attention ratio, Bambrick's venue + number proof, web.dev video).
@@ -20,11 +21,12 @@ import { bookCallHref } from '../lib/book-call-core'
 export const metadata: Metadata = {
   title: 'Hospitality marketing — MD Media, Melbourne',
   description: 'Content, social and ads that fill Melbourne venues. Book a free 10-minute call.',
-  robots: 'noindex, follow', // ad landing page: kept out of search until it is finished
+  robots: 'index, follow', // in the site's Services menu since 11 Nov 2026, so searchable too
+  alternates: { canonical: 'https://www.mdmmarketing.com.au/services/hospitality' },
 }
 
 // every button goes to the ONE booking page (owner, 11 Nov 2026: booking lives on /book-call, not embedded here);
-// UtmPassthrough adds &from=/hospitality on click, so Leads shows "Booked from: Hospitality" with the ad's tags
+// UtmPassthrough adds &from=/services/hospitality on click, so Leads shows "Booked from: Hospitality" with the ad's tags
 const BOOK = bookCallHref('hospitality')
 const M = '/hospitality'
 
@@ -71,7 +73,7 @@ const STORIES: Story[] = [
     thumbs: [],
   },
 ]
-const LONG_LUNCH = { src: 'cecconis-duck-wide', title: 'Long lunch, Cecconi’s' }
+const LONG_LUNCH = { src: 'waterside-venue-wide', title: 'The Waterside, King & Flinders' }
 
 const PHOTOS: { src: string; alt: string }[] = [
   { src: 'cecconis-pappardelle', alt: 'Twirling pappardelle at Cecconi’s' },
@@ -115,19 +117,13 @@ export default function HospitalityPage() {
   return (
     <div className={`${archivo.variable} ${sometype.variable}`}>
       <main className="cv hx">
-        {/* minimal top bar: logo only, no menu (one goal on the page). Dark, because the logo is white and never inverted */}
-        <div className="hx-topbar">
-          <header className="cv-wrap hx-top">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/MDLogo-trim.png" alt="MD Media" className="hx-logo" />
-            <a href={BOOK} className="hx-btn hx-btn-ghost">Book a call</a>
-          </header>
-        </div>
+        {/* the site's own navbar (owner, 11 Nov 2026: "where is the navbar button"): links, Services, the phone ☰ menu,
+            Book a call. The dark band keeps its white logo and links readable on this light page. */}
+        <MdNav band />
 
         {/* 1. HERO: message match with the ad, one button; the vertical new-menu film beside it */}
         <section className="cv-wrap hx-hero">
           <div>
-            <p className="hx-kicker">Hospitality marketing · Melbourne</p>
             <h1 className="cv-h1">Content that <em>fills</em> Melbourne venues.</h1>
             <p className="cv-lead">We shoot, post and advertise for Melbourne restaurants, bars and venues, so locals see you and book a table.</p>
             <a href={BOOK} className="hx-btn">Book a free 10-min call</a>
@@ -135,14 +131,13 @@ export default function HospitalityPage() {
           </div>
           <div className="hx-hero-film">
             <video src={`${M}/cecconis-new-menu.mp4`} poster={`${M}/cecconis-new-menu.jpg`} autoPlay muted loop playsInline preload="auto" aria-label="Cecconi’s new menu, shot by MD Media" />
-            <p className="hx-film-cap">Cecconi’s · New menu launch</p>
           </div>
         </section>
 
         {/* 2. TRUSTED BY: the client logos, the same files as the other pages' logo wall (owner, 11 Nov 2026: "the
             client logo we have in other pages"), dark on the light page. The Glass Den has no logo file yet: its name. */}
         <div className="hx-trusted">
-          <div className="cv-wrap"><p className="hx-kicker">Trusted by Melbourne venues</p></div>
+          
           {/* a straight, endless marquee of the logos (owner: "this marquee too, the logos"); pauses on hover */}
           <div className="hx-logos" aria-label="Trusted by Melbourne venues">
             <ul className="hx-logos-track">
@@ -163,7 +158,6 @@ export default function HospitalityPage() {
         <section className="cv-wrap hx-sec">
           <div className="hx-head">
             <div>
-              <p className="hx-kicker">The work</p>
               <h2 className="hx-h2">Shot the way the kitchen intends it.</h2>
             </div>
             <p className="hx-narrow">Reels, stills and campaigns for Melbourne venues, from fine dining to brunch. Every piece here is our own work.</p>
@@ -186,9 +180,7 @@ export default function HospitalityPage() {
                 </div>
                 {/* the story */}
                 <div className="hx-story">
-                  <p className="hx-story-n">{s.n}</p>
                   <h3 className="hx-story-venue">{s.venue}</h3>
-                  <p className="hx-story-kind">{s.kind}</p>
                   <p className="hx-story-line">{s.line}</p>
                   <ul className="hx-story-made">{s.made.map(m => <li key={m}>{m}</li>)}</ul>
                   {s.thumbs.length > 0 && (
@@ -212,8 +204,7 @@ export default function HospitalityPage() {
         <section className="hx-wide">
           <LazyLoop className="hx-fill" src={`${M}/${LONG_LUNCH.src}`} label={LONG_LUNCH.title} />
           <div className="hx-wide-text cv-wrap">
-            <p className="hx-kicker">Cecconi’s · Long lunch</p>
-            <p className="hx-wide-line">The table people book for.</p>
+            <p className="hx-wide-line">The room people book for.</p>
             <a href={BOOK} className="hx-btn hx-btn-light">Get the same for your venue</a>
           </div>
         </section>
@@ -225,7 +216,6 @@ export default function HospitalityPage() {
         <section className="cv-wrap hx-sec">
           <div className="hx-head">
             <div>
-              <p className="hx-kicker">How it works</p>
               <h2 className="hx-h2">One team. Shoot, post, advertise.</h2>
             </div>
           </div>
@@ -250,7 +240,6 @@ export default function HospitalityPage() {
         {/* 7. QUESTIONS */}
         <section className="cv-wrap hx-sec hx-faq-grid">
           <div>
-            <p className="hx-kicker">Questions</p>
             <h2 className="hx-h2">What owners ask us first.</h2>
           </div>
           <div className="hx-faq">
@@ -262,7 +251,6 @@ export default function HospitalityPage() {
 
         {/* 8. LAST CALL TO ACTION: a button to /book-call, not a calendar (one booking page for the whole site) */}
         <section className="cv-wrap hx-sec hx-book">
-          <p className="hx-kicker">Ready when you are</p>
           <h2 className="cv-h1 hx-book-h">Book a free 10-minute call.</h2>
           <p className="cv-lead">Tell us about your venue. We’ll tell you honestly what we’d do and what it would cost.</p>
           <a href={BOOK} className="hx-btn">Book a free 10-min call</a>

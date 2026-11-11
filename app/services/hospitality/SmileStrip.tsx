@@ -22,7 +22,8 @@ export default function SmileStrip({ photos }: { photos: { src: string; alt: str
 
     const place = () => {
       const half = w.clientWidth / 2
-      const depth = Math.min(90, w.clientWidth * 0.07) // how deep the smile is
+      // how deep the smile is; on phones (owner: "moving weirdly") the strip runs straight: the curve was too tight to read
+      const depth = w.clientWidth < 700 ? 0 : Math.min(90, w.clientWidth * 0.07)
       const loop = t.scrollWidth / 2 // the list is drawn twice, so half the track is one full lap
       for (const el of items) {
         const iw = el.offsetWidth
@@ -44,12 +45,13 @@ export default function SmileStrip({ photos }: { photos: { src: string; alt: str
       place()
       raf = requestAnimationFrame(tick)
     }
-    const enter = () => { paused = true }
+    // pause for a MOUSE only: on phones a tap fired mouseenter with no mouseleave, so the strip froze
+    const enter = (e: PointerEvent) => { if (e.pointerType === 'mouse') paused = true }
     const leave = () => { paused = false }
-    w.addEventListener('mouseenter', enter)
-    w.addEventListener('mouseleave', leave)
+    w.addEventListener('pointerenter', enter)
+    w.addEventListener('pointerleave', leave)
     raf = requestAnimationFrame(tick)
-    return () => { cancelAnimationFrame(raf); w.removeEventListener('mouseenter', enter); w.removeEventListener('mouseleave', leave) }
+    return () => { cancelAnimationFrame(raf); w.removeEventListener('pointerenter', enter); w.removeEventListener('pointerleave', leave) }
   }, [])
 
   return (
