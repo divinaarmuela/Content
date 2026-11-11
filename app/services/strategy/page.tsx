@@ -21,7 +21,8 @@ export default function StrategyPage() {
   return (
     <ServicePage
       current="strategy"
-      hero={{ image: '/images/strategy/team.jpg', label: 'The MD Media team' }}
+      hero={{ video: '/videos/strategy/hero-bts', label: 'Behind the scenes on a campaign shoot with the MD Media team' }}
+      heroSide
       lead="Most marketing problems are positioning problems. Strategy is where we work out what you should be known for, then decide what to build first."
       body="We sharpen your positioning, fix your offers, and map the path from where you are to where you want to be. Then we build it, or hand you the playbook."
       familiar={{

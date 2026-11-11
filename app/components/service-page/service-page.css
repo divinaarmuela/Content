@@ -35,6 +35,15 @@
 .cv-hero { aspect-ratio: 16 / 7; background: #161616; overflow: hidden; }
 .cv-media { width: 100%; height: 100%; object-fit: cover; display: block; }
 
+/* vertical hero film beside the headline (Strategy, 11 Nov 2026): text left, 9:16 film right; stacked on phones */
+.cv-head-side { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: clamp(32px, 6vw, 96px); align-items: end; }
+.cv-head-side .cv-lead { margin: 0; }
+.cv-hero-side { aspect-ratio: 9 / 16; height: min(78vh, 760px); }
+@media (max-width: 860px) {
+  .cv-head-side { grid-template-columns: 1fr; }
+  .cv-hero-side { height: auto; width: min(100%, 420px); }
+}
+
 .cv-lead { font-size: clamp(22px, 2.6vw, 34px); line-height: 1.25; letter-spacing: -0.01em; max-width: 30ch; margin: 0 0 24px; }
 .cv-body { font-size: 16px; line-height: 1.6; color: var(--cv-dim); max-width: 62ch; margin: 0; }
 .cv-narrow { max-width: 42ch; margin-bottom: 32px; }

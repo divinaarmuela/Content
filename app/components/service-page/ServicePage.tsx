@@ -28,6 +28,8 @@ export type Media = { video?: string; image?: string; label: string; device?: 'p
 export type ServicePageProps = {
   current: ServiceKey
   hero: Media
+  /** a vertical (9:16) hero film beside the headline instead of the wide strip under it; the lead moves up beside it */
+  heroSide?: boolean
   /** a link shown under the hero, e.g. to the live site the hero film shows */
   heroLink?: { href: string; label: string }
   /** Selected work straight under the hero (Custom Websites: the sites are the proof — the owner, 1 Nov 2026) */
@@ -115,18 +117,29 @@ export default function ServicePage(p: ServicePageProps) {
     <div className={`${archivo.variable} ${sometype.variable}`}>
       <MdNav />
       <main className="cv">
+        {p.heroSide ? (
+          <div className="cv-wrap cv-head cv-head-side">
+            <div className="cv-side-text">
+              <p className="cv-crumb"><a href="/services">Services</a> / ( {me.n} ) {me.name}</p>
+              <h1 className="cv-h1">{me.name}</h1>
+              <p className="cv-lead">{p.lead}</p>
+            </div>
+            <div className="cv-hero cv-hero-side"><Slot media={p.hero} /></div>
+          </div>
+        ) : (
         <div className="cv-wrap cv-head">
           <p className="cv-crumb"><a href="/services">Services</a> / ( {me.n} ) {me.name}</p>
           <h1 className="cv-h1">{me.name}</h1>
           <div className={`cv-hero${p.hero.device ? ' cv-hero-device' : ''}`}><Slot media={p.hero} /></div>
           {p.heroLink && <a className="cv-hero-link" href={p.heroLink.href} target="_blank" rel="noreferrer noopener">{p.heroLink.label}{' '}↗</a>}
         </div>
+        )}
 
         {p.workFirst && selectedWork}
 
         <section className="cv-wrap cv-sec">
           <h2 className="cv-eyebrow">Overview</h2>
-          <p className="cv-lead">{p.lead}</p>
+          {!p.heroSide && <p className="cv-lead">{p.lead}</p>}
           <p className="cv-body">{p.body}</p>
         </section>
 
