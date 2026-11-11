@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useScramble } from './Scramble'
 import { useExperienceActive, useLamaReady } from './ready'
 
-const CALENDLY = 'https://calendly.com/mdmmarketing-info/10-minute-content-subscription-discovery-call-m-clone?utm_source=website&utm_medium=book-a-call&utm_campaign=lama-lamanav'
+const CALENDLY = '/book-call?cta=lama-lamanav'
 
 const LINKS = [
   { href: '/work', label: 'Work' },
@@ -138,8 +138,6 @@ export default function LamaNav({ gate = true }: {
               <div className="grid grid-cols-2 gap-2">
                 <a
                   href={CALENDLY}
-                  target="_blank"
-                  rel="noreferrer noopener"
                   className="rounded-lg bg-cream p-3.5 text-center font-lamam font-bold text-[10px] uppercase tracking-[0.06em] text-ink no-underline transition-colors hover:bg-cream/[0.86]"
                 >
                   book a call

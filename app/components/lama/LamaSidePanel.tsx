@@ -6,7 +6,7 @@ import { Scramble } from './Scramble'
 import { useExperienceActive, useLamaReady } from './ready'
 import { media } from '../../lib/asset'
 
-const CALENDLY = 'https://calendly.com/mdmmarketing-info/10-minute-content-subscription-discovery-call-m-clone?utm_source=website&utm_medium=book-a-call&utm_campaign=lama-lamasidepanel'
+const CALENDLY = '/book-call?cta=lama-lamasidepanel'
 
 // the preview rotates through real work footage — intentionally not the
 // hero backdrop video
@@ -38,8 +38,6 @@ export default function LamaSidePanel() {
     >
       <a
         href={CALENDLY}
-        target="_blank"
-        rel="noreferrer noopener"
         className="group relative flex h-[50px] w-full items-center gap-x-4 overflow-hidden bg-cream/60 px-3 backdrop-blur-sm no-underline"
       >
         <span className="relative block h-7 w-7 shrink-0 overflow-hidden">

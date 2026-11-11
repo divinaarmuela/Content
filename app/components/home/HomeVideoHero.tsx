@@ -2,7 +2,7 @@
 
 import AsciiHands from '../AsciiHands'
 
-const CALENDLY = 'https://calendly.com/mdmmarketing-info/10-minute-content-subscription-discovery-call-m-clone?utm_source=website&utm_medium=book-a-call&utm_campaign=home-homevideohero'
+const CALENDLY = '/book-call?cta=home-homevideohero'
 
 export default function HomeVideoHero() {
   const scrollToSolution = (e: React.MouseEvent<HTMLAnchorElement>) => {
@@ -30,8 +30,6 @@ export default function HomeVideoHero() {
         <div className="hvh-actions">
           <a
             href={CALENDLY}
-            target="_blank"
-            rel="noreferrer noopener"
             className="hvh-btn hvh-btn--fill"
           >
             Book a strategy call

@@ -48,7 +48,7 @@ export default function MdNavMenu({ services, links, cta }: { services: readonly
           <p className="mdnav-mono mdnav-sheet-label">MD Media</p>
           {links.map(([name, href]) => <a key={href} href={href} onClick={() => setOpen(false)}>{name}</a>)}
           {bar && <span className="mdnav-sheet-track" aria-hidden="true"><span style={{ top: `${bar.top * 100}%`, height: `${bar.size * 100}%` }} /></span>}
-          <div className="mdnav-sheet-bar"><a href={cta} target="_blank" rel="noreferrer noopener" className="mdnav-sheet-cta mdnav-mono">Book a call ↗</a></div>
+          <div className="mdnav-sheet-bar"><a href={cta} className="mdnav-sheet-cta mdnav-mono">Book a call ↗</a></div>
         </div>
       )}
     </>

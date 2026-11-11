@@ -2,7 +2,7 @@ import Reveal from './Reveal'
 import { Scramble } from './Scramble'
 import LamaContactForm from './LamaContactForm'
 
-const CALENDLY = 'https://calendly.com/mdmmarketing-info/10-minute-content-subscription-discovery-call-m-clone?utm_source=website&utm_medium=book-a-call&utm_campaign=lama-lamacontact'
+const CALENDLY = '/book-call?cta=lama-lamacontact'
 
 export default function LamaContact({ gate = true }: { gate?: boolean } = {}) {
   return (
@@ -32,8 +32,6 @@ export default function LamaContact({ gate = true }: { gate?: boolean } = {}) {
         <div className="mt-12 flex flex-wrap gap-4">
           <a
             href={CALENDLY}
-            target="_blank"
-            rel="noreferrer noopener"
             className="border border-cream/25 px-6 py-4 font-lamam text-xs uppercase tracking-widest text-cream visited:text-cream no-underline hover:bg-cream hover:text-ink transition-colors"
           >
             START NOW ↗︎

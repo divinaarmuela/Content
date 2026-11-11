@@ -25,7 +25,7 @@ export const metadata: Metadata = {
   },
 }
 
-const CALENDLY = 'https://calendly.com/mdmmarketing-info/10-minute-content-subscription-discovery-call-m-clone'
+const CALENDLY = '/book-call'
 const HERO = 'https://pub-e66dd091eb38427e8eaca82bde7082ef.r2.dev/hero-spec-ad.mp4'
 
 // Tile loops: real work from each service page (`${video}.mp4` + `${video}.jpg` poster).
@@ -165,7 +165,7 @@ export default function HomePage() {
               {expect.map((e, i) => <li key={i}><span className="hm-mono">{String(i + 1).padStart(2, '0')}</span>{e}</li>)}
             </ol>
             <div className="hm-cta">
-              <a className="hm-btn hm-mono" href={CALENDLY} target="_blank" rel="noreferrer noopener">Book a free strategy call ↗</a>
+              <a className="hm-btn hm-mono" href={CALENDLY}>Book a free strategy call ↗</a>
               <span>No obligation, no hard sell.</span>
             </div>
           </div>

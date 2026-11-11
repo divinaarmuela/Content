@@ -1,0 +1,17 @@
+/* /book-call (11 Nov 2026): words left, the embedded calendar right; stacked on phones. Scoped under .cv. */
+.cv .bc-grid { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: clamp(32px, 5vw, 80px); align-items: start; padding-bottom: 96px; }
+.cv .bc-text { position: sticky; top: 96px; }
+.cv .bc-text .cv-h1 { margin-bottom: 24px; }
+.cv .bc-text .cv-lead { margin-bottom: 28px; }
+.cv .bc-points { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.cv .bc-points li { color: var(--cv-dim); font-size: 15px; line-height: 1.5; padding-left: 18px; position: relative; }
+.cv .bc-points li::before { content: ''; position: absolute; left: 0; top: 0.6em; width: 6px; height: 6px; border-radius: 50%; background: var(--cv-ink); }
+.cv .bc-cal { background: #f9f4eb; border-radius: 12px; overflow: hidden; min-width: 0; }
+.cv .bc-widget { width: 100%; min-width: 320px; }
+.cv .bc-loading { display: flex; align-items: center; justify-content: center; color: #0b0b0b; font-family: var(--cv-mono); font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; }
+.cv .bc-done { margin: 0; padding: 16px 20px; background: #0b0b0b; color: var(--cv-ink); font-size: 15px; border-top: 1px solid var(--cv-line); }
+@media (max-width: 860px) {
+  .cv .bc-grid { grid-template-columns: 1fr; }
+  .cv .bc-text { position: static; }
+  .cv .bc-cal { margin: 0 -8px; border-radius: 8px; }
+}

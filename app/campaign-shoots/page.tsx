@@ -22,7 +22,7 @@ export const metadata: Metadata = {
   },
 }
 
-const CALENDLY = 'https://calendly.com/mdmmarketing-info/10-minute-content-subscription-discovery-call-m-clone'
+const CALENDLY = '/book-call'
 const pad = (i: number) => String(i + 1).padStart(2, '0')
 
 // Display order from the copy: ecommerce first, then finance/property/trades/health, then hospitality.
@@ -67,7 +67,7 @@ const faqs = [
 
 function BookButton({ dark = false }: { dark?: boolean }) {
   return (
-    <a className={`cs-btn${dark ? ' cs-btn-dark' : ''}`} href={CALENDLY} target="_blank" rel="noreferrer noopener">
+    <a className={`cs-btn${dark ? ' cs-btn-dark' : ''}`} href={CALENDLY}>
       Book your intro call ↗
     </a>
   )

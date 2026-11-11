@@ -10,7 +10,7 @@ import LazyLoop from '../lazy-loop/LazyLoop'
  * the layout, nav, footer and logo wall are shared so the pages cannot drift apart.
  */
 
-export const CALENDLY = 'https://calendly.com/mdmmarketing-info/10-minute-content-subscription-discovery-call-m-clone'
+export const CALENDLY = '/book-call'
 
 // Strategy & Consulting and Paid Advertising have no page yet — they point at the closest live page until theirs exist.
 export const SERVICE_LINKS = {
@@ -246,7 +246,7 @@ export default function ServicePage(p: ServicePageProps) {
 
         <section className="cv-wrap cv-cta">
           <p>Have a project in mind?</p>
-          <a href={CALENDLY} target="_blank" rel="noreferrer noopener">( Book a call )</a>
+          <a href={CALENDLY}>( Book a call )</a>
           <a href="mailto:hello@mdmmarketing.com.au">( hello@mdmmarketing.com.au )</a>
         </section>
       </main>

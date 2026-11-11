@@ -3,7 +3,7 @@ import { sometype } from '../lama/fonts'
 import MdNavMenu from './MdNavMenu'
 import MdNavScroll from './MdNavScroll'
 
-const CALENDLY = 'https://calendly.com/mdmmarketing-info/10-minute-content-subscription-discovery-call-m-clone?utm_source=website&utm_medium=book-a-call&utm_campaign=mdnav'
+const CALENDLY = '/book-call?cta=mdnav'
 
 const SERVICES = [
   ['Strategy & Consulting', '/services/strategy'],
@@ -37,7 +37,7 @@ export default function MdNav({ band = false }: { band?: boolean } = {}) {
           </div>
         </div>
         {LINKS.map(([name, href]) => <a key={href} href={href}>{name}</a>)}
-        <a href={CALENDLY} target="_blank" rel="noreferrer noopener" className="mdnav-cta">Book a call ↗</a>
+        <a href={CALENDLY} className="mdnav-cta">Book a call ↗</a>
       </div>
       <MdNavMenu services={SERVICES} links={LINKS} cta={CALENDLY} />
     </div>

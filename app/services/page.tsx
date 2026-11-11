@@ -4,7 +4,7 @@ import GradientHero from '../components/GradientHero'
 import MdFooter from '../components/md-footer/MdFooter'
 import ScrambleEyebrow from '../components/ScrambleEyebrow'
 
-const CALENDLY = 'https://calendly.com/mdmmarketing-info/10-minute-content-subscription-discovery-call-m-clone?utm_source=website&utm_medium=book-a-call&utm_campaign=services'
+const CALENDLY = '/book-call?cta=services'
 
 const services = [
   {
@@ -80,7 +80,7 @@ export default function ServicesPage() {
             </>
           }
           actions={
-            <a href={CALENDLY} target="_blank" rel="noreferrer noopener" className="hero-glow-btn hero-glow-btn-sharp hero-glow-btn-pulse">
+            <a href={CALENDLY} className="hero-glow-btn hero-glow-btn-sharp hero-glow-btn-pulse">
               Book a strategy call
               <span className="btn-pulse-dot" aria-hidden="true"></span>
             </a>
@@ -124,7 +124,7 @@ export default function ServicesPage() {
                   A short call to map where the biggest gap is — content, brand, or distribution — and what closing it looks like.
                 </p>
                 <div className="cta-btns">
-                  <a href={CALENDLY} className="btn" target="_blank" rel="noreferrer noopener">
+                  <a href={CALENDLY} className="btn">
                     Book a call <span className="arr">→</span>
                   </a>
                   <a href="http://scorecard.mdmmarketing.com.au" className="btn btn-outline" target="_blank" rel="noreferrer noopener">

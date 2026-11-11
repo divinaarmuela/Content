@@ -11,7 +11,7 @@ import { clients } from '../../components/lama/workData'
 import { getSiteProject, getSiteProjects } from '../../lib/websiteData'
 import { CASE_NUMBERS } from '../caseNumbers'
 
-const CALENDLY = 'https://calendly.com/mdmmarketing-info/10-minute-content-subscription-discovery-call-m-clone?utm_source=website&utm_medium=book-a-call&utm_campaign=work-post'
+const CALENDLY = '/book-call?cta=work-post'
 
 // case pages refresh from the CMS at most every 5 minutes; slugs added via
 // the dashboard render on demand (dynamicParams defaults to true)
@@ -330,8 +330,6 @@ export default async function CaseStudyPage({ params }: { params: Promise<{ slug
           <div className="mt-16 flex flex-wrap gap-4">
             <a
               href={CALENDLY}
-              target="_blank"
-              rel="noreferrer noopener"
               className="border border-cream/25 px-6 py-4 font-lamam text-xs uppercase tracking-widest text-cream no-underline transition-colors visited:text-cream hover:bg-cream hover:text-ink"
             >
               BOOK A STRATEGY CALL ↗︎

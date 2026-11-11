@@ -1,4 +1,4 @@
-const CALENDLY = 'https://calendly.com/mdmmarketing-info/10-minute-content-subscription-discovery-call-m-clone?utm_source=website&utm_medium=book-a-call&utm_campaign=home-homectabanner'
+const CALENDLY = '/book-call?cta=home-homectabanner'
 
 export default function HomeCtaBanner() {
   return (
@@ -19,8 +19,6 @@ export default function HomeCtaBanner() {
         </p>
         <a
           href={CALENDLY}
-          target="_blank"
-          rel="noreferrer noopener"
           className="hcta-btn"
         >
           Book a strategy call

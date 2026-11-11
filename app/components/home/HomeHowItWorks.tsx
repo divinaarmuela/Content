@@ -1,4 +1,4 @@
-const CALENDLY = 'https://calendly.com/mdmmarketing-info/10-minute-content-subscription-discovery-call-m-clone?utm_source=website&utm_medium=book-a-call&utm_campaign=home-homehowitworks'
+const CALENDLY = '/book-call?cta=home-homehowitworks'
 
 const steps = [
   {
@@ -39,8 +39,6 @@ export default function HomeHowItWorks() {
         </div>
         <a
           href={CALENDLY}
-          target="_blank"
-          rel="noreferrer noopener"
           className="hhiw-cta"
         >
           Book your strategy call
