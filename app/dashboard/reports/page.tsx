@@ -265,12 +265,37 @@ function Writer({ report, clientId, month, mayDelete, onChange, onDeleted, settl
     catch (e) { toast.error(e instanceof Error ? e.message : 'Could not save') }
     finally { setSharing(false) }
   }
+  /**
+   * WRITING SURVIVES A DROPPED CONNECTION (11 Nov 2026: Karly saw "Failed to fetch" on MGMT's October report while the
+   * server finished and saved it at 17:34 — version 11). Writing holds one request open for a minute or more; a laptop
+   * sleeping or Wi-Fi blinking cuts it, but the server keeps going. So on a network error (not an answer from the
+   * server) the page keeps checking the saved report for up to 6 minutes and shows it the moment it lands.
+   */
+  const writeReport = async (body: Record<string, unknown>): Promise<{ ok: boolean; j: Record<string, any> }> => {
+    const started = Date.now()
+    try {
+      const r = await fetch('/api/reports/monthly', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ client_id: clientId, month, ...body }) })
+      const j = await r.json().catch(() => ({}))
+      return { ok: r.ok, j }
+    } catch {
+      setBuilding('Connection dropped — the report is still being written, checking for it…')
+      for (let i = 0; i < 45; i++) {
+        await new Promise(res => setTimeout(res, 8000))
+        try {
+          const r = await fetch(`/api/reports/monthly?client_id=${encodeURIComponent(clientId)}&month=${month}&keep=1`)
+          const j = await r.json().catch(() => ({}))
+          const at = Date.parse(String(j.report?.generated_at ?? ''))
+          if (r.ok && Number.isFinite(at) && at >= started - 5000) return { ok: true, j }
+        } catch { /* still offline: keep checking */ }
+      }
+      return { ok: false, j: { error: 'The connection dropped while writing. The report may still have saved: refresh the page in a minute before pressing Generate again.' } }
+    }
+  }
   const generate = async () => {
     setAsking(null); setWriting(true)
     try {
-      const r = await fetch('/api/reports/monthly', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ client_id: clientId, month, action: 'generate', objective, notes }) })
-      const j = await r.json().catch(() => ({}))
-      if (!r.ok) throw new Error(j.error ?? 'Could not write the report')
+      const { ok, j } = await writeReport({ action: 'generate', objective, notes })
+      if (!ok) throw new Error(j.error ?? 'Could not write the report')
       onChange(j.report); setEditing(false)
       toast.success('Report written — read it through, edit, and tick the checks')
     } catch (e) { toast.error(e instanceof Error ? e.message : 'Could not write the report') } finally { setWriting(false) }
@@ -309,7 +334,7 @@ function Writer({ report, clientId, month, mayDelete, onChange, onDeleted, settl
       if (ex.ok) { if (ex.j.report) onChange(ex.j.report); mark(1, 'done') } else { problems.push(`posts not explained (${ex.j.error ?? 'failed'})`); mark(1, 'skip', ex.j.error ?? 'Could not explain them — the report is still written') }
 
       setBuilding('Writing the report — a minute or two…'); mark(2, 'run')
-      const gen = await post({ action: 'generate', objective, notes: notesText })
+      const gen = await writeReport({ action: 'generate', objective, notes: notesText })
       if (!gen.ok) throw new Error(gen.j.error ?? 'Could not write the report')
       mark(2, 'done')
       onChange(gen.j.report); setEditing(false)
