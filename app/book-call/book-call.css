@@ -60,3 +60,13 @@
 .cv .bf-cc select { padding-left: 12px; }
 .cv .bf-form select option { background: #141416; color: #f9f4eb; }
 
+
+/* budget ticks, as Calendly asks it (11 Nov 2026) */
+.cv .bf-radios { border: 0; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.cv .bf-radios legend { font-size: 13px; color: rgba(249,244,235,.72); margin-bottom: 8px; padding: 0; }
+.cv .bf-radio { flex-direction: row !important; align-items: center; gap: 10px !important; padding: 12px 14px; border: 1px solid rgba(249,244,235,.16); border-radius: 8px; background: #0b0b0d; cursor: pointer; font-size: 14px !important; color: #f9f4eb !important; }
+.cv .bf-radio input { position: absolute; opacity: 0; pointer-events: none; }
+.cv .bf-radio::before { content: ''; flex: none; width: 16px; height: 16px; border-radius: 50%; border: 1.5px solid rgba(249,244,235,.45); }
+.cv .bf-radio-on { border-color: #4d6bff; box-shadow: 0 0 0 3px rgba(77,107,255,.2); }
+.cv .bf-radio-on::before { border-color: #4d6bff; background: radial-gradient(circle, #4d6bff 45%, transparent 50%); }
+@media (max-width: 860px) { .cv .bf-radios { grid-template-columns: 1fr; } }

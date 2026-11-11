@@ -51,3 +51,20 @@ describe('/book-call links and the embedded calendar', () => {
     expect(withFrom('https://calendly.com/x', o, '/about')).toBe('https://calendly.com/x')
   })
 })
+
+describe('Calendly prefill matches the live booking form (11 Nov 2026)', () => {
+  it('every answer lands in its question; phone through location', async () => {
+    const { calendlyEmbedUrl } = await import('../app/lib/book-call-core')
+    const u = new URL(calendlyEmbedUrl({ utm: {}, prefill: { name: 'A B', email: 'a@b.invalid' }, answers: {
+      phone: '+61 412 345 678', service: 'Content Subscriptions', share: 'S', goal: 'G', struggles: 'X', budget: '$8,000+/month', found: 'Instagram',
+    } }))
+    const g = (k: string) => u.searchParams.get(k)
+    expect([g('location'), g('a1'), g('a2'), g('a3'), g('a4'), g('a5'), g('a6')]).toEqual(['+61 412 345 678', 'Content Subscriptions', 'S', 'G', 'X', '$8,000+/month', 'Instagram'])
+  })
+  it('a service or budget that is not one of Calendly’s options is left out, not sent wrong', async () => {
+    const { calendlyEmbedUrl } = await import('../app/lib/book-call-core')
+    const u = new URL(calendlyEmbedUrl({ utm: {}, answers: { service: 'Website / tech', budget: 'lots' } }))
+    expect(u.searchParams.get('a1')).toBeNull()
+    expect(u.searchParams.get('a5')).toBeNull()
+  })
+})

@@ -3,16 +3,17 @@
 import { useMemo, useState } from 'react'
 import CallEmbed from './CallEmbed'
 import { readFirstVisit, visitUtm } from '../lib/utm-core'
-import { cleanFrom } from '../lib/book-call-core'
+import { CALENDLY_BUDGETS, CALENDLY_SERVICES, cleanFrom, type CallAnswers } from '../lib/book-call-core'
 
 /**
  * /book-call IN TWO STEPS (11 Nov 2026, the owner: "they will go to the booking page and answer the first step
  * questions, new lead, and Calendly comes in prefilled … if they have filled all, call booked status … make sure ads
  * all get captured").
- *   1. A short form → /api/submit, the website form's own route: the lead appears on Leads as "New lead" straight
- *      away, with the ad's campaign / ad set / ad / placement, the page they came from and their first visit.
- *   2. The Calendly calendar, prefilled with the same name and email. When they book, the webhook finds that lead
- *      by email and it becomes "Call booked" — one lead, never two.
+ *   1. Calendly's OWN questions, in its words (owner: "phone number is empty, the dropdown is empty — did you even see
+ *      what questions are there"), plus the business name → /api/submit: "New lead" at once, with the ad's campaign /
+ *      ad set / ad / placement, the page they came from and their first visit.
+ *   2. The Calendly calendar with EVERY answer already in (book-call-core: location + a1–a6). They pick a time and
+ *      press Schedule; the webhook finds the lead by email and it becomes "Call booked" — one lead, never two.
  * If step 1 cannot reach the server the calendar still opens (a booking is never lost; the webhook makes the lead).
  */
 // country codes for the phone field (owner, 11 Nov 2026: "make sure country code … nice dropdowns, then the number")
@@ -27,17 +28,19 @@ export function fullPhone(code: string, num: string): string {
   return n ? `${code} ${n}` : ''
 }
 
-const SERVICES = ['Strategy & consulting', 'Branding', 'Website / tech', 'Content & visibility', 'A campaign shoot', 'Hospitality marketing', 'Not sure yet']
-
 export default function BookCallFlow() {
   const [step, setStep] = useState<1 | 2>(1)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
-  const [f, setF] = useState({ fname: '', lname: '', email: '', phone: '', biz: '', model: '', need: '' })
+  const [f, setF] = useState({ fname: '', lname: '', email: '', phone: '', biz: '', service: '', share: '', goal: '', struggles: '', budget: '', found: '' })
   const [cc, setCc] = useState('AU')
   const dial = COUNTRIES.find(c => c[0] === cc)?.[2] ?? '+61'
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => setF(v => ({ ...v, [k]: e.target.value }))
   const prefill = useMemo(() => ({ name: `${f.fname} ${f.lname}`.trim(), email: f.email.trim() }), [f.fname, f.lname, f.email])
+  const answers = useMemo<CallAnswers>(() => ({
+    phone: fullPhone(dial, f.phone), service: f.service, share: f.share, goal: f.goal, struggles: f.struggles, budget: f.budget, found: f.found,
+  }), [dial, f.phone, f.service, f.share, f.goal, f.struggles, f.budget, f.found])
+  const ready = !!(f.fname && f.lname && f.email && f.phone && f.biz && f.service && f.share.trim() && f.found.trim())
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -46,10 +49,16 @@ export default function BookCallFlow() {
     setBusy(true)
     try {
       const from = cleanFrom(new URLSearchParams(window.location.search).get('from'))
+      // everything they wrote reaches the lead: the long answers go into its notes, one line each
+      const need = [f.share.trim(), f.goal.trim() && `#1 goal in 90 days: ${f.goal.trim()}`, f.struggles.trim() && `Struggles: ${f.struggles.trim()}`, f.found.trim() && `Found us: ${f.found.trim()}`].filter(Boolean).join('\n')
       const res = await fetch('/api/submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...f, phone: fullPhone(dial, f.phone), email: f.email.trim(), utm: visitUtm(), first_visit: readFirstVisit(), page: from ?? '/book-call', via: 'book-call' }),
+        body: JSON.stringify({
+          fname: f.fname.trim(), lname: f.lname.trim(), email: f.email.trim(), phone: answers.phone, biz: f.biz.trim(),
+          model: f.service, need, budget: f.budget || null,
+          utm: visitUtm(), first_visit: readFirstVisit(), page: from ?? '/book-call', via: 'book-call',
+        }),
       })
       if (res.status === 400) {
         const j = await res.json().catch(() => ({}))
@@ -68,8 +77,8 @@ export default function BookCallFlow() {
   if (step === 2) {
     return (
       <div className="bf-step2">
-        <p className="bf-step">Step 2 of 2 · Pick a time</p>
-        <CallEmbed prefill={prefill} />
+        <p className="bf-step">Step 2 of 2 · Pick a time — your answers are already in</p>
+        <CallEmbed prefill={prefill} answers={answers} />
       </div>
     )
   }
@@ -78,11 +87,11 @@ export default function BookCallFlow() {
     <form className="bf-form" onSubmit={submit} noValidate>
       <p className="bf-step">Step 1 of 2 · A few quick questions</p>
       <div className="bf-row">
-        <label>First name<input required value={f.fname} onChange={set('fname')} autoComplete="given-name" /></label>
-        <label>Last name<input required value={f.lname} onChange={set('lname')} autoComplete="family-name" /></label>
+        <label>First name *<input required value={f.fname} onChange={set('fname')} autoComplete="given-name" /></label>
+        <label>Last name *<input required value={f.lname} onChange={set('lname')} autoComplete="family-name" /></label>
       </div>
-      <label>Email<input required type="email" value={f.email} onChange={set('email')} autoComplete="email" /></label>
-      <label>Phone
+      <label>Email *<input required type="email" value={f.email} onChange={set('email')} autoComplete="email" /></label>
+      <label>Phone number *
         <span className="bf-phone">
           <span className="bf-select bf-cc">
             <select aria-label="Country code" value={cc} onChange={e => setCc(e.target.value)}>
@@ -92,20 +101,38 @@ export default function BookCallFlow() {
           <input required type="tel" inputMode="tel" value={f.phone} onChange={set('phone')} autoComplete="tel-national" placeholder="412 345 678" />
         </span>
       </label>
-      <label>Business name<input required value={f.biz} onChange={set('biz')} autoComplete="organization" /></label>
-      <label>What can we help with?
+      <label>Business name *<input required value={f.biz} onChange={set('biz')} autoComplete="organization" /></label>
+      <label>Which service are you after? *
         <span className="bf-select">
-          <select required value={f.model} onChange={set('model')}>
-            <option value="" disabled>Choose one</option>
-            {SERVICES.map(s => <option key={s} value={s}>{s}</option>)}
+          <select required value={f.service} onChange={set('service')}>
+            <option value="" disabled>Select…</option>
+            {CALENDLY_SERVICES.map(s => <option key={s} value={s}>{s}</option>)}
           </select>
         </span>
       </label>
-      <label>Anything we should know? <span className="bf-opt">(optional)</span>
-        <textarea rows={3} value={f.need} onChange={set('need')} placeholder="Where you are now, what you want to happen next" />
+      <label>Tell us about your business and what you need help with *
+        <textarea rows={3} value={f.share} onChange={set('share')} placeholder="Anything that will help us prepare for the call" />
+      </label>
+      <label>What’s your #1 goal in the next 90 days?
+        <input value={f.goal} onChange={set('goal')} />
+      </label>
+      <label>What struggles are you currently facing?
+        <input value={f.struggles} onChange={set('struggles')} />
+      </label>
+      <fieldset className="bf-radios">
+        <legend>What is your current monthly marketing budget?</legend>
+        {CALENDLY_BUDGETS.map(b => (
+          <label key={b} className={`bf-radio${f.budget === b ? ' bf-radio-on' : ''}`}>
+            <input type="radio" name="budget" value={b} checked={f.budget === b} onChange={set('budget')} />
+            <span>{b}</span>
+          </label>
+        ))}
+      </fieldset>
+      <label>How did you find MD Marketing? *
+        <input value={f.found} onChange={set('found')} placeholder="e.g. Instagram, a friend, Google" />
       </label>
       {err && <p className="bf-err" role="alert">{err}</p>}
-      <button type="submit" className="bf-btn" disabled={busy || !f.fname || !f.lname || !f.email || !f.phone || !f.biz || !f.model}>
+      <button type="submit" className="bf-btn" disabled={busy || !ready}>
         {busy ? 'One moment…' : 'Next: pick a time →'}
       </button>
       <p className="bf-note">Free · 10 minutes · no obligation</p>

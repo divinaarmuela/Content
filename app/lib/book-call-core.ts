@@ -35,7 +35,20 @@ const clip = (v: string) => v.slice(0, 255) // Calendly: "UTM values must be 255
  * checked live 11 Nov 2026, "Nov Leads" reached Calendly as "Nov+Leads", which would have put "+" in every
  * campaign / ad set / ad name on the Leads page.
  */
-export function calendlyEmbedUrl(opts: { utm: Utm; from?: string | null; cta?: string | null; prefill?: { name?: string; email?: string } }): string {
+/**
+ * THE CALENDLY FORM'S OWN QUESTIONS (read off the live booking form, 11 Nov 2026; owner: "phone number is empty, the
+ * dropdown is empty — did you even see what questions are there"). Calendly prefills custom questions by position,
+ * a1 = the first custom question, and phone through `location` (this is a phone-call event). Checked live:
+ *   location → Phone number · a1 → Which service are you after? (dropdown: the value must be one of its options,
+ *   word for word) · a2 → Please share anything… · a3 → #1 goal in the next 90 days · a4 → struggles ·
+ *   a5 → monthly marketing budget (ticks: the option's exact words) · a6 → How did you find MD Marketing?
+ * If questions are added, removed or reordered in Calendly, these positions move: re-read the form.
+ */
+export const CALENDLY_SERVICES = ['Ongoing Marketing Services', 'Podcast Studio', 'Studio Hire', 'Content Creation Packages', 'Content Subscriptions', 'Not Sure'] as const
+export const CALENDLY_BUDGETS = ['$2,000 – $3,500/month', '$4,000 – $7,500/month', '$8,000+/month', 'Not sure yet / Still figuring it out'] as const
+export type CallAnswers = { phone?: string; service?: string; share?: string; goal?: string; struggles?: string; budget?: string; found?: string }
+
+export function calendlyEmbedUrl(opts: { utm: Utm; from?: string | null; cta?: string | null; prefill?: { name?: string; email?: string }; answers?: CallAnswers }): string {
   const pairs: [string, string][] = []
   const hasAd = UTM_KEYS.some(k => opts.utm[k])
   if (hasAd) {
@@ -52,6 +65,13 @@ export function calendlyEmbedUrl(opts: { utm: Utm; from?: string | null; cta?: s
   const email = opts.prefill?.email?.trim()
   if (name) pairs.push(['name', name.slice(0, 120)])
   if (email) pairs.push(['email', email.slice(0, 200)])
+  const a = opts.answers ?? {}
+  const put = (k: string, v?: string) => { const t = v?.trim(); if (t) pairs.push([k, t.slice(0, 1000)]) }
+  put('location', a.phone)
+  if (a.service && (CALENDLY_SERVICES as readonly string[]).includes(a.service)) put('a1', a.service)
+  put('a2', a.share); put('a3', a.goal); put('a4', a.struggles)
+  if (a.budget && (CALENDLY_BUDGETS as readonly string[]).includes(a.budget)) put('a5', a.budget)
+  put('a6', a.found)
   // Calendly's own embed flag: no cookie banner inside the frame
   pairs.push(['hide_gdpr_banner', '1'])
   return `${CALENDLY_CALL_URL}?${pairs.map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&')}`

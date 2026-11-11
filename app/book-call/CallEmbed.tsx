@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Script from 'next/script'
-import { calendlyEmbedUrl, CALENDLY_CALL_URL } from '../lib/book-call-core'
+import { calendlyEmbedUrl, CALENDLY_CALL_URL, type CallAnswers } from '../lib/book-call-core'
 import { readStoredUtm, utmFrom } from '../lib/utm-core'
 
 declare global {
@@ -22,7 +22,7 @@ declare global {
  * do not say it does). Only messages from https://calendly.com are believed.
  */
 /** `prefill`: step 1's name and email (BookCallFlow), so Calendly opens already filled in */
-export default function CallEmbed({ prefill }: { prefill?: { name?: string; email?: string } } = {}) {
+export default function CallEmbed({ prefill, answers }: { prefill?: { name?: string; email?: string }; answers?: CallAnswers } = {}) {
   const [url, setUrl] = useState<string | null>(null)
   const [height, setHeight] = useState(1100)
   const [done, setDone] = useState(false)
@@ -34,8 +34,9 @@ export default function CallEmbed({ prefill }: { prefill?: { name?: string; emai
       from: q.get('from'),
       cta: q.get('cta'),
       prefill,
+      answers,
     }))
-  }, [prefill])
+  }, [prefill, answers])
 
   useEffect(() => {
     const onMessage = (e: MessageEvent) => {
