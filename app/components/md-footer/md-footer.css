@@ -5,6 +5,8 @@
 .mdfoot-mono { font-family: var(--font-sometype), ui-monospace, monospace; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; }
 .mdfoot-grid { display: grid; grid-template-columns: 1.6fr 1fr 1fr 1.3fr 1fr; gap: 32px; margin-bottom: 64px; }
 .mdfoot-grid > div { display: flex; flex-direction: column; gap: 8px; font-size: 14px; }
+.mdfoot-grid > div { min-width: 0; }
+.mdfoot-grid a[href^="mailto:"] { overflow-wrap: anywhere; } /* phone: the long email wraps instead of running off the screen */
 .mdfoot-grid a:hover { color: rgba(249, 244, 235, 0.55); }
 .mdfoot-grid span, .mdfoot-grid p:not(.mdfoot-mono) { color: rgba(249, 244, 235, 0.55); }
 .mdfoot-label { color: rgba(249, 244, 235, 0.55); margin-bottom: 8px !important; }

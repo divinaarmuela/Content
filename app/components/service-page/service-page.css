@@ -93,7 +93,7 @@ a.cv-view:hover, a.cv-row:hover .cv-view { color: var(--cv-ink); }
 
 .cv-cta { display: flex; flex-wrap: wrap; gap: 12px 28px; align-items: baseline; padding-top: 48px; padding-bottom: 48px; border-top: 1px solid var(--cv-line); }
 .cv-cta p { margin: 0; font-size: 18px; }
-.cv-cta a { color: var(--cv-dim); }
+.cv-cta a { color: var(--cv-dim); overflow-wrap: anywhere; min-width: 0; } /* phone: the email wraps, never runs off screen */
 .cv-cta a:hover { color: var(--cv-ink); }
 
 @media (max-width: 760px) {
