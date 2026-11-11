@@ -8,7 +8,8 @@ import { useEffect, useRef } from 'react'
  * follow it. Pure transforms on one rAF loop, no layout work per frame. Pauses on hover; people who ask for less
  * motion get the same curve standing still.
  */
-export default function SmileStrip({ photos }: { photos: { src: string; alt: string }[] }) {
+/** `base`: folder the photo names live in (default /hospitality/); pass '' when `src` is already a full path without .jpg */
+export default function SmileStrip({ photos, base = '/hospitality/' }: { photos: { src: string; alt: string }[]; base?: string }) {
   const wrap = useRef<HTMLDivElement>(null)
   const track = useRef<HTMLDivElement>(null)
 
@@ -59,7 +60,7 @@ export default function SmileStrip({ photos }: { photos: { src: string; alt: str
       <div ref={track} className="hx-smile-track">
         {[...photos, ...photos].map((p, i) => (
           // eslint-disable-next-line @next/next/no-img-element
-          <img key={`${p.src}-${i}`} src={`/hospitality/${p.src}.jpg`} alt={i < photos.length ? p.alt : ''} aria-hidden={i >= photos.length} loading="lazy" decoding="async" />
+          <img key={`${p.src}-${i}`} src={`${base}${p.src}.jpg`} alt={i < photos.length ? p.alt : ''} aria-hidden={i >= photos.length} loading="lazy" decoding="async" />
         ))}
       </div>
     </div>

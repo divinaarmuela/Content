@@ -35,7 +35,7 @@ const clip = (v: string) => v.slice(0, 255) // Calendly: "UTM values must be 255
  * checked live 11 Nov 2026, "Nov Leads" reached Calendly as "Nov+Leads", which would have put "+" in every
  * campaign / ad set / ad name on the Leads page.
  */
-export function calendlyEmbedUrl(opts: { utm: Utm; from?: string | null; cta?: string | null }): string {
+export function calendlyEmbedUrl(opts: { utm: Utm; from?: string | null; cta?: string | null; prefill?: { name?: string; email?: string } }): string {
   const pairs: [string, string][] = []
   const hasAd = UTM_KEYS.some(k => opts.utm[k])
   if (hasAd) {
@@ -46,6 +46,12 @@ export function calendlyEmbedUrl(opts: { utm: Utm; from?: string | null; cta?: s
   }
   const from = cleanFrom(opts.from)
   if (from) pairs.push([PAGE_PARAM, from])
+  // step 1's answers fill Calendly's name and email (owner, 11 Nov 2026: "calendly comes in prefill details"), so the
+  // booking carries the same email as the New lead and the webhook turns THAT lead into "Call booked"
+  const name = opts.prefill?.name?.trim()
+  const email = opts.prefill?.email?.trim()
+  if (name) pairs.push(['name', name.slice(0, 120)])
+  if (email) pairs.push(['email', email.slice(0, 200)])
   // Calendly's own embed flag: no cookie banner inside the frame
   pairs.push(['hide_gdpr_banner', '1'])
   return `${CALENDLY_CALL_URL}?${pairs.map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&')}`

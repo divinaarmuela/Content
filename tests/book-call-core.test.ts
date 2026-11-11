@@ -30,6 +30,13 @@ describe('/book-call links and the embedded calendar', () => {
     expect(raw).not.toContain('+')
   })
 
+  it('step 1 prefills Calendly with the same name and email', () => {
+    const raw = calendlyEmbedUrl({ utm: {}, prefill: { name: 'Ana Lee', email: 'ana@venue.com' } })
+    expect(raw).toContain('name=Ana%20Lee')
+    expect(raw).toContain('email=ana%40venue.com')
+    expect(calendlyEmbedUrl({ utm: {} })).not.toContain('email=')
+  })
+
   it('from is only ever one of our own paths', () => {
     expect(cleanFrom('https://evil.example')).toBeNull()
     expect(cleanFrom('//evil.example')).toBeNull()

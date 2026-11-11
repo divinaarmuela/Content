@@ -21,7 +21,8 @@ declare global {
  * party, so ads keep counting bookings whether or not Calendly's own pixel fires inside the embedded frame (its docs
  * do not say it does). Only messages from https://calendly.com are believed.
  */
-export default function CallEmbed() {
+/** `prefill`: step 1's name and email (BookCallFlow), so Calendly opens already filled in */
+export default function CallEmbed({ prefill }: { prefill?: { name?: string; email?: string } } = {}) {
   const [url, setUrl] = useState<string | null>(null)
   const [height, setHeight] = useState(1100)
   const [done, setDone] = useState(false)
@@ -32,8 +33,9 @@ export default function CallEmbed() {
       utm: { ...readStoredUtm(), ...utmFrom(window.location.search) },
       from: q.get('from'),
       cta: q.get('cta'),
+      prefill,
     }))
-  }, [])
+  }, [prefill])
 
   useEffect(() => {
     const onMessage = (e: MessageEvent) => {

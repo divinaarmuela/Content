@@ -16,6 +16,8 @@ export async function POST(req: NextRequest) {
   }
 
   const { fname, lname, email, phone, biz, model, need, budget, timeline } = body
+  // /book-call step 1 (11 Nov 2026): they are picking a time right now, so the reply email doesn't ask them to book
+  const bookingNow = body.via === 'book-call'
 
   if (!fname || !lname || !email || !phone || !biz) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
@@ -68,13 +70,13 @@ export async function POST(req: NextRequest) {
         <p style="font-size:16px;line-height:1.7;color:#5A5A55;margin:0 0 32px;">
           We've got your enquiry and someone from the team will be in touch shortly.
         </p>
-        <p style="font-size:16px;line-height:1.7;color:#5A5A55;margin:0 0 32px;">
+        ${bookingNow ? '' : `<p style="font-size:16px;line-height:1.7;color:#5A5A55;margin:0 0 32px;">
           Want to lock in a time now? Grab a spot below and we'll come prepared.
-        </p>
-        <a href="https://calendly.com/mdmmarketing-info/10-minute-content-subscription-discovery-call-m-clone?utm_source=lead-email&utm_medium=email&utm_campaign=form-confirmation"
+        </p>`}
+        ${bookingNow ? '' : `        <a href="https://calendly.com/mdmmarketing-info/10-minute-content-subscription-discovery-call-m-clone?utm_source=lead-email&utm_medium=email&utm_campaign=form-confirmation"
           style="display:inline-block;background:#0057FF;color:#F4F0E6;font-family:monospace;font-size:12px;font-weight:600;letter-spacing:0.15em;text-decoration:none;padding:16px 28px;margin-bottom:40px;">
           Book a 10-min call →
-        </a>
+        </a>`}
         <div style="border-top:1px solid #C9C4BA;padding-top:24px;">
           <p style="font-family:monospace;font-size:11px;color:#8A8A85;letter-spacing:0.08em;margin:0;">
             MD Media Marketing &middot; Melbourne, AU &middot;
@@ -97,6 +99,8 @@ export async function POST(req: NextRequest) {
     timeline: timeline ?? null,
     // the ad that brought them (9 Nov 2026) — campaign, ad set, ad, placement; nothing when no ad did
     ...adFieldsFromUtm(body.utm),
+    // the page they came from (11 Nov 2026, /book-call step 1): "Booked from" on Leads before the booking lands too
+    ...(typeof body.page === 'string' && body.page.startsWith('/') && body.page !== '/book-call' ? { booked_from: body.page.slice(0, 200) } : {}),
   }
   let savedLead: (typeof leadInput & { id: string }) | null = null
   let dbError: unknown = null

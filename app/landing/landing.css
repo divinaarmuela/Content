@@ -1,0 +1,62 @@
+/* /landing/<service> pages (11 Nov 2026): the hospitality page's .cv.hx look, plus the parts only these pages have.
+   Desktop-only rules sit in a min-width query (an unscoped rule once broke the phone hero). */
+.lp .lp-cta { margin-top: 44px; }
+.lp .lp-cta-center { display: flex; flex-direction: column; align-items: center; }
+.lp .hx-hero .lp-cta { margin-top: 0; }
+.lp .lp-wide-h2 { max-width: 26ch; margin-bottom: 36px; }
+.lp .hx-h2 { margin-bottom: 36px; }
+
+/* hero image (some pages lead with a still) */
+.lp .hx-hero-film img { display: block; width: 100%; aspect-ratio: 9 / 16; object-fit: cover; border-radius: 6px; }
+@media (min-width: 861px) {
+  .lp .lp-hero-wide { grid-template-columns: minmax(0, 4fr) minmax(0, 7fr); }
+  .lp .lp-hero-wide .hx-hero-film { width: 100%; justify-self: stretch; }
+  .lp .lp-hero-wide .hx-hero-film video, .lp .lp-hero-wide .hx-hero-film img { aspect-ratio: 16 / 10; }
+}
+
+/* sound familiar */
+.lp-problems { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.lp-problem { background: var(--hx-paper); border: 1px solid var(--cv-line); border-radius: 8px; padding: 26px 26px 28px; }
+.lp-problem-q { font-size: clamp(19px, 1.7vw, 23px); line-height: 1.3; letter-spacing: -0.01em; margin: 0 0 14px; }
+.lp-problem-a { font-size: 15px; line-height: 1.6; color: var(--cv-dim); margin: 0; padding-top: 14px; border-top: 1px solid var(--cv-line); }
+.lp-problem-q::before { content: ''; display: block; width: 22px; height: 3px; border-radius: 2px; background: var(--hx-wine); margin-bottom: 16px; }
+
+/* the work: one big piece per row, alternating sides (hospitality.css does the zigzag) */
+.lp-zig-row { grid-template-columns: minmax(0, 6fr) minmax(0, 5fr); }
+.lp-media { position: relative; overflow: hidden; border-radius: 10px; background: #e8e8ef; box-shadow: 0 40px 70px -34px rgba(13, 13, 18, .45); }
+.lp-portrait { aspect-ratio: 4 / 5; max-height: 720px; }
+.lp-landscape { aspect-ratio: 16 / 10; }
+.lp-square { aspect-ratio: 1; }
+.lp-zig-media.lp-portrait { width: min(100%, 520px); justify-self: center; }
+.lp-kind { font-size: 14px; color: var(--cv-dim); margin: -4px 0 18px; }
+.lp-link { display: inline-block; margin-top: 4px; font-size: 14px; border-bottom: 1px solid var(--cv-line); padding-bottom: 2px; }
+.lp-link:hover { border-color: var(--hx-wine); color: var(--hx-wine); }
+
+/* what's included */
+.lp-included { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.lp-inc { background: var(--hx-paper); border: 1px solid var(--cv-line); border-radius: 8px; padding: 24px; }
+.lp-inc-n { font-family: var(--cv-mono); font-size: 11px; letter-spacing: .12em; color: var(--hx-wine); margin: 0 0 18px; }
+.lp-inc-t { font-size: 20px; letter-spacing: -0.01em; margin: 0 0 8px; }
+.lp-inc-d { font-size: 15px; line-height: 1.55; color: var(--cv-dim); margin: 0; }
+
+/* steps: five across */
+@media (min-width: 861px) { .lp-steps { grid-template-columns: repeat(5, minmax(0, 1fr)); } .lp-steps li + li { padding-left: 22px; } .lp-steps li { padding-right: 18px; } }
+
+/* quote */
+.lp-quote { padding-top: clamp(56px, 7vw, 96px); padding-bottom: clamp(56px, 7vw, 96px); color: #f6f1e8; }
+.lp-quote blockquote { margin: 0; max-width: 34ch; }
+.lp-quote blockquote p:first-child { font-size: clamp(26px, 3.2vw, 42px); line-height: 1.2; letter-spacing: -0.015em; margin: 0 0 24px; }
+.lp-quote .hx-cite { font-family: var(--cv-mono); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: rgba(246,241,232,.6); margin: 0; }
+.lp-quote .hx-btn-light { background: #f6f1e8; color: #0d0d12 !important; }
+.lp-quote .hx-note { color: rgba(246,241,232,.6); }
+
+@media (max-width: 860px) {
+  .lp-problems, .lp-included { grid-template-columns: 1fr; }
+  .lp-zig-row, .lp-zig-row:nth-child(even) { grid-template-columns: 1fr; }
+  .lp-zig-media.lp-portrait { width: 100%; }
+  .lp .hx-hero-film img { width: 100%; height: 100%; aspect-ratio: auto; border-radius: 0; object-fit: cover; }
+}
+@media (min-width: 861px) {
+  .lp-zig-row:nth-child(even) { grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); }
+  .lp-zig-row:nth-child(even) .lp-zig-media { order: 2; }
+}

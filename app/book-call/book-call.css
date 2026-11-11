@@ -15,3 +15,20 @@
   .cv .bc-text { position: static; }
   .cv .bc-cal { margin: 0 -8px; border-radius: 8px; }
 }
+
+/* /book-call step 1 form (11 Nov 2026) — sits in the cream card where the calendar used to be */
+.cv .bf-card { padding: 0; }
+.cv .bf-form { display: flex; flex-direction: column; gap: 14px; padding: clamp(22px, 3vw, 36px); color: #0b0b0b; }
+.cv .bf-step { margin: 0 0 6px; font-family: var(--cv-mono); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: rgba(11,11,11,.55); }
+.cv .bf-step2 .bf-step { padding: 18px 20px 0; }
+.cv .bf-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.cv .bf-form label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: rgba(11,11,11,.75); }
+.cv .bf-form input, .cv .bf-form select, .cv .bf-form textarea { font: inherit; font-size: 16px; color: #0b0b0b; background: #fff; border: 1px solid rgba(11,11,11,.18); border-radius: 8px; padding: 12px 14px; outline: none; }
+.cv .bf-form input:focus, .cv .bf-form select:focus, .cv .bf-form textarea:focus { border-color: #1838e0; box-shadow: 0 0 0 3px rgba(24,56,224,.15); }
+.cv .bf-opt { color: rgba(11,11,11,.45); }
+.cv .bf-btn { margin-top: 6px; padding: 16px 22px; border: 0; border-radius: 999px; background: #0b0b0b; color: #f9f4eb; font-family: var(--cv-mono); font-size: 12px; letter-spacing: .1em; text-transform: uppercase; font-weight: 600; cursor: pointer; }
+.cv .bf-btn:hover:not(:disabled) { background: #1838e0; }
+.cv .bf-btn:disabled { opacity: .45; cursor: not-allowed; }
+.cv .bf-err { margin: 0; color: #b42318; font-size: 14px; }
+.cv .bf-note { margin: 0; text-align: center; font-family: var(--cv-mono); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: rgba(11,11,11,.5); }
+@media (max-width: 860px) { .cv .bf-row { grid-template-columns: 1fr; } }

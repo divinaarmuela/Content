@@ -4,7 +4,7 @@ import MdFooter from '../components/md-footer/MdFooter'
 import { archivo, sometype } from '../components/lama/fonts'
 import '../components/service-page/service-page.css'
 import './book-call.css'
-import CallEmbed from './CallEmbed'
+import BookCallFlow from './BookCallFlow'
 
 /**
  * /book-call — the ONE place a call is booked (11 Nov 2026, the owner: "one dedicated booking page embedded …
@@ -43,7 +43,7 @@ export default function BookCallPage() {
               <li>Can&rsquo;t make it? Reschedule or cancel from the email.</li>
             </ul>
           </div>
-          <CallEmbed />
+          <div className="bc-cal bf-card"><BookCallFlow /></div>
         </div>
       </main>
       <MdFooter
