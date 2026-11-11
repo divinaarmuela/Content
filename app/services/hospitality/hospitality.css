@@ -257,3 +257,41 @@
 /* the site navbar sits above .cv.hx; links in the booking bar never underline (a site-wide link style leaked in) */
 .hx-bar, .hx-bar:visited, .hx-btn, .hx-btn:visited { text-decoration: none !important; }
 @media (max-width: 860px) { .hx-hero { min-height: calc(100svh - 64px); } }
+
+/* The Waterside row (11 Nov 2026, owner: "use the new Waterside video for the Waterside section, it looks so less"):
+   the landscape venue film leads, the Lunar New Year Reel and the yee sang still overlap its lower corners */
+.hx-collage-wide { height: clamp(460px, 48vw, 640px); }
+.hx-col-wide { position: absolute; margin: 0; top: 0; left: 0; right: 0; aspect-ratio: 16 / 9; border-radius: 8px; overflow: hidden; z-index: 1; box-shadow: 0 40px 70px -30px rgba(23,19,15,.45); }
+.hx-collage-wide .hx-col-main { top: auto; bottom: 0; left: 4%; right: auto; width: 26%; z-index: 3; }
+.hx-collage-wide .hx-col-still { bottom: 6%; right: 4%; left: auto; width: 32%; aspect-ratio: 4 / 3; z-index: 3; }
+@media (max-width: 860px) {
+  .hx-collage-wide { height: 92vw; }
+  .hx-collage-wide .hx-col-main { width: 34%; left: 2% !important; }
+  .hx-collage-wide .hx-col-still { width: 44%; right: 2% !important; bottom: 4%; }
+}
+
+/* ── PALETTE v2 (11 Nov 2026, owner's reference Reel: "one accent colour that catches you off guard") ───────────────
+   neutral base (clean warm white + midnight black) and ONE bold accent, hot pink, used sparingly, with a soft blurred
+   glow behind the hero film. Overrides the cream + wine tokens above. */
+.cv.hx {
+  --cv-bg: #faf8f5;
+  --cv-ink: #0d0d12;
+  --cv-dim: rgba(13, 13, 18, 0.58);
+  --cv-line: rgba(13, 13, 18, 0.1);
+  --hx-paper: #ffffff;
+  --hx-wine: #e0338b; /* the one accent: hot pink */
+}
+.hx-hero { position: relative; }
+.hx-hero-film { position: relative; }
+.hx-hero-film::before { content: ''; position: absolute; inset: -18% -22%; z-index: -1; background: radial-gradient(40% 45% at 35% 40%, rgba(224, 51, 139, 0.45), transparent 70%), radial-gradient(38% 40% at 70% 70%, rgba(255, 153, 51, 0.35), transparent 70%); filter: blur(40px); pointer-events: none; }
+.hx-hero-film video { position: relative; }
+.hx-btn { background: var(--cv-ink); }
+.hx-btn:hover { background: var(--hx-wine); }
+.hx-quote-wrap { background: #0d0d12; }
+.hx-slot { background: repeating-linear-gradient(135deg, #f0edf0 0 12px, #ebe7ec 12px 24px); }
+.hx-quote .hx-slot { background: repeating-linear-gradient(135deg, #17171d 0 12px, #1c1c23 12px 24px); }
+.hx-story-made li { background: #fff; }
+@media (max-width: 860px) {
+  .hx-hero-film::before { display: none; }
+  .hx-hero .cv-h1 em { color: #ff6fb5; }
+}

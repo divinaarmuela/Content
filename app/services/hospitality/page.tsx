@@ -43,6 +43,8 @@ const HOSPITALITY_LOGOS = ['Cecconi’s', 'The Waterside', 'Death & Co', 'Imperi
 type Story = {
   n: string; venue: string; kind: string; line: string; made: string[]
   reel: { src: string; title: string }; second?: { src: string; title: string }
+  /** a landscape film that leads the collage (The Waterside venue film); the reel then overlaps it */
+  wide?: { src: string; title: string }
   still: { src: string; alt: string }; thumbs: { src: string; alt: string }[]
 }
 const STORIES: Story[] = [
@@ -65,15 +67,16 @@ const STORIES: Story[] = [
     thumbs: [{ src: 'glass-den-chilli-crab', alt: 'Chilli crab scramble on brioche' }, { src: 'glass-den-desserts', alt: 'The dessert spread' }],
   },
   {
-    n: '03', venue: 'The Waterside', kind: 'Past/Port restaurant · Lunar New Year',
-    line: 'A seasonal event that needed people through the door on specific nights. A captioned explainer that sold the platter, the toss and the occasion.',
-    made: ['Campaign Reel', 'Captioned explainer', 'Event promotion'],
+    n: '03', venue: 'The Waterside', kind: 'King & Flinders · venue and Past/Port restaurant',
+    line: 'A landmark venue on King & Flinders: bars, terraces, dining rooms and function spaces. A venue film that shows the whole building, and seasonal campaigns that fill it, like Lunar New Year at Past/Port.',
+    made: ['Venue film', 'Drone & interiors', 'Seasonal campaign Reel', 'Event promotion'],
+    wide: { src: 'waterside-venue-wide', title: 'The Waterside venue film' },
     reel: { src: 'pastport-lunar-new-year', title: 'Lunar New Year' },
     still: { src: 'pastport-lunar-card', alt: 'Yee sang toss with a red envelope' },
     thumbs: [],
   },
 ]
-const LONG_LUNCH = { src: 'waterside-venue-wide', title: 'The Waterside, King & Flinders' }
+const LONG_LUNCH = { src: 'cecconis-duck-wide', title: 'Long lunch, Cecconi’s' }
 
 const PHOTOS: { src: string; alt: string }[] = [
   { src: 'cecconis-pappardelle', alt: 'Twirling pappardelle at Cecconi’s' },
@@ -166,7 +169,12 @@ export default function HospitalityPage() {
             {STORIES.map(s => (
               <article key={s.venue} className="hx-zig-row">
                 {/* the collage: main Reel, an overlapping still, a second Reel tucked behind */}
-                <div className={`hx-collage${s.second ? '' : ' hx-collage-solo'}`}>
+                <div className={`hx-collage${s.wide ? ' hx-collage-wide' : s.second ? '' : ' hx-collage-solo'}`}>
+                  {s.wide && (
+                    <figure className="hx-col-wide">
+                      <LazyLoop className="hx-fill" src={`${M}/${s.wide.src}`} label={`${s.wide.title}, ${s.venue}`} />
+                    </figure>
+                  )}
                   <figure className="hx-col-main">
                     <LazyLoop className="hx-fill" src={`${M}/${s.reel.src}`} label={`${s.reel.title}, ${s.venue}`} />
                   </figure>
@@ -196,7 +204,7 @@ export default function HospitalityPage() {
         <section className="hx-wide">
           <LazyLoop className="hx-fill" src={`${M}/${LONG_LUNCH.src}`} label={LONG_LUNCH.title} />
           <div className="hx-wide-text cv-wrap">
-            <p className="hx-wide-line">The room people book for.</p>
+            <p className="hx-wide-line">The table people book for.</p>
             <a href={BOOK} className="hx-btn hx-btn-light">See what we’d do for your venue</a>
           </div>
         </section>
