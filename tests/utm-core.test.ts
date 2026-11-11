@@ -24,7 +24,7 @@ import { adFieldsFromUtm } from '@/app/lib/utm-core'
 describe('form ad fields', () => {
   it('maps an ad visit to columns, ignores our own links and junk', () => {
     expect(adFieldsFromUtm({ utm_source: 'ig', utm_medium: 'Instagram_Stories', utm_campaign: 'Nov', utm_term: 'Set A', utm_content: 'Ad 1' }))
-      .toEqual({ source_tag: 'Nov', ad_campaign: 'Nov', ad_set: 'Set A', ad_name: 'Ad 1', ad_placement: 'Instagram_Stories' })
+      .toEqual({ source: 'ig', source_tag: 'Nov', ad_campaign: 'Nov', ad_set: 'Set A', ad_name: 'Ad 1', ad_placement: 'Instagram_Stories' })
     expect(adFieldsFromUtm({ utm_source: 'website', utm_campaign: 'hero' })).toEqual({})
     expect(adFieldsFromUtm('x')).toEqual({})
   })

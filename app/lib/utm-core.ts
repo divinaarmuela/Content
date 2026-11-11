@@ -85,6 +85,7 @@ export function adFieldsFromUtm(raw: unknown): Record<string, string> {
   if (!src || src === 'website') return {}
   const out: Record<string, string> = {}
   const set = (k: string, v: string | null) => { if (v) out[k] = v }
+  set('source', src) // an ad's lead says Facebook / Instagram, not "Website form" (owner, 11 Nov 2026)
   set('source_tag', s('utm_campaign')); set('ad_campaign', s('utm_campaign')); set('ad_set', s('utm_term'))
   set('ad_name', s('utm_content')); set('ad_placement', s('utm_medium'))
   return out
