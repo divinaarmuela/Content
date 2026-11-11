@@ -211,12 +211,13 @@ export default function AccountPage({ params }: { params: Promise<{ id: string }
                 — and gave them no way to do it. The connect flow lived in a
                 dropdown on another page. It is the same call; it now lives
                 where the warning is. */}
-            {needsReconnect && (
-              <Button size="sm" onClick={() => void reconnect()} disabled={reconnecting}>
-                <RefreshCw className={`h-3.5 w-3.5 ${reconnecting ? 'animate-spin' : ''}`} />
-                {reconnecting ? 'Opening the login screen…' : 'Reconnect account'}
-              </Button>
-            )}
+            {/* ALWAYS here (11 Nov 2026): the Overview's "login runs out soon" sent the team to this page, which only
+                drew the button once the account had already broken — so there was no way to renew a login before
+                it ran out. Renewing early never hurts; the button is filled when it matters, outlined otherwise. */}
+            <Button size="sm" variant={needsReconnect || notice?.level === 'watch' ? 'default' : 'outline'} onClick={() => void reconnect()} disabled={reconnecting}>
+              <RefreshCw className={`h-3.5 w-3.5 ${reconnecting ? 'animate-spin' : ''}`} />
+              {reconnecting ? 'Opening the login screen…' : 'Reconnect account'}
+            </Button>
             <Link
               href={`/dashboard/social/inbox?account=${encodeURIComponent(account.provider_account_id)}`}
               className="inline-flex items-center gap-1.5 rounded-tile border border-border px-3 py-1.5 text-body-15 transition-colors hover:bg-foreground/[0.04]"
