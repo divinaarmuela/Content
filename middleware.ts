@@ -142,6 +142,7 @@ export const config = {
     // clerkMiddleware()", 10 Sep 2026)
     '/api/act-as/:path*',
     '/api/calendly/connect',
+    '/api/calendly/bookings',
     '/api/asana/:path*',
     '/api/assets/:path*',
     '/api/audience/:path*',

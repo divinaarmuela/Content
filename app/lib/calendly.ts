@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto'
 import { table } from '@/lib/db'
 import type { Lead } from '@/lib/db-types'
 import { bookingPatch, signingKey, type Booking } from './calendly-core'
+import type { CalEvent } from './bookings-core'
 import { logLeadEvent } from './lead-events'
 import { callWords } from './lead-timeline-core'
 
@@ -25,6 +26,32 @@ async function cal(path: string, init: RequestInit = {}): Promise<any> {
   const j = await r.json().catch(() => ({}))
   if (!r.ok) throw new Error(`Calendly ${r.status}: ${j?.message ?? j?.title ?? 'request failed'}${j?.details ? ' — ' + JSON.stringify(j.details) : ''}`)
   return j
+}
+
+/**
+ * Every call ever booked on this Calendly user (the Bookings tab on Leads, 11 Nov 2026). Read only. Calendly pages
+ * 100 at a time; capped at 50 pages (5,000 bookings) so a runaway loop cannot hang the request.
+ */
+export async function listBookings(): Promise<CalEvent[]> {
+  const me = (await cal('/users/me')).resource
+  const out: CalEvent[] = []
+  let token: string | null = null
+  for (let page = 0; page < 50; page++) {
+    const q = new URLSearchParams({ user: me.uri, count: '100', sort: 'start_time:desc' })
+    if (token) q.set('page_token', token)
+    const j = await cal(`/scheduled_events?${q}`)
+    for (const e of j.collection ?? []) {
+      out.push({
+        name: String(e.name ?? 'Call'),
+        status: e.status === 'canceled' ? 'canceled' : 'active',
+        created_at: String(e.created_at ?? e.start_time ?? ''),
+        start_time: String(e.start_time ?? ''),
+      })
+    }
+    token = j.pagination?.next_page_token ?? null
+    if (!token) break
+  }
+  return out
 }
 
 /** subscribe (once) to bookings and cancellations, pointing at our webhook. Safe to press twice. */

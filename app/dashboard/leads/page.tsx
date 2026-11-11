@@ -24,6 +24,7 @@ import {
   ArrowRight, ArrowUpDown, Copy, Download, Mail, MoreHorizontal, RefreshCw, Trash2, UserPlus,
 } from 'lucide-react'
 import Chip from '../ui/Chip'
+import Bookings from './Bookings'
 import { useRole } from '../useRole'
 import { LoadFailed } from '../NotSetUp'
 import PageTitle from '../ui/PageTitle'
@@ -83,6 +84,8 @@ export default function LeadsPage() {
   const [sort, setSort]       = useState<{ key: SortKey; dir: 'asc' | 'desc' }>({ key: 'created_at', dir: 'desc' })
   const [deleting, setDeleting] = useState<Lead | null>(null)
   const [busy, setBusy] = useState(false)
+  // 11 Nov 2026: the enquiries list, or the all-time Calendly bookings count (managers only — it reads Calendly)
+  const [tab, setTab] = useState<'enquiries' | 'bookings'>('enquiries')
 
   const copyEmail = (l: Lead) => {
     void copyText(Promise.resolve(l.email ?? '')).then(ok => { if (ok) toast.success(`${l.email} copied`) })
@@ -284,13 +287,33 @@ export default function LeadsPage() {
             {/* Export is a monthly reporting job. It used to be the only filled
                 button on the page, so the page looked like it was FOR exporting
                 — the daily work is opening a lead and contacting it. */}
-            <Button variant="outline" size="sm" onClick={exportExcel} disabled={filtered.length === 0}>
-              <Download className="h-4 w-4" /> Export ({filtered.length})
-            </Button>
+            {tab === 'enquiries' && (
+              <Button variant="outline" size="sm" onClick={exportExcel} disabled={filtered.length === 0}>
+                <Download className="h-4 w-4" /> Export ({filtered.length})
+              </Button>
+            )}
           </div>
         </>}
       />
 
+      {manager && (
+        <div role="tablist" aria-label="Leads views" className="flex w-fit gap-1 rounded-lg bg-foreground/[0.05] p-1">
+          {([['enquiries', 'Enquiries'], ['bookings', 'Bookings']] as const).map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              role="tab"
+              aria-selected={tab === key}
+              onClick={() => setTab(key)}
+              className={`rounded-md px-3 py-1.5 text-secondary-13 font-medium transition-colors ${tab === key ? 'bg-surface text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {tab === 'bookings' && manager ? <Bookings /> : <>
 
       <div className="flex items-center gap-3">
         <Input
@@ -404,6 +427,7 @@ export default function LeadsPage() {
         </Card>
         </>
       )}
+      </>}
 
       <AlertDialog open={!!deleting} onOpenChange={open => !open && !busy && setDeleting(null)}>
         <AlertDialogContent>
