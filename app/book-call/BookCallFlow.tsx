@@ -15,13 +15,27 @@ import { cleanFrom } from '../lib/book-call-core'
  *      by email and it becomes "Call booked" — one lead, never two.
  * If step 1 cannot reach the server the calendar still opens (a booking is never lost; the webhook makes the lead).
  */
-const SERVICES = ['Strategy & consulting', 'Branding', 'A new website', 'Content & visibility', 'A campaign shoot', 'Hospitality marketing', 'Not sure yet']
+// country codes for the phone field (owner, 11 Nov 2026: "make sure country code … nice dropdowns, then the number")
+const COUNTRIES: [string, string, string][] = [
+  ['AU', '\u{1F1E6}\u{1F1FA}', '+61'], ['NZ', '\u{1F1F3}\u{1F1FF}', '+64'], ['GB', '\u{1F1EC}\u{1F1E7}', '+44'], ['US', '\u{1F1FA}\u{1F1F8}', '+1'],
+  ['CA', '\u{1F1E8}\u{1F1E6}', '+1'], ['SG', '\u{1F1F8}\u{1F1EC}', '+65'], ['PH', '\u{1F1F5}\u{1F1ED}', '+63'], ['IN', '\u{1F1EE}\u{1F1F3}', '+91'],
+  ['MY', '\u{1F1F2}\u{1F1FE}', '+60'], ['ID', '\u{1F1EE}\u{1F1E9}', '+62'], ['HK', '\u{1F1ED}\u{1F1F0}', '+852'], ['AE', '\u{1F1E6}\u{1F1EA}', '+971'],
+]
+/** "+61" + "0412 345 678" -> "+61 412 345 678": the local leading 0 goes, spaces kept as typed */
+export function fullPhone(code: string, num: string): string {
+  const n = num.trim().replace(/^0+/, '')
+  return n ? `${code} ${n}` : ''
+}
+
+const SERVICES = ['Strategy & consulting', 'Branding', 'Website / tech', 'Content & visibility', 'A campaign shoot', 'Hospitality marketing', 'Not sure yet']
 
 export default function BookCallFlow() {
   const [step, setStep] = useState<1 | 2>(1)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const [f, setF] = useState({ fname: '', lname: '', email: '', phone: '', biz: '', model: '', need: '' })
+  const [cc, setCc] = useState('AU')
+  const dial = COUNTRIES.find(c => c[0] === cc)?.[2] ?? '+61'
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => setF(v => ({ ...v, [k]: e.target.value }))
   const prefill = useMemo(() => ({ name: `${f.fname} ${f.lname}`.trim(), email: f.email.trim() }), [f.fname, f.lname, f.email])
 
@@ -35,7 +49,7 @@ export default function BookCallFlow() {
       const res = await fetch('/api/submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...f, email: f.email.trim(), utm: visitUtm(), first_visit: readFirstVisit(), page: from ?? '/book-call', via: 'book-call' }),
+        body: JSON.stringify({ ...f, phone: fullPhone(dial, f.phone), email: f.email.trim(), utm: visitUtm(), first_visit: readFirstVisit(), page: from ?? '/book-call', via: 'book-call' }),
       })
       if (res.status === 400) {
         const j = await res.json().catch(() => ({}))
@@ -68,13 +82,24 @@ export default function BookCallFlow() {
         <label>Last name<input required value={f.lname} onChange={set('lname')} autoComplete="family-name" /></label>
       </div>
       <label>Email<input required type="email" value={f.email} onChange={set('email')} autoComplete="email" /></label>
-      <label>Phone<input required type="tel" value={f.phone} onChange={set('phone')} autoComplete="tel" /></label>
+      <label>Phone
+        <span className="bf-phone">
+          <span className="bf-select bf-cc">
+            <select aria-label="Country code" value={cc} onChange={e => setCc(e.target.value)}>
+              {COUNTRIES.map(([k, flag, code]) => <option key={k} value={k}>{flag} {code}</option>)}
+            </select>
+          </span>
+          <input required type="tel" inputMode="tel" value={f.phone} onChange={set('phone')} autoComplete="tel-national" placeholder="412 345 678" />
+        </span>
+      </label>
       <label>Business name<input required value={f.biz} onChange={set('biz')} autoComplete="organization" /></label>
       <label>What can we help with?
-        <select required value={f.model} onChange={set('model')}>
-          <option value="" disabled>Choose one</option>
-          {SERVICES.map(s => <option key={s} value={s}>{s}</option>)}
-        </select>
+        <span className="bf-select">
+          <select required value={f.model} onChange={set('model')}>
+            <option value="" disabled>Choose one</option>
+            {SERVICES.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+        </span>
       </label>
       <label>Anything we should know? <span className="bf-opt">(optional)</span>
         <textarea rows={3} value={f.need} onChange={set('need')} placeholder="Where you are now, what you want to happen next" />

@@ -60,3 +60,35 @@
   .lp-zig-row:nth-child(even) { grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); }
   .lp-zig-row:nth-child(even) .lp-zig-media { order: 2; }
 }
+
+/* ── DARK THEME for every /landing page (11 Nov 2026, owner: "just make a nice dark theme"). Scoped to .lp-dark, so
+   /services/hospitality keeps its light look. The site's dark tokens; MD blue as the one accent. */
+.lp-dark .cv.hx {
+  --cv-bg: #0b0b0b;
+  --cv-ink: #f9f4eb;
+  --cv-dim: rgba(249, 244, 235, 0.6);
+  --cv-line: rgba(249, 244, 235, 0.12);
+  --hx-paper: #141416;
+  --hx-wine: #5b78ff; /* MD blue, lifted so it reads on black */
+  background: var(--cv-bg);
+  color: var(--cv-ink);
+}
+.lp-dark .hx-btn { background: #f9f4eb; color: #0b0b0b !important; }
+.lp-dark .hx-btn:hover { background: #1838e0; color: #f9f4eb !important; }
+.lp-dark .hx-btn-ghost { background: transparent; color: #f9f4eb !important; }
+.lp-dark .hx-trusted, .lp-dark .hx-band { background: #111113; border-color: var(--cv-line); }
+.lp-dark .hx-logos-track img { filter: none; opacity: .78; } /* the logo files are white: no inverting on black */
+.lp-dark .hx-logo-text { color: #f9f4eb; }
+.lp-dark .hx-quote-wrap { background: #141416; border-top: 1px solid var(--cv-line); border-bottom: 1px solid var(--cv-line); }
+.lp-dark .hx-slot { background: repeating-linear-gradient(135deg, #151517 0 12px, #19191c 12px 24px); border-color: rgba(249,244,235,.18); }
+.lp-dark .hx-story-made li { background: #141416; border-color: var(--cv-line); }
+.lp-dark .hx-steps { border-top-color: rgba(249,244,235,.5); }
+.lp-dark .hx-faq details:first-child { border-top-color: rgba(249,244,235,.5); }
+.lp-dark .hx-col-still { border-color: #0b0b0b; }
+.lp-dark .lp-media, .lp-dark .hx-reel-frame, .lp-dark .hx-col-main, .lp-dark .hx-col-wide { box-shadow: 0 40px 80px -30px rgba(0,0,0,.8); background: #141416; }
+.lp-dark .lp-link:hover { color: #8ea0ff; border-color: #8ea0ff; }
+.lp-dark .hx-wide { background: #0b0b0b; }
+@media (min-width: 861px) {
+  .lp-dark .hx-hero-film::before { background: radial-gradient(42% 46% at 35% 40%, rgba(24, 56, 224, 0.55), transparent 70%), radial-gradient(36% 40% at 72% 72%, rgba(91, 120, 255, 0.35), transparent 70%); }
+  .lp-dark .hx-hero .cv-h1 em { color: #5b78ff; }
+}

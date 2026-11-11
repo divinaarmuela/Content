@@ -65,7 +65,7 @@ export default function LandingPage({ d }: { d: LandingData }) {
   const heroWide = d.hero.shape === 'landscape'
 
   return (
-    <div className={`${archivo.variable} ${sometype.variable}`}>
+    <div className={`lp-dark ${archivo.variable} ${sometype.variable}`}>
       <MdNav band />
       <main className="cv hx lp">
         {/* HERO: on phones the film fills the screen behind the words (hospitality.css) */}

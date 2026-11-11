@@ -32,3 +32,31 @@
 .cv .bf-err { margin: 0; color: #b42318; font-size: 14px; }
 .cv .bf-note { margin: 0; text-align: center; font-family: var(--cv-mono); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: rgba(11,11,11,.5); }
 @media (max-width: 860px) { .cv .bf-row { grid-template-columns: 1fr; } }
+
+/* DARK FORM (11 Nov 2026, owner: "what's this design … make a nice dark theme"): the step-1 card matches the page */
+.cv .bf-card { background: #141416; border: 1px solid rgba(249,244,235,.12); }
+.cv .bf-form { color: #f9f4eb; }
+.cv .bf-step { color: rgba(249,244,235,.5); }
+.cv .bf-form label { color: rgba(249,244,235,.72); }
+.cv .bf-form input, .cv .bf-form select, .cv .bf-form textarea { color: #f9f4eb; background: #0b0b0d; border-color: rgba(249,244,235,.16); color-scheme: dark; }
+.cv .bf-form input::placeholder, .cv .bf-form textarea::placeholder { color: rgba(249,244,235,.35); }
+.cv .bf-form input:focus, .cv .bf-form select:focus, .cv .bf-form textarea:focus { border-color: #4d6bff; box-shadow: 0 0 0 3px rgba(77,107,255,.25); }
+.cv .bf-opt { color: rgba(249,244,235,.4); }
+.cv .bf-btn { background: #f9f4eb; color: #0b0b0b; }
+.cv .bf-btn:hover:not(:disabled) { background: #1838e0; color: #f9f4eb; }
+.cv .bf-btn:disabled { opacity: .35; }
+.cv .bf-err { color: #ff8a80; }
+.cv .bf-note { color: rgba(249,244,235,.45); }
+/* step 2: the Calendly calendar itself is white, so its card keeps a light frame */
+.cv .bf-card:has(.bf-step2) { background: #f9f4eb; }
+.cv .bf-step2 .bf-step { color: rgba(11,11,11,.55); }
+
+/* phone with country code, nicer dropdowns, and no zoom on iPhone (fields at 16px+; iOS zooms anything smaller) */
+.cv .bf-form input, .cv .bf-form select, .cv .bf-form textarea { font-size: 16px !important; }
+.cv .bf-select { position: relative; display: block; }
+.cv .bf-select select { width: 100%; appearance: none; -webkit-appearance: none; padding-right: 40px; cursor: pointer; }
+.cv .bf-select::after { content: ''; position: absolute; right: 16px; top: 50%; width: 8px; height: 8px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: translateY(-70%) rotate(45deg); pointer-events: none; opacity: .7; }
+.cv .bf-phone { display: grid; grid-template-columns: 118px minmax(0, 1fr); gap: 8px; }
+.cv .bf-cc select { padding-left: 12px; }
+.cv .bf-form select option { background: #141416; color: #f9f4eb; }
+
