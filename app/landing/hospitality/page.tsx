@@ -7,5 +7,5 @@ import '../landing.css'
 export const metadata = landingMeta('Hospitality marketing', 'Content, social and ads that fill Melbourne venues.')
 
 export default function Page() {
-  return <div className="lp-dark"><HospitalityPage /></div>
+  return <HospitalityPage />
 }

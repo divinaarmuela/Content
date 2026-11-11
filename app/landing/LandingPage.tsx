@@ -3,7 +3,6 @@ import { archivo, sometype } from '../components/lama/fonts'
 import LazyLoop from '../components/lazy-loop/LazyLoop'
 import MdNav from '../components/md-nav/MdNav'
 import { logoFile } from '../components/logo-wall/LogoWall'
-import SmileStrip from '../services/hospitality/SmileStrip'
 import '../components/service-page/service-page.css'
 import '../services/hospitality/hospitality.css'
 import './landing.css'
@@ -65,7 +64,7 @@ export default function LandingPage({ d }: { d: LandingData }) {
   const heroWide = d.hero.shape === 'landscape'
 
   return (
-    <div className={`lp-dark ${archivo.variable} ${sometype.variable}`}>
+    <div className={`${archivo.variable} ${sometype.variable}`}>
       <MdNav band />
       <main className="cv hx lp">
         {/* HERO: on phones the film fills the screen behind the words (hospitality.css) */}
@@ -150,8 +149,6 @@ export default function LandingPage({ d }: { d: LandingData }) {
           <Cta />
         </section>
 
-        {/* STILLS on the cosine smile marquee */}
-        {d.strip && d.strip.length > 0 && <SmileStrip photos={d.strip} base="" />}
 
         {/* HOW IT WORKS */}
         <section className="cv-wrap hx-sec">
