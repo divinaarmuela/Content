@@ -156,6 +156,10 @@ export default function BriefCanvas({
   const [selected, setSelected] = useState<string | null>(null)
   /** MORE THAN ONE CARD (4 Nov 2026): Shift- or Cmd-click adds a card; dragging any of them moves them all */
   const [picked, setPicked] = useState<ReadonlySet<string>>(() => new Set())
+  /** DRAW A BOX TO PICK (Divina, 11 Nov 2026: "highlight multiple selections … move groups"): Shift-drag on empty
+   *  board draws a box; every card it touches is picked, and dragging any picked card moves them all */
+  const [marquee, setMarquee] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null)
+  const marqueeRef = useRef<{ x0: number; y0: number; x1: number; y1: number; add: ReadonlySet<string> } | null>(null)
   /** The one card allowed to be a live player.
    *
    *  One, deliberately. A board of ten embedded Reels is ten players, and the
@@ -397,6 +401,7 @@ export default function BriefCanvas({
         // background drag pans; card drags are handled on the cards themselves,
         // and toolbar buttons are UI, not background
         if ((target as HTMLElement).closest?.('[data-card], button, input, textarea, a')) return
+        if (marqueeRef.current) return
         if (event.type.startsWith('pointer')) {
           camRef.current.x += dx
           camRef.current.y += dy
@@ -408,6 +413,7 @@ export default function BriefCanvas({
         // deselecting unmounted the mini toolbar between pointerup and click,
         // so the browser never fired the click and "Add image" did nothing
         if ((target as HTMLElement).closest?.('[data-card], button, input, textarea, a')) return
+        if (marqueeRef.current) return
         commitCamera()
         setSelected(null)
       },
@@ -419,6 +425,48 @@ export default function BriefCanvas({
       drag: { pointer: { buttons: [1, 4] } },
     },
   )
+
+  /* ── the pick box ── */
+  const startMarquee = (e: React.PointerEvent) => {
+    e.preventDefault()
+    const rect = viewportRef.current?.getBoundingClientRect()
+    if (!rect) return
+    const x = e.clientX - rect.left, y = e.clientY - rect.top
+    // with Shift held the box ADDS to what is picked already (the selected card counts as picked)
+    const add = new Set(picked)
+    if (selected && !add.size) add.add(selected)
+    marqueeRef.current = { x0: x, y0: y, x1: x, y1: y, add }
+    setMarquee({ x0: x, y0: y, x1: x, y1: y })
+    const onMove = (ev: PointerEvent) => {
+      const m = marqueeRef.current
+      if (!m) return
+      m.x1 = ev.clientX - rect.left; m.y1 = ev.clientY - rect.top
+      setMarquee({ x0: m.x0, y0: m.y0, x1: m.x1, y1: m.y1 })
+    }
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+      window.removeEventListener('pointercancel', onUp)
+      const m = marqueeRef.current
+      marqueeRef.current = null
+      setMarquee(null)
+      if (!m || Math.hypot(m.x1 - m.x0, m.y1 - m.y0) < 4) return
+      const a = toWorld(rect.left + Math.min(m.x0, m.x1), rect.top + Math.min(m.y0, m.y1))
+      const b = toWorld(rect.left + Math.max(m.x0, m.x1), rect.top + Math.max(m.y0, m.y1))
+      const hit = visible.filter(c => c.kind !== 'arrow').filter(c => {
+        const el = viewportRef.current?.querySelector<HTMLElement>(`[data-cid="${c.id}"]`)
+        const w = el?.offsetWidth || c.w, h = el?.offsetHeight || 100
+        return c.x < b.x && c.x + w > a.x && c.y < b.y && c.y + h > a.y
+      }).map(c => c.id)
+      const next = new Set(m.add)
+      for (const id of hit) next.add(id)
+      setPicked(next)
+      setSelected(null)
+    }
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+    window.addEventListener('pointercancel', onUp)
+  }
 
   /* ── card dragging: raw pointer events, 4px threshold, rAF paint ── */
   const dragState = useRef<{
@@ -813,7 +861,14 @@ export default function BriefCanvas({
     const bar = d.el?.querySelector<HTMLElement>('[data-card-toolbar]')
     if (bar) { bar.style.display = ''; keepToolbarInView() }
     interactingRef.current = false
-    if (!d.moved) { if (d.host && d.el) d.el.style.transform = ''; setSelected(card.id); return }
+    if (!d.moved) {
+      if (d.host && d.el) d.el.style.transform = ''
+      // A SHIFT/CMD PRESS IS LEFT TO THE CLICK (Divina, 11 Nov 2026: "I can't even hold shift to multiple select"):
+      // selecting here re-rendered before the click ran, so the click saw THIS card as the selected one and the card
+      // picked before it never joined — Shift-click only ever moved the selection
+      if (!(e.shiftKey || e.metaKey || e.ctrlKey)) setSelected(card.id)
+      return
+    }
     draggedRef.current = true
     const s = camRef.current.s
     // INTO A COLUMN, OUT OF ONE, OR TO ANOTHER PLACE IN IT (Milanote's columns, 20 Oct 2026)
@@ -1980,6 +2035,10 @@ export default function BriefCanvas({
         // a click on bare canvas puts the player back to a still, so the board
         // never carries a running video somebody has walked away from
         onPointerDown={e => {
+          if (!viewOnly && e.button === 0 && (e.shiftKey || e.metaKey) && (e.target === viewportRef.current || e.target === worldRef.current)) {
+            startMarquee(e)
+            return
+          }
           if (e.target === viewportRef.current || e.target === worldRef.current) {
             setSelected(null)
             setPlaying(null)
@@ -2005,6 +2064,16 @@ export default function BriefCanvas({
           <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center rounded-card border-2 border-dashed border-foreground/40 bg-background/70" role="status">
             <span className="rounded-full bg-foreground px-4 py-2 text-[13px] font-semibold text-background">Drop the pictures here — each one becomes a card</span>
           </div>
+        )}
+        {picked.size > 1 && !marquee && (
+          <div className="pointer-events-auto absolute bottom-3 left-1/2 z-[6000] flex -translate-x-1/2 items-center gap-2 rounded-full bg-foreground px-4 py-2 text-[13px] font-semibold text-background shadow-lg">
+            {picked.size} cards picked · drag any one to move them all
+            <button type="button" onClick={() => setPicked(new Set())} className="rounded-full bg-background/20 px-2 py-0.5 text-[12px] hover:bg-background/30">Clear</button>
+          </div>
+        )}
+        {marquee && (
+          <div aria-hidden className="pointer-events-none absolute z-[6000] rounded-sm border border-accent-blue bg-accent-blue/10"
+            style={{ left: Math.min(marquee.x0, marquee.x1), top: Math.min(marquee.y0, marquee.y1), width: Math.abs(marquee.x1 - marquee.x0), height: Math.abs(marquee.y1 - marquee.y0) }} />
         )}
         <div ref={worldRef} className="absolute left-0 top-0" style={{ transformOrigin: '0 0' }}>
           {/* maxWidth must be inline: the preflight's svg{max-width:100%} against this
