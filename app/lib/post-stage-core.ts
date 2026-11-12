@@ -1459,6 +1459,9 @@ export function planPostTransition(
         notify('schedulers')
       }
       notify('account_managers')
+      // APPROVED, WITH A COMMENT (12 Nov 2026, Anthony: "change FUND to BROKER" lost on Approve): it still goes out
+      // at its time, so the people who can make the small fix are told now, in the client's words
+      if (note) tellMakerAndHolder()
       break
     case 'client_not_approved': {
       // off the schedule at once (R4): the jobs are pulled BEFORE the claim; it needs the quality check again
@@ -1481,6 +1484,7 @@ export function planPostTransition(
       effects.push({ when: 'after', kind: 'queue_publish', for_time: when, now: false })
       notify('schedulers')
       notify('account_managers')
+      if (note) tellMakerAndHolder()
       break
     }
     case 'hold_for_client':

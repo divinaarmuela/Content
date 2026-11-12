@@ -400,10 +400,12 @@ export function moveWords(action: PostAction | string, target: MoveEmail['target
     case 'client_ok':
     case 'client_ok_book': {
       const who = post.client_review?.by && post.client_review.by !== 'the client' ? post.client_review.by : 'The client'
+      const said = post.client_review?.verdict === 'approved' ? quoted(post.client_review?.note ?? null) : null
       return {
-        subject: `The client approved: ${title}`,
+        subject: said ? `The client approved, with a comment: ${title}` : `The client approved: ${title}`,
         lines: [
-          `${who} approved ${title} on their portal.`,
+          said ? `${who} approved ${title} on their portal, and left a comment: ${said}` : `${who} approved ${title} on their portal.`,
+          ...(said ? ['It still goes out at its time — make the change before then if it needs one.'] : []),
           action === 'client_ok_book'
             ? `It was waiting for them, so it is now booked for the next free time: ${when ?? 'its new time'}.`
             : w.previousWhen ? `It was due in under 15 minutes, so it moved to ${when}.` : 'It stays booked. Nothing is needed from you.',

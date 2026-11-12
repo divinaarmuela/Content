@@ -33,9 +33,9 @@ describe('the tab', () => {
     expect(loader).toMatch(/postOnPortal\(contactOf\(p\), scope\)/)
   })
   it('the client answers the frozen version they saw, with their name, and a note for Not approved', () => {
-    expect(ui).toContain("body: JSON.stringify({ token, post_id: tile.post_id, version: tile.version, action, note: note.trim() || null, author_name: name.trim() })")
+    expect(ui).toContain("body: JSON.stringify({ token, post_id: tile.post_id, version: tile.version, action, note: words || null, author_name: name.trim() })")
     expect(ui).toContain("if (!name.trim()) { toast.error('Add your name so the team knows who answered.'); return }")
-    expect(ui).toContain("if (action === 'client_not_approved' && !note.trim())")
+    expect(ui).toContain("if (action === 'client_not_approved' && !words)")
   })
   it('each network as its own profile: Instagram a grid, LinkedIn a feed, TikTok a 9:16 grid', () => {
     expect(ui).toContain("profile.network === 'linkedin'")
@@ -55,7 +55,7 @@ describe('the client comments on a post (2 Oct 2026: "why can\'t they leave comm
     expect(route).toMatch(/postOnPortal\(post, scope\)/)
   })
   it('the sheet shows the thread and one name box for the answer and the comment', () => {
-    expect(ui).toContain('<Comments token={token} tile={tile} name={name} />')
+    expect(ui).toContain('<Comments token={token} tile={tile} name={name} text={draft} setText={setDraft} />')
     expect((ui.match(/placeholder="Your name"/g) ?? []).length).toBe(1)
   })
 })

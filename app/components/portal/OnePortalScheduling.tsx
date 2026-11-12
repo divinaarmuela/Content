@@ -238,21 +238,26 @@ function BookedSheet({ token, tile, network, onClose }: { token: string; tile: S
   const [note, setNote] = useState('')
   const [saying, setSaying] = useState<'no' | null>(null)
   const [busy, setBusy] = useState(false)
+  /** what is typed in the comment box and not sent yet — an answer takes it along, so it is never lost
+   *  (12 Nov 2026, Anthony typed "FUND to BROKER", pressed Approve, and the words were gone) */
+  const [draft, setDraft] = useState('')
   useEffect(() => { try { setName(localStorage.getItem(NAME_KEY) ?? '') } catch { /* private window */ } }, [])
 
   const answer = async (action: 'client_ok' | 'client_not_approved') => {
     if (!name.trim()) { toast.error('Add your name so the team knows who answered.'); return }
-    if (action === 'client_not_approved' && !note.trim()) { toast.error('Say what should change, so the team can fix it.'); return }
+    const words = [note.trim(), draft.trim()].filter(Boolean).join(' — ')
+    if (action === 'client_not_approved' && !words) { toast.error('Say what should change, so the team can fix it.'); return }
     setBusy(true)
     try { localStorage.setItem(NAME_KEY, name.trim()) } catch { /* private window */ }
     try {
       const res = await fetch('/api/portal/act', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, post_id: tile.post_id, version: tile.version, action, note: note.trim() || null, author_name: name.trim() }),
+        body: JSON.stringify({ token, post_id: tile.post_id, version: tile.version, action, note: words || null, author_name: name.trim() }),
       })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(json.error ?? 'That did not go through — reload the page and try again.')
-      toast.success(action === 'client_ok' ? 'Approved — thank you.' : 'Thanks — it is off the schedule and the team has your note.')
+      setDraft('')
+      toast.success(action === 'client_ok' ? (words ? 'Approved — and the team has your comment.' : 'Approved — thank you.') : 'Thanks — it is off the schedule and the team has your note.')
       onClose()
       router.refresh()
     } catch (e) {
@@ -313,16 +318,15 @@ function BookedSheet({ token, tile, network, onClose }: { token: string; tile: S
         </div>
       ) : null}
 
-      <Comments token={token} tile={tile} name={name} />
+      <Comments token={token} tile={tile} name={name} text={draft} setText={setDraft} />
     </Sheet>
   )
 }
 
 /** THE POST'S COMMENTS (the owner, 2 Oct 2026: "why can't [they] leave comments?") — the client thread, every
  *  version, and a box to add one while the post is still to go out. The team sees and answers it in the post window. */
-function Comments({ token, tile, name }: { token: string; tile: ScheduledTile; name: string }) {
+function Comments({ token, tile, name, text, setText }: { token: string; tile: ScheduledTile; name: string; text: string; setText: (v: string) => void }) {
   const router = useRouter()
-  const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
   const add = async () => {
     if (!text.trim()) return

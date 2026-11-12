@@ -82,8 +82,8 @@ export default function OnePortalPostLine({ post, editable, onMoved, onOwnChange
       <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1.5 text-[13px]" data-one-portal-line>
         {(post.stage === 'booked' || review) && (
           <span className={`rounded-full px-2.5 py-1 text-[12px] font-semibold ${state === 'approved' ? 'bg-tint-green' : state === 'not_approved' ? 'bg-tint-red' : 'bg-foreground/[0.06]'}`}
-            title={state === 'not_approved' && review?.note ? `“${review.note}”` : undefined}>
-            {word}{state === 'approved' && review?.by && review.by !== 'the client' ? ` by ${review.by}` : ''}
+            title={(state === 'not_approved' || state === 'approved') && review?.note ? `“${review.note}”` : undefined}>
+            {word}{state === 'approved' && review?.by && review.by !== 'the client' ? ` by ${review.by}` : ''}{state === 'approved' && review?.note ? ', with a comment' : ''}
           </span>
         )}
         {changedSinceApproval(post as never) && (
@@ -116,6 +116,7 @@ export default function OnePortalPostLine({ post, editable, onMoved, onOwnChange
             ? <>Not approved{review.by && review.by !== 'the client' ? ` by ${review.by}` : ''}{review.note && post.stage !== 'draft' ? ` — “${review.note}”` : ''}</>
             : REVIEW_WORDS[state]}
           {state === 'approved' && review?.by && review.by !== 'the client' ? ` by ${review.by}` : ''}
+          {state === 'approved' && review?.note ? `, with a comment — “${review.note}”` : ''}
         </p>
       ) : (
         <p className="text-muted-foreground">The client sees it on their portal once it is booked.</p>

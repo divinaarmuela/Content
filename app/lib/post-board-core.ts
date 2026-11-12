@@ -101,6 +101,16 @@ const STAGE_ORDER: Record<PostStage, number> = {
  * STAGE it holds — never a rewrite of the stage (audit B1, B11). Oldest wait
  * first in the approval lanes; in Approved, by stage, the newest first.
  */
+/** "Anthony approved, with a comment: …" — an approval of THIS version that carries the client's words (12 Nov 2026) */
+export function approvedWithComment(post: Pick<PostState, 'stage' | 'sent_version' | 'client_review'>): string | null {
+  const r = post.client_review
+  const note = typeof r?.note === 'string' ? r.note.trim() : ''
+  if (!r || r.verdict !== 'approved' || !note || r.version !== post.sent_version) return null
+  if (post.stage !== 'ready' && post.stage !== 'booked') return null
+  const who = r.by && r.by !== 'the client' ? r.by : 'The client'
+  return `${who} approved, with a comment: ${note}`
+}
+
 export function groupPosts<T extends Pick<PostState, 'id' | 'stage' | 'stage_at'> & Partial<Pick<PostState, 'if_no_answer' | 'client_review' | 'client_id' | 'sent_version'>>>(
   posts: readonly T[], lanes: readonly Lane[] = POST_APPROVAL_LANES,
 ): { lane: Lane; posts: T[] }[] {
@@ -487,7 +497,8 @@ export function postCardFace(
     // "Waiting for client" on the chip, so not "Booked in — it goes out at its time" under it (20 Oct 2026)
     waiting: { ...wait, ...(waitingForClient(post) ? { line: WAITING_FOR_CLIENT.meaning } : heldForClient(post) ? { line: HELD_FOR_CLIENT.meaning } : {}), sinceWords: sinceDay ? sinceWords(sinceDay, opts.today) : null },
     missed: slotMissed(post, opts.now) ? MISSED_LABEL : null,
-    changes: asked && post.stage === 'draft' ? (ca?.note.trim() ? `${asked}: ${ca.note.trim()}` : asked) : null,
+    changes: asked && post.stage === 'draft' ? (ca?.note.trim() ? `${asked}: ${ca.note.trim()}` : asked)
+      : approvedWithComment(post),
     sent: sentLine && post.stage === 'with_client' ? [sentLine, sentDay, reminded].filter(Boolean).join(' · ') : null,
     answerBy: post.stage === 'with_client' && send && !slotMissed(post, opts.now) && approveByOf(post)
       ? `Answer needed by ${formatInZone(approveByOf(post)!, zone, 'full')}` : null,
