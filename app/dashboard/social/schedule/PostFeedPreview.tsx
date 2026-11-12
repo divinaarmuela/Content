@@ -105,6 +105,18 @@ const badge = (t: FeedPreviewTile) =>
   t.kind === 'this' ? `This post${when(t) ? ` · ${when(t)}` : ' · no time yet'}`
     : t.kind === 'booked' ? `Booked · ${when(t) ?? 'no time yet'}` : null
 
+/** the client's word on a tile, as their portal says it (12 Nov 2026) */
+const CLIENT_MARK = {
+  approved: { words: '✓ Client approved', cls: 'bg-emerald-600 text-white' },
+  not_approved: { words: 'Client: not approved', cls: 'bg-red-600 text-white' },
+  waiting: { words: 'Waiting for client', cls: 'bg-amber-400 text-black' },
+} as const
+function ClientMark({ t, className }: { t: FeedPreviewTile; className?: string }) {
+  if (!t.client || t.kind === 'live') return null
+  const m = CLIENT_MARK[t.client]
+  return <span data-feed-client={t.client} className={cn('rounded-full px-2 py-0.5 text-[10px] font-semibold leading-tight', m.cls, className)}>{m.words}</span>
+}
+
 function Cover({ t, media, className }: { t: FeedPreviewTile; media: (tile: { url: string; type: 'image' | 'video' }, label: string) => ReactNode; className: string }) {
   if (!t.cover) return <div className={cn(className, 'grid place-items-center bg-foreground/[0.06] text-[11px] text-muted-foreground')}>No picture</div>
   if (t.kind !== 'live') return <div className={className}>{media(t.cover, t.kind === 'this' ? 'This post' : '')}</div>
@@ -121,6 +133,7 @@ function FeedGrid({ tiles, tall, media }: { tiles: FeedPreviewTile[]; tall: bool
         const inner = (
           <>
             <Cover t={t} media={media} className="h-full w-full" />
+            <ClientMark t={t} className="absolute left-1.5 top-1.5 max-w-[calc(100%-12px)] truncate" />
             {badge(t) && (
               <span className={cn('absolute bottom-1.5 left-1.5 right-1.5 rounded-lg px-2 py-1 text-center text-[11px] font-semibold leading-tight',
                 t.kind === 'this' ? 'bg-foreground text-background' : 'bg-ink/80 text-cream')}>{badge(t)}</span>
@@ -151,11 +164,14 @@ function FeedCards({ tiles, media }: { tiles: FeedPreviewTile[]; media: (tile: {
             {badge(t)
               ? <span className={cn('rounded-full px-2 py-0.5 font-semibold', t.kind === 'this' ? 'bg-foreground text-background' : 'bg-ink/80 text-cream')}>{badge(t)}</span>
               : <span className="text-muted-foreground">Posted{when(t) ? ` · ${when(t)}` : ''}</span>}
+            <ClientMark t={t} className="shrink-0" />
             {t.kind === 'live' && t.permalink && (
               <a href={t.permalink} target="_blank" rel="noopener noreferrer" className="font-semibold underline underline-offset-4">Open</a>
             )}
           </div>
-          {t.caption && <p className="line-clamp-3 overflow-hidden whitespace-pre-line break-words px-3 pb-2 text-[13px]">{t.caption}</p>}
+          {/* the padding sits on a wrapper: on the clamped paragraph itself a fourth line showed through the bottom padding,
+              half cut by the picture (the owner's screenshot, 12 Nov 2026) */}
+          {t.caption && <div className="px-3 pb-2"><p className="line-clamp-3 whitespace-pre-line break-words text-[13px]">{t.caption}</p></div>}
           {/* a plain picture or video still, held inside its own box — the window's media player spilled over the next
               card and the caption (the owner's screenshot, 2 Nov 2026: 'looks broken') */}
           {t.cover && (

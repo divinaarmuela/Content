@@ -776,6 +776,16 @@ export function instagramProfileGrid(
 }
 
 /** one entry of the post window's Feed preview tab: this post, another booked post on that account, or a live one */
+export type FeedClientMark = 'approved' | 'not_approved' | 'waiting'
+
+/** The client's word on a post, for its feed tile. Null when they have not answered and it goes out anyway. */
+export function feedClientMark(p: { client_review?: unknown; if_no_answer?: unknown }): FeedClientMark | null {
+  const verdict = (p.client_review as { verdict?: unknown } | null | undefined)?.verdict
+  if (verdict === 'approved') return 'approved'
+  if (verdict === 'not_approved') return 'not_approved'
+  return p.if_no_answer === 'wait' ? 'waiting' : null
+}
+
 export type FeedPreviewTile = {
   kind: 'this' | 'booked' | 'live'
   id: string
@@ -784,6 +794,9 @@ export type FeedPreviewTile = {
   cover: GridTile | null
   /** the words that account posts — its own caption when it has one, else the post's */
   caption: string
+  /** what the client has said about a post not out yet (the owner, 12 Nov 2026: "like the client's one — scheduled,
+   *  approved, not approved"): their answer, or `waiting` when it will not go out unless they approve */
+  client?: FeedClientMark | null
   /** a live post opens where it really lives */
   permalink: string | null
 }
@@ -795,6 +808,8 @@ type FeedPost = GridPost & {
   scheduled_for?: string | null
   caption?: string | null
   per_channel: Record<string, { slides?: readonly { url: string; type?: string | null }[] | null; caption?: string | null } | undefined>
+  client_review?: unknown
+  if_no_answer?: unknown
 }
 
 /**
@@ -824,12 +839,12 @@ export function networkFeedPreview(
   const captionOf = (p: FeedPost) => String(p.per_channel[accountId]?.caption?.trim() || p.caption || '')
   const planned: FeedPreviewTile[] = []
   if (post.channels.includes(accountId)) {
-    planned.push({ kind: 'this', id: post.id, at: post.scheduled_for ?? null, cover: coverOf(post), caption: captionOf(post), permalink: null })
+    planned.push({ kind: 'this', id: post.id, at: post.scheduled_for ?? null, cover: coverOf(post), caption: captionOf(post), permalink: null, client: feedClientMark(post) })
   }
   for (const p of others) {
     if (p.id === post.id || p.stage !== 'booked' || !p.channels.includes(accountId)) continue
     const fp = p as unknown as FeedPost
-    planned.push({ kind: 'booked', id: p.id, at: p.scheduled_for ?? null, cover: coverOf(fp), caption: captionOf(fp), permalink: null })
+    planned.push({ kind: 'booked', id: p.id, at: p.scheduled_for ?? null, cover: coverOf(fp), caption: captionOf(fp), permalink: null, client: feedClientMark(p) })
   }
   const time = (t: FeedPreviewTile) => Date.parse(String(t.at ?? ''))
   const undated = planned.filter(t => !Number.isFinite(time(t)))

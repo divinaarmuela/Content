@@ -573,7 +573,8 @@ export default function PostWindow({
   const feedPost = useMemo(() => ({
     id: id ?? '', channels: shown.channels, slides: shown.slides, caption: shown.caption,
     per_channel: shown.perChannel as Parameters<typeof PostFeedPreview>[0]['post']['per_channel'], scheduled_for: shown.scheduledFor ?? null,
-  }), [id, shown.channels, shown.slides, shown.caption, shown.perChannel, shown.scheduledFor])
+    client_review: saved?.client_review ?? null, if_no_answer: saved?.if_no_answer ?? null,
+  }), [id, shown.channels, shown.slides, shown.caption, shown.perChannel, shown.scheduledFor, saved?.client_review, saved?.if_no_answer])
   const feedAccounts = useMemo(() => (context.allAccounts ?? accounts).map(a => ({ id: a.id, platform: String(a.platform), username: a.username ?? null, name: a.name ?? null })),
     [context.allAccounts, accounts])
   const feedNetworks = useMemo(() => shown.channels.some(acc => ['instagram', 'facebook', 'tiktok', 'linkedin'].includes(String(feedAccounts.find(a => a.id === acc)?.platform ?? ''))),
