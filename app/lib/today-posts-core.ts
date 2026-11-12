@@ -36,6 +36,9 @@ export function todayState(input: {
   zernio?: { status?: string | null; platforms?: ZernioPlatform[] } | null
   at: string | null
   now: Date
+  /** the post waits on the client (post-stage-core): `waiting` = booked, comes off 15 minutes before its time unless
+   *  they approve; `held` = it already came off because they did not. Never "Approved" — the client has not. */
+  client?: 'waiting' | 'held' | null
 }): TodayState {
   const { stage, jobStatus, zernio, at, now } = input
   const plats = zernio?.platforms ?? []
@@ -52,8 +55,10 @@ export function todayState(input: {
     const words = stage === 'with_client' ? 'Waiting on client' : stage === 'quality_check' ? 'Needs quality check' : 'Draft — needs approval'
     return { label: late ? `${words} · time passed` : words, tone: late ? 'red' : 'amber', needsAction: true }
   }
+  if (input.client === 'held') return { label: 'Taken off — client has not approved', tone: 'red', needsAction: true }
   if (stage === 'ready') return { label: late ? 'Approved, never booked' : 'Approved — needs Book in', tone: late ? 'red' : 'amber', needsAction: true }
   if (late) return { label: 'Should be out — not confirmed yet', tone: 'amber', needsAction: false }
+  if (input.client === 'waiting') return { label: 'Scheduled — waiting for client', tone: 'amber', needsAction: false }
   return { label: 'Scheduled', tone: 'blue', needsAction: false }
 }
 

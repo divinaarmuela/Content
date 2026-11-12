@@ -23,6 +23,11 @@ describe('Post approval: going out today (4 Nov 2026)', () => {
     expect(todayState({ stage: 'booked', jobStatus: 'scheduled', at: '2026-11-04T04:40:00Z', now,
       zernio: { status: 'scheduled', platforms: [{ platform: 'instagram', status: 'pending' }] } }).label).toBe('Scheduled')
   })
+  it('a post the client never approved is never "Approved" (12 Nov 2026, Capila 7pm)', () => {
+    expect(todayState({ stage: 'ready', at: '2026-11-04T05:00:00Z', now, client: 'held' })).toMatchObject({ label: 'Taken off — client has not approved', tone: 'red', needsAction: true })
+    expect(todayState({ stage: 'booked', jobStatus: 'scheduled', at: '2026-11-04T05:00:00Z', now, client: 'waiting' })).toMatchObject({ label: 'Scheduled — waiting for client', tone: 'amber' })
+    expect(todayState({ stage: 'ready', at: '2026-11-04T05:00:00Z', now }).label).toBe('Approved — needs Book in')
+  })
   it('names the kind: 4 images is a carousel, a story is a story', () => {
     expect(kindWord({ images: 4, videos: 0, platform: 'instagram' })).toBe('Carousel')
     expect(kindWord({ stated: 'story', images: 1, videos: 0, platform: 'instagram' })).toBe('Story')

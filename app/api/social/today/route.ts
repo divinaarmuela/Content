@@ -4,6 +4,7 @@ import type { Client, PublishJob, SocialAccount, SocialPost, TeamUser } from '@/
 import { requireRole, authzErrorResponse } from '@/app/lib/authz'
 import { accessibleClientIds } from '@/app/lib/production-access'
 import { getPublisher } from '@/app/lib/publisher'
+import { heldForClient, waitingForClient } from '@/app/lib/post-stage-core'
 import { dayIn, kindWord, newestFirst, todayState, type ZernioPlatform } from '@/app/lib/today-posts-core'
 
 export const dynamic = 'force-dynamic'
@@ -110,7 +111,7 @@ export async function GET() {
           media: { images, videos, thumb },
           platforms,
           stage: p.stage ?? null,
-          state: todayState({ stage: p.stage, jobStatus: job?.status ?? null, zernio, at, now }),
+          state: todayState({ stage: p.stage, jobStatus: job?.status ?? null, zernio, at, now, client: heldForClient(p as never) ? 'held' : waitingForClient(p as never) ? 'waiting' : null }),
           madeBy: who(p.created_by),
           approvedBy: who(approval?.by ?? p.approved_by),
           bookedBy: who(job?.created_by),
