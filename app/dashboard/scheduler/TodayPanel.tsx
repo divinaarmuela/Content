@@ -86,7 +86,6 @@ export default function TodayPanel({ clientId, asColumn, onCount }: {
   return wrap(
     <>
       <div className={`${asColumn ? '' : '-mt-2 '}flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-muted-foreground`}>
-        <span>Latest time first · status checked{checkedAt ? ` at ${time(checkedAt)}` : ''}</span>
         <button type="button" onClick={load} disabled={busy}
           className="inline-flex min-h-9 items-center font-semibold text-foreground underline-offset-4 hover:underline disabled:opacity-50">
           {busy ? 'Checking…' : 'Check again'}

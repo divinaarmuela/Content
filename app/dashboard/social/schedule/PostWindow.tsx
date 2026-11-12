@@ -1551,36 +1551,8 @@ export default function PostWindow({
               frameClassName={frame}
               empty="Pick a channel and the post appears here as that network will show it." />
           )
-          const igGrid = grid && grid.length > 0 && (
-            <div className="flex flex-col gap-2" data-instagram-grid>
-              <p className="text-[13px] font-semibold">How it sits on the client&rsquo;s Instagram</p>
-              <ul className="grid max-h-[520px] max-w-[300px] grid-cols-3 gap-0.5 overflow-y-auto">
-                {grid.map((g, i) => (
-                  <li key={`${g.kind}-${g.id}-${i}`} data-grid-kind={g.kind}
-                    title={g.kind === 'this' ? 'This post' : g.kind === 'booked' ? `Booked${g.at ? ` · ${formatInZone(g.at, tz, 'full') ?? ''}` : ''}` : `Already posted${g.at ? ` · ${formatInZone(g.at, tz, 'full') ?? ''}` : ''}`}
-                    className={cn('relative aspect-[4/5] overflow-hidden bg-foreground/[0.06]', g.kind === 'this' && 'ring-2 ring-foreground ring-offset-1 ring-offset-background')}>
-                    {g.kind === 'live'
-                      ? (
-                        <a href={g.permalink ?? undefined} target="_blank" rel="noopener noreferrer" className="block h-full w-full">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={g.url} alt="" loading="lazy" className="h-full w-full object-cover" />
-                        </a>
-                      )
-                      : g.type === 'video'
-                        ? (videoView(g, g.kind === 'this' ? 'This post' : '', 'h-full w-full', true)
-                          ?? <video src={playable(g.url)} muted playsInline preload="metadata" className="h-full w-full object-cover" />)
-                        // eslint-disable-next-line @next/next/no-img-element
-                        : <img src={g.url} alt={g.kind === 'this' ? 'This post' : ''} loading="lazy" className="h-full w-full object-cover" />}
-                    {g.kind === 'booked' && <span className="absolute bottom-1 left-1 rounded-full bg-ink/80 px-1.5 py-0.5 text-[10px] font-semibold text-cream">Booked</span>}
-                  </li>
-                ))}
-              </ul>
-              <p className="text-[12px] text-muted-foreground">
-                This post is outlined, among the booked posts, above what is already live
-                {liveFeed === null ? ' (reading the feed…)' : liveFeed.length === 0 ? ' (the live feed could not be read just now)' : ''}.
-              </p>
-            </div>
-          )
+          // "How it sits on the client’s Instagram" under the preview is gone (the owner, 12 Nov 2026: "we should remove this
+          // section") — the Feed preview tab shows the same grid, bigger, for every network.
 
           /* ── A PHONE: one column, Write and Preview as tabs (as before) ── */
           if (!wide) {
@@ -1609,7 +1581,6 @@ export default function PostWindow({
                     ))}
                   </div>
                   {pane === 'preview' && previewPane(undefined, PREVIEW_INTRO)}
-                  {pane === 'preview' && igGrid}
                   {pane === 'write' && (
                     <>
                       {captionBox(5, false)}
@@ -1666,7 +1637,6 @@ export default function PostWindow({
                     </>
                   )}
                 {thumbs}
-                {igGrid}
               </div>
               <div className="flex min-h-0 min-w-0 flex-col">
                 <div role="tablist" aria-label="What to change" className="flex shrink-0 flex-wrap gap-1 border-b border-border px-4 pt-2">
