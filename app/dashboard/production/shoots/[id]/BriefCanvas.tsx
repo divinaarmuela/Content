@@ -160,6 +160,8 @@ export default function BriefCanvas({
    *  board draws a box; every card it touches is picked, and dragging any picked card moves them all */
   const [marquee, setMarquee] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null)
   const marqueeRef = useRef<{ x0: number; y0: number; x1: number; y1: number; add: ReadonlySet<string> } | null>(null)
+  /** decided ONCE at the press: may this drag pan the board? (a Shift-drag box or a card drag must never pan it) */
+  const panRef = useRef(false)
   /** The one card allowed to be a live player.
    *
    *  One, deliberately. A board of ten embedded Reels is ten players, and the
@@ -401,7 +403,7 @@ export default function BriefCanvas({
         // background drag pans; card drags are handled on the cards themselves,
         // and toolbar buttons are UI, not background
         if ((target as HTMLElement).closest?.('[data-card], button, input, textarea, a')) return
-        if (marqueeRef.current) return
+        if (marqueeRef.current || !panRef.current) return
         if (event.type.startsWith('pointer')) {
           camRef.current.x += dx
           camRef.current.y += dy
@@ -413,7 +415,8 @@ export default function BriefCanvas({
         // deselecting unmounted the mini toolbar between pointerup and click,
         // so the browser never fired the click and "Add image" did nothing
         if ((target as HTMLElement).closest?.('[data-card], button, input, textarea, a')) return
-        if (marqueeRef.current) return
+        if (marqueeRef.current || !panRef.current) return
+        panRef.current = false
         commitCamera()
         setSelected(null)
       },
@@ -436,6 +439,9 @@ export default function BriefCanvas({
     const add = new Set(picked)
     if (selected && !add.size) add.add(selected)
     marqueeRef.current = { x0: x, y0: y, x1: x, y1: y, add }
+    window.getSelection()?.removeAllRanges()
+    const prevSelect = document.body.style.userSelect
+    document.body.style.userSelect = 'none'
     setMarquee({ x0: x, y0: y, x1: x, y1: y })
     const onMove = (ev: PointerEvent) => {
       const m = marqueeRef.current
@@ -444,6 +450,7 @@ export default function BriefCanvas({
       setMarquee({ x0: m.x0, y0: m.y0, x1: m.x1, y1: m.y1 })
     }
     const onUp = () => {
+      document.body.style.userSelect = prevSelect
       window.removeEventListener('pointermove', onMove)
       window.removeEventListener('pointerup', onUp)
       window.removeEventListener('pointercancel', onUp)
@@ -453,13 +460,18 @@ export default function BriefCanvas({
       if (!m || Math.hypot(m.x1 - m.x0, m.y1 - m.y0) < 4) return
       const a = toWorld(rect.left + Math.min(m.x0, m.x1), rect.top + Math.min(m.y0, m.y1))
       const b = toWorld(rect.left + Math.max(m.x0, m.x1), rect.top + Math.max(m.y0, m.y1))
-      const hit = visible.filter(c => c.kind !== 'arrow').filter(c => {
+      const inBox = (x: number, y: number) => x >= a.x && x <= b.x && y >= a.y && y <= b.y
+      // a line drawn on its own (no card at either end) is picked when both its ends are in the box; a line joined
+      // to cards follows those cards anyway
+      const lines = visible.filter(c => c.kind === 'arrow' && !c.from && !c.to && c.line?.fx !== undefined && c.line?.tx !== undefined)
+        .filter(c => inBox(c.line!.fx!, c.line!.fy!) && inBox(c.line!.tx!, c.line!.ty!)).map(c => c.id)
+      const hit = visible.filter(c => c.kind !== 'arrow' && !c.col).filter(c => {
         const el = viewportRef.current?.querySelector<HTMLElement>(`[data-cid="${c.id}"]`)
         const w = el?.offsetWidth || c.w, h = el?.offsetHeight || 100
         return c.x < b.x && c.x + w > a.x && c.y < b.y && c.y + h > a.y
       }).map(c => c.id)
       const next = new Set(m.add)
-      for (const id of hit) next.add(id)
+      for (const id of [...hit, ...lines]) next.add(id)
       setPicked(next)
       setSelected(null)
     }
@@ -711,6 +723,10 @@ export default function BriefCanvas({
     } else {
       const group = picked.has(card.id) && picked.size > 1
         ? visible.filter(c => picked.has(c.id) && c.id !== card.id).flatMap(c => {
+            if (c.kind === 'arrow') {
+              const g = viewportRef.current?.querySelector<HTMLElement>(`[data-arrow="${c.id}"]`)
+              return g ? [{ id: c.id, el: g, ox: 0, oy: 0 }] : []
+            }
             const other = viewportRef.current?.querySelector<HTMLElement>(`[data-cid="${c.id}"]`)
             return other ? [{ id: c.id, el: other, ox: c.x, oy: c.y }] : []
           })
@@ -913,6 +929,12 @@ export default function BriefCanvas({
     const next: CanvasCard = { ...card, x: card.x + ddx, y: card.y + ddy, z: top }
     const others = d.group.flatMap((g, i) => {
       const c = cards.find(x => x.id === g.id)
+      if (c?.kind === 'arrow') {
+        g.el.style.transform = ''
+        const l = c.line ?? {}
+        const sh = (v: number | undefined, dv: number) => v === undefined ? undefined : v + dv
+        return [{ ...c, line: { ...l, fx: sh(l.fx, ddx), fy: sh(l.fy, ddy), tx: sh(l.tx, ddx), ty: sh(l.ty, ddy), cx: sh(l.cx, ddx), cy: sh(l.cy, ddy) } }]
+      }
       return c ? [{ ...c, x: c.x + ddx, y: c.y + ddy, z: top + 1 + i }] : []
     })
     for (const c of [next, ...others]) upsertLocal(c)
@@ -2034,6 +2056,10 @@ export default function BriefCanvas({
         }}
         // a click on bare canvas puts the player back to a still, so the board
         // never carries a running video somebody has walked away from
+        onPointerDownCapture={e => {
+          const onItem = !!(e.target as HTMLElement).closest?.('[data-card], button, input, textarea, a')
+          panRef.current = e.button === 1 || (!onItem && !e.shiftKey && !e.metaKey)
+        }}
         onPointerDown={e => {
           if (!viewOnly && e.button === 0 && (e.shiftKey || e.metaKey) && (e.target === viewportRef.current || e.target === worldRef.current)) {
             startMarquee(e)
