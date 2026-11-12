@@ -470,3 +470,21 @@ export const CLIENT_PREVIEW_INTRO =
 export function tabTone(n: { problems?: readonly string[] }): 'ok' | 'problem' {
   return (n.problems?.length ?? 0) > 0 ? 'problem' : 'ok'
 }
+
+/**
+ * THE PICTURE'S OWN SHAPE (12 Nov 2026 — a Capila carousel's logo cut off in the portal, the Schedule and Post
+ * approval). Instagram shows a feed post or carousel at its (first) picture's own shape, anywhere from 4:5 tall
+ * to 1.91:1 wide — a fixed square frame cropped every 4:5 slide top and bottom. `null` = this frame keeps its fixed
+ * shape (Reels, Stories, other networks).
+ */
+export function fitRange(platform: string, kind: string): readonly [number, number] | null {
+  if (platform === 'instagram' && (kind === 'feed' || kind === 'carousel')) return [4 / 5, 1.91]
+  return null
+}
+
+/** width / height of the picture, held inside the range, as a CSS aspect-ratio */
+export function fittedAspect(range: readonly [number, number], w: number, h: number): string | null {
+  if (!(w > 0) || !(h > 0)) return null
+  const r = Math.min(range[1], Math.max(range[0], w / h))
+  return `${Math.round(r * 1000)} / 1000`
+}

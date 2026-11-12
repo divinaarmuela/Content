@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { AlertTriangle, FileText, Film, ImageIcon, Link2, MapPin } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import PlatformIcon from '../../dashboard/social/PlatformIcon'
-import { tabTone, type ClientPreview } from '../../lib/post-preview-core'
+import { fitRange, fittedAspect, tabTone, type ClientPreview } from '../../lib/post-preview-core'
 import { CANNOT_PLAY_HERE } from '../../lib/playable-core'
 
 /**
@@ -178,6 +178,22 @@ export function PostPreviewFrame({ preview, className, playable, videoFor }: {
 
   const caption = <Caption caption={preview.caption} />
 
+  // Instagram shows a feed post or carousel at its FIRST picture's shape — every slide in that one frame
+  const range = fitRange(preview.platform, preview.kind)
+  const first = preview.media[0]
+  const firstImg = range && first && first.type === 'image' ? first.url : null
+  const [fitted, setFitted] = useState<{ url: string; aspect: string } | null>(null)
+  useEffect(() => {
+    if (!firstImg || !range) return
+    let live = true
+    const img = new Image()
+    img.onload = () => { const a = fittedAspect(range, img.naturalWidth, img.naturalHeight); if (live && a) setFitted({ url: firstImg, aspect: a }) }
+    img.src = firstImg
+    return () => { live = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [firstImg, range?.[0], range?.[1]])
+  const aspect = firstImg && fitted?.url === firstImg ? fitted.aspect : preview.aspect
+
   return (
     <div className={cn(
       'flex w-full max-w-[400px] flex-col overflow-hidden rounded-inner border border-border bg-surface',
@@ -226,7 +242,7 @@ export function PostPreviewFrame({ preview, className, playable, videoFor }: {
 
       {preview.captionAbove && <div className="pb-3">{caption}</div>}
 
-      <Frame media={shown} aspect={preview.aspect} label={preview.name} playable={playable} videoFor={videoFor} />
+      <Frame media={shown} aspect={aspect} label={preview.name} playable={playable} videoFor={videoFor} />
 
       {/* the dots under a carousel — and they move it */}
       {preview.dots && (
