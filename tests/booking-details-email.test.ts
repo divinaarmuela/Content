@@ -52,7 +52,7 @@ describe('Calendly booking: the details email', () => {
     expect(inviteeId(b.inviteeUri)).toBe('INV-123')
   })
   it('info@ gets only the time block: the call and its time, under its own calendar id', () => {
-    expect([...BOOKING_BLOCK_TO]).toEqual(['info@mdmmarketing.com.au'])
+    expect([...BOOKING_BLOCK_TO]).toEqual([]) // off since 13 Nov 2026: Calendly's Team Calendar entry is the block
     expect(bookingSlot(b)).toEqual({ title: 'Inquiry call - MD Media', startsAt: '2026-12-25T03:00:00.000Z', endsAt: '2026-12-25T03:10:00.000Z' })
     expect(bookingUids(b)).toEqual({ details: 'call-INV-123', block: 'call-INV-123-block' })
     const src = readFileSync('app/lib/calendly.ts', 'utf8')

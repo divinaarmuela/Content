@@ -243,8 +243,12 @@ export function bookingDetails(b: Booking, when: string | null): BookingDetails 
  * And a cancelled call comes OFF every calendar the app put it in — an invitation nobody withdraws would block the
  * time for ever. */
 
-/** who gets only the time block — no name, no number, no answers */
-export const BOOKING_BLOCK_TO: readonly string[] = ['info@mdmmarketing.com.au']
+/**
+ * Who gets only the time block (no name, no number, no answers) — NOBODY now (the owner, 13 Nov 2026: "so many events
+ * showing in calendar"). Calendly already writes every booking into the Team Calendar, which info@ sees, so the app's
+ * block was a second entry for the same call. Add an address here and it sends again.
+ */
+export const BOOKING_BLOCK_TO: readonly string[] = []
 
 export type BookingSlot = { title: string; startsAt: string; endsAt: string }
 
