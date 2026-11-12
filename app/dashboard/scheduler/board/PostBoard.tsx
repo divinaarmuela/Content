@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { toast } from 'sonner'
-import { LayoutGrid, List as ListIcon } from 'lucide-react'
+import { LayoutGrid, List as ListIcon, MessageSquare } from 'lucide-react'
 import { STAGE_MEANING, type AccountRef, type OfferedAction, type PostState } from '../../../lib/post-stage-core'
 import {
   boardActions, dropOnPostLane, groupPosts, newlyCancelled, offeredList, postMoveTargets, postApprovalWindowHref, scheduleLink,
@@ -15,9 +15,11 @@ import { usePersistedChoice } from '../../production/workHooks'
 import { LaneBoard, type Lane as BoardLane } from '../../production/LaneBoard'
 import Chip from '../../ui/Chip'
 import { PostCard, cardTint } from './PostCard'
+import ClientComments from './ClientComments'
+import TodayPanel from '../TodayPanel'
 import type { BoardPost } from './usePostBoard'
 
-const VIEWS = ['columns', 'list'] as const
+const VIEWS = ['columns', 'list', 'comments'] as const
 
 /** What a lane says when it is empty, in its own words. */
 const LANE_EMPTY: Record<string, string> = {
@@ -49,8 +51,12 @@ const LANE_MEANING: Record<string, string> = {
  * (audit B10). Cancelled posts sit folded under the board, each with Re-book.
  */
 export function PostBoard({
-  posts, cancelled, now, busyId, errorFor, onPress, initialLane, focus, channelsOf, zoneOf,
+  posts, cancelled, now, busyId, errorFor, onPress, initialLane, focus, channelsOf, zoneOf, clientId = '', mayComments = false,
 }: {
+  /** the page's client filter — the Going out today column and the Comments view follow it */
+  clientId?: string
+  /** account managers, quality checkers and super admins get the Comments view */
+  mayComments?: boolean
   posts: readonly BoardPost[]
   cancelled: readonly BoardPost[]
   now: string
@@ -65,7 +71,9 @@ export function PostBoard({
   /** the client's time zone, for the planner's times */
   zoneOf?: (clientId: string) => string | null
 }) {
-  const [view, setView] = usePersistedChoice('post-board-view', VIEWS, 'columns', 'view')
+  const [picked, setView] = usePersistedChoice('post-board-view', VIEWS, 'columns', 'view')
+  const view = picked === 'comments' && !mayComments ? 'columns' : picked
+  const [todayCount, setTodayCount] = useState(0)
   const [dragging, setDragging] = useState<BoardPost | null>(null)
   const [over, setOver] = useState<string | null>(null)
   const justDragged = useRef(false)
@@ -208,25 +216,37 @@ export function PostBoard({
     )
   }
 
+  // GOING OUT TODAY, AS THE LAST COLUMN (12 Nov 2026, the owner): it was a card across the top of the page
+  const todayLane: BoardLane = {
+    key: 'today', title: 'Going out today', count: todayCount, empty: 'Nothing going out today.', cards: [],
+    replace: <TodayPanel clientId={clientId} asColumn onCount={setTodayCount} />,
+    hint: <span className="sr-only">Every post going out today, the latest time first, with what the network says about it now.</span>,
+  }
+
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center justify-end gap-2">
         <div role="group" aria-label="Columns or a list" className="inline-flex h-11 items-center rounded-full border border-border bg-surface p-1">
-          {VIEWS.map(v => (
+          {VIEWS.filter(v => v !== 'comments' || mayComments).map(v => (
             <button key={v} type="button" aria-pressed={view === v} onClick={() => setView(v)}
               className={`inline-flex h-9 items-center gap-1.5 rounded-full px-3 text-[13px] font-semibold ${view === v ? 'bg-foreground text-background' : 'text-muted-foreground hover:text-foreground'}`}>
-              {v === 'columns' ? <LayoutGrid className="h-4 w-4" aria-hidden /> : <ListIcon className="h-4 w-4" aria-hidden />}
-              {v === 'columns' ? 'Columns' : 'List'}
+              {v === 'columns' ? <LayoutGrid className="h-4 w-4" aria-hidden /> : v === 'list' ? <ListIcon className="h-4 w-4" aria-hidden /> : <MessageSquare className="h-4 w-4" aria-hidden />}
+              {v === 'columns' ? 'Columns' : v === 'list' ? 'List' : 'Comments'}
             </button>
           ))}
         </div>
       </div>
 
-      {view === 'list' ? (
-        <PostList groups={grouped.map(g => ({ label: g.lane.label, posts: g.posts.map(p => p.bp) }))} />
+      {view === 'comments' ? (
+        <ClientComments clientId={clientId} />
+      ) : view === 'list' ? (
+        <>
+          <PostList groups={grouped.map(g => ({ label: g.lane.label, posts: g.posts.map(p => p.bp) }))} />
+          <TodayPanel clientId={clientId} />
+        </>
       ) : (
         <div data-tour="board-lanes">
-          <LaneBoard lanes={lanes} initialLane={initialLane ?? undefined} ariaLabel="Posts, by stage" />
+          <LaneBoard lanes={[...lanes, todayLane]} initialLane={initialLane ?? undefined} ariaLabel="Posts, by stage" />
         </div>
       )}
 

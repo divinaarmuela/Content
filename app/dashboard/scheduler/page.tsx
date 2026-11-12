@@ -1,5 +1,6 @@
 'use client'
 
+import { mayReadClientComments } from '../../lib/client-comments-core'
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { ScopeViewer } from '../../lib/production-access-core'
@@ -10,7 +11,6 @@ import { AccountUnavailable } from '../production/shoot-ui'
 import GettingStarted from '../GettingStarted'
 import NoReviewerBanner from '../ui/NoReviewerBanner'
 import WaitingOnYou from './WaitingOnYou'
-import TodayPanel from './TodayPanel'
 import PostWindowFromAddress from './PostWindowFromAddress'
 import ClientRound from './board/ClientRound'
 import { PostBoard } from './board/PostBoard'
@@ -118,8 +118,6 @@ export default function PostApprovalPage() {
       {ready && <GettingStarted role={viewer.role} page="scheduler" />}
       {ready && <NoReviewerBanner me={me} />}
 
-      {ready && <TodayPanel clientId={clientId} />}
-
       {ready && (
         <WaitingOnYou rows={waiting} busyId={acts.busyId} errorFor={acts.errorFor} onPress={acts.press} />
       )}
@@ -150,6 +148,8 @@ export default function PostApprovalPage() {
           )}
           <PostBoard
             posts={lanes}
+            clientId={clientId}
+            mayComments={mayReadClientComments(viewer)}
             cancelled={cancelled}
             now={data.clock.now}
             busyId={acts.busyId}

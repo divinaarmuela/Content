@@ -40,7 +40,12 @@ const statusWord = (s: string | null) => {
  * 2026): what it is and where, whether it still needs approval or is booked,
  * who made, approved and booked it, and what Zernio says right now.
  */
-export default function TodayPanel({ clientId }: { clientId: string }) {
+export default function TodayPanel({ clientId, asColumn, onCount }: {
+  clientId: string
+  /** drawn as the board's last column (12 Nov 2026, the owner: "a going out today kind of column"), not a card on top */
+  asColumn?: boolean
+  onCount?: (n: number) => void
+}) {
   const [rows, setRows] = useState<Row[] | null>(null)
   const [checkedAt, setCheckedAt] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -69,13 +74,18 @@ export default function TodayPanel({ clientId }: { clientId: string }) {
 
   const shown = (rows ?? []).filter(r => !clientId || r.client_id === clientId)
   const needs = shown.filter(r => r.state.needsAction).length
+  const count = rows === null ? null : shown.length
+  useEffect(() => { if (count !== null) onCount?.(count) }, [count, onCount])
   const title = rows === null ? 'Going out today'
     : shown.length === 0 ? 'Nothing going out today'
     : `Going out today · ${shown.length} post${shown.length === 1 ? '' : 's'}${needs ? ` · ${needs} need${needs === 1 ? 's' : ''} you` : ''}`
 
-  return (
-    <TintCard tone={needs > 0 ? 'amber' : 'surface'} title={title}>
-      <div className="-mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-muted-foreground">
+  const wrap = (children: React.ReactNode) => asColumn
+    ? <div className="flex min-h-[120px] flex-col gap-2.5" data-today-column>{needs > 0 && <p className="rounded-inner bg-tint-amber px-3 py-2 text-[13px] font-semibold">{needs} need{needs === 1 ? 's' : ''} you</p>}{children}</div>
+    : <TintCard tone={needs > 0 ? 'amber' : 'surface'} title={title}>{children}</TintCard>
+  return wrap(
+    <>
+      <div className={`${asColumn ? '' : '-mt-2 '}flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-muted-foreground`}>
         <span>Latest time first · status checked{checkedAt ? ` at ${time(checkedAt)}` : ''}</span>
         <button type="button" onClick={load} disabled={busy}
           className="inline-flex min-h-9 items-center font-semibold text-foreground underline-offset-4 hover:underline disabled:opacity-50">
@@ -130,6 +140,9 @@ export default function TodayPanel({ clientId }: { clientId: string }) {
           ))}
         </ul>
       )}
-    </TintCard>
+      {asColumn && rows !== null && shown.length === 0 && !error && (
+        <div className="rounded-inner border border-dashed border-border px-3 py-7 text-center text-[13px] text-muted-foreground">Nothing going out today.</div>
+      )}
+    </>,
   )
 }
