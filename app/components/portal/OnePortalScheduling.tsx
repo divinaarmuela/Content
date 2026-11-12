@@ -55,6 +55,18 @@ function StateMark({ t }: { t: ScheduledTile }) {
   )
 }
 
+/** THE ANSWER, IN A WORD, ON THE TILE (12 Nov 2026 — Anthony could not tell which posts he had already answered:
+ *  the only sign was a 6px dot turning green). Nothing on a post still to review: the count above says how many. */
+function AnswerMark({ t }: { t: ScheduledTile }) {
+  if (t.state !== 'approved' && t.state !== 'asked_again') return null
+  return (
+    <span data-answer-mark={t.state}
+      className={`absolute bottom-1.5 left-1.5 inline-flex max-w-[calc(100%-12px)] items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${t.state === 'approved' ? 'bg-emerald-600 text-white' : 'bg-amber-400 text-black'}`}>
+      <span className="truncate">{t.state === 'approved' ? '✓ Approved' : 'Updated — look again'}</span>
+    </span>
+  )
+}
+
 const fmt = (n: number | null | undefined) => (n == null ? '—' : n >= 10000 ? `${(n / 1000).toFixed(n >= 100000 ? 0 : 1)}k` : n.toLocaleString('en-AU'))
 
 export default function OnePortalScheduling({ token, profiles, openPostId }: {
@@ -101,6 +113,16 @@ export default function OnePortalScheduling({ token, profiles, openPostId }: {
               <p className="text-[13px] text-muted-foreground">{profile.booked.length} booked · {profile.posted.length > 0 ? `your latest ${profile.posted.length} ${profile.posted.length === 1 ? 'post' : 'posts'} on ${NETWORK_WORD[profile.network]}` : NETWORK_WORD[profile.network]}</p>
             </div>
           </div>
+
+          {profile.booked.length > 0 && (() => {
+            const done = profile.booked.filter(t => t.state === 'approved').length
+            const left = profile.booked.length - done
+            return (
+              <p className="text-[14px] font-semibold" data-answer-count role="status">
+                {done} approved · {left === 0 ? 'nothing left to review' : `${left} still to review`}
+              </p>
+            )
+          })()}
 
           <p className="text-[13px] text-muted-foreground">
             Tap a booked post to approve it, or tell us what to change. Posts go out at their time unless you say otherwise.
@@ -160,6 +182,7 @@ function Grid({ profile, tall, onOpen }: { profile: NetworkProfile; tall: boolea
           aria-label={`${t.title}, ${t.when ?? 'booked'} — ${REVIEW_WORDS[t.state]}`} data-booked={t.post_id}>
           <Cover tile={t} className="h-full w-full" />
           <StateMark t={t} />
+          <AnswerMark t={t} />
         </button>
       ))}
       {profile.posted.map(t => (
