@@ -63,6 +63,7 @@ import MediaPicker from './MediaPicker'
 import PostNotes from './PostNotes'
 import ChannelCaptions from './ChannelCaptions'
 import AutomationSection from './AutomationSection'
+import { postAutomationProblem, type PostAutomation } from '@/app/lib/comment-automation-core'
 import { Dropdown, ExtraRow, MenuItem } from './PostOptionRows'
 import TimePicker from './TimePicker'
 import { Thumb } from './tiles'
@@ -724,6 +725,36 @@ export default function PostWindow({
     if (back.post) { loadedKey.current = null; setAnswered(back.post) }
     setQuickCaption(null)
     setReply({ action: 'save', tone: 'ok', text: `Caption changed — still booked for ${melb(at)}. The old caption is in Versions.`, problems: [] })
+  }
+
+  /** a booked post's AUTOMATION set the same way (the owner, 12 Nov 2026: "my team needs to do the automation … it should
+   *  just be the option tab"): the Options tab stays on a booked post, the box is filled in there and Save keeps it
+   *  booked for the same time. The automation is made at Zernio when the booking goes back in (armPostAutomations). */
+  const [quickAuto, setQuickAuto] = useState<PostAutomation | null>(null)
+  const changeBookedAutomation = async (next: PostAutomation) => {
+    if (!saved || !id || busy) return
+    const at = saved.scheduled_for
+    if (!at || Date.parse(at) - Date.now() < 15 * 60_000) { setReply({ action: 'save', tone: 'error', text: 'It goes out in under 15 minutes — too close to change the automation now.', problems: [] }); return }
+    const problem = next.on ? postAutomationProblem(next, context.client?.slug ?? null) : null
+    if (problem) { setReply({ action: 'save', tone: 'error', text: problem, problems: [] }); return }
+    setBusy(true); setReply(null)
+    const off = await api.act(id, { action: 'edit_booked', expect_rev: saved.rev, confirm: true, note: 'Changing the automation' })
+    if (!off.ok || !off.post) { setBusy(false); setReply({ action: 'save', tone: 'error', text: off.ok ? 'It could not be taken off to change the automation' : off.reason, problems: [] }); return }
+    const p = off.post
+    const s1 = await api.save(id, { slides: p.slides, caption: p.caption, channels: p.channels, per_channel: p.per_channel, scheduled_for: at,
+      timezone: p.timezone ?? tz ?? 'Australia/Melbourne', automation: next, expect_rev: p.rev } as never)
+    const rev = s1.ok ? readPostState(s1.row)?.rev : null
+    const back = rev == null ? null : await api.act(id, { action: 'schedule_direct', expect_rev: rev, scheduled_for: at, note: 'Automation changed — booked back in for the same time' })
+    setBusy(false)
+    if (!back?.ok) {
+      const why = !s1.ok ? s1.reason : back && !back.ok ? back.reason : 'it could not be booked back in'
+      setReply({ action: 'save', tone: 'error', text: `The automation was not saved and the post is now a draft: ${why}. Book it again from here.`, problems: [] })
+      if (back && !back.ok && back.post) { loadedKey.current = null; setAnswered(back.post) }
+      return
+    }
+    if (back.post) { loadedKey.current = null; setAnswered(back.post) }
+    setQuickAuto(null)
+    setReply({ action: 'save', tone: 'ok', text: next.on ? `Automation saved — still booked for ${melb(at)}. It starts when the post goes out.` : `Automation turned off — still booked for ${melb(at)}.`, problems: [] })
   }
 
   const changeBookedCover = async (url: string | null, ids: string[] | null) => {
@@ -1425,15 +1456,29 @@ export default function PostWindow({
               }}
             />
           )
+          // a booked post that can still change (mayRecover) keeps the box open: fill it in, Save, it stays booked
+          const bookedAuto = !editable && mayRecover
           const automation = chosen.some(a => ['instagram', 'facebook'].includes(String(a.platform))) && (
-            <AutomationSection
-              automation={editable ? state.automation : shown.automation}
-              editable={editable}
-              onChange={next => dispatch({ type: 'automation', automation: next })}
-              clientSlug={context.client?.slug ?? null}
-              postId={saved?.id ?? null}
-              stage={saved?.stage ?? null}
-            />
+            <>
+              <AutomationSection
+                automation={editable ? state.automation : bookedAuto ? (quickAuto ?? shown.automation) : shown.automation}
+                editable={editable || bookedAuto}
+                onChange={next => (bookedAuto ? setQuickAuto(next) : dispatch({ type: 'automation', automation: next }))}
+                clientSlug={context.client?.slug ?? null}
+                postId={saved?.id ?? null}
+                stage={saved?.stage ?? null}
+              />
+              {bookedAuto && quickAuto && (
+                <div className="flex flex-wrap items-center gap-2 rounded-inner border border-accent-blue/40 bg-tint-blue p-3" data-quick-automation-box>
+                  <p className="min-w-0 flex-1 text-[12px]">Save and the post stays booked for {melb(saved?.scheduled_for)}.</p>
+                  <button type="button" disabled={busy} onClick={() => setQuickAuto(null)} className="rounded-full border border-border px-4 py-2 text-[12px] font-semibold disabled:opacity-60">Cancel</button>
+                  <button type="button" disabled={busy} data-quick-automation-save onClick={() => void changeBookedAutomation(quickAuto)}
+                    className="rounded-full bg-foreground px-4 py-2 text-[12px] font-semibold text-background disabled:opacity-60">
+                    {busy ? 'Saving…' : 'Save automation — stays booked'}
+                  </button>
+                </div>
+              )}
+            </>
           )
           // A REQUIRED TICK IS NEVER TUCKED AWAY (the owner, 27 Oct 2026: "if they select tiktok the tickbox is all the
           // way in options"): on a laptop TikTok's consent — and any other tick a post cannot go out without — sits
@@ -1596,7 +1641,7 @@ export default function PostWindow({
             { key: 'media', label: 'Media', count: shown.slides.length, show: true },
             // the comment-to-DM section draws nothing on a post that cannot change and has none set (live check, 27 Oct
             // 2026: MGMT's booked REEL 4 opened an empty Options tab)
-            { key: 'options', label: 'Options', show: !!options || !!alsoPost || (!!automation && (editable || !!shown.automation)) },
+            { key: 'options', label: 'Options', show: !!options || !!alsoPost || (!!automation && (editable || mayRecover || !!shown.automation)) },
             // how it sits on each network's feed, booked posts and live ones (the owner, 2 Nov 2026)
             { key: 'feed', label: 'Feed preview', show: feedNetworks },
             { key: 'notes', label: 'Notes', count: noteCount, show: !!notesBox },
