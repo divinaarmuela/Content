@@ -38,7 +38,7 @@ import { cardLinkOf, opensOnClick } from '../../../../lib/canvas-link-open-core'
 import { toggleBullets, toggleHighlight } from '../../../../lib/note-format-core'
 import { COLUMN_COLOURS, NEW_COLUMN, columnAt, dropIndex, fitsInColumn, placeInColumn, takeOutOfColumn, type ColumnBox } from '../../../../lib/canvas-column-core'
 import {
-  boardTrail, childrenOf, deleteWarning, descendantsOf, freeSpot, insideLabel, moveIntoBoard, stillThere, type Box,
+  boardTrail, childrenOf, deleteWarning, descendantsOf, freeSpot, insideLabel, moveIntoBoard, moveToLevel, stillThere, type Box,
 } from '../../../../lib/shoot-board-core'
 
 type Camera = { x: number; y: number; s: number }
@@ -162,6 +162,7 @@ export default function BriefCanvas({
   const marqueeRef = useRef<{ x0: number; y0: number; x1: number; y1: number; add: ReadonlySet<string> } | null>(null)
   /** decided ONCE at the press: may this drag pan the board? (a Shift-drag box or a card drag must never pan it) */
   const panRef = useRef(false)
+  const crumbsRef = useRef<HTMLElement>(null)
   /** The one card allowed to be a live player.
    *
    *  One, deliberately. A board of ten embedded Reels is ten players, and the
@@ -500,6 +501,9 @@ export default function BriefCanvas({
     /** every board tile it could be dropped into, and the one under the pointer now */
     boards: ColumnBox[]
     overBoard: { id: string; el: HTMLElement } | null
+    /** BACK UP A LEVEL: the breadcrumbs above it may be dropped on, and the one under the pointer now */
+    crumbs?: { id: string | null; el: HTMLElement; r: DOMRect }[]
+    overCrumb?: { id: string | null; el: HTMLElement } | null
   } | null>(null)
   /* ── corner resize: both axes. `oh` is the height MEASURED at pointerdown
    *  (a card without an h of its own is as tall as its content), so a drag
@@ -740,6 +744,9 @@ export default function BriefCanvas({
         id: card.id, startX: e.clientX, startY: e.clientY,
         ox: card.x, oy: card.y, moved: false, el, half, ends, raf: 0, nx: card.x, ny: card.y,
         columns, over: null, group, boards, overBoard: null,
+        crumbs: Array.from(crumbsRef.current?.querySelectorAll<HTMLElement>('[data-crumb]') ?? [])
+          .map(el => ({ id: el.dataset.crumb || null, el, r: el.getBoundingClientRect() })),
+        overCrumb: null,
       }
     }
     try { el.setPointerCapture(e.pointerId) } catch { /* see startResize */ }
@@ -822,6 +829,14 @@ export default function BriefCanvas({
         d.overBoard = id && el ? { id, el } : null
       }
     }
+    if (d.crumbs?.length) {
+      const hit = d.crumbs.find(c => e.clientX >= c.r.left && e.clientX <= c.r.right && e.clientY >= c.r.top && e.clientY <= c.r.bottom) ?? null
+      if (hit?.el !== d.overCrumb?.el) {
+        if (d.overCrumb) d.overCrumb.el.style.outline = ''
+        if (hit) hit.el.style.outline = '3px solid rgb(59 130 246 / 0.8)'
+        d.overCrumb = hit ? { id: hit.id, el: hit.el } : null
+      }
+    }
     if (!d.raf) d.raf = requestAnimationFrame(paintDrag)
   }
 
@@ -835,6 +850,7 @@ export default function BriefCanvas({
       if (d.el) { d.el.style.willChange = ''; d.el.style.zIndex = ''; d.el.style.transform = d.host ? '' : `translate(${d.ox}px, ${d.oy}px)` }
       if (d.over) d.over.style.outline = ''
       if (d.overBoard) d.overBoard.el.style.outline = ''
+      if (d.overCrumb) d.overCrumb.el.style.outline = ''
       for (const g of d.group) g.el.style.transform = `translate(${g.ox}px, ${g.oy}px)`
       const bar = d.el?.querySelector<HTMLElement>('[data-card-toolbar]')
       if (bar) bar.style.display = ''
@@ -907,6 +923,21 @@ export default function BriefCanvas({
       const out = takeOutOfColumn(moving, snap(d.nx), snap(d.ny), Math.max(0, ...cards.map(c => c.z)) + 1)
       upsertLocal(out); persist([out]); setSelected(out.id)
       return
+    }
+    // BACK UP A LEVEL (12 Nov 2026): dropped on a breadcrumb, the card and every card picked with it go onto that board
+    if (d.overCrumb) {
+      d.overCrumb.el.style.outline = ''
+      const to = d.overCrumb.id
+      for (const g of d.group) g.el.style.transform = ''
+      const moved = moveToLevel(cards, [card.id, ...d.group.map(g => g.id)], to)
+      if (moved) {
+        for (const c of moved) upsertLocal(c)
+        persist(moved)
+        setPicked(new Set()); setSelected(null)
+        const name = to ? (cards.find(c => c.id === to)?.name || 'the board') : (rootName || trail[0]?.name || 'the top board')
+        toast(`${moved.length === 1 ? '1 card' : `${moved.length} cards`} moved to ${name}`)
+        return
+      }
     }
     // INTO A BOARD (4 Nov 2026): dropped on a board tile, the card and every card picked with it go inside
     const intoBoard = d.overBoard?.id ?? null
@@ -1909,7 +1940,7 @@ export default function BriefCanvas({
 
   /** "Shoot brief / Concepts / Day two" — every step a 44px button back up. */
   const crumbs = board !== null && (
-    <nav aria-label="Where you are" className="flex min-h-11 flex-wrap items-center gap-0.5 px-1 pb-2">
+    <nav ref={crumbsRef} aria-label="Where you are" className="flex min-h-11 flex-wrap items-center gap-0.5 px-1 pb-2">
       {trail.map((c, i) => {
         const last = i === trail.length - 1
         return (
@@ -1920,7 +1951,7 @@ export default function BriefCanvas({
                 <FolderOpen className="h-4 w-4" /> {c.id ? c.name : (rootName || c.name)}
               </span>
             ) : (
-              <button type="button" onClick={() => openBoard(c.id)}
+              <button type="button" data-crumb={c.id ?? ''} title="Open — or drop cards here to move them to this board" onClick={() => openBoard(c.id)}
                 className="inline-flex h-11 items-center rounded-full px-3 text-body-15 text-muted-foreground hover:bg-foreground/[0.06] hover:text-foreground">
                 {c.id ? c.name : (rootName || c.name)}
               </button>

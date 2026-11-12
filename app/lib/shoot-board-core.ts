@@ -174,6 +174,50 @@ export function freeSpot(want: { x: number; y: number }, size: { w: number; h: n
  * the move is impossible: a board dropped into itself or into one of its own
  * boards would make a loop and vanish from every view.
  */
+/** a free line has no x/y of its own — its points move instead */
+type LinePts = { fx?: number; fy?: number; tx?: number; ty?: number; cx?: number; cy?: number }
+function shiftLine<T>(c: T, dx: number, dy: number): T {
+  const l = (c as { line?: LinePts }).line
+  if (!l) return c
+  const sh = (v: number | undefined, d: number) => v === undefined ? undefined : Math.round(v + d)
+  return { ...c, line: { ...l, fx: sh(l.fx, dx), fy: sh(l.fy, dy), tx: sh(l.tx, dx), ty: sh(l.ty, dy), cx: sh(l.cx, dx), cy: sh(l.cy, dy) } }
+}
+/** the top-left of a group, lines counted by their points */
+function groupCorner(cs: readonly (BoardCard & { x: number; y: number })[]): { x: number; y: number } {
+  const xs: number[] = [], ys: number[] = []
+  for (const c of cs) {
+    const l = (c as { line?: LinePts }).line
+    if (c.kind === 'arrow') {
+      if (l?.fx !== undefined) { xs.push(l.fx); ys.push(l.fy ?? 0) }
+      if (l?.tx !== undefined) { xs.push(l.tx); ys.push(l.ty ?? 0) }
+    } else { xs.push(c.x); ys.push(c.y) }
+  }
+  return { x: xs.length ? Math.min(...xs) : 0, y: ys.length ? Math.min(...ys) : 0 }
+}
+
+/** BACK UP A LEVEL (12 Nov 2026: "there is no way for me to put it back to the other page"): cards dropped on a
+ *  breadcrumb go onto that board (`null` = the top), kept together, to the right of what is already there.
+ *  Lines drawn on their own move with them; `null` back means nothing could move. */
+export function moveToLevel<T extends BoardCard & { x: number; y: number; w: number; h?: number }>(
+  cards: readonly T[], ids: readonly string[], target: string | null, gap = 48,
+): T[] | null {
+  const moving = cards.filter(c => ids.includes(c.id) && c.id !== target && (c.parent ?? null) !== target)
+  if (moving.length === 0) return null
+  if (target) for (const m of moving) {
+    if (m.kind === 'board' && descendantsOf(cards, m.id).includes(target)) return null
+  }
+  const inside = childrenOf(cards, target).filter(c => !ids.includes(c.id) && c.kind !== 'arrow')
+  const { x: gx, y: gy } = groupCorner(moving)
+  const ox = inside.length ? Math.max(...inside.map(c => c.x + (c.w || 200))) + gap : 0
+  const oy = inside.length ? Math.min(...inside.map(c => c.y)) : 0
+  return moving.map(c => {
+    const { parent: _old, ...rest } = c
+    void _old
+    const base = { ...(rest as T), ...(target ? { parent: target } : {}) } as T
+    return c.kind === 'arrow' ? shiftLine(base, ox - gx, oy - gy) : { ...base, x: Math.round(ox + (c.x - gx)), y: Math.round(oy + (c.y - gy)) }
+  })
+}
+
 export function moveIntoBoard<T extends BoardCard & { x: number; y: number; w: number; h?: number }>(
   cards: readonly T[], ids: readonly string[], boardId: string, gap = 48,
 ): T[] | null {
@@ -183,9 +227,10 @@ export function moveIntoBoard<T extends BoardCard & { x: number; y: number; w: n
     if (m.kind === 'board' && (m.id === boardId || descendantsOf(cards, m.id).includes(boardId))) return null
   }
   const inside = childrenOf(cards, boardId).filter(c => !ids.includes(c.id) && c.kind !== 'arrow')
-  const gx = Math.min(...moving.map(c => c.x))
-  const gy = Math.min(...moving.map(c => c.y))
+  const { x: gx, y: gy } = groupCorner(moving)
   const ox = inside.length ? Math.max(...inside.map(c => c.x + (c.w || 200))) + gap : 0
   const oy = inside.length ? Math.min(...inside.map(c => c.y)) : 0
-  return moving.map(c => ({ ...c, parent: boardId, x: Math.round(ox + (c.x - gx)), y: Math.round(oy + (c.y - gy)) }))
+  return moving.map(c => c.kind === 'arrow'
+    ? shiftLine({ ...c, parent: boardId }, ox - gx, oy - gy)
+    : ({ ...c, parent: boardId, x: Math.round(ox + (c.x - gx)), y: Math.round(oy + (c.y - gy)) }))
 }
