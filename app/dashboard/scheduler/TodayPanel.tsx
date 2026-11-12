@@ -85,12 +85,9 @@ export default function TodayPanel({ clientId, asColumn, onCount }: {
     : <TintCard tone={needs > 0 ? 'amber' : 'surface'} title={title}>{children}</TintCard>
   return wrap(
     <>
-      <div className={`${asColumn ? '' : '-mt-2 '}flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-muted-foreground`}>
-        <button type="button" onClick={load} disabled={busy}
-          className="inline-flex min-h-9 items-center font-semibold text-foreground underline-offset-4 hover:underline disabled:opacity-50">
-          {busy ? 'Checking…' : 'Check again'}
-        </button>
-      </div>
+      {/* no "Check again" (the owner, 12 Nov 2026: "why check again"): the list re-reads itself every two minutes; only a
+          failed read offers a retry */}
+      {error && <button type="button" onClick={load} disabled={busy} className="self-start text-[12px] font-semibold underline underline-offset-4 disabled:opacity-50">{busy ? 'Trying…' : 'Try again'}</button>}
       {error && <p role="alert" className="text-[13px] font-medium text-foreground">{error}</p>}
       {rows === null && !error && <p className="text-[13px] text-muted-foreground">Checking today’s posts…</p>}
       {shown.length > 0 && (
