@@ -12,7 +12,7 @@ import OnePortalTabs from '../../../components/portal/OnePortalTabs'
 import OnePortalWorkList from '../../../components/portal/OnePortalWorkList'
 import OnePortalShoots from '../../../components/portal/OnePortalShoots'
 import { loadOnePortal } from '../../../lib/one-portal-page'
-import { loadScheduling, profilesForWork, schedulingWaiting, schedulingWorks } from '../../../lib/one-portal-schedule'
+import { loadScheduling, profilesForWork, onlyPostOf, schedulingWaiting, schedulingWorks } from '../../../lib/one-portal-schedule'
 import OnePortalList, { type ListRow } from '../../../components/portal/OnePortalList'
 import ShootBoard from '../../../components/portal/ShootBoard'
 import { getPortalTeamBoardDetail } from '../../../lib/portal-team-board'
@@ -216,7 +216,10 @@ export default async function OnePortalPage({ params, searchParams }: {
       <div className="flex flex-col gap-5" data-one-portal-work-page={workId}>
         {back('All posts')}
         {title(workId === 'feed' ? 'Your feed' : work!.title, workId === 'feed' ? 'Everything booked, and what is already posted' : `${work!.booked} booked${work!.off ? ` · ${work!.off} off the schedule` : ''}`)}
-        <OnePortalScheduling token={token} profiles={workId === 'feed' ? profiles : profilesForWork(profiles, workId)} openPostId={askedPost} />
+        <OnePortalScheduling token={token} profiles={workId === 'feed' ? profiles : profilesForWork(profiles, workId)}
+          // A WORK WITH ONE POST OPENS THAT POST (12 Nov 2026, Anthony: "when I go back to the comments it's not showing
+          // up") — tapping "73" used to land on a grid of the feed, the post itself one more tap (or a long scroll) away
+          openPostId={askedPost ?? (workId !== 'feed' ? onlyPostOf(profilesForWork(profiles, workId)) : null)} />
       </div>
     )
   }
@@ -257,7 +260,9 @@ export default async function OnePortalPage({ params, searchParams }: {
     href: onePortalPath(token, 'scheduling', w.id),
     title: w.title,
     line: `${w.booked} booked${w.off ? ` · ${w.off} off the schedule` : ''}`,
-    chip: w.waiting > 0 ? { words: `${w.waiting} to look at`, tone: 'waiting' } : w.booked > 0 ? { words: 'All answered', tone: 'done' } : null,
+    chip: w.waiting > 0 ? { words: `${w.waiting} to look at`, tone: 'waiting' } : w.booked > 0 ? { words: 'All answered', tone: 'done' }
+      // every post of it came off on their own no: say so, instead of a bare row that reads as nothing happened
+      : w.off > 0 ? { words: 'Not approved — being changed', tone: 'done' } : null,
   }))
 
   return (

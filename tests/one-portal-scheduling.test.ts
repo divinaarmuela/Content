@@ -167,7 +167,9 @@ describe('a link to one post opens it on Your feed (the owner, 5 Oct 2026, Justi
   it('the post is drawn among what is already posted, not alone on its work\'s page', () => {
     const page = readFileSync('app/portal/[token]/home/page.tsx', 'utf8')
     expect(page).toContain("const workId = id && id !== askedPost ? id : 'feed'")
-    expect(page).toContain("profiles={workId === 'feed' ? profiles : profilesForWork(profiles, workId)} openPostId={askedPost}")
+    expect(page).toContain("profiles={workId === 'feed' ? profiles : profilesForWork(profiles, workId)}")
+    // a work's own page opens its one post (12 Nov 2026); a link to a post still wins
+    expect(page).toContain("openPostId={askedPost ?? (workId !== 'feed' ? onlyPostOf(profilesForWork(profiles, workId)) : null)}")
   })
 })
 

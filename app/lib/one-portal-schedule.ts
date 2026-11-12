@@ -296,6 +296,13 @@ export function profilesForWork(profiles: readonly NetworkProfile[], workId: str
     .filter(p => p.booked.length + p.off.length > 0)
 }
 
+/** the one post these profiles hold between them, or null when there are none or several */
+export function onlyPostOf(profiles: readonly NetworkProfile[]): string | null {
+  const ids = new Set<string>()
+  for (const p of profiles) for (const t of [...p.booked, ...p.off]) ids.add(t.post_id)
+  return ids.size === 1 ? [...ids][0] : null
+}
+
 /** How many booked posts wait on the client's word — the tab's badge. */
 export function schedulingWaiting(profiles: readonly NetworkProfile[]): number {
   const ids = new Set<string>()

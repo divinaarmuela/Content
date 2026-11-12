@@ -128,12 +128,7 @@ export default function OnePortalScheduling({ token, profiles, openPostId }: {
             Tap a booked post to approve it, or tell us what to change. Posts go out at their time unless you say otherwise.
           </p>
 
-          {profile.network === 'linkedin' || profile.network === 'facebook'
-            ? <LinkedInFeed profile={profile} onOpen={setOpen} />
-            : <Grid profile={profile} tall={profile.network === 'tiktok'} onOpen={setOpen} />}
-
-          {profile.feed_problem && <p className="text-[13px] text-muted-foreground" role="status">{profile.feed_problem}</p>}
-
+          {/* ABOVE THE FEED (12 Nov 2026): under 25 posted tiles nobody found the post they had said no to */}
           {profile.off.length > 0 && (
             <div className="flex flex-col gap-2" data-one-portal-off>
               <p className="text-[12px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">Off the schedule</p>
@@ -151,6 +146,13 @@ export default function OnePortalScheduling({ token, profiles, openPostId }: {
               ))}
             </div>
           )}
+
+          {profile.network === 'linkedin' || profile.network === 'facebook'
+            ? <LinkedInFeed profile={profile} onOpen={setOpen} />
+            : <Grid profile={profile} tall={profile.network === 'tiktok'} onOpen={setOpen} />}
+
+          {profile.feed_problem && <p className="text-[13px] text-muted-foreground" role="status">{profile.feed_problem}</p>}
+
         </section>
       )}
 
