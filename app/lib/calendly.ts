@@ -2,7 +2,11 @@ import 'server-only'
 import { createHash } from 'node:crypto'
 import { table } from '@/lib/db'
 import type { Lead } from '@/lib/db-types'
-import { bookingPatch, signingKey, type Booking } from './calendly-core'
+import {
+  BOOKING_BLOCK_TO, BOOKING_DETAILS_TO, bookingDetails, bookingIcs, bookingPatch, bookingSlot, bookingUids, inviteeId, signingKey,
+  type Booking, type BookingDetails,
+} from './calendly-core'
+import { escapeHtml, noReplyAddress, notify, renderEmail } from './mailer'
 import type { CalEvent } from './bookings-core'
 import { logLeadEvent } from './lead-events'
 import { callWords } from './lead-timeline-core'
@@ -119,4 +123,99 @@ async function logBooking(leadId: string, b: Booking, again: boolean, now: Date)
     detail: b.startsAt ? `For ${callWords(b.startsAt)}` : null,
     meta: { utm_source: b.utm.source, utm_medium: b.utm.medium, utm_campaign: b.utm.campaign, utm_term: b.utm.term, utm_content: b.utm.content, page: b.page },
   })
+}
+
+/**
+ * THE DETAILS EMAIL'S BODY (the owner, 12 Nov 2026: "please design it properly"). Who and when first, big enough to
+ * read at a glance on a phone; then how to reach them, each one a link; then every question with its answer in its
+ * own box. Inline styles only — mail clients drop everything else.
+ */
+export function bookingDetailsHtml(d: BookingDetails): string {
+  const NL = String.fromCharCode(10)
+  const val = (label: string) => d.rows.find(([k]) => k === label)?.[1] ?? null
+  const name = val('Name') ?? ''
+  const link = (label: string, v: string) =>
+    label === 'Email' ? `<a href="mailto:${escapeHtml(v)}" style="color:#2563eb;text-decoration:none;">${escapeHtml(v)}</a>`
+      : label === 'Phone' ? `<a href="tel:${escapeHtml(v.replace(/[^+\d]/g, ''))}" style="color:#2563eb;text-decoration:none;">${escapeHtml(v)}</a>`
+        : escapeHtml(v)
+  const facts = d.rows.filter(([k]) => !['Call', 'When', 'Name'].includes(k)).map(([k, v]) =>
+    `<tr><td style="padding:7px 16px 7px 0;${LABEL}vertical-align:top;white-space:nowrap;">${escapeHtml(k)}</td>`
+    + `<td style="padding:7px 0;font-size:15px;color:#18181b;word-break:break-word;">${link(k, v)}</td></tr>`).join('')
+  const answers = d.answers
+    ? d.answers.split(NL + NL).map(block => {
+        const [q, ...a] = block.split(NL)
+        return `<div style="margin:0 0 10px;padding:12px 14px;background:#ffffff;border:1px solid #e4e4e7;border-radius:10px;">`
+          + `<p style="margin:0 0 4px;font-size:12px;line-height:1.4;color:#71717a;">${escapeHtml(q ?? '')}</p>`
+          + `<p style="margin:0;font-size:15px;line-height:1.5;color:#18181b;word-break:break-word;">${a.map(escapeHtml).join('<br>')}</p></div>`
+      }).join('')
+    : `<p style="margin:0;font-size:14px;color:#71717a;">They answered no other questions.</p>`
+  return `<p style="margin:0;font-size:22px;line-height:1.25;font-weight:700;color:#18181b;letter-spacing:-0.01em;">${escapeHtml(name)}</p>`
+    + `<p style="margin:4px 0 16px;font-size:14px;color:#52525b;">${escapeHtml(val('Call') ?? 'A call')}</p>`
+    + whenBox(val('When'))
+    + `<table role="presentation" style="border-collapse:collapse;width:100%;margin:0 0 20px;">${facts}</table>`
+    + `<p style="margin:0 0 10px;${LABEL}">Their answers</p>${answers}`
+    + (d.calendar ? `<p style="margin:16px 0 0;font-size:12px;color:#71717a;">The attached invitation puts this call in your calendar.</p>` : '')
+}
+
+const LABEL = 'font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:#71717a;'
+const whenBox = (when: string | null, tint = '#eff6ff') => when
+  ? `<div style="margin:0 0 18px;padding:12px 14px;background:${tint};border-radius:10px;"><p style="margin:0;${LABEL}">When</p>`
+    + `<p style="margin:2px 0 0;font-size:17px;font-weight:600;color:#18181b;">${escapeHtml(when)} <span style="font-size:13px;font-weight:400;color:#52525b;">Melbourne time</span></p></div>`
+  : ''
+
+/** The bare email info@ gets: the call's name and its time — nothing about the person (calendly-core BOOKING_BLOCK_TO). */
+export function bookingBlockHtml(call: string, when: string | null, cancelled = false): string {
+  return `<p style="margin:0 0 16px;font-size:18px;font-weight:700;color:#18181b;">${escapeHtml(call)}</p>`
+    + whenBox(when, cancelled ? '#fef2f2' : '#eff6ff')
+    + `<p style="margin:0;font-size:13px;color:#71717a;">${cancelled
+      ? 'This call was cancelled. The attached notice takes it off your calendar.'
+      : 'The attached invitation blocks this time in your calendar.'}</p>`
+}
+
+/**
+ * A BOOKING, TOLD TO THE THREE INBOXES (the owner, 12 Nov 2026):
+ *   hello@ and contact@ — the person, how to reach them, and every answer (calendly-core BOOKING_DETAILS_TO), with an
+ *     invitation that puts the call in their own calendar (name and number only — the answers stay in the email);
+ *   info@ — the call's name and time only, with an invitation that blocks the time (BOOKING_BLOCK_TO).
+ * A CANCELLED call sends each of them a withdrawal, so the entry comes off again.
+ * One email per booking per address per kind: notify() claims a key built from the invitee id, so Calendly's retries
+ * send nothing twice. Best-effort — a failed email never fails the webhook, or Calendly would retry the lead.
+ */
+export async function sendBookingDetails(b: Booking, leadUrl: string | null): Promise<void> {
+  if (b.kind !== 'booked' && b.kind !== 'cancelled') return
+  const cancelled = b.kind === 'cancelled'
+  const when = b.startsAt ? callWords(b.startsAt) : null
+  const slot = bookingSlot(b)
+  const uids = bookingUids(b)
+  const call = b.event ?? 'A call'
+  const name = [b.fname, b.lname].filter(Boolean).join(' ') || b.email
+  const d = cancelled ? null : bookingDetails(b, when)
+  const from = noReplyAddress()
+  const invite = (to: string, uid: string, title: string, note: string | null) => slot ? { attachments: [{
+    filename: cancelled ? 'cancelled.ics' : 'call.ics', contentType: `text/calendar; method=${cancelled ? 'CANCEL' : 'REQUEST'}`,
+    content: Buffer.from(bookingIcs({ method: cancelled ? 'CANCEL' : 'REQUEST', uid, title, startsAt: slot.startsAt, endsAt: slot.endsAt, note, organizerEmail: from, attendeeEmail: to })),
+  }] } : {}
+  const send = async (to: string, eventType: string, subject: string, bodyHtml: string, extra: object) => {
+    try {
+      await notify({ eventType, entityType: 'calendly_booking', entityId: inviteeId(b.inviteeUri), recipientEmail: to, subject, bodyHtml, replyTo: b.email, clientId: null, ...extra })
+    } catch (e) {
+      console.error('[calendly] could not email', eventType, 'to', to, e instanceof Error ? e.message : e)
+    }
+  }
+  for (const to of BOOKING_DETAILS_TO) {
+    if (cancelled) {
+      await send(to, 'call_cancelled_details', `Call cancelled: ${name} (${call})`,
+        renderEmail('A booked call was cancelled', `<p style="margin:0 0 16px;font-size:18px;font-weight:700;color:#18181b;">${escapeHtml(name)}</p>${bookingBlockHtml(call, when, true)}`, leadUrl ? 'Open the lead' : undefined, leadUrl ?? undefined),
+        invite(to, uids.details, `${call}: ${name}`, null))
+    } else if (d) {
+      await send(to, 'call_booked_details', d.subject,
+        renderEmail('A new call has been booked', bookingDetailsHtml(d), leadUrl ? 'Open the lead' : undefined, leadUrl ?? undefined),
+        invite(to, uids.details, `${call}: ${name}`, d.calendar?.note ?? null))
+    }
+  }
+  for (const to of BOOKING_BLOCK_TO) {
+    await send(to, cancelled ? 'call_cancelled_block' : 'call_booked_block', cancelled ? `Call cancelled: ${call}` : `Call booked: ${call}`,
+      renderEmail(cancelled ? 'A booked call was cancelled' : 'A call has been booked', bookingBlockHtml(call, when, cancelled)),
+      invite(to, uids.block, call, null))
+  }
 }

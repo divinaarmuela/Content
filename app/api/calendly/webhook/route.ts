@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { parseBooking, verifySignature } from '@/app/lib/calendly-core'
-import { applyBooking, calendlyKey } from '@/app/lib/calendly'
+import { applyBooking, calendlyKey, sendBookingDetails } from '@/app/lib/calendly'
 
 /**
  * PUBLIC — Calendly calls this on every booking and cancellation (9 Nov 2026). Not in middleware's matcher on
@@ -21,5 +21,8 @@ export async function POST(req: Request) {
   const booking = parseBooking(json)
   if (!booking) return NextResponse.json({ ok: true, ignored: true })
   const res = await applyBooking(booking)
+  // hello@ and contact@ get the details and answers, info@ only the time block; a cancellation takes each entry off
+  // again — best-effort, after the lead is safe
+  if (booking.kind === 'booked' || booking.kind === 'cancelled') await sendBookingDetails(booking, res.id ? `${new URL(req.url).origin}/dashboard/leads/${res.id}` : null).catch(e => console.error('[calendly] booking details email failed', e))
   return NextResponse.json({ ok: true, ...res })
 }

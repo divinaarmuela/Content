@@ -29,6 +29,8 @@ export type Booking = {
   phone: string | null
   event: string | null
   startsAt: string | null
+  /** when the call ends (Calendly's scheduled_event.end_time) — for the calendar invitation */
+  endsAt?: string | null
   utm: Utm
   /** the site page the Book button was on (utm-core PAGE_PARAM) */
   page: string | null
@@ -107,7 +109,7 @@ export function parseBooking(json: unknown): Booking | null {
     page: (() => { const v = str(tr.salesforce_uuid, 200); return v && v.startsWith('/') ? v : null })(),
     service, budget, notes: rest.length ? rest.join('\n\n').slice(0, 8000) : null,
     kind, inviteeUri, email, fname, lname, phone: phoneFrom(p),
-    event: str(ev.name, 200), startsAt: str(ev.start_time, 40),
+    event: str(ev.name, 200), startsAt: str(ev.start_time, 40), endsAt: str(ev.end_time, 40),
     utm: { source: str(tr.utm_source, 200), medium: str(tr.utm_medium, 200), campaign: str(tr.utm_campaign, 200), term: str(tr.utm_term, 200), content: str(tr.utm_content, 200) },
   }
 }
@@ -184,4 +186,103 @@ export function bookingPatch(b: Booking, existing: Existing | null, nowIso: stri
     patch.ad_campaign = b.utm.campaign; patch.ad_set = b.utm.term; patch.ad_name = b.utm.content; patch.ad_placement = b.utm.medium
   }
   return patch
+}
+
+/* ── A BOOKING'S DETAILS, BY EMAIL (the owner, 12 Nov 2026) ─────────────────────────────────────────────────────────
+ * "info should only see this in their calendar but not the questions' answers … those are only for contact and
+ * hello." The calendar entry Calendly writes carries no answers any more, and Calendly's own automation email never
+ * arrived (searched contact@'s mail, every folder), so the app sends the details itself: it already receives every
+ * booking, answers included, on the webhook. */
+
+/** who is sent a new booking's details and answers — never info@, which only sees the calendar entry */
+export const BOOKING_DETAILS_TO: readonly string[] = ['hello@mdmmarketing.com.au', 'contact@mdmmarketing.com.au']
+
+/** the last part of Calendly's invitee uri: one id per booking, so one email per booking however often it retries */
+export function inviteeId(uri: string): string {
+  return uri.split('/').filter(Boolean).pop() ?? uri
+}
+
+export type BookingDetails = {
+  subject: string; rows: [label: string, value: string][]; answers: string | null
+  /** the entry the invitation puts in hello@'s and contact@'s own calendars (never the answers) — null when Calendly gave no time */
+  calendar: { uid: string; title: string; startsAt: string; endsAt: string; note: string } | null
+}
+
+/** What the details email says. Null for anything but a new booking. `when` is the call's time in plain words. */
+export function bookingDetails(b: Booking, when: string | null): BookingDetails | null {
+  if (b.kind !== 'booked') return null
+  const name = [b.fname, b.lname].filter(Boolean).join(' ') || b.email
+  const call = b.event ?? 'A call'
+  const rows: [string, string][] = [['Call', call]]
+  if (when) rows.push(['When', when])
+  rows.push(['Name', name], ['Email', b.email])
+  if (b.phone) rows.push(['Phone', b.phone])
+  if (b.service) rows.push(['Service', b.service])
+  if (b.budget) rows.push(['Budget', b.budget])
+  const start = b.startsAt && !Number.isNaN(Date.parse(b.startsAt)) ? new Date(b.startsAt) : null
+  const end = b.endsAt && !Number.isNaN(Date.parse(b.endsAt)) ? new Date(b.endsAt) : start ? new Date(start.getTime() + 10 * 60_000) : null
+  const NL = String.fromCharCode(10)
+  // NO ANSWERS IN THE CALENDAR ENTRY (the owner: "how about the questions going into info?"): hello@'s calendar is one
+  // info@ can open, so the entry carries only who to ring — the service, budget and answers stay in the email
+  const note = [...rows.filter(([k]) => k === 'Name' || k === 'Phone' || k === 'Email').map(([k, v]) => `${k}: ${v}`), '', 'Their answers are in the email "' + `New call booked: ${name} (${call})` + '".'].join(NL)
+  return {
+    subject: `New call booked: ${name} (${call})`, rows, answers: b.notes,
+    calendar: start && end ? { uid: `call-${inviteeId(b.inviteeUri)}`, title: `${call}: ${name}`, startsAt: start.toISOString(), endsAt: end.toISOString(), note } : null,
+  }
+}
+
+/* ── THE TIME BLOCK, AND TAKING IT BACK (the owner, 12 Nov 2026: "info as well, their calendar needs to show that time
+ * block so that they don't book anything") ──────────────────────────────────────────────────────────────────────────
+ * info@ gets the call in its own calendar as a bare block: the call's name and its time, nothing about the person.
+ * And a cancelled call comes OFF every calendar the app put it in — an invitation nobody withdraws would block the
+ * time for ever. */
+
+/** who gets only the time block — no name, no number, no answers */
+export const BOOKING_BLOCK_TO: readonly string[] = ['info@mdmmarketing.com.au']
+
+export type BookingSlot = { title: string; startsAt: string; endsAt: string }
+
+/** The call's place on a calendar, for a booking or its cancellation; null when Calendly gave no start time. */
+export function bookingSlot(b: Booking): BookingSlot | null {
+  const start = b.startsAt && !Number.isNaN(Date.parse(b.startsAt)) ? new Date(b.startsAt) : null
+  if (!start) return null
+  const end = b.endsAt && !Number.isNaN(Date.parse(b.endsAt)) ? new Date(b.endsAt) : new Date(start.getTime() + 10 * 60_000)
+  return { title: b.event ?? 'Call', startsAt: start.toISOString(), endsAt: end.toISOString() }
+}
+
+/** the calendar ids of one booking: the entry with a name on it (hello@, contact@) and the bare block (info@) */
+export function bookingUids(b: Booking): { details: string; block: string } {
+  const id = inviteeId(b.inviteeUri)
+  return { details: `call-${id}`, block: `call-${id}-block` }
+}
+
+const icsTime = (iso: string) => new Date(iso).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '')
+const icsText = (s: string) => s.replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n')
+
+/**
+ * A calendar invitation (REQUEST) or its withdrawal (CANCEL) for ONE person. The same uid with a later SEQUENCE and
+ * METHOD:CANCEL is what makes a calendar take the entry away again.
+ */
+export function bookingIcs(p: {
+  method: 'REQUEST' | 'CANCEL'; uid: string; title: string; startsAt: string; endsAt: string
+  note?: string | null; organizerEmail: string; attendeeEmail: string; stamp?: string
+}): string {
+  const cancel = p.method === 'CANCEL'
+  const lines = [
+    'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//MD Media//Booked Calls//EN', `METHOD:${p.method}`,
+    'BEGIN:VEVENT',
+    `UID:${p.uid}@mdmmarketing.com.au`,
+    `DTSTAMP:${icsTime(p.stamp ?? new Date().toISOString())}`,
+    `DTSTART:${icsTime(p.startsAt)}`,
+    `DTEND:${icsTime(p.endsAt)}`,
+    `SUMMARY:${icsText(p.title)}`,
+    ...(p.note ? [`DESCRIPTION:${icsText(p.note)}`] : []),
+    `ORGANIZER;CN=MD Media:mailto:${p.organizerEmail}`,
+    `ATTENDEE;ROLE=REQ-PARTICIPANT;PARTSTAT=${cancel ? 'NEEDS-ACTION' : 'ACCEPTED'}:mailto:${p.attendeeEmail}`,
+    `SEQUENCE:${cancel ? 1 : 0}`,
+    `STATUS:${cancel ? 'CANCELLED' : 'CONFIRMED'}`,
+    'TRANSP:OPAQUE',
+    'END:VEVENT', 'END:VCALENDAR',
+  ]
+  return lines.join('\r\n') + '\r\n'
 }
