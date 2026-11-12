@@ -194,8 +194,14 @@ export function bookingPatch(b: Booking, existing: Existing | null, nowIso: stri
  * arrived (searched contact@'s mail, every folder), so the app sends the details itself: it already receives every
  * booking, answers included, on the webhook. */
 
-/** who is sent a new booking's details and answers — never info@, which only sees the calendar entry */
-export const BOOKING_DETAILS_TO: readonly string[] = ['hello@mdmmarketing.com.au', 'contact@mdmmarketing.com.au']
+/**
+ * Who the APP emails a new booking's details and answers to — NOBODY (the owner, 13 Nov 2026: "i am receiving three
+ * different emails for one booking, keep only one and not from our app"). Calendly's own emails never arrived on 12 Nov
+ * because the domain's mail records were not being served; once they were, Calendly's "New Event" email (contact@) and
+ * its automation email (hello@) both arrive, so the app's copy was the third. The code stays for the day it is wanted
+ * again: add an address here and it sends. Never info@, which only sees the calendar entry.
+ */
+export const BOOKING_DETAILS_TO: readonly string[] = []
 
 /** the last part of Calendly's invitee uri: one id per booking, so one email per booking however often it retries */
 export function inviteeId(uri: string): string {

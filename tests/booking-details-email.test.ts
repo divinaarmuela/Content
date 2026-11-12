@@ -24,8 +24,8 @@ describe('Calendly booking: the details email', () => {
   const b = parseBooking(body)!
   const d = bookingDetails(b, 'Fri, 25 Dec, 2:00 pm')!
 
-  it('goes to hello@ and contact@, never info@', () => {
-    expect([...BOOKING_DETAILS_TO]).toEqual(['hello@mdmmarketing.com.au', 'contact@mdmmarketing.com.au'])
+  it('the app emails the details to nobody now, Calendly sends its own (13 Nov 2026), and never to info@', () => {
+    expect([...BOOKING_DETAILS_TO]).toEqual([])
     expect(BOOKING_DETAILS_TO.some(a => a.startsWith('info@'))).toBe(false)
   })
   it('says who, what call, when, how to reach them, and every answer', () => {
