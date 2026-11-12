@@ -5,7 +5,7 @@ import { requireRole, authzErrorResponse } from '@/app/lib/authz'
 import { accessibleClientIds } from '@/app/lib/production-access'
 import { getPublisher } from '@/app/lib/publisher'
 import { heldForClient, waitingForClient } from '@/app/lib/post-stage-core'
-import { dayIn, kindWord, newestFirst, todayState, type ZernioPlatform } from '@/app/lib/today-posts-core'
+import { dayIn, isGoingOutToday, kindWord, newestFirst, todayState, type ZernioPlatform } from '@/app/lib/today-posts-core'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30
@@ -81,6 +81,7 @@ export async function GET() {
         const job = jobIds.map(id => jobById.get(id)).find(Boolean) as (PublishJob & Loose) | undefined
         const providerId = s(job?.provider_post_id)
         const zernio = providerId ? await fromZernio(providerId) : null
+        const onClient = heldForClient(p as never) ? ('held' as const) : waitingForClient(p as never) ? ('waiting' as const) : null
         const slides = (Array.isArray(p.slides) ? p.slides : []) as Loose[]
         const images = slides.filter(x => x.type === 'image').length
         const videos = slides.filter(x => x.type === 'video').length
@@ -111,7 +112,8 @@ export async function GET() {
           media: { images, videos, thumb },
           platforms,
           stage: p.stage ?? null,
-          state: todayState({ stage: p.stage, jobStatus: job?.status ?? null, zernio, at, now, client: heldForClient(p as never) ? 'held' : waitingForClient(p as never) ? 'waiting' : null }),
+          going: isGoingOutToday({ stage: p.stage, jobStatus: job?.status ?? null, client: onClient }),
+          state: todayState({ stage: p.stage, jobStatus: job?.status ?? null, zernio, at, now, client: onClient }),
           madeBy: who(p.created_by),
           approvedBy: who(approval?.by ?? p.approved_by),
           bookedBy: who(job?.created_by),
@@ -120,7 +122,7 @@ export async function GET() {
         }
       }))
 
-      return NextResponse.json({ day: today, checkedAt: now.toISOString(), rows: newestFirst(rows) })
+      return NextResponse.json({ day: today, checkedAt: now.toISOString(), rows: newestFirst(rows.filter(r => r.going)) })
     } catch (e) {
       const { error, status } = authzErrorResponse(e)
       return NextResponse.json({ error }, { status })

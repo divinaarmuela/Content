@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { dayIn, kindWord, newestFirst, todayState } from '../app/lib/today-posts-core'
+import { dayIn, isGoingOutToday, kindWord, newestFirst, todayState } from '../app/lib/today-posts-core'
 
 const now = new Date('2026-11-04T04:30:00Z') // 3:30pm Melbourne
 
@@ -27,6 +27,14 @@ describe('Post approval: going out today (4 Nov 2026)', () => {
     expect(todayState({ stage: 'ready', at: '2026-11-04T05:00:00Z', now, client: 'held' })).toMatchObject({ label: 'Taken off — client has not approved', tone: 'red', needsAction: true })
     expect(todayState({ stage: 'booked', jobStatus: 'scheduled', at: '2026-11-04T05:00:00Z', now, client: 'waiting' })).toMatchObject({ label: 'Scheduled — waiting for client', tone: 'amber' })
     expect(todayState({ stage: 'ready', at: '2026-11-04T05:00:00Z', now }).label).toBe('Approved — needs Book in')
+  })
+  it('only what is really going out is in Going out today (12 Nov 2026)', () => {
+    expect(isGoingOutToday({ stage: 'booked' })).toBe(true)
+    expect(isGoingOutToday({ stage: 'posted' })).toBe(true)
+    expect(isGoingOutToday({ stage: 'ready', jobStatus: 'failed' })).toBe(true)
+    expect(isGoingOutToday({ stage: 'ready', client: 'held' })).toBe(false) // Capila 7pm: taken off for the client
+    expect(isGoingOutToday({ stage: 'booked', client: 'waiting' })).toBe(false)
+    for (const stage of ['draft', 'quality_check', 'with_client', 'ready', 'cancelled']) expect(isGoingOutToday({ stage })).toBe(false)
   })
   it('names the kind: 4 images is a carousel, a story is a story', () => {
     expect(kindWord({ images: 4, videos: 0, platform: 'instagram' })).toBe('Carousel')

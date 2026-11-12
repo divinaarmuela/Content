@@ -62,6 +62,18 @@ export function todayState(input: {
   return { label: 'Scheduled', tone: 'blue', needsAction: false }
 }
 
+/**
+ * IS IT REALLY GOING OUT TODAY? (the owner, 12 Nov 2026, Capila's 7pm post taken off for the client: "its in the wrong
+ * column".) "Going out today" holds only what is booked, already out, or failed while going. A post still being made,
+ * checked, with the client, approved-but-never-booked, or waiting on / taken off for the client is NOT going out — it
+ * stays in its own column on the board and never shows here.
+ */
+export function isGoingOutToday(input: { stage: string | null | undefined; jobStatus?: string | null; client?: 'waiting' | 'held' | null }): boolean {
+  if (input.client) return false
+  if (input.stage === 'booked' || input.stage === 'posted') return true
+  return input.jobStatus === 'failed'
+}
+
 /** "Carousel" / "Story" / "Reel" — what this post is on a platform. */
 export function kindWord(input: { stated?: string | null; images: number; videos: number; platform: string }): string {
   const s = (input.stated ?? '').toLowerCase()
