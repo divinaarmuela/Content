@@ -13,8 +13,10 @@ import { fieldDisplay, type TodoFieldDef } from '../../lib/todo-fields-core'
 /** the coloured pill Asana draws for a dropdown's value */
 export function FieldPill({ text, colour }: { text: string; colour?: string }) {
   return (
-    <span className="inline-flex max-w-full items-center truncate rounded-full px-2 py-0.5 text-[12px] font-medium leading-5"
-      style={colour ? { backgroundColor: `${colour}33`, color: '#1e1f21', boxShadow: `inset 0 0 0 1px ${colour}66` } : undefined}>
+    // the words take the page's own ink, never a fixed dark grey: on the dark theme a hard-coded #1e1f21 sat on a dark
+    // tint and could not be read (the owner's screenshot, 13 Nov 2026)
+    <span className="inline-flex max-w-full items-center truncate rounded-full px-2 py-0.5 text-[12px] font-medium leading-5 text-foreground"
+      style={colour ? { backgroundColor: `${colour}33`, boxShadow: `inset 0 0 0 1px ${colour}66` } : undefined}>
       <span aria-hidden className="mr-1.5 h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: colour ?? '#c4c4c4' }} />
       <span className="truncate">{text}</span>
     </span>
