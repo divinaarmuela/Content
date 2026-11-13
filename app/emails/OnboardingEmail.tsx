@@ -73,8 +73,8 @@ function Feature({ step, img, flip }: { step: OnboardingStep; img: string | null
             <Img src={img} alt="" width="210" style={{ display: 'block', width: '100%', maxWidth: 210, height: 'auto', border: 0, margin: '0 auto' }} />
           </div>
         )}
-        <div dir="ltr" style={{ ...half, maxWidth: img ? 310 : 560, textAlign: 'left' }}>
-          <div style={{ padding: '18px 14px' }}>
+        <div dir="ltr" style={{ ...half, maxWidth: img ? 334 : 584, textAlign: 'left' }}>
+          <div style={{ padding: '18px 0' }}>
             <Text style={{ margin: '0 0 8px', fontFamily: L.sans, fontSize: 22, lineHeight: '28px', fontWeight: 700, letterSpacing: '-0.02em', color: L.cream }}>{step.title.trim()}</Text>
             {step.body.trim() && <Text style={{ ...body, margin: 0, fontSize: 15, lineHeight: '24px', color: L.soft }}>{lines(step.body)}</Text>}
           </div>

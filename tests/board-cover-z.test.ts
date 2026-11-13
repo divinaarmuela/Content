@@ -55,7 +55,7 @@ describe('the expanded board is above the page', () => {
   })
 
   it('the zoom cluster is bottom LEFT, out of both corners the page uses', () => {
-    const line = canvas.split('\n').find(l => l.includes('data-canvas-zoom'))
+    const line = canvas.split('\n').find(l => l.includes('<div data-canvas-zoom'))
     expect(line).toBeDefined()
     expect(line).toMatch(/\bbottom-3\b/)
     expect(line).toMatch(/\bleft-3\b/)

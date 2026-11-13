@@ -48,3 +48,15 @@ describe('a copied picture pastes onto the board (the owner, 13 Nov 2026)', () =
     expect(paste).toContain('void addImagesRef.current(pictures)')
   })
 })
+
+describe('the board, 13 Nov 2026 fixes', () => {
+  const c = readFileSync('app/dashboard/production/shoots/[id]/BriefCanvas.tsx', 'utf8')
+  it('two quick presses of a zoom button no longer make a note: a double-click counts only on the bare board', () => {
+    expect(c).toContain("closest('[data-card], [data-canvas-zoom], [data-card-toolbar], button, input, textarea, select, a')) return")
+    expect(c).toContain('<div data-canvas-zoom')
+  })
+  it('the guide is dotted, across and down', () => {
+    expect(c).toContain("x.style.background = dots('to bottom')")
+    expect(c).toContain("y.style.background = dots('to right')")
+  })
+})

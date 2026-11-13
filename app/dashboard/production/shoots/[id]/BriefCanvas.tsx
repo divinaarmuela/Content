@@ -1,6 +1,7 @@
 'use client'
 
 import { ALIGN_REACH_PX, alignTo, type AlignBox } from '@/app/lib/canvas-align-core'
+import { groupAlign, groupColour, groupFont, groupOffers, groupTextColour, groupTextSize } from '@/app/lib/canvas-group-core'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { cardBoxes, keepAnyInView } from '@/app/lib/canvas-keep-in-view-core'
 import { useCanvasComments } from '../../../../components/canvas/CanvasComments'
@@ -787,19 +788,23 @@ export default function BriefCanvas({
       const make = () => {
         const g = document.createElement('div')
         g.setAttribute('data-align-guide', '')
-        g.style.cssText = 'position:absolute;left:0;top:0;pointer-events:none;z-index:9998;background:rgb(24 56 224);display:none'
+        g.style.cssText = 'position:absolute;left:0;top:0;pointer-events:none;z-index:9998;display:none'
         layer.appendChild(g)
         return g
       }
       d.guides = { x: make(), y: make() }
     }
-    const thick = Math.max(1, 1 / s)
+    // DOTTED, like the guide a document editor shows when something is almost in line (the owner, 13 Nov 2026).
+    // The dash is sized by the zoom so it looks the same however far in or out the board is.
+    const thick = Math.max(1, 1.5 / s)
+    const dash = 6 / s, gap = 4 / s
+    const dots = (dir: string) => `repeating-linear-gradient(${dir}, rgb(24 56 224) 0 ${dash}px, transparent ${dash}px ${dash + gap}px)`
     const far = 200000
     const { x, y } = d.guides
     if (gx === null) x.style.display = 'none'
-    else { x.style.display = 'block'; x.style.width = `${thick}px`; x.style.height = `${far}px`; x.style.transform = `translate(${gx - thick / 2}px, ${-far / 2}px)` }
+    else { x.style.display = 'block'; x.style.background = dots('to bottom'); x.style.width = `${thick}px`; x.style.height = `${far}px`; x.style.transform = `translate(${gx - thick / 2}px, ${-far / 2}px)` }
     if (gy === null) y.style.display = 'none'
-    else { y.style.display = 'block'; y.style.height = `${thick}px`; y.style.width = `${far}px`; y.style.transform = `translate(${-far / 2}px, ${gy - thick / 2}px)` }
+    else { y.style.display = 'block'; y.style.background = dots('to right'); y.style.height = `${thick}px`; y.style.width = `${far}px`; y.style.transform = `translate(${-far / 2}px, ${gy - thick / 2}px)` }
   }
   const clearGuides = (d: { guides?: { x: HTMLElement; y: HTMLElement } }) => {
     d.guides?.x.remove(); d.guides?.y.remove(); d.guides = undefined
@@ -1106,6 +1111,32 @@ export default function BriefCanvas({
     const next: CanvasCard = { ...card, size, w }
     upsertLocal(next); persist([next])
   }
+  /* ── THE TOOLBAR ON EVERY PICKED CARD (the owner, 13 Nov 2026; rules in canvas-group-core) ── */
+  const pickedCards = picked.size > 1 ? visible.filter(c => picked.has(c.id)) : []
+  /** one save for the cards that changed, and nothing for the ones that did not */
+  const applyGroup = (changed: CanvasCard[]) => {
+    if (changed.length === 0) return
+    for (const c of changed) upsertLocal(c)
+    persist(changed)
+  }
+  /** every picked card goes, with one Undo. A board with cards inside is kept back: it is deleted on its own, where
+   *  its own warning is shown */
+  const removePicked = () => {
+    const held = pickedCards.filter(c => deleteWarning(cards, c))
+    const going = pickedCards.filter(c => !deleteWarning(cards, c))
+    if (going.length === 0) { toast.error('These are boards with cards inside. Delete each one on its own.'); return }
+    const gone = going.flatMap(c => (c.kind === 'board' ? [c.id, ...descendantsOf(cards, c.id)] : [c.id]))
+    const goneSet = new Set(gone)
+    const restore = cards.filter(c => goneSet.has(c.id))
+    setCards(prev => prev.filter(c => !goneSet.has(c.id)))
+    setSelected(null); setPicked(new Set())
+    persist([], gone)
+    toast(`${going.length === 1 ? '1 card' : `${going.length} cards`} deleted${held.length ? `. ${held.length === 1 ? '1 board with cards inside was' : `${held.length} boards with cards inside were`} kept` : ''}`, {
+      action: { label: 'Undo', onClick: () => { for (const c of restore) upsertLocal(c); persist(restore) } },
+      duration: 6000,
+    })
+  }
+
   /** Into the words — the toolbar's way, for a finger that cannot double-click. */
   const editCard = (card: CanvasCard) => {
     if (card.kind !== 'note' && card.kind !== 'label' && card.kind !== 'mockup') return
@@ -2167,7 +2198,10 @@ export default function BriefCanvas({
         }}
         onDoubleClick={e => {
           if (viewOnly) return
-          if ((e.target as HTMLElement).closest('[data-card]')) return
+          // ONLY ON THE BARE BOARD (the owner, 13 Nov 2026: "when I press minimise multiple times randomly this tool
+          // will pop up … same with plus"): two quick presses of a zoom button are a double-click too, and it bubbled
+          // up here and made an empty yellow note under the button, with its toolbar open
+          if ((e.target as HTMLElement).closest('[data-card], [data-canvas-zoom], [data-card-toolbar], button, input, textarea, select, a')) return
           const rect = viewportRef.current!.getBoundingClientRect()
           const cam = camRef.current
           const x = Math.round((e.clientX - rect.left - cam.x) / cam.s)
@@ -2186,9 +2220,79 @@ export default function BriefCanvas({
           </div>
         )}
         {picked.size > 1 && !marquee && (
-          <div className="pointer-events-auto absolute bottom-3 left-1/2 z-[6000] flex -translate-x-1/2 items-center gap-2 rounded-full bg-foreground px-4 py-2 text-[13px] font-semibold text-background shadow-lg">
-            {picked.size} cards picked · drag any one to move them all
-            <button type="button" onClick={() => setPicked(new Set())} className="rounded-full bg-background/20 px-2 py-0.5 text-[12px] hover:bg-background/30">Clear</button>
+          <div data-group-toolbar role="toolbar" aria-label={`${picked.size} cards picked`}
+            className="pointer-events-auto absolute bottom-16 left-1/2 z-[6000] flex w-max max-w-[min(94%,760px)] -translate-x-1/2 flex-wrap items-center justify-center gap-1 rounded-inner border border-border bg-surface p-1.5 shadow-lg"
+            style={{ fontFamily: FONT_STACK.sans }}
+            onPointerDown={e => e.stopPropagation()} onDoubleClick={e => e.stopPropagation()}>
+            <span className="px-2 text-[13px] font-semibold text-foreground">{picked.size} cards picked</span>
+            <span className="hidden px-1 text-[12px] text-muted-foreground sm:inline">drag one to move them all</span>
+            {(() => {
+              const offers = groupOffers(pickedCards)
+              const sep = <span className="mx-0.5 h-5 w-px bg-foreground/[0.08]" />
+              return (
+                <>
+                  {offers.font && (
+                    <>
+                      {sep}
+                      <select aria-label="Font for the picked cards" title="Font" value="" onChange={e => { applyGroup(groupFont(pickedCards, (e.target.value === 'default' ? '' : e.target.value) as CanvasFont | '')); e.target.value = '' }}
+                        className="h-8 rounded-md border border-border bg-popover px-1.5 text-secondary-13 text-foreground [@media(pointer:coarse)]:h-11">
+                        <option value="" disabled>Font</option>
+                        <option value="default">Default font</option>
+                        {CANVAS_FONTS.map(f => <option key={f} value={f} style={{ fontFamily: FONT_STACK[f] }}>{FONT_LABEL[f]}</option>)}
+                      </select>
+                    </>
+                  )}
+                  {offers.colour && (
+                    <>
+                      {sep}
+                      <div role="group" aria-label="Colour for the picked cards" className="flex items-center gap-1">
+                        {CANVAS_NOTE_COLORS.map(c => (
+                          <button key={c} type="button" aria-label={`Colour ${c}`} title={c[0].toUpperCase() + c.slice(1)}
+                            onClick={() => applyGroup(groupColour(pickedCards, c))}
+                            className={`flex h-7 w-7 items-center justify-center rounded-full border border-border [@media(pointer:coarse)]:h-11 [@media(pointer:coarse)]:w-11 ${NOTE_COLORS[c].split(' ').slice(0, 1).join(' ')}`} />
+                        ))}
+                      </div>
+                    </>
+                  )}
+                  {offers.text && (
+                    <>
+                      {sep}
+                      <div role="group" aria-label="Text size for the picked cards" className="flex items-center">
+                        <Button size="sm" variant="ghost" className="h-8 w-8 p-0 font-semibold" aria-label="Smaller text" title="Smaller text" onClick={() => applyGroup(groupTextSize(pickedCards, -1))}>A−</Button>
+                        <Button size="sm" variant="ghost" className="h-8 w-8 p-0 font-semibold" aria-label="Bigger text" title="Bigger text" onClick={() => applyGroup(groupTextSize(pickedCards, 1))}>A+</Button>
+                      </div>
+                      {sep}
+                      <div role="group" aria-label="Text colour for the picked cards" className="flex items-center gap-1">
+                        <span className="px-1 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Text</span>
+                        {CANVAS_TEXT_COLORS.map(c => (
+                          <button key={c} type="button" aria-label={`Text colour ${c}`} title={`Text ${c}`} onClick={() => applyGroup(groupTextColour(pickedCards, c))}
+                            className="flex h-7 w-7 items-center justify-center rounded-full border border-border [@media(pointer:coarse)]:h-11 [@media(pointer:coarse)]:w-11">
+                            <span aria-hidden className={`h-3.5 w-3.5 rounded-full border border-border ${TEXT_COLOR_SWATCH[c]}`} />
+                          </button>
+                        ))}
+                      </div>
+                      {sep}
+                      <div role="group" aria-label="Align the picked cards' words" className="flex items-center gap-0.5">
+                        {CANVAS_TEXT_ALIGNS.map(al => {
+                          const Icon = al === 'left' ? AlignLeft : al === 'center' ? AlignCenter : AlignRight
+                          return (
+                            <button key={al} type="button" aria-label={`Align ${al === 'center' ? 'middle' : al}`} title={`Align ${al === 'center' ? 'middle' : al}`} onClick={() => applyGroup(groupAlign(pickedCards, al))}
+                              className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-foreground/[0.06] hover:text-foreground [@media(pointer:coarse)]:h-11 [@media(pointer:coarse)]:w-11">
+                              <Icon className="h-3.5 w-3.5" />
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </>
+                  )}
+                  {sep}
+                  <Button size="sm" variant="ghost" className="h-8 gap-1.5 px-2 text-accent-red hover:text-accent-red" onClick={removePicked}>
+                    <Trash2 className="h-3.5 w-3.5" /> Delete
+                  </Button>
+                  <Button size="sm" variant="ghost" className="h-8 px-2 text-secondary-13" onClick={() => setPicked(new Set())}>Clear</Button>
+                </>
+              )
+            })()}
           </div>
         )}
         {marquee && (
