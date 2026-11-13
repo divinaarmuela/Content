@@ -335,6 +335,7 @@ export default function OnboardingPage({ params }: { params: Promise<{ id: strin
           <Part title="What we still need">
             <Field label="Heading"><Input value={draft.needTitle} onChange={e => patch({ needTitle: e.target.value })} /></Field>
             <Field label="Paragraph"><Textarea rows={4} value={draft.needBody} onChange={e => patch({ needBody: e.target.value })} /></Field>
+            <Field label="Button (opens the Brand assets tab on their portal; leave empty for no button)"><Input value={draft.needButton} onChange={e => patch({ needButton: e.target.value })} /></Field>
           </Part>
 
           <Part title="A set-up call" hint="Paste your booking link to show the button. Leave the link empty for no button.">

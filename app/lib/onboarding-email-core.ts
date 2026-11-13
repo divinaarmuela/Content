@@ -28,6 +28,8 @@ export type OnboardingDraft = {
   portalButton: string
   needTitle: string
   needBody: string
+  /** the button under "what we still need": it opens the portal's Brand assets tab, where the client adds the files */
+  needButton: string
   callTitle: string
   callBody: string
   callButton: string
@@ -103,7 +105,8 @@ export function defaultOnboarding(input: {
     portalBody: 'Your posts will appear here as they are ready. Save this link, there is no password.',
     portalButton: 'Open your portal',
     needTitle: 'A few things we still need',
-    needBody: 'Your logo files, brand colours and fonts, logins for your social accounts, and any dates we should plan around.\n\nJust reply to this email with them, whenever suits.',
+    needBody: 'Your logo files, brand colours and fonts, logins for your social accounts, and any dates we should plan around.\n\nAdd your brand files in your portal, and reply to this email with the rest, whenever suits.',
+    needButton: 'Add your brand files',
     callTitle: 'A set-up call',
     callBody: 'Prefer to talk it through first? We are happy to set up a short call.',
     callButton: 'Book a call',
@@ -145,7 +148,7 @@ export function normaliseOnboarding(raw: unknown, base: OnboardingDraft): Onboar
     workTitle: short('workTitle'), workHeadline: short('workHeadline'), workBody: long('workBody'),
     seeTitle: short('seeTitle'), seeIntro: short('seeIntro'), see: steps(r.see, base.see),
     portalTitle: short('portalTitle'), portalBody: long('portalBody'), portalButton: short('portalButton'),
-    needTitle: short('needTitle'), needBody: long('needBody'),
+    needTitle: short('needTitle'), needBody: long('needBody'), needButton: short('needButton'),
     callTitle: short('callTitle'), callBody: long('callBody'), callButton: short('callButton'),
     callUrl: 'callUrl' in r ? safeLink(r.callUrl) : base.callUrl,
     nextTitle: short('nextTitle'), next: steps(r.next, base.next),
@@ -182,4 +185,9 @@ export function templateId(name: string): string {
  */
 export function applyTemplate(template: OnboardingDraft, client: OnboardingDraft): OnboardingDraft {
   return { ...template, subject: client.subject, greeting: client.greeting, agreed: client.agreed, agreedTitle: template.agreedTitle }
+}
+
+/** the portal's Brand assets tab, from the client's portal link: …/portal/<token> → …/portal/<token>/home?tab=brand */
+export function brandAssetsUrl(portalUrl: string): string {
+  return `${portalUrl.replace(/\/+$/, '').replace(/\/home$/, '')}/home?tab=brand`
 }

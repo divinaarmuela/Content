@@ -1,7 +1,7 @@
 import {
   Body, Column, Container, Head, Heading, Hr, Html, Img, Link, Preview, Row, Section, Text,
 } from '@react-email/components'
-import type { OnboardingDraft, OnboardingStep } from '../lib/onboarding-email-core'
+import { brandAssetsUrl, type OnboardingDraft, type OnboardingStep } from '../lib/onboarding-email-core'
 
 /**
  * THE WELCOME EMAIL, AS A REACT EMAIL TEMPLATE (the owner, 13 Nov 2026: "can we use a react email … look at this
@@ -175,6 +175,10 @@ export default function OnboardingEmail({ draft: d, portalUrl, assetBase }: {
             <Section className="pad" style={{ ...pad, paddingTop: 72 }}>
               <Text style={eyebrow}>{d.needTitle.trim()}</Text>
               <Text style={{ ...body, margin: 0, fontSize: 18, lineHeight: '30px' }}>{lines(d.needBody)}</Text>
+              {/* straight to the portal's Brand assets tab, where they add the files themselves (13 Nov 2026) */}
+              {portalUrl && d.needButton.trim() && (
+                <Text style={{ margin: '22px 0 0' }}><Pill href={brandAssetsUrl(portalUrl)} bg={L.cream} color={L.ink}>{d.needButton.trim()}</Pill></Text>
+              )}
             </Section>
           )}
           {showCall && (

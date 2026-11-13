@@ -32,6 +32,8 @@ import ShootAnswer from '../../../shoot/[token]/ShootAnswer'
 import { PortalIntakeView } from '../../../components/portal/PortalIntake'
 import PortalReport from '../../../components/portal/PortalReport'
 import { sharedReport, sharedReports } from '../../../lib/portal-reports'
+import { loadPortalBrandFiles } from '../../../lib/brand-assets'
+import OnePortalBrand from '../../../components/portal/OnePortalBrand'
 
 export const metadata: Metadata = {
   title: 'Your portal — MD Media',
@@ -154,6 +156,8 @@ export default async function OnePortalPage({ params, searchParams }: {
   }
   // REPORTS (5 Nov 2026): the months the team shared, the business's only; one month opens interactive
   const reportRows = tab === 'reports' && page.scope.kind === 'business' ? await sharedReports(page.client.id) : []
+  // BRAND ASSETS: read only when that tab is the one open
+  const brandFiles = tab === 'brand' ? await loadPortalBrandFiles(page.client.id) : []
   if (tab === 'reports' && id && page.scope.kind === 'business') {
     const report = await sharedReport(page.client.id, id)
     if (!report) redirect(onePortalPath(token, tab))
@@ -312,6 +316,7 @@ export default async function OnePortalPage({ params, searchParams }: {
                 <OnePortalList rows={reportRows.map(r => ({ key: r.month, href: onePortalPath(token, 'reports', r.month), title: `${r.label} report`, line: 'Your accounts, your posts and how they did — tap to open' }))}
                   empty="No reports yet. When the team shares your monthly report, it shows here." />
               )}
+              {tab === 'brand' && <OnePortalBrand token={token} files={brandFiles} mayAdd={page.scope.kind === 'business'} />}
               {tab === 'boards' && <OnePortalList rows={boardRows} empty="No boards shared with you yet. When the team shares one, it shows here." />}
               {tab === 'editing' && <OnePortalWorkList token={token} tab="editing" cards={page.editing} empty="No edits to look at yet. When a video is ready for you, it shows here." />}
               {tab === 'designing' && <OnePortalWorkList token={token} tab="designing" cards={page.designing} empty="No designs to look at yet. When a design is ready for you, it shows here." />}

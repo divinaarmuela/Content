@@ -157,7 +157,7 @@ export default function PostCalendar() {
   const openList = openDay ? byDay.get(openDay) ?? [] : []
 
   return (
-    <div className="flex flex-col gap-3" data-post-calendar>
+    <div className="flex min-w-0 max-w-full flex-col gap-3" data-post-calendar>
       {/* ── one line: where you are, whose posts, and month or week ── */}
       <div className="flex flex-wrap items-center gap-2">
         <button type="button" className={round} aria-label={range === 'month' ? 'Previous month' : 'Previous week'} onClick={() => step(-1)}><ChevronLeft className="h-[18px] w-[18px]" strokeWidth={1.8} /></button>
@@ -186,14 +186,15 @@ export default function PostCalendar() {
       </div>
       <p className="text-[13px] text-muted-foreground">Every post on the day its audience sees it. Times are the client&rsquo;s, not yours. Press a post to open it.</p>
 
-      {/* ── the grid: the Schedule page's own, bordered cells ── */}
-      <div className="overflow-x-auto">
-        <div className="flex min-w-[840px] flex-col rounded-inner border border-border bg-surface">
-          <div className="grid grid-cols-7">
+      {/* ── the grid: the Schedule page's own, bordered cells. ON A PHONE THE DAYS STACK, one under the other, and a
+          day with nothing on it is left out: seven columns in 390px left each tile too narrow to read its time ── */}
+      <div className="min-w-0">
+        <div className="flex flex-col rounded-inner border border-border bg-surface">
+          <div className="hidden grid-cols-7 md:grid">
             {WEEKDAYS.map(d => <div key={d} className="border-b border-border px-2 py-2 text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">{d}</div>)}
           </div>
-          <div className="grid grid-cols-7">
-            {cells.map(cell => {
+          <div className="grid grid-cols-1 md:grid-cols-7">
+            {cells.map((cell, i) => {
               const list = byDay.get(cell.key) ?? []
               const dues = due.get(cell.key) ?? []
               const shown = range === 'week' ? list : list.slice(0, MONTH_CELL_MAX)
@@ -201,12 +202,14 @@ export default function PostCalendar() {
               return (
                 <div key={cell.key} data-day={cell.key}
                   className={cn(
-                    'flex flex-col gap-1 border-b border-l border-border p-1.5 [&:nth-child(7n+1)]:border-l-0',
-                    range === 'week' ? 'min-h-[320px]' : 'min-h-[104px]',
+                    'flex-col gap-1 border-b border-border p-2 md:border-l md:p-1.5 md:[&:nth-child(7n+1)]:border-l-0',
+                    list.length === 0 && dues.length === 0 && today !== cell.key ? 'hidden md:flex' : 'flex',
+                    range === 'week' ? 'md:min-h-[320px]' : 'md:min-h-[104px]',
                     !cell.inMonth && 'bg-foreground/[0.02] text-muted-foreground',
                     today === cell.key && 'bg-foreground/[0.035]',
                   )}>
                   <span className="flex items-center gap-1.5 px-0.5 text-[12px] font-semibold">
+                    <span className="text-muted-foreground md:hidden">{WEEKDAYS[i % 7]}</span>
                     <span className={today === cell.key ? 'flex h-6 min-w-6 items-center justify-center rounded-full bg-foreground px-1.5 text-background' : ''}>{cell.day}</span>
                     {list.length > 0 && <span className="text-[10px] font-semibold tabular-nums text-muted-foreground">{list.length}</span>}
                   </span>

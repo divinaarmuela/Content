@@ -193,7 +193,7 @@ export function postOnPortal(itemContact: string | null | undefined, scope: Port
   return scope.kind === 'business' ? who === null : who === scope.contactId
 }
 
-export type PortalTab = 'shoot' | 'editing' | 'designing' | 'scheduling' | 'boards' | 'forms' | 'reports'
+export type PortalTab = 'shoot' | 'editing' | 'designing' | 'scheduling' | 'boards' | 'forms' | 'reports' | 'brand'
 export const PORTAL_TABS: readonly { key: PortalTab; label: string }[] = [
   { key: 'shoot', label: 'Shoot brief' },
   { key: 'editing', label: 'Editing' },
@@ -205,6 +205,8 @@ export const PORTAL_TABS: readonly { key: PortalTab; label: string }[] = [
   { key: 'forms', label: 'Forms' },
   // the monthly report, once the team shares it (Manal, via the owner, 5 Nov 2026)
   { key: 'reports', label: 'Reports' },
+  // the client's brand guidelines, logos and brand files, and where they add more (the owner, 13 Nov 2026)
+  { key: 'brand', label: 'Brand assets' },
 ]
 export function readTab(v: unknown): PortalTab {
   return PORTAL_TABS.some(t => t.key === v) ? (v as PortalTab) : 'scheduling'
