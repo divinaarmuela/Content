@@ -85,8 +85,8 @@ export default function OnboardingEmail({ draft: d, portalUrl, assetBase }: {
             .row-l { padding: 16px 0 0 !important; }
             .row-v { padding: 0 0 16px !important; }
             .row-v p { margin-top: 6px !important; }
-            .hero { font-size: 48px !important; line-height: 48px !important; }
-            .h2 { font-size: 34px !important; line-height: 36px !important; }
+            .hero { font-size: 34px !important; line-height: 38px !important; }
+            .h2 { font-size: 26px !important; line-height: 32px !important; }
             .card { padding: 40px 24px !important; }
           }
         `}</style>
@@ -101,16 +101,16 @@ export default function OnboardingEmail({ draft: d, portalUrl, assetBase }: {
           </Section>
 
           {/* ── hello ── */}
-          <Section className="pad" style={{ ...pad, paddingTop: 72, paddingBottom: 48 }}>
-            <Heading as="h1" className="hero" style={{ ...display, fontSize: 68, lineHeight: '66px' }}>{d.greeting.trim() || 'Welcome'}</Heading>
-            {d.intro.trim() && <Text style={{ ...body, margin: '28px 0 0', maxWidth: 480 }}>{lines(d.intro)}</Text>}
+          <Section className="pad" style={{ ...pad, paddingTop: 48, paddingBottom: 40 }}>
+            <Heading as="h1" className="hero" style={{ ...display, fontSize: 40, lineHeight: '44px' }}>{d.greeting.trim() || 'Welcome'}</Heading>
+            {d.intro.trim() && <Text style={{ ...body, margin: '18px 0 0', maxWidth: 480 }}>{lines(d.intro)}</Text>}
           </Section>
           <Img src={asset('hero.jpg')} alt="The people at MD Media" width="640" style={{ display: 'block', width: '100%', height: 'auto', border: 0 }} />
 
           {/* ── what we agreed ── */}
           {agreed.length > 0 && (
             <Section className="pad" style={{ ...pad, paddingTop: 72 }}>
-              <Heading as="h2" className="h2" style={{ ...display, fontSize: 44, lineHeight: '46px', marginBottom: 28 }}>{d.agreedTitle.trim()}</Heading>
+              <Heading as="h2" className="h2" style={{ ...display, fontSize: 30, lineHeight: '36px', marginBottom: 28 }}>{d.agreedTitle.trim()}</Heading>
               {agreed.map((r, i) => (
                 <Row key={i} style={{ borderTop: `1px solid ${L.line}` }}>
                   <Column className="stack row-l" style={{ width: '36%', verticalAlign: 'top', padding: '18px 16px 18px 0' }}>
@@ -129,7 +129,7 @@ export default function OnboardingEmail({ draft: d, portalUrl, assetBase }: {
           {(d.workHeadline.trim() || d.workBody.trim()) && (
             <Section className="pad" style={{ ...pad, paddingTop: 72 }}>
               <Text style={eyebrow}>{d.workTitle.trim()}</Text>
-              {d.workHeadline.trim() && <Heading as="h2" className="h2" style={{ ...display, fontSize: 44, lineHeight: '46px' }}>{d.workHeadline.trim()}</Heading>}
+              {d.workHeadline.trim() && <Heading as="h2" className="h2" style={{ ...display, fontSize: 30, lineHeight: '36px' }}>{d.workHeadline.trim()}</Heading>}
               {d.workBody.trim() && <Text style={{ ...body, margin: '22px 0 0', color: L.soft, maxWidth: 500 }}>{lines(d.workBody)}</Text>}
             </Section>
           )}
@@ -137,7 +137,7 @@ export default function OnboardingEmail({ draft: d, portalUrl, assetBase }: {
           {/* ── what you will see: picture and words, swapping sides ── */}
           {see.length > 0 && (
             <Section className="pad" style={{ ...pad, paddingTop: 80 }}>
-              <Heading as="h2" className="h2" style={{ ...display, fontSize: 44, lineHeight: '46px' }}>{d.seeTitle.trim()}</Heading>
+              <Heading as="h2" className="h2" style={{ ...display, fontSize: 30, lineHeight: '36px' }}>{d.seeTitle.trim()}</Heading>
               {d.seeIntro.trim() && <Text style={{ ...body, margin: '14px 0 0', color: L.soft }}>{d.seeIntro.trim()}</Text>}
               <Section style={{ paddingTop: 40 }}>
                 {see.map((s, i) => <Feature key={i} step={s} flip={i % 2 === 1} img={ONBOARDING_IMAGES[i] ? asset(ONBOARDING_IMAGES[i]) : null} />)}
@@ -174,7 +174,7 @@ export default function OnboardingEmail({ draft: d, portalUrl, assetBase }: {
           {/* ── what happens next ── */}
           {next.length > 0 && (
             <Section className="pad" style={{ ...pad, paddingTop: 80 }}>
-              <Heading as="h2" className="h2" style={{ ...display, fontSize: 44, lineHeight: '46px', marginBottom: 28 }}>{d.nextTitle.trim()}</Heading>
+              <Heading as="h2" className="h2" style={{ ...display, fontSize: 30, lineHeight: '36px', marginBottom: 28 }}>{d.nextTitle.trim()}</Heading>
               {next.map((s, i) => (
                 <Row key={i} style={{ borderTop: `1px solid ${L.line}` }}>
                   <Column style={{ width: 56, verticalAlign: 'top', padding: '20px 0' }}>
