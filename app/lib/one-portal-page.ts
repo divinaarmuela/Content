@@ -3,6 +3,7 @@ import { isArchived } from './archive-core'
 import { table } from '@/lib/db'
 import type { Client, ContentItem } from '@/lib/db-types'
 import { portalOwnerByToken } from './portal-owner'
+import { rowsByIds } from './portal-reads'
 import { getPortalData, type PortalCard, type PortalData } from './portal-data'
 import { onePortal, workTab, type PortalTab } from './one-portal-core'
 import type { PortalScope } from './portal-owner-core'
@@ -77,7 +78,7 @@ export async function loadOnePortal(rawToken: string): Promise<OnePortalPage | n
   // which tab a piece belongs in: its work kind (graphics → Designing), read here so the live loader is untouched
   const ids = new Set(work0.map(c => c.id))
   const [items, kinds] = await Promise.all([
-    ids.size ? table<ContentItem>('content_items').list({ where: r => ids.has(r.id) }) : Promise.resolve([] as ContentItem[]),
+    ids.size ? rowsByIds<ContentItem>('content_items', [...ids]) : Promise.resolve([] as ContentItem[]),
     table<{ id: string; slug: string }>('work_kinds').list().catch(() => [] as { id: string; slug: string }[]),
   ])
   const slugOf = new Map(kinds.map(k => [k.id, k.slug]))
@@ -97,7 +98,8 @@ export async function loadOnePortal(rawToken: string): Promise<OnePortalPage | n
 
   // the boards the team shares with the client (2 Oct 2026: "boards is also something that we send to clients")
   const boards = owner.scope.kind !== 'business' ? [] : (await table<{ id: string; name?: string | null; client_id?: string | null; shared_with_client?: boolean | null; updated_at?: string | null }>('team_boards')
-    .list({ where: b => clientMaySeeTeamBoard(b, client.id) }).catch(() => []))
+    // this client's boards only: the whole table is over 6 MB, and it was read on every portal view
+    .list({ by: { client_id: client.id }, where: b => clientMaySeeTeamBoard(b, client.id), orderBy: [['id', 'asc']] }).catch(() => []))
     .map(b => ({ id: b.id, name: String(b.name ?? '').trim() || 'Board', updated_at: b.updated_at ?? null }))
     .sort((a, b) => String(b.updated_at ?? '').localeCompare(String(a.updated_at ?? '')))
 

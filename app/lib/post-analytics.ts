@@ -328,6 +328,8 @@ export async function analyticsForItems(itemIds: string[]): Promise<Map<string, 
   // before these rows existed — never an error into the render
   let data: PostAnalytic[]
   try {
+    // the whole table, ONCE per portal view: the Scheduling tab reads it too, and inside the page's request cache
+    // the two share one download (it was three)
     data = await table<PostAnalytic>('post_analytics').list({
       where: r => r.item_id != null && wanted.has(r.item_id),
       orderBy: [['published_at', 'desc']],

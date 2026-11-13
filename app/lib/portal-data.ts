@@ -49,6 +49,7 @@ import { networkName } from './publish-core'
 import { canvasCardLabel, findCanvasCard } from './canvas-comments-core'
 import { belongsToPortal, portalName, type PortalScope } from './portal-owner-core'
 import { portalOwnerByToken } from './portal-owner'
+import { rowsByColumn, rowsByIds } from './portal-reads'
 import { forTheClient } from './comment-visibility-core'
 import { portalHasWork } from './editing-portal-core'
 
@@ -442,11 +443,11 @@ export async function getPortalData(clientId: string, scope: PortalScope = { kin
     .map(i => i.id)
   const [versionRows, scheduleRows, analyticsByItem, activityRows, postRows, jobRows] = await Promise.all([
     ids.length
-      ? table<AssetVersion>('asset_versions')
-          .list({ where: r => ids.includes(r.item_id), orderBy: [['version_number', 'desc']] })
+      ? rowsByColumn<AssetVersion>('asset_versions', 'item_id', ids)
+          .then(rows => [...rows].sort((a, b) => Number(b.version_number ?? 0) - Number(a.version_number ?? 0)))
       : Promise.resolve([] as AssetVersion[]),
     ids.length
-      ? table<ScheduleEntry>('schedule_entries').list({ where: r => ids.includes(r.item_id) })
+      ? rowsByColumn<ScheduleEntry>('schedule_entries', 'item_id', ids)
       : Promise.resolve([] as ScheduleEntry[]),
     // the cached per-post numbers; the cron keeps them fresh, and the
     // background refresh below shortens the wait for a post that just landed
@@ -633,7 +634,7 @@ export async function getPortalData(clientId: string, scope: PortalScope = { kin
   const approverIds = [...new Set(visible.map(x => (x.p.approval?.on_behalf_of_client ? x.p.approval.by : null)).filter((x): x is string => !!x))]
   const [versionRowsForPosts, approverRows, accountRows] = await Promise.all([
     versionIds.length
-      ? table<PostVersion>('post_versions').list({ where: r => versionIds.includes(r.id) }).catch(() => [] as PostVersion[])
+      ? rowsByIds<PostVersion>('post_versions', versionIds).catch(() => [] as PostVersion[])
       : Promise.resolve([] as PostVersion[]),
     // the names behind "Approved by Divina for you" — only those
     approverIds.length

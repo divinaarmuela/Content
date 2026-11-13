@@ -11,7 +11,7 @@ import { PortalHelpLine } from '../../../components/portal/PortalSections'
 import OnePortalTabs from '../../../components/portal/OnePortalTabs'
 import OnePortalWorkList from '../../../components/portal/OnePortalWorkList'
 import OnePortalShoots from '../../../components/portal/OnePortalShoots'
-import { loadOnePortal } from '../../../lib/one-portal-page'
+import { loadOnePortalAll } from '../../../lib/one-portal-load'
 import { loadScheduling, profilesForWork, onlyPostOf, schedulingWaiting, schedulingWorks } from '../../../lib/one-portal-schedule'
 import OnePortalList, { type ListRow } from '../../../components/portal/OnePortalList'
 import ShootBoard from '../../../components/portal/ShootBoard'
@@ -50,16 +50,14 @@ export default async function OnePortalPage({ params, searchParams }: {
   searchParams?: Promise<Record<string, string | string[] | undefined>>
 }) {
   const { token: raw } = await params
-  const page = await loadOnePortal(raw)
-  if (!page) notFound()
   const sp = (await searchParams) ?? {}
   const askedTab = typeof sp.tab === 'string' ? readTab(sp.tab) : null
-  // the booked posts always (the tab's badge); the posted feeds only when the Scheduling tab is open
-  const profiles = await loadScheduling(page.client.id, page.scope, page.data.client.timezone, new Date(), askedTab === 'scheduling' || askedTab === null)
+  // one request, one copy of each table, and the loads that do not need each other run together (one-portal-load)
+  const loaded = await loadOnePortalAll(raw, askedTab === 'scheduling' || askedTab === null)
+  const page = loaded?.page ?? null
+  if (!page) notFound()
+  const { profiles, forms } = loaded!
   page.waiting.scheduling = schedulingWaiting(profiles)
-  // THE FORMS (2 Oct 2026: "all this links should redirect to their one portal"): intake forms, monthly updates and
-  // shoot-date proposals are rows on the Shoot brief tab; the business's only, never on a person's portal
-  const forms = await loadPortalForms(page.client.id, page.scope, page.data.client.timezone || 'Australia/Melbourne')
   page.waiting.shoot += forms.filter(f => f.waiting && formTab(f.kind) === 'shoot').length
   page.waiting.forms += forms.filter(f => f.waiting && formTab(f.kind) === 'forms').length
   // no tab asked for: the first one with something waiting on them, else Scheduling (what goes out next)

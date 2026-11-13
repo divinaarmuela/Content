@@ -38,7 +38,8 @@ const eyebrow = { margin: '0 0 18px', fontFamily: L.mono, fontSize: 11, lineHeig
 const display = { margin: 0, fontFamily: L.sans, fontWeight: 700, color: L.cream, letterSpacing: '-0.035em' }
 const body = { margin: '0 0 14px', fontFamily: L.sans, fontSize: 16, lineHeight: '26px', color: L.cream }
 
-const footLink = { color: ONBOARDING_LOOK.cream, textDecoration: 'none' }
+// each link stays whole: on a narrow phone the row wraps BETWEEN links, never inside one
+const footLink = { color: ONBOARDING_LOOK.cream, textDecoration: 'none', whiteSpace: 'nowrap' as const, display: 'inline-block' }
 
 function Arrow({ href, children, color = L.cream }: { href: string; children: React.ReactNode; color?: string }) {
   return <Link href={href} style={{ fontFamily: L.sans, fontSize: 15, lineHeight: '22px', fontWeight: 700, color, textDecoration: 'none' }}>{children} &rarr;</Link>
@@ -209,11 +210,11 @@ export default function OnboardingEmail({ draft: d, portalUrl, assetBase }: {
           {/* the footer of the email info@ liked (the owner, 13 Nov 2026: "why didn't add this in the footer"): what we do, three links, where we are */}
           <Section className="pad" style={{ ...pad, paddingTop: 40, paddingBottom: 48, textAlign: 'center' }}>
             <Text style={{ margin: 0, fontFamily: L.sans, fontSize: 16, lineHeight: '24px', color: L.soft }}>Get seen. Get known. Get booked.</Text>
-            <Text style={{ margin: '26px 0 0', fontFamily: L.mono, fontSize: 12, lineHeight: '20px', fontWeight: 600, letterSpacing: '0.16em', textTransform: 'uppercase', color: L.cream }}>
+            <Text style={{ margin: '26px 0 0', fontFamily: L.mono, fontSize: 11, lineHeight: '26px', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: L.cream }}>
               <Link href={ONBOARDING_FOOTER_LINKS.website} style={footLink}>Website</Link>
-              <span style={{ color: L.faint }}>&nbsp;&nbsp;&middot;&nbsp;&nbsp;</span>
+              <span style={{ color: L.faint }}> &middot; </span>
               <Link href={ONBOARDING_FOOTER_LINKS.instagram} style={footLink}>Instagram</Link>
-              <span style={{ color: L.faint }}>&nbsp;&nbsp;&middot;&nbsp;&nbsp;</span>
+              <span style={{ color: L.faint }}> &middot; </span>
               <Link href={ONBOARDING_FOOTER_LINKS.email} style={footLink}>Email us</Link>
             </Text>
             <Text style={{ margin: '26px 0 0', fontFamily: L.mono, fontSize: 11, lineHeight: '18px', letterSpacing: '0.16em', textTransform: 'uppercase', color: L.faint }}>Melbourne, Australia</Text>

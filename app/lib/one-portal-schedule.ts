@@ -1,6 +1,7 @@
 import 'server-only'
 import { isArchived } from './archive-core'
 import { table } from '@/lib/db'
+import { rowsByIds } from './portal-reads'
 import type { ContentItem, PostVersion, SocialAccount, SocialPost } from '@/lib/db-types'
 import { getPublisher } from './publisher'
 import { avatarStale, refreshAvatars } from './account-avatars'
@@ -122,9 +123,12 @@ export async function loadScheduling(
   withFeeds = true,
 ): Promise<NetworkProfile[]> {
   const [accounts, rows, items] = await Promise.all([
-    table<SocialAccount>('social_accounts').list({ where: a => a.client_id === clientId && a.active !== false }),
-    table<SocialPost>('social_posts').list({ where: r => r.client_id === clientId && (r.stage === 'booked' || r.stage === 'ready' || r.stage === 'draft') }),
-    table<ContentItem>('content_items').list({ where: r => r.client_id === clientId }),
+    // each by the client's index, not the whole table kept down to one client. IN THE ORDER THE WHOLE TABLE GAVE THEM
+    // (by id): two accounts on one network are told apart by which comes first, and an indexed read comes back in
+    // no promised order — unsorted, one client's profile showed 0 booked where it had 7 (caught before release)
+    table<SocialAccount>('social_accounts').list({ by: { client_id: clientId }, where: a => a.active !== false, orderBy: [['id', 'asc']] }),
+    table<SocialPost>('social_posts').list({ by: { client_id: clientId }, where: r => r.stage === 'booked' || r.stage === 'ready' || r.stage === 'draft', orderBy: [['id', 'asc']] }),
+    table<ContentItem>('content_items').list({ by: { client_id: clientId }, orderBy: [['id', 'asc']] }),
   ])
   // A DEAD PROFILE PICTURE IS READ AGAIN, HERE (5 Oct 2026): Instagram's signed link lasts about four days. Only
   // when one is stale, only with the feeds (never for a tab's badge), and never longer than four seconds.
@@ -152,7 +156,7 @@ export async function loadScheduling(
   const versionIds = posts.flatMap(p => (p.stage === 'draft' && p.client_review?.verdict === 'not_approved' ? [p.client_review.version] : p.sent_version != null ? [p.sent_version] : [])
     .map(n => postVersionId(p.id, n)))
   const versions = versionIds.length
-    ? await table<PostVersion>('post_versions').list({ where: v => versionIds.includes(v.id) })
+    ? await rowsByIds<PostVersion>('post_versions', versionIds)
     : []
   const versionById = new Map(versions.map(v => [v.id, v]))
   const accountById = new Map(accounts.map(a => [a.id, a]))

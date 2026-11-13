@@ -132,3 +132,16 @@ describe('finding things on Post approval (the owner, 13 Nov 2026)', () => {
     expect(readFileSync('app/api/social/today/route.ts', 'utf8')).toContain('rows: earliestFirst(rows.filter(r => r.going))')
   })
 })
+
+describe('the portal shows itself while it loads (the owner, 13 Nov 2026)', () => {
+  it('has a loading screen with the portal header and tabs, and nothing about the client in it', async () => {
+    const { readFileSync, existsSync } = await import('node:fs')
+    expect(existsSync('app/portal/[token]/home/loading.tsx')).toBe(true)
+    const src = readFileSync('app/portal/[token]/home/loading.tsx', 'utf8')
+    expect(src).toContain('PORTAL_TABS.map')
+    expect(src).toContain('aria-busy="true"')
+    expect(src).toContain('animate-pulse')
+    // drawn before anything is read: no data, no token
+    expect(src).not.toMatch(/getPortalData|params|token|await /)
+  })
+})

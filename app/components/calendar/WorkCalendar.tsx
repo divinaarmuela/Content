@@ -201,16 +201,25 @@ function MorePopover({ day, events, viewer, onMove, label }: {
         +{events.length} more
       </button>
       {open && (
-        <div role="dialog" aria-label={label}
-          className="absolute left-0 top-full z-30 mt-1 w-64 rounded-inner border border-border bg-popover p-2 shadow-[0_6px_24px_rgba(11,11,11,0.14)]">
-          <p className="mb-1.5 px-1 text-[12px] font-semibold text-muted-foreground">{label}</p>
-          <ul className="flex max-h-64 flex-col gap-1 overflow-y-auto">
-            {events.map(e => (
-              <li key={e.uid} data-day={day}>
-                <EventChip e={e} viewer={viewer} onMove={onMove} dense={false} />
-              </li>
-            ))}
-          </ul>
+        /* IN THE MIDDLE OF THE SCREEN, NOT UNDER THE DAY (the owner, 13 Nov 2026: "when I do week and show more the
+           popup is hidden"): hung under its day it was cut off by the calendar's own edge, which clips what spills */
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" data-more-day
+          onMouseDown={ev => { if (ev.target === ev.currentTarget) setOpen(false) }}>
+          <div role="dialog" aria-modal="true" aria-label={label}
+            className="flex max-h-[80vh] w-full max-w-md flex-col rounded-card border border-border bg-popover p-4 shadow-[0_6px_24px_rgba(11,11,11,0.14)]">
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <p className="min-w-0 text-[15px] font-semibold text-foreground">{label} · {events.length}</p>
+              <button type="button" onClick={() => setOpen(false)} aria-label="Close"
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[20px] leading-none text-muted-foreground hover:bg-foreground/[0.06] hover:text-foreground">×</button>
+            </div>
+            <ul className="flex min-h-0 flex-col gap-1 overflow-y-auto">
+              {events.map(e => (
+                <li key={e.uid} data-day={day}>
+                  <EventChip e={e} viewer={viewer} onMove={onMove} dense={false} />
+                </li>
+              ))}
+            </ul>
+          </div>
         </div>
       )}
     </div>
