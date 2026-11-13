@@ -716,7 +716,7 @@ function CommentItem({ c, viewer, names, nameOf, when, send }: {
 function Linked({ text }: { text: string }) {
   return <>{linkParts(text).map((p, i) => p.href
     ? <a key={i} href={p.href} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}
-        className="break-all text-accent-blue-deep underline underline-offset-2 hover:text-accent-blue">{p.text}</a>
+        className="break-all text-accent-blue-deep underline underline-offset-2 hover:text-accent-blue dark:text-[#8FB2FF] dark:hover:text-[#B8CEFF]">{p.text}</a>
     : <span key={i}>{p.text}</span>)}</>
 }
 

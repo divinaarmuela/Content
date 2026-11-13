@@ -8,4 +8,8 @@ describe('To-dos field pill', () => {
     expect(src).toContain('leading-5 text-foreground"')
     expect(src).not.toMatch(/color: '#1e1f21'/)
   })
+  it('a link in a task’s description is a light blue on the dark theme', () => {
+    const panel = readFileSync('app/dashboard/todos/TodoPanel.tsx', 'utf8')
+    expect(panel).toContain('hover:text-accent-blue dark:text-[#8FB2FF] dark:hover:text-[#B8CEFF]')
+  })
 })
