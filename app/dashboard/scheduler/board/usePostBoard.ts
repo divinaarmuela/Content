@@ -1,5 +1,6 @@
 'use client'
 
+import { latestActivity } from '../../../lib/pager-core'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTable } from '@/lib/db-client'
 import type { ClientContact, SocialPost } from '@/lib/db-types'
@@ -37,6 +38,8 @@ const CANCELLED_DAYS = 30
 export type BoardPost = {
   post: PostState
   face: PostCardFace
+  /** when this post was last made, edited or moved (pager-core.latestActivity) — the columns sort on it */
+  activityAt: string
   hats: PostHat[]
   ctx: Omit<TransitionContext, 'now'>
 }
@@ -113,6 +116,12 @@ export function usePostBoard(person: ScopeViewer | null) {
     return { posts: out, unstaged }
   }, [postRows])
 
+  /** each post's latest activity, read off its own row (the rules' PostState does not carry created/edited) */
+  const activityOf = useMemo(() => new Map(postRows.map(r => {
+    const row = r as unknown as Record<string, unknown>
+    return [String(row.id ?? ''), latestActivity(row)] as const
+  })), [postRows])
+
   const visible = useMemo(
     () => (person ? states.posts.filter(p => postVisibleTo(p, person, live.tables.assignments.rows)) : []),
     [states.posts, person, live.tables.assignments.rows])
@@ -126,6 +135,7 @@ export function usePostBoard(person: ScopeViewer | null) {
     }
     return {
       post,
+      activityAt: activityOf.get(post.id) ?? String(post.stage_at ?? ''),
       hats: hatsFor(person, post),
       ctx,
       face: postCardFace(post, {
@@ -139,7 +149,7 @@ export function usePostBoard(person: ScopeViewer | null) {
         zone: client?.timezone ?? null,
       }),
     }
-  }, [clientById, accounts, choicesFor, person, clock, itemTitle, nameOf, platformOf])
+  }, [clientById, accounts, choicesFor, person, clock, itemTitle, nameOf, platformOf, activityOf])
 
   const onLanes = useMemo(
     () => visible.filter(p => onBoard(p, clock.now)).map(decorate),

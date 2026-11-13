@@ -13,6 +13,7 @@ import {
 } from '../../lib/work-calendar-core'
 import { schedulerScope, type Viewer } from '../../lib/work-pages-core'
 import { DEFAULT_TZ } from '../../lib/timezone-core'
+import { addressWithClient, clientFromAddress } from '../../lib/post-board-core'
 
 /**
  * The scheduler's month, and now the scheduler's week.
@@ -42,6 +43,12 @@ export default function ScheduleCalendar() {
   const [items, setItems] = useState<QueueItem[]>([])
   const [range, setRange] = usePersistedChoice(RANGE_KEY, RANGES, 'month')
   const [showDue, setShowDue] = usePersistedFlag(DUE_KEY, false)
+  // the client chosen on the board (?client=) is the client shown here too
+  const [clientId, setClientId] = useState<string>(() => (typeof window === 'undefined' ? '' : clientFromAddress(window.location.search)))
+  const showEveryClient = () => {
+    setClientId('')
+    window.history.replaceState(null, '', `${window.location.pathname}${addressWithClient(window.location.search, '')}`)
+  }
 
   const { me, role } = useRole()
   const viewer: Viewer | null = me ? { id: me.id, role: me.role } : null
@@ -79,10 +86,10 @@ export default function ScheduleCalendar() {
 
   const calendar = useMemo(
     () => eventsFor('scheduler', {
-      entries: entries ?? [],
-      items: showDue ? held : [],
+      entries: (entries ?? []).filter(e => !clientId || e.content_items?.client_id === clientId),
+      items: (showDue ? held : []).filter(i => !clientId || i.client_id === clientId),
     }, DEFAULT_TZ),
-    [entries, held, showDue],
+    [entries, held, showDue, clientId],
   )
 
   // an empty month above a badge reading "1 scheduled" reads as a broken page
@@ -123,6 +130,12 @@ export default function ScheduleCalendar() {
        22px white panel the rest of the new look uses, so the month reads as
        one object instead of a grid floating on cream */
     <section className="rounded-card border border-border bg-surface p-4 sm:p-6">
+      {clientId && (
+        <p className="mb-3 flex flex-wrap items-center gap-2 text-[13px] text-muted-foreground" data-calendar-client>
+          Showing the client you chose on the board.
+          <button type="button" onClick={showEveryClient} className="min-h-11 font-semibold text-foreground underline-offset-4 hover:underline">Show every client</button>
+        </p>
+      )}
       <WorkCalendar
         events={calendar}
         viewer={viewer}

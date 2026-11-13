@@ -86,7 +86,13 @@ export function kindWord(input: { stated?: string | null; images: number; videos
   return 'Text'
 }
 
-/** latest time first — the owner asked for descending order */
+/** latest time first — kept for callers that want the day read backwards */
 export function newestFirst<T extends { at: string | null }>(rows: readonly T[]): T[] {
   return [...rows].sort((a, b) => String(b.at ?? '').localeCompare(String(a.at ?? '')))
+}
+
+/** THE DAY IN ORDER, earliest post first (the owner, 13 Nov 2026: "going out today arrangement should be the
+ *  opposite, not the last post of the day first") */
+export function earliestFirst<T extends { at: string | null }>(rows: readonly T[]): T[] {
+  return [...rows].sort((a, b) => String(a.at ?? '').localeCompare(String(b.at ?? '')))
 }

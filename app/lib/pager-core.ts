@@ -46,7 +46,7 @@ export function firstUpcoming(rows: readonly { at: string }[], nowWall: string |
   return i === -1 ? rows.length - 1 : i
 }
 
-/** how many Approved posts the Post approval board shows before "Show more", and how many each press adds */
+/** how many posts each Post approval column shows before "Show more", and how many each press adds */
 export const APPROVED_STEP = 10
 
 /**
@@ -70,4 +70,26 @@ export function isTodosPage(path: string | null | undefined): boolean {
 export function withoutToday<G extends { lane: { key: string }; posts: readonly { id: string }[] }>(groups: readonly G[], todayIds: ReadonlySet<string>, laneKey = 'approved'): G[] {
   if (todayIds.size === 0) return [...groups]
   return groups.map(g => (g.lane.key === laneKey ? { ...g, posts: g.posts.filter(p => !todayIds.has(p.id)) } : g))
+}
+
+/**
+ * THE LATEST THING THAT HAPPENED TO A POST: made, edited, or moved to a stage (booking is a move). The owner,
+ * 13 Nov 2026: "make sure the columns are arranged with the latest activity such as created, edited or scheduled,
+ * so it's easy for the team to find things".
+ */
+export function latestActivity(row: { created_at?: unknown; updated_at?: unknown; stage_at?: unknown }): string {
+  return [row.created_at, row.updated_at, row.stage_at].map(v => (typeof v === 'string' ? v : '')).sort().pop() ?? ''
+}
+
+/** newest activity first; a tie keeps the order it came in */
+export function byLatestActivity<T>(rows: readonly T[], at: (row: T) => string): T[] {
+  return rows.map((row, i) => ({ row, i, at: at(row) })).sort((a, b) => (a.at === b.at ? a.i - b.i : a.at < b.at ? 1 : -1)).map(x => x.row)
+}
+
+/** does any of these words-about-a-post hold what was typed? Every typed word must be found; case does not matter */
+export function matchesSearch(haystack: readonly (string | null | undefined)[], typed: string): boolean {
+  const words = typed.toLowerCase().split(/\s+/).filter(Boolean)
+  if (words.length === 0) return true
+  const text = haystack.map(h => String(h ?? '')).join(' \n ').toLowerCase()
+  return words.every(w => text.includes(w))
 }

@@ -1,7 +1,8 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
+import { addressWithClient, clientFromAddress } from '../../lib/post-board-core'
 import { CalendarDays, Kanban, Send } from 'lucide-react'
 import NewPostButton from './NewPostButton'
 import PageTitle from '../ui/PageTitle'
@@ -35,6 +36,7 @@ const VIEWS = [
 
 export default function SchedulerLayout({ children }: { children: React.ReactNode }) {
   const path = usePathname()
+  const router = useRouter()
   const active = VIEWS.find(v => v.href === path) ?? VIEWS[0]
   const pill = (isActive: boolean) =>
     `inline-flex min-h-11 items-center gap-1.5 whitespace-nowrap rounded-full px-4 text-[14px] font-semibold transition-colors ${
@@ -54,7 +56,15 @@ export default function SchedulerLayout({ children }: { children: React.ReactNod
               const Icon = v.icon
               const isActive = v.href === active.href
               return (
-                <Link key={v.href} href={v.href} aria-current={isActive ? 'page' : undefined} className={pill(isActive)}>
+                <Link key={v.href} href={v.href} aria-current={isActive ? 'page' : undefined} className={pill(isActive)}
+                  // the client chosen on one view is still chosen on the next (the owner, 13 Nov 2026: "calendar
+                  // filter should be applied too if we have already chosen the client")
+                  onClick={e => {
+                    const chosen = clientFromAddress(window.location.search)
+                    if (!chosen || isActive) return
+                    e.preventDefault()
+                    router.push(`${v.href}${addressWithClient('', chosen)}`)
+                  }}>
                   <Icon className="h-4 w-4" strokeWidth={1.8} /> {v.label}
                 </Link>
               )

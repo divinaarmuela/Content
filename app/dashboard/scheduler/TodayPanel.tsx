@@ -36,7 +36,7 @@ const statusWord = (s: string | null) => {
 }
 
 /**
- * TODAY — every post going out today, latest time first (the owner, 4 Nov
+ * TODAY — every post going out today, earliest time first (reversed 13 Nov 2026) (the owner, 4 Nov
  * 2026): what it is and where, whether it still needs approval or is booked,
  * who made, approved and booked it, and what Zernio says right now.
  */

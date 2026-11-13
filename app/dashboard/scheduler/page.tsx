@@ -3,6 +3,9 @@
 import { mayReadClientComments } from '../../lib/client-comments-core'
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Search } from 'lucide-react'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { matchesSearch } from '../../lib/pager-core'
 import type { ScopeViewer } from '../../lib/production-access-core'
 import { addressWithClient, clientDropdownChoices, clientFromAddress, laneFromAddress } from '../../lib/post-board-core'
 import { useRole } from '../useRole'
@@ -14,6 +17,9 @@ import ClientRound from './board/ClientRound'
 import { PostBoard } from './board/PostBoard'
 import { usePostActs } from './board/usePostActs'
 import { usePostBoard } from './board/usePostBoard'
+
+/** the dropdown's "no one client" choice (the menu cannot hold an empty value) */
+const EVERY_CLIENT = 'every'
 
 /**
  * POST APPROVAL (/dashboard/scheduler) — getting a post approved.
@@ -74,6 +80,12 @@ export default function PostApprovalPage() {
   const lanes = useMemo(
     () => (clientId ? data.onLanes.filter(bp => bp.post.client_id === clientId) : data.onLanes),
     [data.onLanes, clientId])
+  /* ── the search box: a post's title, its client, its caption ── */
+  const [q, setQ] = useState('')
+  const found = useMemo(
+    () => (q.trim() ? lanes.filter(bp => matchesSearch([bp.face.title, bp.face.client, bp.post.caption], q)) : lanes),
+    [lanes, q])
+
   /* ── what the address names ── */
   const [initialLane, setInitialLane] = useState<string | null>(null)
   const [focus, setFocus] = useState<ReadonlySet<string>>(() => new Set())
@@ -106,8 +118,6 @@ export default function PostApprovalPage() {
       {ready && <GettingStarted role={viewer.role} page="scheduler" />}
       {ready && <NoReviewerBanner me={me} />}
 
-      {ready && <ClientRound posts={lanes} now={data.clock.now} choicesFor={data.choicesFor} />}
-
       {ready && data.unstaged > 0 && (
         <p className="rounded-inner border border-dashed border-border px-4 py-3 text-[13px] text-muted-foreground">
           {data.unstaged === 1 ? '1 older post has' : `${data.unstaged} older posts have`} not been moved to the new stages yet. {data.unstaged === 1 ? 'It shows' : 'They show'} here once the move has run.
@@ -120,18 +130,27 @@ export default function PostApprovalPage() {
         </div>
       ) : (
         <>
-          {(clientsOnBoard.length > 1 || clientId !== '') && (
-            <label className="inline-flex h-11 w-fit items-center gap-2 rounded-full border border-border bg-surface px-3 text-[13px] font-semibold text-muted-foreground">
-              Client
-              <select aria-label="Show one client" value={clientId} onChange={e => setClientId(e.target.value)}
-                className="h-9 bg-transparent text-[13px] font-semibold text-foreground outline-none">
-                <option value="">Every client</option>
-                {clientsOnBoard.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
-            </label>
-          )}
           <PostBoard
-            posts={lanes}
+            toolbar={<>
+              {(clientsOnBoard.length > 1 || clientId !== '') && (
+                <Select value={clientId || EVERY_CLIENT} onValueChange={v => setClientId(v === EVERY_CLIENT ? '' : v)}>
+                  <SelectTrigger aria-label="Show one client" className="h-11 w-[210px] rounded-full bg-surface px-4 text-[13px] font-semibold">
+                    <SelectValue placeholder="Every client" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={EVERY_CLIENT}>Every client</SelectItem>
+                    {clientsOnBoard.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              )}
+              <label className="inline-flex h-11 w-full min-w-0 items-center gap-2 rounded-full border border-border bg-surface px-4 sm:w-[260px]">
+                <Search className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+                <input type="search" aria-label="Search posts" placeholder="Search posts" value={q} onChange={e => setQ(e.target.value)}
+                  className="h-9 w-full min-w-0 bg-transparent text-[14px] text-foreground outline-none placeholder:text-muted-foreground" />
+              </label>
+              <ClientRound posts={lanes} now={data.clock.now} choicesFor={data.choicesFor} />
+            </>}
+            posts={found}
             clientId={clientId}
             mayComments={mayReadClientComments(viewer)}
             now={data.clock.now}

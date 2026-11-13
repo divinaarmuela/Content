@@ -9,7 +9,7 @@ import {
   boardActions, dropOnPostLane, groupPosts, offeredList, postMoveTargets, postApprovalWindowHref, scheduleLink,
 } from '../../../lib/post-board-core'
 import { groupBatches } from '../../../lib/post-batch-core'
-import { APPROVED_STEP, laneShown, withoutToday } from '../../../lib/pager-core'
+import { APPROVED_STEP, byLatestActivity, laneShown, withoutToday } from '../../../lib/pager-core'
 import { BatchPlanner } from './BatchPlanner'
 import { SCHEDULE_PAGE } from '../../../lib/page-access-core'
 import { usePersistedChoice } from '../../production/workHooks'
@@ -52,8 +52,10 @@ const LANE_MEANING: Record<string, string> = {
  * (audit B10). Cancelled posts sit folded under the board, each with Re-book.
  */
 export function PostBoard({
-  posts, now, busyId, errorFor, onPress, initialLane, focus, channelsOf, zoneOf, clientId = '', mayComments = false,
+  posts, now, busyId, errorFor, onPress, initialLane, focus, channelsOf, zoneOf, clientId = '', mayComments = false, toolbar,
 }: {
+  /** the page's own controls (client, search, send several), drawn on the one line with Columns · List */
+  toolbar?: React.ReactNode
   /** the page's client filter — the Going out today column and the Comments view follow it */
   clientId?: string
   /** account managers, quality checkers and super admins get the Comments view */
@@ -91,13 +93,17 @@ export function PostBoard({
     () => groupPosts(posts.map(bp => ({ id: bp.post.id, stage: bp.post.stage, stage_at: bp.post.stage_at, if_no_answer: bp.post.if_no_answer, client_review: bp.post.client_review, client_id: bp.post.client_id, sent_version: bp.post.sent_version, bp }))),
     [posts])
   // a post going out today is in the Going out today column only, not in Approved as well
-  const grouped = useMemo(() => withoutToday(groupedAll, todayIds), [groupedAll, todayIds])
+  // …and every column reads newest activity first, so what was just made, edited or booked is at the top
+  const grouped = useMemo(
+    () => withoutToday(groupedAll, todayIds).map(g => ({ ...g, posts: byLatestActivity(g.posts, x => x.bp.activityAt) })),
+    [groupedAll, todayIds])
   const reachable = useMemo(() => new Set(
     dragging ? postMoveTargets(dragging.post, dragging.hats, now, dragging.ctx).map(m => m.lane) : []),
   [dragging, now])
   const firstId = grouped.find(g => g.posts.length > 0)?.posts[0]?.id ?? null
 
-  const [approvedShown, setApprovedShown] = useState(APPROVED_STEP)
+  // every column shows ten at a time; how many more each one has been asked for, by lane
+  const [shownBy, setShownBy] = useState<Record<string, number>>({})
 
   // a post named in the address is brought into view once it is drawn
   useEffect(() => {
@@ -138,12 +144,11 @@ export function PostBoard({
   const lanes: BoardLane[] = grouped.map(({ lane, posts: inLane }) => {
     const key = lane.key
     const active = dragging !== null && reachable.has(key)
-    // APPROVED SHOWS TEN AT A TIME (the owner, 13 Nov 2026: "sometimes it goes way too long"). The column's number
+    // EVERY COLUMN SHOWS TEN AT A TIME (the owner, 13 Nov 2026: "sometimes it goes way too long", then "you only
+    // did for approved, how about the other columns"). The column's number
     // still counts every post; a post named in the address is always inside what is shown.
     const groups = groupBatches(inLane, x => x.bp.post.batch)
-    const shownGroups = key === 'approved'
-      ? groups.slice(0, laneShown(approvedShown, groups.map(g => (g.kind === 'post' ? focus?.has(g.item.id) === true : g.items.some(x => focus?.has(x.id) === true)))))
-      : groups
+    const shownGroups = groups.slice(0, laneShown(shownBy[key] ?? APPROVED_STEP, groups.map(g => (g.kind === 'post' ? focus?.has(g.item.id) === true : g.items.some(x => focus?.has(x.id) === true)))))
     const zone = (
       <div
         role="list"
@@ -175,7 +180,7 @@ export function PostBoard({
           </div>
         )}
         {groups.length > shownGroups.length && (
-          <button type="button" onClick={() => setApprovedShown(n => n + APPROVED_STEP)}
+          <button type="button" onClick={() => setShownBy(m => ({ ...m, [key]: (m[key] ?? APPROVED_STEP) + APPROVED_STEP }))}
             className="min-h-11 rounded-inner border border-border bg-surface px-3 text-[13px] font-semibold text-foreground hover:border-foreground/30">
             Show {Math.min(APPROVED_STEP, groups.length - shownGroups.length)} more · {groups.length - shownGroups.length} not shown
           </button>
@@ -224,13 +229,16 @@ export function PostBoard({
   const todayLane: BoardLane = {
     key: 'today', title: 'Going out today', count: todayCount, empty: 'Nothing going out today.', cards: [],
     replace: <TodayPanel clientId={clientId} asColumn onCount={setTodayCount} onIds={setTodayIdList} />,
-    hint: <span className="sr-only">Every post going out today, the latest time first, with what the network says about it now.</span>,
+    hint: <span className="sr-only">Every post going out today, the earliest time first, with what the network says about it now.</span>,
   }
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-center justify-end gap-2">
-        <div role="group" aria-label="Columns or a list" className="inline-flex h-11 items-center rounded-full border border-border bg-surface p-1">
+      {/* ONE LINE (the owner, 13 Nov 2026: "looks unorganised … let's make it one line and a search bar"): the page's
+          controls on the left, Columns · List on the right; a section a control opens takes the next line whole */}
+      <div className="flex flex-wrap items-center gap-2 [&>section]:order-last [&>section]:w-full">
+        {toolbar}
+        <div role="group" aria-label="Columns or a list" className="ml-auto inline-flex h-11 items-center rounded-full border border-border bg-surface p-1">
           {VIEWS.filter(v => v !== 'comments' || mayComments).map(v => (
             <button key={v} type="button" aria-pressed={view === v} onClick={() => setView(v)}
               className={`inline-flex h-9 items-center gap-1.5 rounded-full px-3 text-[13px] font-semibold ${view === v ? 'bg-foreground text-background' : 'text-muted-foreground hover:text-foreground'}`}>

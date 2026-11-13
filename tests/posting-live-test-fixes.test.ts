@@ -387,7 +387,8 @@ describe('Post approval reads ?client= and writes the dropdown back to the addre
     expect(page).toMatch(/useState<string>\(\s*\(\) => \(typeof window === 'undefined' \? '' : clientFromAddress\(window\.location\.search\)\)\)/)
     expect(page).toMatch(/addressWithClient\(window\.location\.search, clientId\)/)
     expect(page).toMatch(/window\.history\.replaceState\(/)
-    expect(page).toMatch(/onChange=\{e => setClientId\(e\.target\.value\)\}/)
+    // the app's own dropdown since 13 Nov 2026, not the browser's
+    expect(page).toContain("onValueChange={v => setClientId(v === EVERY_CLIENT ? '' : v)}")
     expect(page).toMatch(/<PostWindowFromAddress clientId=\{clientId\} \/>/)
     const win = readFileSync('app/dashboard/scheduler/PostWindowFromAddress.tsx', 'utf8')
     // closed in place, not through the router, which swallowed it after a page loaded from a link (30 Sep 2026)

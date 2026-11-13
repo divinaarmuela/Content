@@ -5,7 +5,7 @@ import { requireRole, authzErrorResponse } from '@/app/lib/authz'
 import { accessibleClientIds } from '@/app/lib/production-access'
 import { getPublisher } from '@/app/lib/publisher'
 import { heldForClient, waitingForClient } from '@/app/lib/post-stage-core'
-import { dayIn, isGoingOutToday, kindWord, newestFirst, todayState, type ZernioPlatform } from '@/app/lib/today-posts-core'
+import { dayIn, earliestFirst, isGoingOutToday, kindWord, todayState, type ZernioPlatform } from '@/app/lib/today-posts-core'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30
@@ -122,7 +122,7 @@ export async function GET() {
         }
       }))
 
-      return NextResponse.json({ day: today, checkedAt: now.toISOString(), rows: newestFirst(rows.filter(r => r.going)) })
+      return NextResponse.json({ day: today, checkedAt: now.toISOString(), rows: earliestFirst(rows.filter(r => r.going)) })
     } catch (e) {
       const { error, status } = authzErrorResponse(e)
       return NextResponse.json({ error }, { status })
