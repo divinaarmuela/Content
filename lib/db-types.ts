@@ -87,6 +87,7 @@ export type TableName =
   | 'monthly_updates'
   | 'newsletter_subscribers'
   | 'notification_log'
+  | 'onboarding_templates'
   | 'portal_feeds'
   | 'post_analytics'
   | 'post_comments'
@@ -1449,6 +1450,16 @@ export interface NotificationLog {
   claimed_at: string | null
 }
 
+export interface OnboardingTemplate {
+  id: string
+  name: string
+  draft: unknown
+  created_at: string
+  updated_at: string
+  updated_by: string | null
+  updated_by_name: string | null
+}
+
 export interface PortalFeed {
   id: string
   client_id: string
@@ -2186,6 +2197,7 @@ export const TABLE_COLUMNS = {
   monthly_updates: ['id', 'created_at', 'client_id', 'month', 'year', 'definition', 'token', 'status', 'answers', 'notify_emails', 'sent_at', 'first_opened_at', 'submitted_at', 'reopened_at', 'title', 'created_by'],
   newsletter_subscribers: ['id', 'email', 'source', 'created_at'],
   notification_log: ['id', 'created_at', 'dedupe_key', 'event_type', 'recipient_id', 'recipient_email', 'subject', 'body_html', 'entity_type', 'entity_id', 'channel', 'status', 'sent_at', 'error', 'retry_count', 'read_at', 'claimed_at'],
+  onboarding_templates: ['id', 'name', 'draft', 'created_at', 'updated_at', 'updated_by', 'updated_by_name'],
   portal_feeds: ['id', 'client_id', 'platform', 'tiles', 'fetched_at', 'error'],
   post_analytics: ['id', 'item_id', 'publish_job_id', 'provider_post_id', 'platform', 'platform_post_url', 'views', 'reach', 'impressions', 'likes', 'comments', 'shares', 'saves', 'engagement_rate', 'sync_status', 'published_at', 'synced_at', 'raw', 'source', 'performance'],
   post_comments: ['id', 'post_id', 'client_id', 'version', 'file_url', 'slide_index', 'visibility', 'author_id', 'author_name', 'author_role', 'body', 'assigned_to', 'resolved_at', 'resolved_by', 'created_at', 'updated_at'],
@@ -2313,6 +2325,7 @@ export const NULLABLE_COLUMNS = {
   monthly_updates: ['notify_emails', 'sent_at', 'first_opened_at', 'submitted_at', 'reopened_at', 'created_by'],
   newsletter_subscribers: [],
   notification_log: ['recipient_id', 'entity_type', 'entity_id', 'sent_at', 'error', 'read_at', 'claimed_at'],
+  onboarding_templates: ['updated_by', 'updated_by_name'],
   portal_feeds: ['error'],
   post_analytics: ['item_id', 'publish_job_id', 'platform', 'platform_post_url', 'views', 'reach', 'impressions', 'likes', 'comments', 'shares', 'saves', 'engagement_rate', 'sync_status', 'published_at', 'source', 'performance'],
   post_comments: ['version', 'file_url', 'slide_index', 'author_id', 'assigned_to', 'resolved_at', 'resolved_by'],
@@ -2447,6 +2460,7 @@ export const JSON_COLUMNS = {
   monthly_updates: ['definition', 'answers'],
   newsletter_subscribers: [],
   notification_log: [],
+  onboarding_templates: ['draft'],
   portal_feeds: ['tiles'],
   post_analytics: ['raw', 'performance'],
   post_comments: [],
@@ -2580,6 +2594,7 @@ export const JSON_ARRAY_COLUMNS = {
   monthly_updates: [],
   newsletter_subscribers: [],
   notification_log: [],
+  onboarding_templates: [],
   portal_feeds: ['tiles'],
   post_analytics: [],
   post_comments: [],

@@ -4,7 +4,7 @@ import { render } from '@react-email/components'
 import OnboardingEmail from '../app/emails/OnboardingEmail'
 import { existsSync, readFileSync } from 'node:fs'
 import {
-  defaultOnboarding, joinWords, normaliseOnboarding, onboardingProblems, plainDate, safeLink, type OnboardingDraft,
+  applyTemplate, defaultOnboarding, joinWords, normaliseOnboarding, templateId, templateName, onboardingProblems, plainDate, safeLink, type OnboardingDraft,
 } from '../app/lib/onboarding-email-core'
 import { canSeeSubpage, defaultAllows, ONBOARDING_SUBPAGE } from '../app/lib/page-access-core'
 
@@ -75,6 +75,10 @@ describe('the email (the React Email template)', () => {
     expect(out).toContain('https://app.example.test/email/onboarding/hero.jpg')
     expect(out).toContain('https://app.example.test/MDLogo-trim.png')
     expect(out).toContain('max-width:640px')
+    // the footer: three links, and none of them a path on the app (the owner: "why is pointing to /website")
+    for (const href of ['https://www.mdmmarketing.com.au', 'https://www.instagram.com/mdmedia._', 'mailto:hello@mdmmarketing.com.au']) expect(out).toContain(`href="${href}"`)
+    expect(out).not.toMatch(/href="\/[a-z]/)
+    expect(out).toContain('Melbourne, Australia')
     // the website's own type, never a serif
     expect(out).toContain('Inter Tight')
     expect(out).toContain('JetBrains Mono')
@@ -123,6 +127,31 @@ describe('who may open Onboarding', () => {
     expect(existsSync('app/api/clients/[id]/onboarding/test')).toBe(false)
     const page = readFileSync('app/dashboard/clients/[id]/onboarding/page.tsx', 'utf8')
     expect(page).toContain('Copy email')
-    expect(page).not.toMatch(/method: 'POST'/)
+    expect(page).not.toMatch(/sendSystemEmail|\/onboarding\/test/)
+  })
+})
+
+describe('templates', () => {
+  it('a template brings its wording but never another client\'s name or agreement', () => {
+    const saved = { ...base(), intro: 'Our retainer welcome.', next: [{ title: 'Kick-off', body: 'This week.' }] }
+    const other = defaultOnboarding({ clientName: 'ZZ Other Client', contactName: 'Sam Other', lines: [{ label: 'Reels', monthly_qty: 4 }] })
+    const out = applyTemplate(saved, other)
+    expect(out.intro).toBe('Our retainer welcome.')
+    expect(out.next).toEqual([{ title: 'Kick-off', body: 'This week.' }])
+    expect(out.greeting).toBe('Hi Sam,')
+    expect(out.subject).toBe('Welcome to MD Media, Sam')
+    expect(out.agreed).toEqual(other.agreed)
+    expect(JSON.stringify(out)).not.toContain('Alia')
+  })
+  it('the same name is the same template, and a blank name is refused', () => {
+    expect(templateId('Social Retainer')).toBe(templateId('  social   retainer '.trim().replace(/\s+/g, ' ')))
+    expect(templateId('Social Retainer')).toBe('social-retainer')
+    expect(templateName('   ')).toBeNull()
+    expect(templateName('  Social   retainer ')).toBe('Social retainer')
+  })
+  it('only the two roles reach the templates route', () => {
+    const src = readFileSync('app/api/clients/onboarding-templates/route.ts', 'utf8')
+    expect(src).toContain('ONBOARDING_ROLES.includes(user.role)')
+    expect(src.match(/await gate\(\)/g)).toHaveLength(2)
   })
 })

@@ -1156,6 +1156,17 @@ const GHOST_TABLES = {
   // refreshed when older than 15 minutes, one writer by a claim on fetched_at. `error` keeps the last failure.
   // THE WELCOME EMAIL DRAFT (13 Nov 2026, app/lib/onboarding-email-core.ts). One row per client, id = client_id.
   // `draft` is the email's words as the account manager left them; nothing here sends anything.
+  // WELCOME EMAIL TEMPLATES (13 Nov 2026): a named set of the email's words, shared across clients. id = the name,
+  // lower-cased and dashed (onboarding-email-core.templateId), so saving under the same name replaces it.
+  onboarding_templates: [
+    ['id', col('string', false)],
+    ['name', col('string', false)],
+    ['draft', col('unknown', false, true)],
+    ['created_at', col('string', false)],
+    ['updated_at', col('string', false)],
+    ['updated_by', col('string', true)],
+    ['updated_by_name', col('string', true)],
+  ],
   client_onboarding: [
     ['id', col('string', false)],
     ['client_id', col('string', false)],

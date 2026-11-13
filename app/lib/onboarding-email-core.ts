@@ -162,3 +162,24 @@ export function onboardingProblems(d: OnboardingDraft, opts: { portalUrl: string
   if (d.callButton.trim() && !d.callUrl) out.push('The call button has no link, so it is left out. Paste your booking link to show it.')
   return out
 }
+
+// ── templates: a named set of the words, shared across clients ──────────────────────────────────────────────────────
+
+/** a template's name as typed, tidied; null when there is nothing to call it */
+export function templateName(raw: unknown): string | null {
+  const s = String(raw ?? '').replace(/\s+/g, ' ').trim().slice(0, 60)
+  return s || null
+}
+
+/** the row id for a name: the same name, however it is capitalised or spaced, is the same template */
+export function templateId(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'template'
+}
+
+/**
+ * A template laid over a client. The template brings the wording; what is this client's own stays this client's:
+ * the subject and greeting (their name) and "what we agreed" (their agreement, not the one the template was saved on).
+ */
+export function applyTemplate(template: OnboardingDraft, client: OnboardingDraft): OnboardingDraft {
+  return { ...template, subject: client.subject, greeting: client.greeting, agreed: client.agreed, agreedTitle: template.agreedTitle }
+}

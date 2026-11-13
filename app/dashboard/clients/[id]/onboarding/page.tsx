@@ -11,7 +11,7 @@ import { Copy, Monitor, Plus, Smartphone, Trash2 } from 'lucide-react'
 import { render } from '@react-email/components'
 import OnboardingEmail from '../../../../emails/OnboardingEmail'
 import {
-  ONBOARDING_LIMITS, onboardingProblems,
+  ONBOARDING_LIMITS, applyTemplate, onboardingProblems,
   type OnboardingDraft, type OnboardingRow, type OnboardingStep,
 } from '../../../../lib/onboarding-email-core'
 
@@ -30,6 +30,8 @@ type Loaded = {
   portal_url: string | null
   asset_base: string
 }
+
+type Template = { id: string; name: string; draft: OnboardingDraft }
 
 const when = (iso: string) => new Date(iso).toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })
 
@@ -95,6 +97,17 @@ export default function OnboardingPage({ params }: { params: Promise<{ id: strin
   const [width, setWidth] = useState<'desktop' | 'phone'>('desktop')
   const [view, setView] = useState<'edit' | 'preview'>('edit')
   const [frameHeight, setFrameHeight] = useState(900)
+  // templates: the words under a name, to start any client from (the owner, 13 Nov 2026)
+  const [templates, setTemplates] = useState<Template[]>([])
+  const [templateName, setTemplateName] = useState('')
+  const [savingTemplate, setSavingTemplate] = useState(false)
+  const loadTemplates = useCallback(async () => {
+    try {
+      const res = await fetch('/api/clients/onboarding-templates', { cache: 'no-store' })
+      if (res.ok) setTemplates((await res.json()).templates ?? [])
+    } catch { /* the list stays as it was */ }
+  }, [])
+  useEffect(() => { void loadTemplates() }, [loadTemplates])
   const frame = useRef<HTMLIFrameElement>(null)
 
   const load = useCallback(async () => {
@@ -166,6 +179,34 @@ export default function OnboardingPage({ params }: { params: Promise<{ id: strin
     }
   }
 
+  const useTemplate = (id: string) => {
+    const t = templates.find(x => x.id === id)
+    if (!t || !data) return
+    setDraft(applyTemplate(t.draft, data.suggested)); setDirty(true)
+    toast.success(`"${t.name}" is in. The greeting and what we agreed are this client's own.`)
+  }
+
+  const saveTemplate = async () => {
+    if (!draft) return
+    const name = templateName.trim()
+    if (!name) { toast.error('Give the template a name first'); return }
+    setSavingTemplate(true)
+    try {
+      const res = await fetch('/api/clients/onboarding-templates', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, draft }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error ?? 'Could not save the template')
+      toast.success(json.replaced ? `Template "${name}" updated` : `Template "${name}" saved. It is now in the list on every client.`)
+      setTemplateName('')
+      void loadTemplates()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not save the template')
+    } finally {
+      setSavingTemplate(false)
+    }
+  }
+
   const save = async () => {
     if (!draft) return
     setBusy(true)
@@ -224,6 +265,25 @@ export default function OnboardingPage({ params }: { params: Promise<{ id: strin
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         {/* ── the words ── */}
         <div className={`${view === 'edit' ? 'flex' : 'hidden'} min-w-0 flex-col gap-4 lg:flex`}>
+          <Part title="Templates" hint="Start this client from a saved template, or save these words as a template for other clients. A template never carries another client's name or agreement.">
+            <Field label="Start from a template">
+              <select value="" onChange={e => { if (e.target.value) useTemplate(e.target.value) }} disabled={templates.length === 0}
+                className="h-11 w-full rounded-md border border-input bg-background px-3 text-[14px] text-foreground disabled:opacity-60">
+                <option value="">{templates.length === 0 ? 'No templates saved yet' : 'Choose a template…'}</option>
+                {templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+              </select>
+            </Field>
+            <Field label="Save these words as a template">
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <Input placeholder="Template name, e.g. Social retainer" value={templateName} maxLength={60} onChange={e => setTemplateName(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); void saveTemplate() } }} />
+                <Button type="button" variant="outline" className="shrink-0" disabled={savingTemplate || !templateName.trim()} onClick={() => void saveTemplate()}>
+                  {savingTemplate ? 'Saving…' : 'Save template'}
+                </Button>
+              </div>
+            </Field>
+          </Part>
+
           <Part title="Opening">
             <Field label="Subject"><Input value={draft.subject} maxLength={ONBOARDING_LIMITS.short} onChange={e => patch({ subject: e.target.value })} /></Field>
             <Field label="Greeting"><Input value={draft.greeting} maxLength={ONBOARDING_LIMITS.short} onChange={e => patch({ greeting: e.target.value })} /></Field>

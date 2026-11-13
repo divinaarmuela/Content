@@ -21,6 +21,13 @@ export const ONBOARDING_LOOK = {
 } as const
 const L = ONBOARDING_LOOK
 
+/** where the footer's three links go: the public site, the agency's Instagram (the same one the site footer uses), the shared inbox */
+export const ONBOARDING_FOOTER_LINKS = {
+  website: 'https://www.mdmmarketing.com.au',
+  instagram: 'https://www.instagram.com/mdmedia._',
+  email: 'mailto:hello@mdmmarketing.com.au',
+} as const
+
 /** the picture beside each "what you will see" row, in order: the portal's four tabs */
 export const ONBOARDING_IMAGES = ['shoot-brief.jpg', 'editing.jpg', 'designing.jpg', 'scheduling.jpg'] as const
 
@@ -30,6 +37,8 @@ const pad = { padding: '0 40px' }
 const eyebrow = { margin: '0 0 18px', fontFamily: L.mono, fontSize: 11, lineHeight: '16px', fontWeight: 600, letterSpacing: '0.16em', textTransform: 'uppercase' as const, color: L.sky }
 const display = { margin: 0, fontFamily: L.sans, fontWeight: 700, color: L.cream, letterSpacing: '-0.035em' }
 const body = { margin: '0 0 14px', fontFamily: L.sans, fontSize: 16, lineHeight: '26px', color: L.cream }
+
+const footLink = { color: ONBOARDING_LOOK.cream, textDecoration: 'none' }
 
 function Arrow({ href, children, color = L.cream }: { href: string; children: React.ReactNode; color?: string }) {
   return <Link href={href} style={{ fontFamily: L.sans, fontSize: 15, lineHeight: '22px', fontWeight: 700, color, textDecoration: 'none' }}>{children} &rarr;</Link>
@@ -197,11 +206,17 @@ export default function OnboardingEmail({ draft: d, portalUrl, assetBase }: {
             <Text style={{ margin: '6px 0 0' }}><Arrow href="mailto:hello@mdmmarketing.com.au" color={L.sky}>hello@mdmmarketing.com.au</Arrow></Text>
           </Section>
           <Hr style={{ margin: 0, borderColor: L.line, borderTopWidth: 1 }} />
-          <Section className="pad" style={{ ...pad, paddingTop: 32, paddingBottom: 48 }}>
-            <Text style={{ margin: 0, fontFamily: L.mono, fontSize: 11, lineHeight: '18px', letterSpacing: '0.16em', textTransform: 'uppercase', color: L.faint }}>
-              MD Media &middot; Get seen &middot; Get known &middot; Get booked
+          {/* the footer of the email info@ liked (the owner, 13 Nov 2026: "why didn't add this in the footer"): what we do, three links, where we are */}
+          <Section className="pad" style={{ ...pad, paddingTop: 40, paddingBottom: 48, textAlign: 'center' }}>
+            <Text style={{ margin: 0, fontFamily: L.sans, fontSize: 16, lineHeight: '24px', color: L.soft }}>Get seen. Get known. Get booked.</Text>
+            <Text style={{ margin: '26px 0 0', fontFamily: L.mono, fontSize: 12, lineHeight: '20px', fontWeight: 600, letterSpacing: '0.16em', textTransform: 'uppercase', color: L.cream }}>
+              <Link href={ONBOARDING_FOOTER_LINKS.website} style={footLink}>Website</Link>
+              <span style={{ color: L.faint }}>&nbsp;&nbsp;&middot;&nbsp;&nbsp;</span>
+              <Link href={ONBOARDING_FOOTER_LINKS.instagram} style={footLink}>Instagram</Link>
+              <span style={{ color: L.faint }}>&nbsp;&nbsp;&middot;&nbsp;&nbsp;</span>
+              <Link href={ONBOARDING_FOOTER_LINKS.email} style={footLink}>Email us</Link>
             </Text>
-            <Text style={{ margin: '6px 0 0', fontFamily: L.sans, fontSize: 12, lineHeight: '18px', color: L.faint }}>MD Media Marketing, Melbourne, Australia</Text>
+            <Text style={{ margin: '26px 0 0', fontFamily: L.mono, fontSize: 11, lineHeight: '18px', letterSpacing: '0.16em', textTransform: 'uppercase', color: L.faint }}>Melbourne, Australia</Text>
           </Section>
         </Container>
       </Body>
