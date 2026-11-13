@@ -35,6 +35,7 @@ export const GRANTABLE_PAGES: { href: string; label: string; parent?: string }[]
   { href: '/dashboard/clients/:id/intake', label: 'Intake', parent: '/dashboard/clients' },
   { href: '/dashboard/clients/:id/brand', label: 'Brand', parent: '/dashboard/clients' },
   { href: '/dashboard/clients/:id/agreement', label: 'Agreement', parent: '/dashboard/clients' },
+  { href: '/dashboard/clients/:id/onboarding', label: 'Onboarding', parent: '/dashboard/clients' },
   { href: '/dashboard/files', label: 'Files' },
   { href: '/dashboard/audience', label: 'Audience' },
   { href: '/dashboard/social', label: 'Social channels' },
@@ -123,6 +124,9 @@ const PERSONAL_PAGES = ['/dashboard', '/dashboard/start', '/dashboard/todos', '/
  * workflow-core, and the item page opens for any team member who is sent a
  * link to it.
  */
+/** the Onboarding tab on a client: the welcome email an account manager writes after the agreement is signed */
+export const ONBOARDING_SUBPAGE = '/dashboard/clients/:id/onboarding'
+
 export const isAcquisitionPage = (href: string): boolean => href === '/dashboard/leads/acquisition' || href.startsWith('/dashboard/leads/acquisition/')
 
 export function defaultAllows(role: Role | null, href: string): boolean {
@@ -141,6 +145,8 @@ export function defaultAllows(role: Role | null, href: string): boolean {
   if (socialParentOf(href)) return (role === 'scheduler' || role === 'general') && SCHEDULER_SOCIAL_PAGES.includes(href)
   // the monthly client report: a super admin's and an account manager's, nobody else's by default
   if (href === '/dashboard/reports') return role === 'super_admin' || role === 'account_manager'
+  // the client's welcome email (the owner, 13 Nov 2026: "ensure AM or super admins can access and create that")
+  if (href === ONBOARDING_SUBPAGE) return role === 'super_admin' || role === 'account_manager'
   if (role === 'editor') {
     // + Shoots (the owner, 5 Nov 2026: "allow schedulers and editors to be on the shoots page and view everything, edit")
     return [...PERSONAL_PAGES, '/dashboard/production', '/dashboard/editor', '/dashboard/designer'].includes(href)

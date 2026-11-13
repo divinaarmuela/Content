@@ -1154,6 +1154,16 @@ const GHOST_TABLES = {
   // as Zernio lists them (GET /accounts/{id}/posts — every network, including posts made outside the app), kept so
   // the client's Scheduling tab never calls the platforms on every visit. The id IS the social_accounts id;
   // refreshed when older than 15 minutes, one writer by a claim on fetched_at. `error` keeps the last failure.
+  // THE WELCOME EMAIL DRAFT (13 Nov 2026, app/lib/onboarding-email-core.ts). One row per client, id = client_id.
+  // `draft` is the email's words as the account manager left them; nothing here sends anything.
+  client_onboarding: [
+    ['id', col('string', false)],
+    ['client_id', col('string', false)],
+    ['draft', col('unknown', false, true)],
+    ['updated_by', col('string', true)],
+    ['updated_by_name', col('string', true)],
+    ['updated_at', col('string', false)],
+  ],
   portal_feeds: [
     ['id', col('string', false)],
     ['client_id', col('string', false)],

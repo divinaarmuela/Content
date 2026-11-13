@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
-  ArrowLeft, CalendarDays, ChevronRight, ClipboardList, Copy, KeyRound, MessageSquare, Palette, FileText, Share2, Users } from 'lucide-react'
+  ArrowLeft, CalendarDays, ChevronRight, ClipboardList, Copy, KeyRound, MessageSquare, Palette, FileText, MailPlus, Share2, Users } from 'lucide-react'
 import { publicUrl } from '@/app/lib/public-url'
 import { useRole } from '../../useRole'
 import { useUser } from '@clerk/nextjs'
@@ -91,6 +91,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
     // Agreement and Brand — the two an account manager opens most — used to be
     // the two off the end of a bar with no cue that it scrolled
     { key: '/dashboard/clients/:id/agreement', href: `${base}/agreement`, label: 'Agreement', icon: FileText },
+    { key: '/dashboard/clients/:id/onboarding', href: `${base}/onboarding`, label: 'Onboarding', icon: MailPlus },
     { key: '/dashboard/clients/:id/brand', href: `${base}/brand`, label: 'Brand', icon: Palette },
     { key: '/dashboard/clients/:id/contacts', href: `${base}/contacts`, label: 'Contacts', icon: Users },
     { key: '/dashboard/clients/:id/notes', href: `${base}/notes`, label: 'Notes', icon: MessageSquare },
