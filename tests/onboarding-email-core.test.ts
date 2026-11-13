@@ -73,7 +73,7 @@ describe('the email (the React Email template)', () => {
     expect(out).toContain(`href="${portalUrl}"`)
     expect(out).toContain('href="https://calendly.com/x"')
     expect(out).toContain('https://app.example.test/email/onboarding/hero.jpg')
-    expect(out).toContain('https://app.example.test/MDLogo-trim.png')
+    expect(out).toContain('https://app.example.test/email/onboarding/logo-chip.png')
     expect(out).toContain('max-width:640px')
     // the footer: three links, and none of them a path on the app (the owner: "why is pointing to /website")
     for (const href of ['https://www.mdmmarketing.com.au', 'https://www.instagram.com/mdmedia._', 'mailto:hello@mdmmarketing.com.au']) expect(out).toContain(`href="${href}"`)
@@ -102,7 +102,7 @@ describe('the email (the React Email template)', () => {
     expect(out).toContain('&lt;b&gt;b&lt;/b&gt;')
   })
   it('every picture the template names is in public/email/onboarding', () => {
-    for (const f of ['hero.jpg', 'shoot-brief.jpg', 'editing.jpg', 'designing.jpg', 'scheduling.jpg']) expect(existsSync(`public/email/onboarding/${f}`)).toBe(true)
+    for (const f of ['hero.jpg', 'logo-chip.png', 'shoot-brief.png', 'editing.png', 'designing.png', 'scheduling.png']) expect(existsSync(`public/email/onboarding/${f}`)).toBe(true)
   })
 })
 
@@ -162,5 +162,18 @@ describe('the Onboarding tab shows the portal link itself (the owner, 13 Nov 202
     expect(page).toContain('<Input readOnly value={data.portal_url}')
     expect(page).toContain("toast.success('Portal link copied')")
     expect(page).toContain('<a href={data.portal_url} target="_blank"')
+  })
+})
+
+describe('the email holds up in Gmail on a phone, where a pasted email loses its phone-only rules (13 Nov 2026)', () => {
+  it('the picture rows are blocks that stack by themselves, the button never breaks, the phone pictures are see-through', async () => {
+    const out = await html({ ...base(), callUrl: 'https://calendly.com/x' }, 'https://app.example.test/portal/abc')
+    const noStyle = out.replace(/<style[\s\S]*?<\/style>/g, '')
+    // side by side only when there is room: inline blocks with a width cap, not table columns
+    expect(noStyle).toMatch(/display:inline-block;width:100%;vertical-align:middle;direction:ltr;max-width:250px/)
+    expect(noStyle).toContain('dir="rtl"')
+    expect(noStyle).toContain('white-space:nowrap')
+    for (const f of ['shoot-brief.png', 'editing.png', 'designing.png', 'scheduling.png']) expect(noStyle).toContain(`/email/onboarding/${f}`)
+    expect(noStyle).not.toMatch(/onboarding\/(shoot-brief|editing|designing|scheduling)\.jpg/)
   })
 })

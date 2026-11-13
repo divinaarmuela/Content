@@ -1,5 +1,6 @@
 'use client'
 
+import { CardSkeleton } from './board/BoardSkeleton'
 import { useCallback, useEffect, useState } from 'react'
 import Chip from '../ui/Chip'
 import TintCard from '../ui/TintCard'
@@ -93,7 +94,10 @@ export default function TodayPanel({ clientId, asColumn, onCount, onIds }: {
           failed read offers a retry */}
       {error && <button type="button" onClick={load} disabled={busy} className="self-start text-[12px] font-semibold underline underline-offset-4 disabled:opacity-50">{busy ? 'Trying…' : 'Try again'}</button>}
       {error && <p role="alert" className="text-[13px] font-medium text-foreground">{error}</p>}
-      {rows === null && !error && <p className="text-[13px] text-muted-foreground">Checking today’s posts…</p>}
+      {/* the column holds its shape while today's posts are read, so the board beside it does not jump */}
+      {rows === null && !error && (asColumn
+        ? <div role="status" aria-label="Checking today’s posts" className="flex flex-col gap-2.5">{[0, 1, 2].map(i => <CardSkeleton key={i} />)}</div>
+        : <p className="text-[13px] text-muted-foreground">Checking today’s posts…</p>)}
       {shown.length > 0 && (
         <ul className="flex flex-col gap-2.5">
           {shown.map(r => (

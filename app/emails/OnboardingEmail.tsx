@@ -29,13 +29,15 @@ export const ONBOARDING_FOOTER_LINKS = {
 } as const
 
 /** the picture beside each "what you will see" row, in order: the portal's four tabs */
-export const ONBOARDING_IMAGES = ['shoot-brief.jpg', 'editing.jpg', 'designing.jpg', 'scheduling.jpg'] as const
+// see-through pictures of the phone alone: nothing around it to show as a box when a mail app changes the background
+export const ONBOARDING_IMAGES = ['shoot-brief.png', 'editing.png', 'designing.png', 'scheduling.png'] as const
 
 const lines = (t: string) => t.trim().split('\n').map((l, i, all) => <span key={i}>{l}{i < all.length - 1 && <br />}</span>)
 
-const pad = { padding: '0 40px' }
+// 28px each side on every screen: a pasted email loses its phone-only rules in Gmail, so nothing may depend on them
+const pad = { padding: '0 28px' }
 const eyebrow = { margin: '0 0 18px', fontFamily: L.mono, fontSize: 11, lineHeight: '16px', fontWeight: 600, letterSpacing: '0.16em', textTransform: 'uppercase' as const, color: L.sky }
-const display = { margin: 0, fontFamily: L.sans, fontWeight: 700, color: L.cream, letterSpacing: '-0.035em' }
+const display = { margin: 0, fontFamily: L.sans, fontWeight: 700, color: L.cream, letterSpacing: '-0.035em', textWrap: 'balance' as const }
 const body = { margin: '0 0 14px', fontFamily: L.sans, fontSize: 16, lineHeight: '26px', color: L.cream }
 
 // each link stays whole: on a narrow phone the row wraps BETWEEN links, never inside one
@@ -47,26 +49,37 @@ function Arrow({ href, children, color = L.cream }: { href: string; children: Re
 
 function Pill({ href, children, bg, color }: { href: string; children: React.ReactNode; bg: string; color: string }) {
   return (
-    <Link href={href} style={{ display: 'inline-block', padding: '15px 30px', borderRadius: 999, backgroundColor: bg, fontFamily: L.sans, fontSize: 13, lineHeight: '16px', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color, textDecoration: 'none' }}>
-      {children} &rarr;
+    <Link href={href} style={{ display: 'inline-block', padding: '14px 22px', borderRadius: 999, backgroundColor: bg, fontFamily: L.sans, fontSize: 12, lineHeight: '16px', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color, textDecoration: 'none', whiteSpace: 'nowrap' }}>
+      {children}&nbsp;&rarr;
     </Link>
   )
 }
 
-/** a picture beside its words; the side swaps row by row, and a phone stacks them */
+/**
+ * A picture beside its words; the side swaps row by row. NO PHONE-ONLY RULES: Gmail drops them from a pasted email,
+ * which left the two halves squeezed side by side on a phone (the owner's phone, 13 Nov 2026). These are two blocks
+ * that sit side by side when the screen has room for both and fall one under the other when it does not. The swap is
+ * done by reading direction, which every mail app keeps; stacked, the picture is always on top.
+ */
 function Feature({ step, img, flip }: { step: OnboardingStep; img: string | null; flip: boolean }) {
-  const words = (
-    <Column className="stack" style={{ width: img ? '50%' : '100%', verticalAlign: 'middle', padding: img ? (flip ? '0 24px 0 0' : '0 0 0 24px') : 0 }}>
-      <Text className={flip ? undefined : 'stack-words'} style={{ margin: '0 0 8px', fontFamily: L.sans, fontSize: 22, lineHeight: '28px', fontWeight: 700, letterSpacing: '-0.02em', color: L.cream }}>{step.title.trim()}</Text>
-      {step.body.trim() && <Text style={{ ...body, margin: 0, fontSize: 15, lineHeight: '24px', color: L.soft }}>{lines(step.body)}</Text>}
-    </Column>
+  const half = { display: 'inline-block', width: '100%', verticalAlign: 'middle', direction: 'ltr' as const }
+  return (
+    <Section style={{ marginBottom: 44 }}>
+      <div dir={flip ? 'rtl' : 'ltr'} style={{ textAlign: 'center', fontSize: 0, direction: flip ? 'rtl' : 'ltr' }}>
+        {img && (
+          <div style={{ ...half, maxWidth: 250 }}>
+            <Img src={img} alt="" width="210" style={{ display: 'block', width: '100%', maxWidth: 210, height: 'auto', border: 0, margin: '0 auto' }} />
+          </div>
+        )}
+        <div dir="ltr" style={{ ...half, maxWidth: img ? 310 : 560, textAlign: 'left' }}>
+          <div style={{ padding: '18px 14px' }}>
+            <Text style={{ margin: '0 0 8px', fontFamily: L.sans, fontSize: 22, lineHeight: '28px', fontWeight: 700, letterSpacing: '-0.02em', color: L.cream }}>{step.title.trim()}</Text>
+            {step.body.trim() && <Text style={{ ...body, margin: 0, fontSize: 15, lineHeight: '24px', color: L.soft }}>{lines(step.body)}</Text>}
+          </div>
+        </div>
+      </div>
+    </Section>
   )
-  const picture = img && (
-    <Column className={flip ? 'stack stack-pic' : 'stack'} style={{ width: '50%', verticalAlign: 'middle' }}>
-      <Img src={img} alt="" width="280" style={{ display: 'block', width: '100%', height: 'auto', border: 0 }} />
-    </Column>
-  )
-  return <Row style={{ marginBottom: 40 }}>{flip ? <>{words}{picture}</> : <>{picture}{words}</>}</Row>
 }
 
 export default function OnboardingEmail({ draft: d, portalUrl, assetBase }: {
@@ -88,16 +101,9 @@ export default function OnboardingEmail({ draft: d, portalUrl, assetBase }: {
         <style>{`
           @import url('https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap');
           @media only screen and (max-width: 520px) {
-            .pad { padding-left: 24px !important; padding-right: 24px !important; }
-            .stack { display: block !important; width: 100% !important; padding: 0 !important; }
-            .stack-words { margin-top: 18px !important; }
-            .stack-pic { padding-top: 18px !important; }
-            .row-l { padding: 16px 0 0 !important; }
-            .row-v { padding: 0 0 16px !important; }
-            .row-v p { margin-top: 6px !important; }
+            .pad { padding-left: 22px !important; padding-right: 22px !important; }
             .hero { font-size: 34px !important; line-height: 38px !important; }
             .h2 { font-size: 26px !important; line-height: 32px !important; }
-            .card { padding: 40px 24px !important; }
           }
         `}</style>
       </Head>
@@ -107,7 +113,9 @@ export default function OnboardingEmail({ draft: d, portalUrl, assetBase }: {
 
           {/* ── logo ── */}
           <Section className="pad" style={{ ...pad, paddingTop: 36 }}>
-            <Img src={`${assetBase}/MDLogo-trim.png`} alt="MD Media" height="26" style={{ display: 'block', height: 26, width: 'auto', border: 0 }} />
+            {/* ON ITS OWN DARK CHIP, baked into the picture: white letters and the blue slash stay readable when a mail app
+                turns the email light, and the logo itself is never inverted */}
+            <Img src={asset('logo-chip.png')} alt="MD Media" height="40" style={{ display: 'block', height: 40, width: 'auto', border: 0, marginLeft: -11 }} />
           </Section>
 
           {/* ── hello ── */}
@@ -122,14 +130,10 @@ export default function OnboardingEmail({ draft: d, portalUrl, assetBase }: {
             <Section className="pad" style={{ ...pad, paddingTop: 72 }}>
               <Heading as="h2" className="h2" style={{ ...display, fontSize: 30, lineHeight: '36px', marginBottom: 28 }}>{d.agreedTitle.trim()}</Heading>
               {agreed.map((r, i) => (
-                <Row key={i} style={{ borderTop: `1px solid ${L.line}` }}>
-                  <Column className="stack row-l" style={{ width: '36%', verticalAlign: 'top', padding: '18px 16px 18px 0' }}>
-                    <Text style={{ ...eyebrow, margin: 0, color: L.faint, lineHeight: '24px' }}>{r.label.trim()}</Text>
-                  </Column>
-                  <Column className="stack row-v" style={{ verticalAlign: 'top', padding: '18px 0' }}>
-                    <Text style={{ ...body, margin: 0 }}>{lines(r.value)}</Text>
-                  </Column>
-                </Row>
+                <Section key={i} style={{ borderTop: `1px solid ${L.line}`, padding: '16px 0' }}>
+                  <Text style={{ ...eyebrow, margin: '0 0 4px', color: L.faint }}>{r.label.trim()}</Text>
+                  <Text style={{ ...body, margin: 0 }}>{lines(r.value)}</Text>
+                </Section>
               ))}
               <Hr style={{ margin: 0, borderColor: L.line, borderTopWidth: 1 }} />
             </Section>
@@ -158,9 +162,9 @@ export default function OnboardingEmail({ draft: d, portalUrl, assetBase }: {
           {/* ── the portal: the one cream card ── */}
           {portalUrl && (
             <Section className="pad" style={{ ...pad, paddingTop: 32 }}>
-              <Section className="card" style={{ backgroundColor: L.cream, padding: '64px 48px', textAlign: 'center' }}>
+              <Section className="card" style={{ backgroundColor: L.cream, padding: '44px 22px', textAlign: 'center' }}>
                 <Text style={{ ...eyebrow, color: L.blue }}>{d.portalTitle.trim()}</Text>
-                <Text style={{ margin: '0 0 30px', fontFamily: L.sans, fontSize: 26, lineHeight: '34px', fontWeight: 600, letterSpacing: '-0.02em', color: L.ink }}>{lines(d.portalBody)}</Text>
+                <Text style={{ margin: '0 auto 26px', maxWidth: 420, fontFamily: L.sans, fontSize: 21, lineHeight: '29px', fontWeight: 600, letterSpacing: '-0.02em', color: L.ink, textWrap: 'balance' }}>{lines(d.portalBody)}</Text>
                 <Pill href={portalUrl} bg={L.blue} color="#FFFFFF">{d.portalButton.trim() || 'Open your portal'}</Pill>
               </Section>
             </Section>

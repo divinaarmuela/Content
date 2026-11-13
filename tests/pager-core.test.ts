@@ -145,3 +145,15 @@ describe('the portal shows itself while it loads (the owner, 13 Nov 2026)', () =
     expect(src).not.toMatch(/getPortalData|params|token|await /)
   })
 })
+
+describe('Post approval holds its shape while it loads (the owner, 13 Nov 2026)', () => {
+  it('draws every column under its real name, and the today column keeps its shape too', async () => {
+    const { readFileSync } = await import('node:fs')
+    const sk = readFileSync('app/dashboard/scheduler/board/BoardSkeleton.tsx', 'utf8')
+    expect(sk).toContain("[...POST_APPROVAL_LANES.map(l => l.label), 'Going out today']")
+    expect(sk).toContain('h-[92px]') // a real card's picture height, so nothing moves when it lands
+    const page = readFileSync('app/dashboard/scheduler/page.tsx', 'utf8')
+    expect(page).toContain('<BoardSkeleton />')
+    expect(readFileSync('app/dashboard/scheduler/TodayPanel.tsx', 'utf8')).toContain('<CardSkeleton key={i} />')
+  })
+})

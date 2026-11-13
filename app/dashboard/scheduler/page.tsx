@@ -2,7 +2,6 @@
 
 import { mayReadClientComments } from '../../lib/client-comments-core'
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
-import { Skeleton } from '@/components/ui/skeleton'
 import { Search } from 'lucide-react'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { matchesSearch } from '../../lib/pager-core'
@@ -15,6 +14,7 @@ import NoReviewerBanner from '../ui/NoReviewerBanner'
 import PostWindowFromAddress from './PostWindowFromAddress'
 import ClientRound from './board/ClientRound'
 import { PostBoard } from './board/PostBoard'
+import BoardSkeleton from './board/BoardSkeleton'
 import { usePostActs } from './board/usePostActs'
 import { usePostBoard } from './board/usePostBoard'
 
@@ -125,9 +125,7 @@ export default function PostApprovalPage() {
       )}
 
       {!ready ? (
-        <div role="status" aria-label="Loading the board" aria-busy="true" className="grid gap-3.5 md:grid-cols-2">
-          {Array.from({ length: 2 }).map((_, i) => <Skeleton key={i} className="h-64 w-full rounded-card" />)}
-        </div>
+        <BoardSkeleton />
       ) : (
         <>
           <PostBoard
