@@ -155,3 +155,12 @@ describe('templates', () => {
     expect(src.match(/await gate\(\)/g)).toHaveLength(2)
   })
 })
+
+describe('the Onboarding tab shows the portal link itself (the owner, 13 Nov 2026)', () => {
+  it('in the "Their portal" box, to read, copy or open', () => {
+    const page = readFileSync('app/dashboard/clients/[id]/onboarding/page.tsx', 'utf8')
+    expect(page).toContain('<Input readOnly value={data.portal_url}')
+    expect(page).toContain("toast.success('Portal link copied')")
+    expect(page).toContain('<a href={data.portal_url} target="_blank"')
+  })
+})

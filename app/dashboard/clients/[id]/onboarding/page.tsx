@@ -310,6 +310,23 @@ export default function OnboardingPage({ params }: { params: Promise<{ id: strin
           </Part>
 
           <Part title="Their portal" hint={data.portal_url ? 'The button opens this client’s own portal link.' : 'This client has no portal link yet, so this part is left out of the email.'}>
+            {/* THE LINK ITSELF, IN SIGHT (the owner, 13 Nov 2026: "there should be the portal link shown in the box, as
+                in we can know what the link is"): the address the email's button opens, to read, open or copy */}
+            {data.portal_url && (
+              <Field label="This client’s portal link">
+                <div className="flex flex-col gap-2 sm:flex-row" data-portal-link>
+                  <Input readOnly value={data.portal_url} aria-label="This client’s portal link" onFocus={e => e.currentTarget.select()} className="font-mono text-[13px]" />
+                  <div className="flex shrink-0 gap-2">
+                    <Button type="button" variant="outline" onClick={() => { void navigator.clipboard.writeText(data.portal_url!).then(() => toast.success('Portal link copied')).catch(() => toast.error('Could not copy the link')) }}>
+                      <Copy className="h-4 w-4" /> Copy
+                    </Button>
+                    <Button type="button" variant="outline" asChild>
+                      <a href={data.portal_url} target="_blank" rel="noreferrer noopener">Open</a>
+                    </Button>
+                  </div>
+                </div>
+              </Field>
+            )}
             <Field label="Heading"><Input value={draft.portalTitle} onChange={e => patch({ portalTitle: e.target.value })} /></Field>
             <Field label="Paragraph"><Textarea rows={2} value={draft.portalBody} onChange={e => patch({ portalBody: e.target.value })} /></Field>
             <Field label="Button"><Input value={draft.portalButton} onChange={e => patch({ portalButton: e.target.value })} /></Field>
