@@ -464,7 +464,7 @@ export default function Shell({
 
           {/* Kept from the old header so no page loses its name before the
               per-page titles land. */}
-          <h1 className="shrink-0 text-[15px] font-semibold tracking-tight md:hidden">{pageTitle(path)}</h1>
+          <h1 className="min-w-0 truncate text-[15px] font-semibold tracking-tight md:hidden">{pageTitle(path)}</h1>
 
           {/* "search tasks, people, messages" is the To-dos page's own; on every other page it was a box nobody
               could make sense of (the owner, 13 Nov 2026), so it is drawn there and nowhere else */}
