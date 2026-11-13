@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import GlobalSearch from './GlobalSearch'
-import { useMemo, useState, type CSSProperties } from 'react'
+import { useMemo, useState, type CSSProperties, useRef } from 'react'
 import { UserButton, useUser } from '@clerk/nextjs'
 import { isReviewer } from '@/app/lib/reviewer-lock-core'
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/sheet'
@@ -388,7 +388,12 @@ export default function Shell({
   // refuses regardless of what is rendered here
   const actAs = useActAs()
   // Meta's reviewer (9 Nov 2026): no sidebar links, search or notifications — one page, the test client's Social tab
-  const reviewer = isReviewer(useUser().user?.id)
+  // ONCE A REVIEWER, A REVIEWER UNTIL THE PAGE GOES (the owner, 13 Nov 2026: "when meta review is logging out i can
+  // see briefly all the existing sidebar menus"): signing out empties Clerk's user a moment before the page leaves,
+  // and in that moment the check said "not the reviewer" and the whole sidebar drew. The answer now sticks.
+  const reviewerSeen = useRef(false)
+  if (isReviewer(useUser().user?.id)) reviewerSeen.current = true
+  const reviewer = reviewerSeen.current
 
   return (
     // `--dbx-chrome` is what the header and <main>'s own padding take out of
