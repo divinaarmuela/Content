@@ -40,11 +40,10 @@ describe('a cancelled post says where it went, with Re-book', () => {
     expect(w).toMatch(/outcome\.stage === 'cancelled'[\s\S]*?CANCELLED_NOTICE[\s\S]*?label: 'Re-book'/)
   })
 
-  it('the board’s Cancelled list is closed by default and opened by a cancel', () => {
+  it('the board no longer draws a Cancelled list (the owner, 13 Nov 2026: "remove cancel block")', () => {
     const b = src('app/dashboard/scheduler/board/PostBoard.tsx')
-    expect(b).toContain('const [cancelledOpen, setCancelledOpen] = useState(false)')
-    expect(b).toMatch(/newlyCancelled\(onLaneIds\.current, cancelled\.map\(bp => bp\.post\)\)/)
-    expect(b).toMatch(/<details ref=\{cancelledBox\} open=\{cancelledOpen\}/)
+    expect(b).not.toMatch(/Cancelled ·|cancelledBox|cancelledOpen/)
+    expect(src('app/dashboard/scheduler/page.tsx')).not.toMatch(/cancelled=\{cancelled\}/)
   })
 
   it('Schedule: the window after a cancel offers Re-book and the cancelled list, not "Open the post"', () => {

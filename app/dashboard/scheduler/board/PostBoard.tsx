@@ -6,9 +6,10 @@ import { toast } from 'sonner'
 import { LayoutGrid, List as ListIcon, MessageSquare } from 'lucide-react'
 import { STAGE_MEANING, type AccountRef, type OfferedAction, type PostState } from '../../../lib/post-stage-core'
 import {
-  boardActions, dropOnPostLane, groupPosts, newlyCancelled, offeredList, postMoveTargets, postApprovalWindowHref, scheduleLink,
+  boardActions, dropOnPostLane, groupPosts, offeredList, postMoveTargets, postApprovalWindowHref, scheduleLink,
 } from '../../../lib/post-board-core'
 import { groupBatches } from '../../../lib/post-batch-core'
+import { APPROVED_STEP, laneShown, withoutToday } from '../../../lib/pager-core'
 import { BatchPlanner } from './BatchPlanner'
 import { SCHEDULE_PAGE } from '../../../lib/page-access-core'
 import { usePersistedChoice } from '../../production/workHooks'
@@ -51,14 +52,13 @@ const LANE_MEANING: Record<string, string> = {
  * (audit B10). Cancelled posts sit folded under the board, each with Re-book.
  */
 export function PostBoard({
-  posts, cancelled, now, busyId, errorFor, onPress, initialLane, focus, channelsOf, zoneOf, clientId = '', mayComments = false,
+  posts, now, busyId, errorFor, onPress, initialLane, focus, channelsOf, zoneOf, clientId = '', mayComments = false,
 }: {
   /** the page's client filter — the Going out today column and the Comments view follow it */
   clientId?: string
   /** account managers, quality checkers and super admins get the Comments view */
   mayComments?: boolean
   posts: readonly BoardPost[]
-  cancelled: readonly BoardPost[]
   now: string
   busyId: string | null
   errorFor: (id: string) => string | null
@@ -74,6 +74,8 @@ export function PostBoard({
   const [picked, setView] = usePersistedChoice('post-board-view', VIEWS, 'columns', 'view')
   const view = picked === 'comments' && !mayComments ? 'columns' : picked
   const [todayCount, setTodayCount] = useState(0)
+  const [todayIdList, setTodayIdList] = useState<string[]>([])
+  const todayIds = useMemo(() => new Set(todayIdList), [todayIdList])
   const [dragging, setDragging] = useState<BoardPost | null>(null)
   const [over, setOver] = useState<string | null>(null)
   const justDragged = useRef(false)
@@ -85,27 +87,17 @@ export function PostBoard({
   const plannable = (list: readonly BoardPost[]) => list.some(bp => bp.post.stage === 'draft'
     && offeredList(boardActions(bp.post, bp.hats, now, bp.ctx)).some(a => a.action === 'send_to_qc'))
 
-  const grouped = useMemo(
+  const groupedAll = useMemo(
     () => groupPosts(posts.map(bp => ({ id: bp.post.id, stage: bp.post.stage, stage_at: bp.post.stage_at, if_no_answer: bp.post.if_no_answer, client_review: bp.post.client_review, client_id: bp.post.client_id, sent_version: bp.post.sent_version, bp }))),
     [posts])
+  // a post going out today is in the Going out today column only, not in Approved as well
+  const grouped = useMemo(() => withoutToday(groupedAll, todayIds), [groupedAll, todayIds])
   const reachable = useMemo(() => new Set(
     dragging ? postMoveTargets(dragging.post, dragging.hats, now, dragging.ctx).map(m => m.lane) : []),
   [dragging, now])
   const firstId = grouped.find(g => g.posts.length > 0)?.posts[0]?.id ?? null
 
-  // A CANCELLED POST IS NOT LOST (1 Oct 2026): when a post that was on a lane turns up in the Cancelled
-  // list — cancelled on its card or in its window — the list is opened and brought into view, so the
-  // card is seen where it went (closed by default otherwise)
-  const [cancelledOpen, setCancelledOpen] = useState(false)
-  const onLaneIds = useRef<ReadonlySet<string>>(new Set())
-  const cancelledBox = useRef<HTMLDetailsElement | null>(null)
-  useEffect(() => {
-    const moved = newlyCancelled(onLaneIds.current, cancelled.map(bp => bp.post))
-    onLaneIds.current = new Set(posts.map(bp => bp.post.id))
-    if (moved.length === 0) return
-    setCancelledOpen(true)
-    try { cancelledBox.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }) } catch { /* nothing to scroll */ }
-  }, [posts, cancelled])
+  const [approvedShown, setApprovedShown] = useState(APPROVED_STEP)
 
   // a post named in the address is brought into view once it is drawn
   useEffect(() => {
@@ -146,6 +138,12 @@ export function PostBoard({
   const lanes: BoardLane[] = grouped.map(({ lane, posts: inLane }) => {
     const key = lane.key
     const active = dragging !== null && reachable.has(key)
+    // APPROVED SHOWS TEN AT A TIME (the owner, 13 Nov 2026: "sometimes it goes way too long"). The column's number
+    // still counts every post; a post named in the address is always inside what is shown.
+    const groups = groupBatches(inLane, x => x.bp.post.batch)
+    const shownGroups = key === 'approved'
+      ? groups.slice(0, laneShown(approvedShown, groups.map(g => (g.kind === 'post' ? focus?.has(g.item.id) === true : g.items.some(x => focus?.has(x.id) === true)))))
+      : groups
     const zone = (
       <div
         role="list"
@@ -157,7 +155,7 @@ export function PostBoard({
           dragging ? active ? over === key ? 'bg-tint-green ring-2 ring-accent-green' : 'bg-tint-green' : 'opacity-60' : ''
         }`}
       >
-        {groupBatches(inLane, x => x.bp.post.batch).map(g => (g.kind === 'post' ? item(g.item) : (
+        {shownGroups.map(g => (g.kind === 'post' ? item(g.item) : (
           <BatchBox
             key={g.key}
             title={g.title}
@@ -175,6 +173,12 @@ export function PostBoard({
           <div className="rounded-inner border border-dashed border-border px-3 py-7 text-center text-[13px] text-muted-foreground">
             {LANE_EMPTY[key] ?? 'Nothing here.'}
           </div>
+        )}
+        {groups.length > shownGroups.length && (
+          <button type="button" onClick={() => setApprovedShown(n => n + APPROVED_STEP)}
+            className="min-h-11 rounded-inner border border-border bg-surface px-3 text-[13px] font-semibold text-foreground hover:border-foreground/30">
+            Show {Math.min(APPROVED_STEP, groups.length - shownGroups.length)} more · {groups.length - shownGroups.length} not shown
+          </button>
         )}
       </div>
     )
@@ -219,7 +223,7 @@ export function PostBoard({
   // GOING OUT TODAY, AS THE LAST COLUMN (12 Nov 2026, the owner): it was a card across the top of the page
   const todayLane: BoardLane = {
     key: 'today', title: 'Going out today', count: todayCount, empty: 'Nothing going out today.', cards: [],
-    replace: <TodayPanel clientId={clientId} asColumn onCount={setTodayCount} />,
+    replace: <TodayPanel clientId={clientId} asColumn onCount={setTodayCount} onIds={setTodayIdList} />,
     hint: <span className="sr-only">Every post going out today, the latest time first, with what the network says about it now.</span>,
   }
 
@@ -248,21 +252,6 @@ export function PostBoard({
         <div data-tour="board-lanes">
           <LaneBoard lanes={[...lanes, todayLane]} initialLane={initialLane ?? undefined} ariaLabel="Posts, by stage" />
         </div>
-      )}
-
-      {cancelled.length > 0 && (
-        <details ref={cancelledBox} open={cancelledOpen}
-          onToggle={e => setCancelledOpen((e.currentTarget as HTMLDetailsElement).open)}
-          className="group rounded-card border border-border bg-surface px-4 py-2">
-          <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 text-[14px] font-semibold">
-            Cancelled · {cancelled.length}
-            <span aria-hidden className="transition-transform group-open:rotate-90">›</span>
-            <span className="text-[13px] font-normal text-muted-foreground">Cancelled in the last 30 days. Re-book one to start it again.</span>
-          </summary>
-          <div className="grid gap-2.5 pb-2 pt-1 md:grid-cols-2 xl:grid-cols-3">
-            {cancelled.map(bp => <div key={bp.post.id}>{card(bp)}</div>)}
-          </div>
-        </details>
       )}
 
       <BatchPlanner

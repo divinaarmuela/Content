@@ -5,12 +5,10 @@ import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { ScopeViewer } from '../../lib/production-access-core'
 import { addressWithClient, clientDropdownChoices, clientFromAddress, laneFromAddress } from '../../lib/post-board-core'
-import { postWaitingRows } from '../../lib/post-waiting-core'
 import { useRole } from '../useRole'
 import { AccountUnavailable } from '../production/shoot-ui'
 import GettingStarted from '../GettingStarted'
 import NoReviewerBanner from '../ui/NoReviewerBanner'
-import WaitingOnYou from './WaitingOnYou'
 import PostWindowFromAddress from './PostWindowFromAddress'
 import ClientRound from './board/ClientRound'
 import { PostBoard } from './board/PostBoard'
@@ -27,9 +25,10 @@ import { usePostBoard } from './board/usePostBoard'
  * status to decide where a post is (docs/posting-rebuild/SPEC.md §4.2).
  *
  * Top to bottom:
- *   1. Waiting on you — the posts somebody is held up by (`post-waiting-core`).
- *   2. The board — Draft · Quality check · With client · Approved, and the
- *      cancelled posts folded under it (`PostBoard`).
+ *   The board — Draft · Quality check · With client · Approved (`PostBoard`). The "waiting on you" block above
+ *   it and the Cancelled list under it were taken off the page on 13 Nov 2026 (the owner: "remove this block on
+ *   post approval … and remove cancel block"). A cancelled post still says where it went and offers Re-book in
+ *   the notice that follows the cancel.
  *
  * Every button on all three is from `boardActions` (post-board-core, which
  * narrows `postActions` to this page's moves) and is sent by `usePostActs` to
@@ -75,17 +74,6 @@ export default function PostApprovalPage() {
   const lanes = useMemo(
     () => (clientId ? data.onLanes.filter(bp => bp.post.client_id === clientId) : data.onLanes),
     [data.onLanes, clientId])
-  const cancelled = useMemo(
-    () => (clientId ? data.cancelled.filter(bp => bp.post.client_id === clientId) : data.cancelled),
-    [data.cancelled, clientId])
-
-  const waiting = useMemo(() => {
-    if (!viewer) return []
-    const byId = new Map(lanes.map(bp => [bp.post.id, bp]))
-    return postWaitingRows(lanes.map(bp => bp.post), viewer, data.clock.now,
-      post => ({ face: byId.get(post.id)!.face, ctx: byId.get(post.id)!.ctx }))
-  }, [lanes, viewer, data.clock.now])
-
   /* ── what the address names ── */
   const [initialLane, setInitialLane] = useState<string | null>(null)
   const [focus, setFocus] = useState<ReadonlySet<string>>(() => new Set())
@@ -118,10 +106,6 @@ export default function PostApprovalPage() {
       {ready && <GettingStarted role={viewer.role} page="scheduler" />}
       {ready && <NoReviewerBanner me={me} />}
 
-      {ready && (
-        <WaitingOnYou rows={waiting} busyId={acts.busyId} errorFor={acts.errorFor} onPress={acts.press} />
-      )}
-
       {ready && <ClientRound posts={lanes} now={data.clock.now} choicesFor={data.choicesFor} />}
 
       {ready && data.unstaged > 0 && (
@@ -150,7 +134,6 @@ export default function PostApprovalPage() {
             posts={lanes}
             clientId={clientId}
             mayComments={mayReadClientComments(viewer)}
-            cancelled={cancelled}
             now={data.clock.now}
             busyId={acts.busyId}
             errorFor={acts.errorFor}

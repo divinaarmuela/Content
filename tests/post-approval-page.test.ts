@@ -76,9 +76,10 @@ describe('buttons come from one list', () => {
     expect(board).toMatch(/if \(!d\.ok\) \{ toast\.error\(d\.reason\); return \}/)
   })
 
-  it('Waiting on you presses the same handler as the board', () => {
+  it('the board presses the one handler, and the "waiting on you" block is off the page (the owner, 13 Nov 2026)', () => {
     const page = code(read('app/dashboard/scheduler/page.tsx'))
-    expect(page).toMatch(/<WaitingOnYou rows=\{waiting\} busyId=\{acts\.busyId\} errorFor=\{acts\.errorFor\} onPress=\{acts\.press\} \/>/)
+    expect(page).not.toMatch(/<WaitingOnYou\b/)
+    expect(page).not.toContain("from './WaitingOnYou'")
     expect(page).toMatch(/onPress=\{acts\.press\}\s+initialLane/)
   })
 

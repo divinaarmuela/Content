@@ -40,11 +40,13 @@ const statusWord = (s: string | null) => {
  * 2026): what it is and where, whether it still needs approval or is booked,
  * who made, approved and booked it, and what Zernio says right now.
  */
-export default function TodayPanel({ clientId, asColumn, onCount }: {
+export default function TodayPanel({ clientId, asColumn, onCount, onIds }: {
   clientId: string
   /** drawn as the board's last column (12 Nov 2026, the owner: "a going out today kind of column"), not a card on top */
   asColumn?: boolean
   onCount?: (n: number) => void
+  /** the posts this column is showing, so the board can take them out of Approved */
+  onIds?: (ids: string[]) => void
 }) {
   const [rows, setRows] = useState<Row[] | null>(null)
   const [checkedAt, setCheckedAt] = useState<string | null>(null)
@@ -76,6 +78,8 @@ export default function TodayPanel({ clientId, asColumn, onCount }: {
   const needs = shown.filter(r => r.state.needsAction).length
   const count = rows === null ? null : shown.length
   useEffect(() => { if (count !== null) onCount?.(count) }, [count, onCount])
+  const idsKey = rows === null ? null : shown.map(r => r.id).join(',')
+  useEffect(() => { if (idsKey !== null) onIds?.(idsKey ? idsKey.split(',') : []) }, [idsKey, onIds])
   const title = rows === null ? 'Going out today'
     : shown.length === 0 ? 'Nothing going out today'
     : `Going out today · ${shown.length} post${shown.length === 1 ? '' : 's'}${needs ? ` · ${needs} need${needs === 1 ? 's' : ''} you` : ''}`

@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import GlobalSearch from './GlobalSearch'
+import { isTodosPage } from '../../lib/pager-core'
 import { useMemo, useState, type CSSProperties, useRef } from 'react'
 import { UserButton, useUser } from '@clerk/nextjs'
 import { isReviewer } from '@/app/lib/reviewer-lock-core'
@@ -465,7 +466,9 @@ export default function Shell({
               per-page titles land. */}
           <h1 className="shrink-0 text-[15px] font-semibold tracking-tight md:hidden">{pageTitle(path)}</h1>
 
-          {!reviewer && <GlobalSearch />}
+          {/* "search tasks, people, messages" is the To-dos page's own; on every other page it was a box nobody
+              could make sense of (the owner, 13 Nov 2026), so it is drawn there and nowhere else */}
+          {!reviewer && isTodosPage(path) && <GlobalSearch />}
 
           <div className="ml-auto flex items-center gap-2">
             {/* Beta: this is in daily use while still being built, so the state
