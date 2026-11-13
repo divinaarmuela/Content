@@ -40,6 +40,8 @@ describe('the toolbar on every picked card (the owner, 13 Nov 2026)', () => {
   it('is on the board: one save for what changed, and Delete keeps back a board with cards inside', () => {
     const c = readFileSync('app/dashboard/production/shoots/[id]/BriefCanvas.tsx', 'utf8')
     expect(c).toContain('data-group-toolbar')
+    // one toolbar at a time: the single card's is put away while several are picked
+    expect(c).toContain('selected === card.id && picked.size <= 1 && !viewOnly')
     expect(c).toContain('applyGroup(groupColour(pickedCards, c))')
     expect(c).toContain('applyGroup(groupTextSize(pickedCards, 1))')
     expect(c).toContain('const held = pickedCards.filter(c => deleteWarning(cards, c))')

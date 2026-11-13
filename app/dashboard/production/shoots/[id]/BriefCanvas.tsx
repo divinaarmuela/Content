@@ -2512,7 +2512,9 @@ export default function BriefCanvas({
                   drops below the card when the card is at the top edge. */}
               {/* the toolbar stays while the words are being typed (the owner, 15 Sep 2026:
                   "the toolbar disappears on a note when you highlight it") */}
-              {selected === card.id && !viewOnly && (!editing || editing === card.id) && card.kind !== 'arrow' && (() => {
+              {/* ONE TOOLBAR AT A TIME: with several cards picked the selection's own toolbar is the one shown, so a press
+                  cannot quietly change just the last card clicked (seen on the live test, 13 Nov 2026) */}
+              {selected === card.id && picked.size <= 1 && !viewOnly && (!editing || editing === card.id) && card.kind !== 'arrow' && (() => {
                 const s = camRef.current.s
                 const nearTop = camRef.current.y + card.y * s < 72
                 return (
