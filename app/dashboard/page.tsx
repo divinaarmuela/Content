@@ -22,6 +22,9 @@ import Stat from './ui/Stat'
 import Chip, { type ChipTone } from './ui/Chip'
 import MiniCalendar, { type Marker } from './ui/MiniCalendar'
 import Timeline, { type TimelineItem } from './ui/Timeline'
+import Pager from './ui/Pager'
+import RecentClientComments from './RecentClientComments'
+import { firstUpcoming, pageOfIndex, pageSlice } from '../lib/pager-core'
 import {
   DEFAULT_TZ, dayKeyInZone, formatInZone, greetingInZone, toZonedInput,
   viewerHint, zoneLabel,
@@ -856,7 +859,7 @@ export default function OverviewPage() {
   }, [live.batches, live.items, entryRows, zone])
 
   /** today, in order — the same rows, filtered to this one day */
-  const todayItems: TimelineItem[] = useMemo(() => {
+  const todayItems: (TimelineItem & { at: string })[] = useMemo(() => {
     if (!todayKey) return []
     const rows: (TimelineItem & { at: string })[] = []
     for (const b of live.batches) {
@@ -903,8 +906,14 @@ export default function OverviewPage() {
     }
     return rows
       .sort((a, b) => a.at.localeCompare(b.at))
-      .map(r => ({ time: r.time, title: r.title, detail: r.detail, tone: r.tone, href: r.href }))
+      .map(r => ({ at: r.at, time: r.time, title: r.title, detail: r.detail, tone: r.tone, href: r.href }))
   }, [live.batches, live.items, entryRows, clientNameOf, todayKey, zone, role])
+
+  // TODAY, FIVE AT A TIME (the owner, 13 Nov 2026: a long day pushed "Posts this month" all the way down). It opens on
+  // what is coming up next; once a person presses left or right, their page stays.
+  const TODAY_SIZE = 5
+  const [todayPicked, setTodayPicked] = useState<number | null>(null)
+  const todayPage = todayPicked ?? pageOfIndex(firstUpcoming(todayItems, now ? toZonedInput(now, zone) || null : null), todayItems.length, TODAY_SIZE)
 
   /* ── the heading ── */
 
@@ -1173,8 +1182,12 @@ export default function OverviewPage() {
               </span>
             )}
           >
-            <Timeline items={todayItems} empty="Nothing on today." />
+            <Timeline items={pageSlice(todayItems, todayPage, TODAY_SIZE)} empty="Nothing on today." />
+            <Pager page={todayPage} total={todayItems.length} size={TODAY_SIZE} onPage={setTodayPicked} what="things today" />
           </Panel>
+
+          {/* what clients said lately — only for those the route lets read it (it hides itself otherwise) */}
+          <RecentClientComments />
         </aside>
       </div>
 
