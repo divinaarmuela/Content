@@ -123,7 +123,7 @@ describe('finding things on Post approval (the owner, 13 Nov 2026)', () => {
     const board = readFileSync('app/dashboard/scheduler/board/PostBoard.tsx', 'utf8')
     expect(board).toContain('byLatestActivity(g.posts, x => x.bp.activityAt)')
     expect(readFileSync('app/dashboard/scheduler/layout.tsx', 'utf8')).toContain("router.push(`${v.href}${addressWithClient('', chosen)}`)")
-    expect(readFileSync('app/dashboard/scheduler/ScheduleCalendar.tsx', 'utf8')).toContain('e.content_items?.client_id === clientId')
+    expect(readFileSync('app/dashboard/scheduler/PostCalendar.tsx', 'utf8')).toContain('!clientId || bp.post.client_id === clientId')
   })
   it('Going out today reads earliest first', async () => {
     const { earliestFirst } = await import('../app/lib/today-posts-core')

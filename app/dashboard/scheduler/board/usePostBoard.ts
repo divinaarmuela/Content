@@ -154,6 +154,11 @@ export function usePostBoard(person: ScopeViewer | null) {
   const onLanes = useMemo(
     () => visible.filter(p => onBoard(p, clock.now)).map(decorate),
     [visible, clock.now, decorate])
+  /** THE CALENDAR'S POSTS: every post with a time that is not cancelled, however long ago it went out (the board
+   *  drops a posted post after two weeks; a calendar is where you look back) */
+  const onCalendar = useMemo(
+    () => visible.filter(p => p.stage !== 'cancelled' && !!p.scheduled_for).map(decorate),
+    [visible, decorate])
   const cancelled = useMemo(() => {
     const cutoff = Date.parse(clock.now) - CANCELLED_DAYS * 24 * 60 * 60_000
     return visible
@@ -175,6 +180,7 @@ export function usePostBoard(person: ScopeViewer | null) {
     zoneOf,
     loading: live.loading || postsLoading,
     onLanes,
+    onCalendar,
     cancelled,
     unstaged: states.unstaged,
     clients,

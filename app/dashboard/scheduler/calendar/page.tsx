@@ -1,6 +1,6 @@
-import ScheduleCalendar from '../ScheduleCalendar'
+import PostCalendar from '../PostCalendar'
 
-/** The scheduled-content month grid, as its own route. */
+/** Post approval's calendar: one tile per post, in the Social Schedule's look (13 Nov 2026). */
 export default function SchedulerCalendarPage() {
-  return <ScheduleCalendar />
+  return <PostCalendar />
 }
