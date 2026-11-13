@@ -1,5 +1,6 @@
 'use client'
 
+import { ALIGN_REACH_PX, alignTo, type AlignBox } from '@/app/lib/canvas-align-core'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { cardBoxes, keepAnyInView } from '@/app/lib/canvas-keep-in-view-core'
 import { useCanvasComments } from '../../../../components/canvas/CanvasComments'
@@ -504,6 +505,12 @@ export default function BriefCanvas({
     /** BACK UP A LEVEL: the breadcrumbs above it may be dropped on, and the one under the pointer now */
     crumbs?: { id: string | null; el: HTMLElement; r: DOMRect }[]
     overCrumb?: { id: string | null; el: HTMLElement } | null
+    /** LINING UP WITH OTHER CARDS (canvas-align-core): the cards that stay put, measured at the press, the guides
+     *  drawn while one of their lines is met, and whether each direction is lined up right now */
+    still?: AlignBox[]
+    guides?: { x: HTMLElement; y: HTMLElement }
+    ax?: boolean
+    ay?: boolean
   } | null>(null)
   /* ── corner resize: both axes. `oh` is the height MEASURED at pointerdown
    *  (a card without an h of its own is as tall as its content), so a drag
@@ -740,10 +747,14 @@ export default function BriefCanvas({
         const box = viewportRef.current?.querySelector<HTMLElement>(`[data-cid="${c.id}"]`)
         return { id: c.id, x: c.x, y: c.y, w: box?.offsetWidth || c.w, h: box?.offsetHeight || 120, z: c.z }
       })
+      const still: AlignBox[] = visible.filter(c => !moving.has(c.id) && c.kind !== 'arrow' && !c.col).map(c => {
+        const box = viewportRef.current?.querySelector<HTMLElement>(`[data-cid="${c.id}"]`)
+        return { x: c.x, y: c.y, w: box?.offsetWidth || c.w, h: box?.offsetHeight || 100 }
+      })
       dragState.current = {
         id: card.id, startX: e.clientX, startY: e.clientY,
         ox: card.x, oy: card.y, moved: false, el, half, ends, raf: 0, nx: card.x, ny: card.y,
-        columns, over: null, group, boards, overBoard: null,
+        columns, over: null, group, boards, overBoard: null, still,
         crumbs: Array.from(crumbsRef.current?.querySelectorAll<HTMLElement>('[data-crumb]') ?? [])
           .map(el => ({ id: el.dataset.crumb || null, el, r: el.getBoundingClientRect() })),
         overCrumb: null,
@@ -765,6 +776,33 @@ export default function BriefCanvas({
     if (d.over) d.over.style.outline = ''
     if (el) { el.style.outline = '2px solid rgb(59 130 246 / 0.7)'; el.style.outlineOffset = '2px' }
     d.over = el
+  }
+
+  /** the two guide lines, in the same layer as the cards so they move and zoom with the board */
+  const showGuides = (d: NonNullable<typeof dragState.current>, gx: number | null, gy: number | null, s: number) => {
+    const layer = d.el?.parentElement
+    if (!layer) return
+    if (!d.guides) {
+      if (gx === null && gy === null) return
+      const make = () => {
+        const g = document.createElement('div')
+        g.setAttribute('data-align-guide', '')
+        g.style.cssText = 'position:absolute;left:0;top:0;pointer-events:none;z-index:9998;background:rgb(24 56 224);display:none'
+        layer.appendChild(g)
+        return g
+      }
+      d.guides = { x: make(), y: make() }
+    }
+    const thick = Math.max(1, 1 / s)
+    const far = 200000
+    const { x, y } = d.guides
+    if (gx === null) x.style.display = 'none'
+    else { x.style.display = 'block'; x.style.width = `${thick}px`; x.style.height = `${far}px`; x.style.transform = `translate(${gx - thick / 2}px, ${-far / 2}px)` }
+    if (gy === null) y.style.display = 'none'
+    else { y.style.display = 'block'; y.style.height = `${thick}px`; y.style.width = `${far}px`; y.style.transform = `translate(${-far / 2}px, ${gy - thick / 2}px)` }
+  }
+  const clearGuides = (d: { guides?: { x: HTMLElement; y: HTMLElement } }) => {
+    d.guides?.x.remove(); d.guides?.y.remove(); d.guides = undefined
   }
 
   /** One visual update per FRAME, from whatever the latest pointer position
@@ -819,6 +857,16 @@ export default function BriefCanvas({
     const s = camRef.current.s
     d.nx = d.ox + dx / s
     d.ny = d.oy + dy / s
+    // LINE UP WITH THE OTHER CARDS (Divina, 13 Nov 2026). Hold Alt to place a card freely.
+    if (!d.host && d.still?.length && !e.altKey) {
+      const a = alignTo({ x: d.nx, y: d.ny, w: d.half.w * 2, h: d.half.h * 2 }, d.still, ALIGN_REACH_PX / s)
+      d.nx = a.x; d.ny = a.y
+      d.ax = a.guideX !== null; d.ay = a.guideY !== null
+      showGuides(d, a.guideX, a.guideY, s)
+    } else if (d.guides) {
+      d.ax = false; d.ay = false
+      showGuides(d, null, null, s)
+    }
     if (d.columns.length) markColumn(d, e.clientX, e.clientY)
     if (d.boards.length) {
       const id = columnAt(toWorld(e.clientX, e.clientY), d.boards, d.id)
@@ -851,6 +899,7 @@ export default function BriefCanvas({
       if (d.over) d.over.style.outline = ''
       if (d.overBoard) d.overBoard.el.style.outline = ''
       if (d.overCrumb) d.overCrumb.el.style.outline = ''
+      clearGuides(d)
       for (const g of d.group) g.el.style.transform = `translate(${g.ox}px, ${g.oy}px)`
       const bar = d.el?.querySelector<HTMLElement>('[data-card-toolbar]')
       if (bar) bar.style.display = ''
@@ -883,6 +932,7 @@ export default function BriefCanvas({
     if (!d || (d.host ?? d.id) !== card.id) return
     dragState.current = null
     if (d.raf) cancelAnimationFrame(d.raf)
+    clearGuides(d)
     if (d.over) d.over.style.outline = ''
     if (d.overBoard) { d.overBoard.el.style.outline = ''; d.overBoard.el.style.outlineOffset = '' }
     // a plain press KEEPS the lift: clearing it here and waiting for the
@@ -954,8 +1004,9 @@ export default function BriefCanvas({
       }
       toast.error('A board cannot go inside itself')
     }
-    const ddx = snap(d.ox + (e.clientX - d.startX) / s) - card.x
-    const ddy = snap(d.oy + (e.clientY - d.startY) / s) - card.y
+    // a direction that met another card's line stays exactly on it; one that did not settles on the 8px grid as before
+    const ddx = (d.ax ? Math.round(d.nx) : snap(d.ox + (e.clientX - d.startX) / s)) - card.x
+    const ddy = (d.ay ? Math.round(d.ny) : snap(d.oy + (e.clientY - d.startY) / s)) - card.y
     const top = Math.max(0, ...cards.map(c => c.z)) + 1
     const next: CanvasCard = { ...card, x: card.x + ddx, y: card.y + ddy, z: top }
     const others = d.group.flatMap((g, i) => {
@@ -1553,6 +1604,8 @@ export default function BriefCanvas({
    *    note being typed, and only when what was copied is plainly a table. */
   const addCardRef = useRef(addCard)
   addCardRef.current = addCard
+  const addImagesRef = useRef(addImages)
+  addImagesRef.current = addImages
   useEffect(() => {
     if (viewOnly) return
     const onPaste = (e: ClipboardEvent) => {
@@ -1560,6 +1613,16 @@ export default function BriefCanvas({
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
       const onBoard = !t || t === document.body || !!viewportRef.current?.contains(t)
       if (!onBoard || !e.clipboardData) return
+      // A COPIED PICTURE (13 Nov 2026): a screenshot, or "Copy image" from a web page or a chat, lands on the board
+      // as a picture, the same way a dropped file does
+      const pictures = Array.from(e.clipboardData.items ?? []).filter(i => i.kind === 'file' && i.type.startsWith('image/'))
+        .map(i => i.getAsFile()).filter((x): x is File => !!x)
+      if (pictures.length) {
+        e.preventDefault()
+        mockupTargetRef.current = null
+        void addImagesRef.current(pictures)
+        return
+      }
       const table = tableFromClipboard(e.clipboardData.getData('text/html'), e.clipboardData.getData('text/plain'))
       if (!table) return
       e.preventDefault()

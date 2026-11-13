@@ -55,6 +55,9 @@ export async function POST(req: Request) {
       // the portal link IS this token; a client opened without one has a
       // front door that 404s
       share_token: randomUUID(),
+      // …and it is the ONE portal (the owner, 20 Oct 2026: "the one-link portal every client is on now"; 13 Nov 2026:
+      // a client made here was landing on the old portal because only the link was set, not the switch)
+      portal_one: true,
     })
     return NextResponse.json(client, { status: 201 })
   } catch (e) {

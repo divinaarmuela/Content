@@ -69,3 +69,23 @@ describe('Brand assets: the route and where a file lands', () => {
     expect(readFileSync('app/emails/OnboardingEmail.tsx', 'utf8')).toContain('<Pill href={brandAssetsUrl(portalUrl)}')
   })
 })
+
+describe('a new client is on the one portal, and an old-portal client never gets "page not found" (13 Nov 2026)', () => {
+  it('every route that makes a client sets the one-portal switch with the link', () => {
+    for (const f of ['app/api/website/clients/route.ts', 'app/api/website/clients/convert-lead/route.ts', 'app/api/leads/acquisition/[id]/stage/route.ts']) {
+      const s = readFileSync(f, 'utf8')
+      expect(s, f).toMatch(/share_token: randomUUID\(\),[\s\S]{0,400}portal_one: true,/)
+    }
+  })
+  it('a one-portal address for a client on the old portal opens the portal they have', () => {
+    const page = readFileSync('app/portal/[token]/home/page.tsx', 'utf8')
+    expect(page).toContain('if (!page) { const old = await oldPortalPathFor(raw); if (old) redirect(old) }')
+    expect(page).toMatch(/if \(!page\) notFound\(\)/)
+    const load = readFileSync('app/lib/one-portal-load.ts', 'utf8')
+    expect(load).toContain('if (!owner || onePortal(owner.client)) return null')
+  })
+  it('the welcome email leaves the brand files button out for a client whose portal has no such tab', () => {
+    expect(readFileSync('app/emails/OnboardingEmail.tsx', 'utf8')).toContain('{portalUrl && brandTab && d.needButton.trim() && (')
+    expect(readFileSync('app/api/clients/[id]/onboarding/route.ts', 'utf8')).toContain('brand_tab: client.portal_one === true,')
+  })
+})

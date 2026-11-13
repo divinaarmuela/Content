@@ -109,6 +109,9 @@ async function makeClient(p: ProspectRow & Prospect): Promise<{ id: string } | {
       website: p.website ?? null, industry: p.industry ?? null, status: 'active', source: 'acquisition',
       notes: [p.audit_angle && `Audit angle: ${p.audit_angle}`, p.deal_value && `First deal: $${p.deal_value}`, 'Handed off from the acquisition pipeline'].filter(Boolean).join('\n'),
       share_token: randomUUID(),
+      // …and it is the ONE portal (the owner, 20 Oct 2026: "the one-link portal every client is on now"; 13 Nov 2026:
+      // a client made here was landing on the old portal because only the link was set, not the switch)
+      portal_one: true,
     } as never)
     return { id: client.id }
   } catch (e) {

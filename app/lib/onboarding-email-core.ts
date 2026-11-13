@@ -40,6 +40,9 @@ export type OnboardingDraft = {
   signature: string
 }
 
+/** the shared inbox a new client is given for their account manager */
+export const ONBOARDING_INBOX = 'info@mdmmarketing.com.au'
+
 export const ONBOARDING_LIMITS = { rows: 12, steps: 8, short: 140, long: 1200 } as const
 
 const firstName = (name: string): string => name.trim().split(/\s+/)[0] ?? ''
@@ -81,7 +84,9 @@ export function defaultOnboarding(input: {
   const start = plainDate(input.startDate)
   if (start) agreed.push({ label: 'Start date', value: start })
   agreed.push({ label: 'Approvals', value: 'Nothing is posted without your yes. You approve each post in your portal.' })
-  if (input.managerName?.trim()) agreed.push({ label: 'Your account manager', value: input.managerName.trim() })
+  // the account manager BY NAME, and the shared inbox to reach them on (the owner, 13 Nov 2026: "under acct manager, put a
+  // name of the AM and the info@ email"). With no manager on the client yet, the inbox still stands.
+  agreed.push({ label: 'Your account manager', value: [input.managerName?.trim(), ONBOARDING_INBOX].filter(Boolean).join('\n') })
   return {
     subject: `Welcome to MD Media, ${who}`,
     greeting: `Hi ${who},`,

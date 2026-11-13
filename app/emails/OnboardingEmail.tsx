@@ -36,7 +36,9 @@ const lines = (t: string) => t.trim().split('\n').map((l, i, all) => <span key={
 
 // 28px each side on every screen: a pasted email loses its phone-only rules in Gmail, so nothing may depend on them
 const pad = { padding: '0 28px' }
-const eyebrow = { margin: '0 0 18px', fontFamily: L.mono, fontSize: 11, lineHeight: '16px', fontWeight: 600, letterSpacing: '0.16em', textTransform: 'uppercase' as const, color: L.sky }
+// the small section labels: the BODY font in capitals (the owner, 13 Nov 2026: "I don't love the font on 'A set up call', can we
+// use the same font as body but capitals")
+const eyebrow = { margin: '0 0 18px', fontFamily: L.sans, fontSize: 12, lineHeight: '16px', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase' as const, color: L.sky }
 const display = { margin: 0, fontFamily: L.sans, fontWeight: 700, color: L.cream, letterSpacing: '-0.035em', textWrap: 'balance' as const }
 const body = { margin: '0 0 14px', fontFamily: L.sans, fontSize: 16, lineHeight: '26px', color: L.cream }
 
@@ -82,7 +84,9 @@ function Feature({ step, img, flip }: { step: OnboardingStep; img: string | null
   )
 }
 
-export default function OnboardingEmail({ draft: d, portalUrl, assetBase }: {
+export default function OnboardingEmail({ draft: d, portalUrl, assetBase, brandTab = true }: {
+  /** false for a client still on the old portal, which has no Brand assets tab: the button is left out */
+  brandTab?: boolean
   draft: OnboardingDraft
   portalUrl: string | null
   /** where the pictures and the logo are served from, no trailing slash: https://app…/ */
@@ -176,7 +180,7 @@ export default function OnboardingEmail({ draft: d, portalUrl, assetBase }: {
               <Text style={eyebrow}>{d.needTitle.trim()}</Text>
               <Text style={{ ...body, margin: 0, fontSize: 18, lineHeight: '30px' }}>{lines(d.needBody)}</Text>
               {/* straight to the portal's Brand assets tab, where they add the files themselves (13 Nov 2026) */}
-              {portalUrl && d.needButton.trim() && (
+              {portalUrl && brandTab && d.needButton.trim() && (
                 <Text style={{ margin: '22px 0 0' }}><Pill href={brandAssetsUrl(portalUrl)} bg={L.cream} color={L.ink}>{d.needButton.trim()}</Pill></Text>
               )}
             </Section>

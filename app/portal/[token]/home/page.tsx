@@ -11,7 +11,7 @@ import { PortalHelpLine } from '../../../components/portal/PortalSections'
 import OnePortalTabs from '../../../components/portal/OnePortalTabs'
 import OnePortalWorkList from '../../../components/portal/OnePortalWorkList'
 import OnePortalShoots from '../../../components/portal/OnePortalShoots'
-import { loadOnePortalAll } from '../../../lib/one-portal-load'
+import { loadOnePortalAll, oldPortalPathFor } from '../../../lib/one-portal-load'
 import { loadScheduling, profilesForWork, onlyPostOf, schedulingWaiting, schedulingWorks } from '../../../lib/one-portal-schedule'
 import OnePortalList, { type ListRow } from '../../../components/portal/OnePortalList'
 import ShootBoard from '../../../components/portal/ShootBoard'
@@ -57,6 +57,8 @@ export default async function OnePortalPage({ params, searchParams }: {
   // one request, one copy of each table, and the loads that do not need each other run together (one-portal-load)
   const loaded = await loadOnePortalAll(raw, askedTab === 'scheduling' || askedTab === null)
   const page = loaded?.page ?? null
+  // a real link whose client is still on the old portal opens that portal; only a link that is nobody's is a 404
+  if (!page) { const old = await oldPortalPathFor(raw); if (old) redirect(old) }
   if (!page) notFound()
   const { profiles, forms } = loaded!
   page.waiting.scheduling = schedulingWaiting(profiles)

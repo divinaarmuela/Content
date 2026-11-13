@@ -29,6 +29,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       updated_by_name: row?.updated_by_name ?? null,
       portal_url: ctx.portalUrl,
       asset_base: ctx.assetBase,
+      // the Brand assets tab is the one portal's; a client still on the old portal has no such tab to link to
+      brand_tab: client.portal_one === true,
     })
   } catch (e) {
     const { error, status } = authzErrorResponse(e)

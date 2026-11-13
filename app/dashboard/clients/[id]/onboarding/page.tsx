@@ -29,6 +29,7 @@ type Loaded = {
   updated_by_name: string | null
   portal_url: string | null
   asset_base: string
+  brand_tab?: boolean
 }
 
 type Template = { id: string; name: string; draft: OnboardingDraft }
@@ -135,17 +136,18 @@ export default function OnboardingPage({ params }: { params: Promise<{ id: strin
   // the same React Email template that will be sent, rendered here as the words change
   const [html, setHtml] = useState('')
   const portalUrl = data?.portal_url ?? null
+  const brandTab = data?.brand_tab !== false
   const assetBase = data?.asset_base || (typeof window === 'undefined' ? '' : window.location.origin)
   useEffect(() => {
     if (!draft) return
     let live = true
     const t = setTimeout(() => {
-      render(<OnboardingEmail draft={draft} portalUrl={portalUrl} assetBase={assetBase} />)
+      render(<OnboardingEmail draft={draft} portalUrl={portalUrl} assetBase={assetBase} brandTab={brandTab} />)
         .then(out => { if (live) setHtml(out) })
         .catch(e => console.error('[onboarding] preview failed', e))
     }, 150)
     return () => { live = false; clearTimeout(t) }
-  }, [draft, portalUrl, assetBase])
+  }, [draft, portalUrl, assetBase, brandTab])
   const problems = useMemo(() => draft && data ? onboardingProblems(draft, { portalUrl: data.portal_url }) : [], [draft, data])
 
   const measure = () => {

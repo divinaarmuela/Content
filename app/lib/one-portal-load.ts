@@ -3,6 +3,8 @@ import { withRequestCache } from '@/lib/db'
 import { loadOnePortal } from './one-portal-page'
 import { loadScheduling } from './one-portal-schedule'
 import { loadPortalForms } from './one-portal-forms'
+import { portalOwnerByToken } from './portal-owner'
+import { onePortal } from './one-portal-core'
 
 /**
  * EVERYTHING THE ONE PORTAL PAGE READS, IN ONE REQUEST (the owner, 13 Nov 2026: "why so slow these portal, is there
@@ -25,4 +27,15 @@ export async function loadOnePortalAll(rawToken: string, withFeeds: boolean) {
     ])
     return { page, profiles, forms }
   })
+}
+
+/**
+ * A ONE-PORTAL ADDRESS FOR A CLIENT WHO IS NOT ON IT (the owner, 13 Nov 2026: a welcome email's link gave a client
+ * "page not found"). The link is real, the client is real, only the layout differs: they are sent to the portal they
+ * do have. Null when the link is nobody's, which stays a 404.
+ */
+export async function oldPortalPathFor(rawToken: string): Promise<string | null> {
+  const owner = await portalOwnerByToken(rawToken)
+  if (!owner || onePortal(owner.client)) return null
+  return `/portal/${encodeURIComponent(rawToken)}`
 }

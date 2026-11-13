@@ -23,12 +23,15 @@ describe('the first draft comes from the client record', () => {
     expect(d.agreed.find(r => r.label === 'Each month')?.value).toBe('8 reels and 20 graphics.')
     expect(d.agreed.find(r => r.label === 'Also included')?.value).toBe('Weekly reporting.')
     expect(d.agreed.find(r => r.label === 'Start date')?.value).toBe('20 November 2026')
-    expect(d.agreed.find(r => r.label === 'Your account manager')?.value).toBe('Sam Manager')
+    // the manager by name, and the shared inbox under it (the owner, 13 Nov 2026)
+    expect(d.agreed.find(r => r.label === 'Your account manager')?.value).toBe('Sam Manager\ninfo@mdmmarketing.com.au')
   })
   it('says nothing about deliverables, services or a start date that are not on file', () => {
     const d = defaultOnboarding({ clientName: 'ZZ Test Client' })
     expect(d.greeting).toBe('Hi ZZ Test Client,')
-    expect(d.agreed.map(r => r.label)).toEqual(['Approvals'])
+    expect(d.agreed.map(r => r.label)).toEqual(['Approvals', 'Your account manager'])
+    // no manager on the client yet: the inbox still stands, with no made-up name
+    expect(d.agreed.at(-1)?.value).toBe('info@mdmmarketing.com.au')
   })
   it('joins and dates in plain words', () => {
     expect(joinWords(['a', 'b', 'c'])).toBe('a, b and c')
