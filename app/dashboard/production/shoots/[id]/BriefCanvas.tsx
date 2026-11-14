@@ -1,7 +1,7 @@
 'use client'
 
 import { ALIGN_REACH_PX, alignTo, type AlignBox } from '@/app/lib/canvas-align-core'
-import { groupAlign, groupColour, groupFont, groupOffers, groupTextColour, groupTextSize } from '@/app/lib/canvas-group-core'
+import { groupAlign, groupColour, groupFont, groupInside, groupOffers, groupTextColour, groupTextSize } from '@/app/lib/canvas-group-core'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { cardBoxes, keepAnyInView } from '@/app/lib/canvas-keep-in-view-core'
 import { useCanvasComments } from '../../../../components/canvas/CanvasComments'
@@ -129,7 +129,7 @@ export default function BriefCanvas({
   /** the new-board / rename dialog: the tile it is for, or null for a new one */
   const [boardDialog, setBoardDialog] = useState<{ card: CanvasCard | null } | null>(null)
   /** a tile with something inside it, waiting for a yes before it goes */
-  const [confirmDelete, setConfirmDelete] = useState<{ card: CanvasCard; warning: string } | null>(null)
+  const [confirmDelete, setConfirmDelete] = useState<{ card: CanvasCard; warning: string; group?: number } | null>(null)
 
   const interactingRef = useRef(false)
   const pendingOpsRef = useRef(0)
@@ -1119,19 +1119,23 @@ export default function BriefCanvas({
     for (const c of changed) upsertLocal(c)
     persist(changed)
   }
-  /** every picked card goes, with one Undo. A board with cards inside is kept back: it is deleted on its own, where
-   *  its own warning is shown */
-  const removePicked = () => {
-    const held = pickedCards.filter(c => deleteWarning(cards, c))
-    const going = pickedCards.filter(c => !deleteWarning(cards, c))
-    if (going.length === 0) { toast.error('These are boards with cards inside. Delete each one on its own.'); return }
-    const gone = going.flatMap(c => (c.kind === 'board' ? [c.id, ...descendantsOf(cards, c.id)] : [c.id]))
+  /**
+   * EVERY PICKED CARD GOES, with one Undo (the owner, 14 Nov 2026: "when you highlight and delete, why does it delete
+   * one only"). A board with cards inside used to be quietly kept back; now the whole selection is asked about once,
+   * saying what is inside, and then all of it is deleted together.
+   */
+  const removePicked = (confirmed = false) => {
+    if (pickedCards.length === 0) return
+    const inside = groupInside(pickedCards.map(c => ({ kind: c.kind, name: c.name ?? null, inside: c.kind === 'board' ? descendantsOf(cards, c.id).length : 0 })))
+    if (inside && !confirmed) { setConfirmDelete({ card: pickedCards[0], warning: inside, group: pickedCards.length }); return }
+    const gone = [...new Set(pickedCards.flatMap(c => (c.kind === 'board' ? [c.id, ...descendantsOf(cards, c.id)] : [c.id])))]
     const goneSet = new Set(gone)
     const restore = cards.filter(c => goneSet.has(c.id))
+    const count = pickedCards.length
     setCards(prev => prev.filter(c => !goneSet.has(c.id)))
     setSelected(null); setPicked(new Set())
     persist([], gone)
-    toast(`${going.length === 1 ? '1 card' : `${going.length} cards`} deleted${held.length ? `. ${held.length === 1 ? '1 board with cards inside was' : `${held.length} boards with cards inside were`} kept` : ''}`, {
+    toast(`${count === 1 ? '1 card' : `${count} cards`} deleted`, {
       action: { label: 'Undo', onClick: () => { for (const c of restore) upsertLocal(c); persist(restore) } },
       duration: 6000,
     })
@@ -2286,7 +2290,7 @@ export default function BriefCanvas({
                     </>
                   )}
                   {sep}
-                  <Button size="sm" variant="ghost" className="h-8 gap-1.5 px-2 text-accent-red hover:text-accent-red" onClick={removePicked}>
+                  <Button size="sm" variant="ghost" className="h-8 gap-1.5 px-2 text-accent-red hover:text-accent-red" onClick={() => removePicked()}>
                     <Trash2 className="h-3.5 w-3.5" /> Delete
                   </Button>
                   <Button size="sm" variant="ghost" className="h-8 px-2 text-secondary-13" onClick={() => setPicked(new Set())}>Clear</Button>
@@ -2764,14 +2768,14 @@ export default function BriefCanvas({
       <AlertDialog open={!viewOnly && confirmDelete !== null} onOpenChange={o => { if (!o) setConfirmDelete(null) }}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete &ldquo;{confirmDelete?.card.name || 'Board'}&rdquo;?</AlertDialogTitle>
+            <AlertDialogTitle>{confirmDelete?.group ? `Delete these ${confirmDelete.group} cards?` : <>Delete &ldquo;{confirmDelete?.card.name || 'Board'}&rdquo;?</>}</AlertDialogTitle>
             <AlertDialogDescription>{confirmDelete?.warning}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel className="h-11">Keep it</AlertDialogCancel>
             <AlertDialogAction className="h-11 bg-accent-red text-cream hover:bg-accent-red/90"
-              onClick={() => { if (confirmDelete) removeCard(confirmDelete.card, true); setConfirmDelete(null) }}>
-              Delete the board
+              onClick={() => { if (confirmDelete?.group) removePicked(true); else if (confirmDelete) removeCard(confirmDelete.card, true); setConfirmDelete(null) }}>
+              {confirmDelete?.group ? 'Delete them all' : 'Delete the board'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

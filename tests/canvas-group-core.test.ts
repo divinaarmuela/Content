@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
-import { groupAlign, groupColour, groupFont, groupOffers, groupTextColour, groupTextSize } from '../app/lib/canvas-group-core'
+import { groupAlign, groupColour, groupFont, groupInside, groupOffers, groupTextColour, groupTextSize } from '../app/lib/canvas-group-core'
 import type { CanvasCard } from '../app/lib/batch-brief-core'
 
 const note = (id: string, extra: Partial<CanvasCard> = {}): CanvasCard => ({ id, kind: 'note', x: 0, y: 0, w: 208, z: 1, text: 'Words', color: 'yellow', ...extra } as CanvasCard)
@@ -44,7 +44,22 @@ describe('the toolbar on every picked card (the owner, 13 Nov 2026)', () => {
     expect(c).toContain('selected === card.id && picked.size <= 1 && !viewOnly')
     expect(c).toContain('applyGroup(groupColour(pickedCards, c))')
     expect(c).toContain('applyGroup(groupTextSize(pickedCards, 1))')
-    expect(c).toContain('const held = pickedCards.filter(c => deleteWarning(cards, c))')
+    // Delete takes the whole selection; a board with cards inside is asked about once, not quietly kept (14 Nov 2026)
+    expect(c).not.toContain('const held = pickedCards.filter')
+    expect(c).toContain("if (inside && !confirmed) { setConfirmDelete({ card: pickedCards[0], warning: inside, group: pickedCards.length }); return }")
+    expect(c).toContain('if (confirmDelete?.group) removePicked(true)')
     expect(c).toContain("label: 'Undo'")
+  })
+})
+
+describe('deleting a selection that holds a board (the owner, 14 Nov 2026: "why does it delete one only")', () => {
+  it('asks nothing when no picked board has cards inside', () => {
+    expect(groupInside([{ kind: 'note', inside: 0 }, { kind: 'board', name: 'Test', inside: 0 }])).toBeNull()
+  })
+  it('says what else goes, naming each board', () => {
+    expect(groupInside([{ kind: 'board', name: 'Test', inside: 0 }, { kind: 'board', name: 'Test', inside: 3 }]))
+      .toBe('This also deletes the 3 cards inside “Test”. You can undo it straight after.')
+    expect(groupInside([{ kind: 'board', name: 'A', inside: 1 }, { kind: 'board', name: '', inside: 2 }]))
+      .toBe('This also deletes the 1 card inside “A” and 2 cards inside “Board”. You can undo it straight after.')
   })
 })

@@ -55,3 +55,16 @@ export function groupAlign(cards: readonly CanvasCard[], align: Align): CanvasCa
 export function groupFont(cards: readonly CanvasCard[], font: CanvasFont | ''): CanvasCard[] {
   return cards.filter(c => hasFontChoice(c.kind) && (fontOf(c) ?? '') !== font).map(c => ({ ...c, font: font || undefined }))
 }
+
+/**
+ * WHAT ELSE GOES WHEN A SELECTION IS DELETED: the cards inside any board in it. Null when no picked board holds
+ * anything, so a plain selection is deleted without a question (it has Undo). Otherwise the one sentence the
+ * confirmation shows, naming each board and how many cards are inside it.
+ */
+export function groupInside(picked: readonly { kind: string; name?: string | null; inside: number }[]): string | null {
+  const boards = picked.filter(p => p.kind === 'board' && p.inside > 0)
+  if (boards.length === 0) return null
+  const each = boards.map(b => `${b.inside === 1 ? '1 card' : `${b.inside} cards`} inside “${(b.name ?? '').trim() || 'Board'}”`)
+  const list = each.length === 1 ? each[0] : `${each.slice(0, -1).join(', ')} and ${each[each.length - 1]}`
+  return `This also deletes the ${list}. You can undo it straight after.`
+}
