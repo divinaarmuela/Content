@@ -764,6 +764,15 @@ export default function BriefCanvas({
     try { el.setPointerCapture(e.pointerId) } catch { /* see startResize */ }
   }
 
+  /** THE CARD INSIDE A COLUMN UNDER A CLICK. A press captures the pointer on the column (so a card can be dragged
+   *  out of it), and a captured pointer's click and double-click arrive at the column, not at the card under it —
+   *  Renée's note in VID 1 HERO (16 Nov 2026) would not open however often it was double-clicked. So the card is
+   *  found by where the click was when the event's own target does not say. */
+  const columnChildAt = (e: React.MouseEvent): string | null => {
+    const from = (el: Element | null | undefined) => el?.closest?.('[data-col-child]')?.getAttribute('data-col-child') ?? null
+    return from(e.target as Element) ?? from(document.elementFromPoint(e.clientX, e.clientY))
+  }
+
   /** where a card dragged from inside a column is drawn: moved by how far it went, it is still in the column's flow */
   const dragTransform = (d: { host?: string; nx: number; ny: number; ox: number; oy: number }) =>
     d.host ? `translate(${d.nx - d.ox}px, ${d.ny - d.oy}px)` : `translate(${d.nx}px, ${d.ny}px)`
@@ -2360,7 +2369,7 @@ export default function BriefCanvas({
                 // A LINK OPENS ITS PAGE (Manal, 20 Oct 2026: a pasted link "becomes instagram video … it should take
                 // them to the actual link in new tab"): a click on a link card or a post — not on its play button,
                 // not after a drag, not mid-edit — opens the real link in a new tab; inside a column, the card pressed
-                const childId = (e.target as HTMLElement).closest?.('[data-col-child]')?.getAttribute('data-col-child')
+                const childId = columnChildAt(e)
                 const pressed = childId ? cards.find(c => c.id === childId) ?? card : card
                 const link = cardLinkOf(pressed)
                 if (link && connectFrom === null && opensOnClick(e.target as HTMLElement, { dragged: draggedRef.current, editing: editing === pressed.id })) openLinkSoon(link)
@@ -2396,7 +2405,7 @@ export default function BriefCanvas({
                 if (card.kind === 'board') { openBoard(card.id); return }
                 if (card.kind === 'boardlink' && card.target) { window.location.assign(`/dashboard/team-boards/${encodeURIComponent(card.target)}`); return }
                 // a card inside a column (Milanote's): the one pressed, not the column
-                const childId = (e.target as HTMLElement).closest?.('[data-col-child]')?.getAttribute('data-col-child')
+                const childId = columnChildAt(e)
                 const target = childId ? cards.find(c => c.id === childId) ?? card : card
                 // a document opens to read even for a viewer; a note or heading is edited
                 if (target.kind === 'document') { interactingRef.current = true; setEditing(target.id); return }
