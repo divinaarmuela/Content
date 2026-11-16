@@ -85,6 +85,85 @@ function RichEditable({ html, onSave, className, style }: {
   )
 }
 
+/**
+ * A TABLE OPEN TO TYPE IN (the owner, 16 Nov 2026: Renée pasted Claude's tables into the Alia event brief and could
+ * not change a word of them). Each cell is its own little editor; Tab moves to the next cell; a row or a column can be
+ * added or taken away. What is kept is canvas-rich-core's allowlist, saved as each cell is left.
+ */
+function TableEditable({ card, onSave }: { card: Card; onSave: (rows: string[][]) => void }) {
+  const [rows, setRows] = React.useState<string[][]>(() => (card.rows?.length ? card.rows : [['', ''], ['', '']]).map(r => [...r]))
+  const rowsRef = React.useRef(rows)
+  rowsRef.current = rows
+  const tableRef = React.useRef<HTMLTableElement>(null)
+  const width = Math.max(1, ...rows.map(r => r.length))
+  const commit = (next: string[][]) => { setRows(next); onSave(next) }
+  const cellAt = (i: number, j: number) => tableRef.current?.querySelector<HTMLElement>(`[data-cell="${i}-${j}"]`)
+  // the first cell takes the caret as the table opens
+  React.useEffect(() => { cellAt(0, 0)?.focus({ preventScroll: true }) }, [])
+  // a click away can close the table before the cell's blur: what was typed is kept all the same
+  const pending = React.useRef<{ i: number; j: number; html: string } | null>(null)
+  const saveRef = React.useRef(onSave)
+  saveRef.current = onSave
+  React.useEffect(() => () => {
+    const p = pending.current
+    if (!p) return
+    saveRef.current(rowsRef.current.map((r, a) => a === p.i ? r.map((c, b) => b === p.j ? p.html : c) : r))
+  }, [])
+
+  const btn = 'rounded px-2 py-0.5 text-[12px] text-[#6b6b6b] hover:bg-black/[0.06] dark:text-white/70 dark:hover:bg-white/10'
+  return (
+    <div data-mn="table-open" className={`${CARD} overflow-auto`} style={box(card)} onPointerDown={e => e.stopPropagation()}>
+      {card.name && <p className="px-3 pb-1 pt-3 text-[14px] font-semibold">{card.name}</p>}
+      <table ref={tableRef} className="w-full border-collapse text-[13px]">
+        <tbody>
+          {rows.map((row, i) => (
+            <tr key={i} className={i === 0 && card.header !== false ? 'bg-[#f2f2f2] font-semibold dark:bg-white/10' : ''}>
+              {Array.from({ length: width }, (_, j) => (
+                <td
+                  key={j}
+                  data-cell={`${i}-${j}`}
+                  contentEditable
+                  suppressContentEditableWarning
+                  className={`border border-[#e3e3e3] px-2.5 py-1.5 align-top outline-none focus:bg-[#fff7e0] dark:border-white/15 dark:focus:bg-white/[0.06] ${RICH} text-[13px]`}
+                  dangerouslySetInnerHTML={{ __html: row[j] ?? '' }}
+                  onKeyDown={e => {
+                    e.stopPropagation()
+                    if (e.key === 'Escape') (e.currentTarget as HTMLElement).blur()
+                    if (e.key === 'Tab') {
+                      e.preventDefault()
+                      const n = i * width + j + (e.shiftKey ? -1 : 1)
+                      cellAt(Math.floor(n / width), n % width)?.focus()
+                    }
+                  }}
+                  onPaste={e => {
+                    // words only into a cell: a paste from a doc or a chat brings its own fonts and colours
+                    e.preventDefault()
+                    document.execCommand('insertText', false, e.clipboardData.getData('text/plain'))
+                  }}
+                  onInput={e => { pending.current = { i, j, html: sanitiseCanvasHtml(e.currentTarget.innerHTML) } }}
+                  onBlur={e => {
+                    pending.current = null
+                    const html = sanitiseCanvasHtml(e.currentTarget.innerHTML)
+                    const cur = rowsRef.current
+                    if ((cur[i]?.[j] ?? '') === html) return
+                    commit(cur.map((r, a) => a === i ? Array.from({ length: width }, (_, b) => b === j ? html : r[b] ?? '') : r))
+                  }}
+                />
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div className="flex flex-wrap gap-1 px-2 py-1.5" onMouseDown={e => e.preventDefault()}>
+        <button type="button" className={btn} onClick={() => commit([...rows, Array(width).fill('')])}>+ Row</button>
+        <button type="button" className={btn} onClick={() => commit(rows.map(r => [...r, ...Array(Math.max(0, width - r.length)).fill(''), '']))}>+ Column</button>
+        {rows.length > 1 && <button type="button" className={btn} onClick={() => commit(rows.slice(0, -1))}>− Last row</button>}
+        {width > 1 && <button type="button" className={btn} onClick={() => commit(rows.map(r => r.slice(0, width - 1)))}>− Last column</button>}
+      </div>
+    </div>
+  )
+}
+
 /** "2 cards, 1 document" — Milanote's count under a column's title */
 export function columnCountWords(children: readonly Card[]): string {
   const docs = children.filter(c => c.kind === 'document').length
@@ -177,6 +256,7 @@ export function MilanoteCard({ card, editing, onUpdate, onOpen, insideLabel, col
   /* ── a table: a grey header row, ruled cells ── */
   if (card.kind === 'table') {
     const rows = card.rows ?? []
+    if (editing && onUpdate) return <TableEditable card={card} onSave={next => save({ rows: next })} />
     return (
       <div data-mn="table" className={`${CARD} overflow-auto`} style={box(card)}>
         {card.name && <p className="px-3 pb-1 pt-3 text-[14px] font-semibold">{card.name}</p>}

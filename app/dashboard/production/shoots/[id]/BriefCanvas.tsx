@@ -1143,7 +1143,7 @@ export default function BriefCanvas({
 
   /** Into the words — the toolbar's way, for a finger that cannot double-click. */
   const editCard = (card: CanvasCard) => {
-    if (card.kind !== 'note' && card.kind !== 'label' && card.kind !== 'mockup') return
+    if (card.kind !== 'note' && card.kind !== 'label' && card.kind !== 'mockup' && card.kind !== 'table') return
     interactingRef.current = true
     setEditing(card.id)
   }
@@ -1589,7 +1589,7 @@ export default function BriefCanvas({
       if (e.key === 'Escape') {
         if (connectFrom) setConnectFrom(null)
         else if (picked.size) setPicked(new Set())
-        else if (editing) setEditing(null)
+        else if (editing) { setEditing(null); interactingRef.current = false }
         else if (selected) setSelected(null)
         else if (board) openBoard(trail[trail.length - 2]?.id ?? null) // one board up
         else if (fullscreen) setFullscreen(false)
@@ -1612,7 +1612,7 @@ export default function BriefCanvas({
       if (!card) return
       if (e.key === 'Delete' || e.key === 'Backspace') { removeCard(card); return }
       if (e.key === 'Enter' || e.key === 'F2') {
-        if (card.kind === 'note' || card.kind === 'label' || card.kind === 'mockup') setEditing(card.id)
+        if (card.kind === 'note' || card.kind === 'label' || card.kind === 'mockup' || card.kind === 'table') setEditing(card.id)
         return
       }
       // as in Figma: an arrow key is a pixel, Shift makes it ten
@@ -2195,6 +2195,9 @@ export default function BriefCanvas({
             return
           }
           if (e.target === viewportRef.current || e.target === worldRef.current) {
+            // a table being typed in is done with a click on the board (its cells keep what was typed as they close);
+            // a note's words close by their own blur, which saves them
+            if (editing && cards.find(c => c.id === editing)?.kind === 'table') { setEditing(null); interactingRef.current = false }
             setSelected(null)
             setPlaying(null)
             setSound(null)
@@ -2397,7 +2400,7 @@ export default function BriefCanvas({
                 const target = childId ? cards.find(c => c.id === childId) ?? card : card
                 // a document opens to read even for a viewer; a note or heading is edited
                 if (target.kind === 'document') { interactingRef.current = true; setEditing(target.id); return }
-                if (!viewOnly && (target.kind === 'note' || target.kind === 'label' || target.kind === 'mockup')) {
+                if (!viewOnly && (target.kind === 'note' || target.kind === 'label' || target.kind === 'mockup' || target.kind === 'table')) {
                   interactingRef.current = true
                   setEditing(target.id)
                 }
