@@ -8,7 +8,8 @@ import { belongsToPortal, portalName } from './portal-owner-core'
 import { accountManagerName } from './portal-data'
 import { listFolder, type FolderListing } from './drive-folder-list'
 import { driveFileMeta } from './drive-stream'
-import { previewsFor } from './stream'
+import { previewsFor, smallerCopyOf } from './stream'
+import { encoderConfigured } from './encoder'
 import { streamBaseUrl } from './stream-core'
 import { clipsOf, clipSignature, editingPortalFolder, portalHasWork, portalWaitingOnFiles, portalStreamPath, type PortalClip, clientMayApprove, clientSeenRound, asClientVersions, clientRoundsOf } from './editing-portal-core'
 import { finalFilesOf, assetIdOf } from './final-files-core'
@@ -127,12 +128,24 @@ export async function getEditingPortal(rawToken: string, itemId: string): Promis
   // the preview copies of the pulled clips, for the strip's stills and hover frames
   const videos = pulled.filter(f => kindOf(f.mime, f.name) === 'video')
   const previews = videos.length > 0 ? await previewsFor(videos.map(f => f.url as string)).catch(() => new Map()) : new Map()
+  // A CLIP CLOUDFLARE REFUSED PLAYS FROM OUR ENCODER'S COPY HERE TOO (the owner, 17 Nov 2026: "fix this one then" —
+  // five ProRes 4444 masters over Cloudflare's 200 Mbps limit would have been sound and a black picture for the
+  // client). The same .mp4 the team's clip page and Post approval play; asking also STARTS the copy when there is
+  // none, so the client opening the page is enough. Until it is ready the clip is what it was.
+  const copies = new Map<string, string>()
+  if (encoderConfigured()) {
+    await Promise.all(videos.filter(f => previews.get(f.url as string)?.state === 'error').map(async f => {
+      const seconds = Number(previews.get(f.url as string)?.duration_sec)
+      const copy = await smallerCopyOf(f.url as string, 'instagram', undefined, Number.isFinite(seconds) && seconds > 0 ? seconds : undefined).catch(() => null)
+      if (copy?.status === 'ready') copies.set(f.url as string, copy.url)
+    }))
+  }
   const clips = pulled.length > 0
     ? pulled.map(f => {
         const kind = kindOf(f.mime, f.name) === 'image' ? 'image' as const : 'video' as const
         const p = previews.get(f.url as string)
         const base = p && p.state === 'ready' ? streamBaseUrl(p) : null
-        return { id: f.id, name: f.name, asset_id: assetOf.get(f.id) ?? null, carries: assetOf.has(f.id), retired_round: retiredOf.get(f.id) ?? null, thumb: kind === 'image' ? f.url as string : null, kind, src: f.url as string, version: fileRound(f), stream: base && typeof p?.duration_sec === 'number' && p.duration_sec > 0 ? { base, duration: p.duration_sec } : null }
+        return { id: f.id, name: f.name, asset_id: assetOf.get(f.id) ?? null, carries: assetOf.has(f.id), retired_round: retiredOf.get(f.id) ?? null, thumb: kind === 'image' ? f.url as string : null, kind, src: copies.get(f.url as string) ?? f.url as string, version: fileRound(f), stream: base && typeof p?.duration_sec === 'number' && p.duration_sec > 0 ? { base, duration: p.duration_sec } : null }
       })
     : clipsOf(listing.entries).map(c => ({ ...c, asset_id: null, carries: false, retired_round: null, src: signedClipStream(owner.token, item.id, c), version: Math.min(round, seen), stream: null }))
   // THE CLIENT'S VERSIONS (editing-portal-core.ts): renumbered to the times the card reached them
