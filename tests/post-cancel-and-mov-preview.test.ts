@@ -66,7 +66,7 @@ describe('what the post window shows for a video (shownVideo)', () => {
 
   it('the encoder’s .mp4 copy first', () => {
     const rows = [{ source_url: MOV, output_key: 'clip-1.instagram.mp4', status: 'done', platform: 'instagram' }]
-    expect(shownVideo({ url: MOV, encodeRows: rows, stream: READY })).toEqual({ kind: 'file', src: 'https://r2.test/up/clip-1.instagram.mp4' })
+    expect(shownVideo({ url: MOV, encodeRows: rows, stream: READY })).toEqual({ kind: 'file', src: 'https://r2.test/clip-1.instagram.mp4' }) // the copy is at the bucket's root, whatever folder the master is in (17 Nov 2026)
   })
 
   it('else Cloudflare’s preview of the original, with its still as the poster', () => {
