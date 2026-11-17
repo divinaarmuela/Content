@@ -24,7 +24,7 @@ describe('a refused autoplay is remembered', () => {
 
 describe('the mock-up card', () => {
   it('draws a play badge whenever its clip is not moving, and a sound badge only while it is', () => {
-    expect(src).toContain("{auto.play && !refused && <SoundBadge on={soundOn} onToggle={toggleSound} label={post.title ?? 'post'} />}")
+    expect(src).toContain("{auto.play && !refused && <SoundBadge on={soundOn} onToggle={toggleSound} label={post.title ?? 'post'} onPause={film ? pauseForControls : undefined} />}")
     expect(src).toMatch(/\{!playing && \(autoKind === 'instagram'\s*\? \(post\.media === 'video' \|\| !post\.thumb\)\s*: \(!!film && \(!auto\.play \|\| refused\)\)\) && \(\s*<PlayBadge onPlay=\{onPlay\} label=\{post\.title \?\? 'post'\} \/>/)
   })
   it('the press opens a real player: controls, autoplay, the pointer, like the link card', () => {
@@ -36,7 +36,25 @@ describe('the mock-up card', () => {
 
 describe('the link card and the file card', () => {
   it('show the play badge, not the sound badge, when the browser refused', () => {
-    expect(src).toContain("{!playing && (auto.play && !refused\n              ? <SoundBadge on={soundOn} onToggle={toggleSound} label={card.name ?? 'video'} />")
-    expect(src).toContain("{auto.play && !refused\n            ? <SoundBadge on={soundOn} onToggle={toggleSound} label={card.title ?? 'post'} />")
+    expect(src).toContain("{!playing && (auto.play && !refused\n              ? <SoundBadge on={soundOn} onToggle={toggleSound} label={card.name ?? 'video'} onPause={pauseForControls} />")
+    expect(src).toContain("{auto.play && !refused\n            ? <SoundBadge on={soundOn} onToggle={toggleSound} label={card.title ?? 'post'} onPause={film ? pauseForControls : undefined} />")
+  })
+})
+
+/**
+ * PAUSE ON A CLIP THAT PLAYS BY ITSELF (the owner, 17 Nov 2026: "the controls
+ * missing, only sound unmute is there"). A moving clip wore only the sound
+ * badge, and the real player came only behind a play badge it never wears —
+ * so it could not be stopped or wound back. Pinned on the source: the pause
+ * button stops the clip and opens the same real player, and it is offered
+ * only where the clip is a file (never over a provider's frame).
+ */
+describe('a clip playing by itself can be paused', () => {
+  it('pause stops the clip and its sound file, then opens the real player', () => {
+    expect(src).toContain('const pauseForControls = () => {\n    videoRef.current?.pause()\n    audioRef.current?.pause()\n    onPlay?.()\n  }')
+  })
+  it('the button is drawn only when a pause was given, and never starts a drag', () => {
+    expect(src).toContain('{onPause && (\n        <button')
+    expect(src).toContain('data-clip-pause\n          onPointerDown={e => e.stopPropagation()}\n          onClick={e => { e.stopPropagation(); onPause() }}')
   })
 })

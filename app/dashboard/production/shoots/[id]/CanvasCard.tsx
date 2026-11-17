@@ -3,7 +3,7 @@
 import React from 'react'
 import {
   Bookmark, Forward, Globe, HardDrive, Heart, ImagePlus, MessageCircle, MoreHorizontal,
-  Music2, Play, Send, ThumbsUp, Volume2, VolumeX,
+  Music2, Pause, Play, Send, ThumbsUp, Volume2, VolumeX,
 } from 'lucide-react'
 import { postMediaOf, type PostMedia, DRIVE_PICTURE_SIZE, portalDriveStreamUrl, portalDriveThumbnailUrl } from '../../../../lib/canvas-drive-core'
 import { Link2 } from 'lucide-react'
@@ -246,23 +246,48 @@ function PostMediaFrame({ media, playing, onPlay }: { media: PostMedia; playing?
  *  itself, so the one thing left to offer is sound. It toggles the SAME
  *  player where it sits — no second frame, no resize, no leaving the
  *  board — and says which way it is about to go. Corner, not centre (the
- *  clip is the point), and a 44px target because it is tapped on phones. */
-function SoundBadge({ on, onToggle, label }: { on: boolean; onToggle: () => void; label: string }) {
+ *  clip is the point), and a 44px target because it is tapped on phones.
+ *
+ *  PAUSE, BESIDE IT (the owner, 17 Nov 2026: "the controls missing, only
+ *  sound unmute is there"): a clip that plays by itself could not be stopped
+ *  or wound back — the real player only came behind a play badge, and a
+ *  moving clip never wears one. `onPause` (given only where the clip is a
+ *  file of ours to control, not a provider's frame) stops the clip where it
+ *  is and opens that same real player on it; a click on the board gives the
+ *  silent loop back. */
+function SoundBadge({ on, onToggle, label, onPause }: { on: boolean; onToggle: () => void; label: string; onPause?: () => void }) {
   return (
-    <button
-      type="button"
-      aria-label={on ? `Mute ${label}` : `Play ${label} with sound`}
-      aria-pressed={on}
-      title={on ? 'Mute' : 'Play with sound'}
-      onPointerDown={e => e.stopPropagation()}
-      onClick={e => { e.stopPropagation(); onToggle() }}
-      className="absolute bottom-0 right-0 flex h-11 min-w-11 items-center justify-end gap-1 pb-1.5 pr-1.5"
-    >
-      <span className={`flex h-8 items-center gap-1.5 rounded-full px-2.5 text-[12px] font-medium text-white backdrop-blur-sm transition-transform hover:scale-105 ${on ? 'bg-accent-blue' : 'bg-black/60'}`}>
-        {on ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
-        {on ? 'Sound on' : 'Sound'}
-      </span>
-    </button>
+    <div className="absolute bottom-0 right-0 flex items-center">
+      {onPause && (
+        <button
+          type="button"
+          aria-label={`Pause ${label} and show the player controls`}
+          title="Pause — show the player controls"
+          data-clip-pause
+          onPointerDown={e => e.stopPropagation()}
+          onClick={e => { e.stopPropagation(); onPause() }}
+          className="flex h-11 w-11 items-center justify-end pb-1.5"
+        >
+          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur-sm transition-transform hover:scale-105">
+            <Pause className="h-4 w-4 fill-white" />
+          </span>
+        </button>
+      )}
+      <button
+        type="button"
+        aria-label={on ? `Mute ${label}` : `Play ${label} with sound`}
+        aria-pressed={on}
+        title={on ? 'Mute' : 'Play with sound'}
+        onPointerDown={e => e.stopPropagation()}
+        onClick={e => { e.stopPropagation(); onToggle() }}
+        className="flex h-11 min-w-11 items-center justify-end gap-1 pb-1.5 pr-1.5"
+      >
+        <span className={`flex h-8 items-center gap-1.5 rounded-full px-2.5 text-[12px] font-medium text-white backdrop-blur-sm transition-transform hover:scale-105 ${on ? 'bg-accent-blue' : 'bg-black/60'}`}>
+          {on ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
+          {on ? 'Sound on' : 'Sound'}
+        </span>
+      </button>
+    </div>
   )
 }
 
@@ -427,6 +452,14 @@ function CanvasCardInner({
       else a.pause()
     }
     onSound?.(on)
+  }
+
+  /** Pause, from a clip that is playing by itself: stopped where it is, and
+   *  the real player (controls, the pointer) opened on the same element. */
+  const pauseForControls = () => {
+    videoRef.current?.pause()
+    audioRef.current?.pause()
+    onPlay?.()
   }
 
   /* INSTAGRAM'S SOUND IS A SECOND FILE, PLAYED ALONGSIDE. Their mp4 carries
@@ -740,7 +773,7 @@ function CanvasCardInner({
             <PlatformMark provider={post.provider} className="h-8 w-8" />
           </div>
         )}
-        {auto.play && !refused && <SoundBadge on={soundOn} onToggle={toggleSound} label={post.title ?? 'post'} />}
+        {auto.play && !refused && <SoundBadge on={soundOn} onToggle={toggleSound} label={post.title ?? 'post'} onPause={film ? pauseForControls : undefined} />}
         {/* a play badge whenever the clip is not moving: Instagram's frame
             behind a tap, or our own player when autoplay was not allowed or
             this card is not one of the few playing (15 Sep 2026) */}
@@ -1044,7 +1077,7 @@ function CanvasCardInner({
               style={{ pointerEvents: playing ? 'auto' : 'none' }}
             />
             {!playing && (auto.play && !refused
-              ? <SoundBadge on={soundOn} onToggle={toggleSound} label={card.name ?? 'video'} />
+              ? <SoundBadge on={soundOn} onToggle={toggleSound} label={card.name ?? 'video'} onPause={pauseForControls} />
               : <PlayBadge onPlay={onPlay} label={card.name ?? 'video'} />)}
           </div>
         ) : (
@@ -1203,7 +1236,7 @@ function CanvasCardInner({
               offers sound instead. An Instagram card never wears our badge:
               its frame is the face and the play button on it is theirs. */}
           {auto.play && !refused
-            ? <SoundBadge on={soundOn} onToggle={toggleSound} label={card.title ?? 'post'} />
+            ? <SoundBadge on={soundOn} onToggle={toggleSound} label={card.title ?? 'post'} onPause={film ? pauseForControls : undefined} />
             : autoKind === 'instagram' || playing
               ? null
               : (card.media === 'video' || embed) && (
@@ -1286,7 +1319,7 @@ export const CanvasCardView = React.memo(function CanvasCardView(props: Paramete
     <>
       {/* MILANOTE'S CARDS (20 Oct 2026, docs/MILANOTE_MERGE.md) are drawn as Milanote draws them */}
       {drawnAsMilanote(props.card)
-        ? <MilanoteCard card={props.card} editing={props.editing} onUpdate={props.onUpdate} onOpen={props.onOpen}
+        ? <MilanoteCard card={props.card} editing={props.editing} onUpdate={props.onUpdate} onCommitText={props.onCommitText} onOpen={props.onOpen}
             insideLabel={props.insideLabel} columnCards={columnCards} renderChild={renderChild} />
         : <CanvasCardInner {...inner} />}
       {!props.editing && <PostLinkLine card={props.card} />}

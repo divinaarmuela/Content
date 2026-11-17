@@ -177,10 +177,12 @@ export function columnCountWords(children: readonly Card[]): string {
   return parts.join(', ') || 'Empty'
 }
 
-export function MilanoteCard({ card, editing, onUpdate, onOpen, insideLabel, columnCards, renderChild }: {
+export function MilanoteCard({ card, editing, onUpdate, onCommitText, onOpen, insideLabel, columnCards, renderChild }: {
   card: Card
   editing: boolean
   onUpdate?: (next: Card) => void
+  /** a column's name, typed on the column itself — saved and closed by the canvas */
+  onCommitText?: (text: string) => void
   onOpen?: () => void
   insideLabel?: string
   /** a column: the cards inside it, in their order */
@@ -212,7 +214,30 @@ export function MilanoteCard({ card, editing, onUpdate, onOpen, insideLabel, col
             its cards stay white, and the title and count turn readable on it */}
         {/* select-none: dragging a card out across the title highlighted the count (20 Oct 2026) */}
         <div className="select-none px-4 pb-3 pt-5 text-center" style={card.hex ? { color: inkOn(card.hex) } : undefined}>
-          <p className="text-[17px] font-semibold leading-tight" style={{ fontFamily: MN_SERIF }}>{card.name || 'Untitled'}</p>
+          {editing && onUpdate && onCommitText ? (
+            // THE NAME, TYPED WHERE IT IS (the owner, 17 Nov 2026): double-click the column and its title is a box —
+            // Enter or a click away saves it, Escape leaves it as it was
+            <input
+              data-column-name
+              autoFocus
+              defaultValue={card.name ?? ''}
+              placeholder="Name this column…"
+              aria-label="Name of the column"
+              maxLength={300}
+              onFocus={e => e.currentTarget.select()}
+              onPointerDown={e => e.stopPropagation()}
+              onDoubleClick={e => e.stopPropagation()}
+              onKeyDown={e => {
+                if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur() }
+                if (e.key === 'Escape') { e.currentTarget.value = card.name ?? ''; e.currentTarget.blur() }
+              }}
+              onBlur={e => onCommitText(e.currentTarget.value)}
+              className="w-full select-text rounded-[3px] border border-black/20 bg-white/80 px-1 text-center text-[17px] font-semibold leading-tight text-[#222] outline-none focus:border-[#1838E0]"
+              style={{ fontFamily: MN_SERIF }}
+            />
+          ) : (
+            <p className="text-[17px] font-semibold leading-tight" style={{ fontFamily: MN_SERIF }} title={onUpdate ? 'Double-click to rename' : undefined}>{card.name || 'Untitled'}</p>
+          )}
           <p className={`mt-1 text-[12px] ${card.hex ? 'opacity-70' : 'text-[#8a8a8a]'}`}>{columnCountWords(kids)}</p>
         </div>
         {!card.collapsed && kids.length > 0 && (

@@ -1470,6 +1470,15 @@ export default function BriefCanvas({
   const commitText = (card: CanvasCard, text: string) => {
     setEditing(null)
     interactingRef.current = false
+    // A COLUMN'S NAME, TYPED ON THE COLUMN (the owner, 17 Nov 2026: "no way for me to actually edit the new column
+    // text, it's only through the toolbar"): its words are its name, saved exactly as the toolbar's box saves them
+    if (card.kind === 'column') {
+      const name = text.trim().slice(0, 300)
+      if (name === (card.name ?? '')) return
+      const next = { ...card, name }
+      upsertLocal(next); persist([next])
+      return
+    }
     // A NOTE LEFT EMPTY IS NOT KEPT (1 Oct 2026): a double-click on the board saves a blank note at
     // once, so clicking about a board that looked empty left ten "Write it down…" notes scattered
     // across Jordan 9th October's plan — nobody wrote them, and they hid the real cards
@@ -1621,7 +1630,7 @@ export default function BriefCanvas({
       if (!card) return
       if (e.key === 'Delete' || e.key === 'Backspace') { removeCard(card); return }
       if (e.key === 'Enter' || e.key === 'F2') {
-        if (card.kind === 'note' || card.kind === 'label' || card.kind === 'mockup' || card.kind === 'table') setEditing(card.id)
+        if (card.kind === 'note' || card.kind === 'label' || card.kind === 'mockup' || card.kind === 'table' || card.kind === 'column') setEditing(card.id)
         return
       }
       // as in Figma: an arrow key is a pixel, Shift makes it ten
@@ -2410,6 +2419,11 @@ export default function BriefCanvas({
                 // a document opens to read even for a viewer; a note or heading is edited
                 if (target.kind === 'document') { interactingRef.current = true; setEditing(target.id); return }
                 if (!viewOnly && (target.kind === 'note' || target.kind === 'label' || target.kind === 'mockup' || target.kind === 'table')) {
+                  interactingRef.current = true
+                  setEditing(target.id)
+                }
+                // a column, pressed on its own title or well (not on a card inside it): its name opens to type
+                if (!viewOnly && !childId && target.kind === 'column') {
                   interactingRef.current = true
                   setEditing(target.id)
                 }
