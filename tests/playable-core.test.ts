@@ -19,6 +19,9 @@ describe('playableUrl', () => {
     expect(playableUrl(MASTER, rows.filter(r => r.platform !== 'instagram'))).toBe('https://pub-x.r2.dev/copy-tiktok.mp4')
     expect(playableUrl(MASTER, rows.filter(r => r.status !== 'done'))).toBe(MASTER)
     expect(playableUrl(MASTER, null)).toBe(MASTER)
+    // a master in a folder (a Drive pull): the copy is still at the bucket's root (live, 17 Nov 2026 — it was a 404)
+    const pulled = 'https://pub-x.r2.dev/pulls/folder/clip.mov'
+    expect(playableUrl(pulled, [{ source_url: pulled, output_key: 'copy-instagram.mp4', status: 'done', platform: 'instagram' }])).toBe('https://pub-x.r2.dev/copy-instagram.mp4')
   })
   it('leaves a picture alone', () => {
     expect(playableUrl('https://pub-x.r2.dev/a.jpg', rows)).toBe('https://pub-x.r2.dev/a.jpg')

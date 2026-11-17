@@ -38,6 +38,10 @@ export function playableUrl(master: string, rows: readonly EncodeRowLike[] | nul
   if (done.length === 0) return master
   done.sort((a, b) => rank(a.platform) - rank(b.platform))
   const key = String(done[0].output_key)
+  // THE COPY IS AT THE BUCKET'S ROOT, NOT BESIDE THE MASTER (live, 17 Nov 2026): `output_key` is the whole key, and
+  // a master pulled from Drive sits in a folder (`pulls/<folder>/<file>.mov`) — "the master's folder + the key" was a
+  // 404 and the player showed nothing. For a master at the root the two are the same address.
+  try { return `${new URL(master).origin}/${key.replace(/^\/+/, '')}` } catch { /* not an absolute URL */ }
   const cut = master.lastIndexOf('/')
   return cut > 0 ? `${master.slice(0, cut + 1)}${key}` : key
 }
