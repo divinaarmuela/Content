@@ -45,7 +45,9 @@ export async function POST(req: Request) {
         await requireRole('editor')
       }
 
-      const apiToken = process.env.APIFY_TOKEN
+      // APIFY_API_TOKEN, not the old APIFY_TOKEN: that one's value was revoked
+      // (every run 401 from 12 Nov 2026) and is deliberately no longer read
+      const apiToken = process.env.APIFY_API_TOKEN
       if (!apiToken) return NextResponse.json({ video: null, reason: 'off' } satisfies VideoAnswer)
 
       const videos = table<InstagramVideoRow>('instagram_videos')
