@@ -8,7 +8,7 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useRow, useTable } from '@/lib/db-client'
-import type { Batch, ContentItem, DrivePull, ItemComment, TeamUser } from '@/lib/db-types'
+import type { Batch, ContentItem, DrivePull, EncodeJob, ItemComment, TeamUser } from '@/lib/db-types'
 import { driveTargetOf } from '../../../../../lib/card-link-core'
 import { filesOf, pullId } from '../../../../../lib/drive-pull-core'
 import { kindOf } from '../../../../../lib/files-core'
@@ -16,6 +16,7 @@ import { finalFilesAsPulls } from '../../../../../lib/final-files-core'
 import { usePreviewRows } from '../../../../../components/media/usePreviewRows'
 import { hlsManifestUrl, useHlsSource } from '../../../../../components/media/useHlsSource'
 import { pickPoster, streamBaseUrl } from '../../../../../lib/stream-core'
+import { needsPreviewCopy, playableUrl } from '../../../../../lib/playable-core'
 import { DEFAULT_TZ, formatInZone } from '../../../../../lib/timezone-core'
 import PageTitle from '../../../../ui/PageTitle'
 import { personLabel } from '../../../../../lib/identity-core'
@@ -139,7 +140,15 @@ export default function VideoReviewPage() {
   const previews = usePreviewRows(copyUrl ? [copyUrl] : [])
   const preview = copyUrl ? previews.get(copyUrl) : null
   const streamBase = preview && preview.state === 'ready' ? streamBaseUrl(preview) : null
-  useHlsSource(video, isImage ? null : streamBase ? hlsManifestUrl(streamBase) : (copyUrl ?? `/api/drive/stream?id=${encodeURIComponent(fileId)}&name=${encodeURIComponent(name)}`))
+  // A MASTER CLOUDFLARE REFUSED PLAYS FROM OUR ENCODER'S COPY (the owner, 17 Nov 2026): the same .mp4 Post approval
+  // plays. While that copy is being made the master is not loaded at all — a browser cannot draw a ProRes .mov, and
+  // fetching two gigabytes to show a black box was the eleven-second wait — and the stage says what is happening.
+  const { rows: encodeRows } = useTable<EncodeJob>('encode_jobs', { enabled: !!copyUrl && !isImage })
+  const encoded = copyUrl ? playableUrl(copyUrl, encodeRows) : null
+  const encodedCopy = encoded && encoded !== copyUrl ? encoded : null
+  const refused = !isImage && !!copyUrl && !streamBase && !encodedCopy && preview?.state === 'error' && needsPreviewCopy(copyUrl)
+  const copyFailed = refused && encodeRows.some(r => r.source_url === copyUrl && r.status === 'failed')
+  useHlsSource(video, isImage || refused ? null : streamBase ? hlsManifestUrl(streamBase) : (encodedCopy ?? copyUrl ?? `/api/drive/stream?id=${encodeURIComponent(fileId)}&name=${encodeURIComponent(name)}`))
   const [now, setNow] = useState(0)
   const [duration, setDuration] = useState(0)
   const [text, setText] = useState('')
@@ -241,7 +250,17 @@ export default function VideoReviewPage() {
               // eslint-disable-next-line @next/next/no-img-element -- the clip's own still, from Stream
               <img src={poster} alt="" aria-hidden className="absolute inset-0 h-full w-full object-contain opacity-70" />
             )}
-            {!ready && <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-black/60 px-3 py-1 text-[12px] font-semibold text-white" role="status">Loading…</span>}
+            {!ready && !refused && <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-black/60 px-3 py-1 text-[12px] font-semibold text-white" role="status">Loading…</span>}
+            {refused && (
+              <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-1.5 px-6 text-center text-white" role="status" data-clip-copy={copyFailed ? 'failed' : 'making'}>
+                <p className="text-[15px] font-semibold">{copyFailed ? 'This file could not be made playable' : 'Making a copy that plays here'}</p>
+                <p className="max-w-md text-[13px] leading-snug text-white/75">
+                  {copyFailed
+                    ? 'It is a very heavy master export. Export it again as H.264 (.mp4) and upload that, and it will play.'
+                    : 'This is a very heavy master export, too big to play as it is. A lighter copy is being made and will start here by itself in a few minutes — you can keep working.'}
+                </p>
+              </div>
+            )}
             {isImage ? (
               // eslint-disable-next-line @next/next/no-img-element -- the file itself
               <img key={fileId} src={fileSrc} alt={name} onLoad={() => setReady(true)}

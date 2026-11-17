@@ -101,7 +101,9 @@ describe('the page, the stream and the tiles (source pins)', () => {
   it('the page draws the clip, the markers and the comments, and stamps the current second', () => {
     const p = src('app/dashboard/editor/[id]/video/[fileId]/page.tsx')
     // our copy first (16 Sep 2026), Drive otherwise
-    expect(p).toContain("useHlsSource(video, isImage ? null : streamBase ? hlsManifestUrl(streamBase) : (copyUrl ?? `/api/drive/stream?id=${encodeURIComponent(fileId)}&name=${encodeURIComponent(name)}`))")
+    // a master Cloudflare refused plays from our encoder's copy, and is not loaded while that copy is made (17 Nov 2026)
+    expect(p).toContain("useHlsSource(video, isImage || refused ? null : streamBase ? hlsManifestUrl(streamBase) : (encodedCopy ?? copyUrl ?? `/api/drive/stream?id=${encodeURIComponent(fileId)}&name=${encodeURIComponent(name)}`))")
+    expect(p).toContain("const refused = !isImage && !!copyUrl && !streamBase && !encodedCopy && preview?.state === 'error' && needsPreviewCopy(copyUrl)")
     expect(p).toContain("const copy = [...[...cardPulls, footagePull].flatMap(p => filesOf(p)), ...finalFilesAsPulls(item ?? {})].find(f => f.id === fileId && f.status === 'done' && f.url) ?? null")
     expect(p).toContain('aria-label={`Comment at ${m.stamp}`}')
     expect(p).toContain("const at = stamp && !isImage ? Math.floor(video.current?.currentTime ?? 0) : null")

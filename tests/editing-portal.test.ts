@@ -181,6 +181,7 @@ describe('the clip a phone can play (16 Sep 2026)', () => {
     expect(portal).toContain('useHlsSource(video, clip && !isImage ? (clip.stream ? hlsManifestUrl(clip.stream.base) : clip.src) : null)')
     expect(portal).not.toContain('preload="metadata" src={clip.src}')
     const review = src('app/dashboard/editor/[id]/video/[fileId]/page.tsx')
-    expect(review).toContain('useHlsSource(video, isImage ? null : streamBase ? hlsManifestUrl(streamBase) : (copyUrl ??')
+    // a master Cloudflare refused plays from our encoder's copy, and is not loaded while that copy is made (17 Nov 2026)
+    expect(review).toContain('useHlsSource(video, isImage || refused ? null : streamBase ? hlsManifestUrl(streamBase) : (encodedCopy ?? copyUrl ??')
   })
 })

@@ -353,6 +353,17 @@ export async function lookupPreview(
     const fresh = await refreshPreview(row.stream_uid!).catch(() => null)
     if (fresh) return { configured: true, row: { ...row, ...fresh } as PreviewRow }
   }
+  // CLOUDFLARE SAID NO — OUR OWN ENCODER MAKES THE COPY (the owner, 17 Nov 2026: "mov should be allowed… this needs
+  // working"). Five ProRes 4444 masters (340–890 Mbps) were refused with "The video bitrate exceeded the maximum
+  // acceptable value of 200 Mbps", so the editor's clip page had nothing to play but the master: sound, a black
+  // picture. The encoder has no such limit and its .mp4 is what Post approval already plays (playable-core), so a
+  // refused file a player asks about is handed to it — once: the job is claimed on (file, channel), and a row that
+  // already exists is only read. Never the reason a lookup fails.
+  if (row?.state === 'error' && claim && isVideoUrl(url) && isOwnStorageUrl(url) && encoderConfigured()) {
+    const seconds = Number((row as PreviewRow & { duration_sec?: number | null }).duration_sec)
+    await smallerCopyOf(url, 'instagram', undefined, Number.isFinite(seconds) && seconds > 0 ? seconds : undefined)
+      .catch(() => { /* the answer about the preview stands either way */ })
+  }
   if (row || !claim || !isVideoUrl(url) || !isOwnStorageUrl(url)) {
     return { configured: true, row }
   }
