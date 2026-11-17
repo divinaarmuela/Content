@@ -561,6 +561,31 @@ export const dueReminders = inngest.createFunction(
 )
 
 /**
+ * Overdue to-do reminders (the owner, 17 Nov 2026) — every weekday at 10:00
+ * Melbourne, the person a to-do is assigned to gets one email a day after it
+ * was due and one three days after (todo-overdue-core). 10:00 because the
+ * team is in Australia and the Philippines: that is 7 am in Manila in the
+ * Australian summer and 8 am in winter, so it is waiting at the start of the
+ * Philippine day and lands mid-morning in Melbourne.
+ *
+ * (CLAUDE.md trap 5b: a NEW function does nothing until Inngest is re-synced.)
+ */
+export const todoOverdueReminders = inngest.createFunction(
+  {
+    id: 'todo-overdue-reminders',
+    name: 'To-dos: overdue reminders to the assignee',
+    triggers: [{ cron: 'TZ=Australia/Melbourne 0 10 * * 1-5' }],
+    retries: 1,
+  },
+  async ({ step }) => withRequestCache(async () => {
+    return step.run('remind', async () => {
+      const { runTodoOverdueReminders } = await import('../lib/todo-overdue')
+      return runTodoOverdueReminders()
+    })
+  })
+)
+
+/**
  * Copy one file into Google Drive.
  *
  * A background job because the file can be gigabytes and the transfer can
@@ -1201,6 +1226,7 @@ export const functions = [
   acquisitionDm,
   acquisitionResearch,
   dueReminders,
+  todoOverdueReminders,
   shootBriefLate,
   editorSopNudges,
   accountHealthDaily,
