@@ -69,6 +69,9 @@ type Listed = {
   image_url: string | null; location: string | null; teaser: string
 }
 
+/** the groups of the booking list this page leaves out */
+const NOT_ON_THIS_PAGE = /creative studio/i
+
 export default function EventBooking() {
   const [catalogue, setCatalogue] = useState<Listed[] | null>(null)
   const [slug, setSlug] = useState<string | null>(null)
@@ -114,7 +117,9 @@ export default function EventBooking() {
   useEffect(() => {
     void fetch('/api/booking/public/services')
       .then(r => (r.ok ? r.json() : { services: [] }))
-      .then(j => setCatalogue(j.services ?? []))
+      // THE CREATIVE STUDIO IS NOT OFFERED ON THIS PAGE (Martin, 18 Nov 2026: "remove the MD House creative
+      // studio from the website here… only leave the podcast"). It stays bookable on /book and in the dashboard.
+      .then(j => setCatalogue(((j.services ?? []) as Listed[]).filter(s => !NOT_ON_THIS_PAGE.test(s.category ?? ''))))
       .catch(() => setCatalogue([]))
       .finally(() => setLoading(false))
   }, [])
