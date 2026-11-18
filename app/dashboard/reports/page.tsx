@@ -1,7 +1,8 @@
 'use client'
 
-import { Suspense, useCallback, useEffect, useMemo, useState } from 'react'
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
+import dynamic from 'next/dynamic'
 import { toast } from 'sonner'
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { ArrowDownRight, ArrowUpRight, Check, CircleHelp, ExternalLink, FileDown, Pencil, RefreshCw, Sparkles, Trash2 } from 'lucide-react'
@@ -16,6 +17,7 @@ import PageTitle from '../ui/PageTitle'
 import TintCard from '../ui/TintCard'
 import PostBreakdowns from './PostBreakdowns'
 import PostsInReport from './PostsInReport'
+import type { ReportEditorHandle } from './ReportEditor'
 import { ReportV2Body } from './v2/ReportV2'
 import { parseView, viewQuery } from '../../lib/report-v2/filters'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
@@ -45,7 +47,9 @@ type Saved = {
   shared_at?: string | null; shared_by?: string | null
   written_v?: number | null
 }
-const OBJECTIVES = ['Growth', 'Engagement', 'Leads', 'Positioning']
+/* the editor is fetched when Edit is pressed, so opening Reports stays as quick as it was */
+const ReportEditor = dynamic(() => import('./ReportEditor'), { ssr: false, loading: () => <Skeleton className="h-[480px] rounded-inner" /> })
+const OBJECTIVES =['Growth', 'Engagement', 'Leads', 'Positioning']
 const PREF_KEY = 'reports:last'
 
 export default function ReportsPage() {
@@ -170,7 +174,7 @@ function ReportsInner() {
           <Writer report={report ?? ({ id: `${clientId}_${month}`, month, data: null, body: null, objective: null, notes: null, checks: null, generated_at: null, updated_at: '' } as Saved)}
             clientId={clientId} month={month} mayDelete={mayDelete} onChange={setReport} onDeleted={() => void load()}
             settled={state.kind === 'final'} settlesOn={state.settlesOn} people={people} candidates={data?.candidates ?? []} portalLink={portalLink}
-            connected={data?.platforms.map(p => p.platform) ?? []} blockers={blockers} />
+            connected={data?.platforms.map(p => p.platform) ?? []} blockers={blockers} figuresRead={!!data} />
           {data && <PrintReport data={scopeData(data, includedPlatforms(report?.included_platforms, data.platforms.map(p => p.platform)))} report={report} clientName={clientName} />}
         </>
       )}
@@ -216,7 +220,9 @@ function FreshnessCard({ state, month, fetchedAt }: { state: MonthState; month: 
 
 /* ── the written report ──────────────────────────────────────────────────── */
 
-function Writer({ report, clientId, month, mayDelete, onChange, onDeleted, settled, settlesOn, people, candidates: allCandidates, portalLink, connected, blockers = [] }: {
+function Writer({ report, clientId, month, mayDelete, onChange, onDeleted, settled, settlesOn, people, candidates: allCandidates, portalLink, connected, blockers = [], figuresRead }: {
+  /** the month's figures are saved, so its posts are known (none saved: Build report reads them first) */
+  figuresRead: boolean
   report: Saved; clientId: string; month: MonthKey; mayDelete: boolean; onChange: (r: Saved) => void; onDeleted: () => void
   /** the month's numbers are complete (2 days after it ends) — building before that is allowed, but said */
   settled: boolean; settlesOn: string
@@ -243,14 +249,23 @@ function Writer({ report, clientId, month, mayDelete, onChange, onDeleted, settl
   const pickedCount = includedIds(report.included_post_ids, candidates).size
   const [objective, setObjective] = useState(report.objective || 'Growth')
   const [notes, setNotes] = useState(report.notes ?? '')
-  const [body, setBody] = useState(report.body ?? '')
+  // THE REPORT IS EDITED AS A PAGE (19 Nov 2026, ReportEditor.tsx): the editor keeps its own words while typing —
+  // nothing here changes on a keystroke — and hands the text over once, on Save
+  const editorHandle = useRef<ReportEditorHandle | null>(null)
+  const [dirty, setDirty] = useState(false)
   const [editing, setEditing] = useState(false)
   const [writing, setWriting] = useState(false)
   const [saving, setSaving] = useState(false)
   const [asking, setAsking] = useState<'regen' | 'delete' | null>(null)
-  useEffect(() => { setBody(report.body ?? ''); setNotes(report.notes ?? ''); setObjective(report.objective || 'Growth') }, [report.id, report.generated_at]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setNotes(report.notes ?? ''); setObjective(report.objective || 'Growth') }, [report.id, report.generated_at]) // eslint-disable-line react-hooks/exhaustive-deps
   const checks = report.checks ?? {}
-  const dirty = body !== (report.body ?? '')
+  // unsaved words are not lost to a closed tab without a warning
+  useEffect(() => {
+    if (!editing || !dirty) return
+    const warn = (e: BeforeUnloadEvent) => { e.preventDefault() }
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  }, [editing, dirty])
 
   const patch = async (fields: Record<string, unknown>) => {
     const r = await fetch('/api/reports/monthly', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ client_id: clientId, month, ...fields }) })
@@ -323,10 +338,16 @@ function Writer({ report, clientId, month, mayDelete, onChange, onDeleted, settl
     const problems: string[] = []
     try {
       setBuilding('Reading the figures fresh…'); mark(0, 'run')
-      const fresh = await call(`/api/reports/monthly?client_id=${encodeURIComponent(clientId)}&month=${month}&refresh=1`)
-      if (!fresh.ok) throw new Error(fresh.j.error ?? 'Could not read the figures')
-      if (fresh.j.report) onChange(fresh.j.report)
-      mark(0, 'done')
+      // read a moment ago to show the posts (startBuild): not read twice
+      if (Date.now() - readForPicking.current.at < 10 * 60_000 && readForPicking.current.key === `${clientId}_${month}`) {
+        mark(0, 'done', 'Read a moment ago, to show you the posts')
+      } else {
+        const fresh = await call(`/api/reports/monthly?client_id=${encodeURIComponent(clientId)}&month=${month}&refresh=1`)
+        if (!fresh.ok) throw new Error(fresh.j.error ?? 'Could not read the figures')
+        if (fresh.j.report) onChange(fresh.j.report)
+        mark(0, 'done')
+      }
+      readForPicking.current = { key: '', at: 0 }
 
       setBuilding('Explaining the posts — reading 90 days of Instagram…'); mark(1, 'run')
       const post = (body: Record<string, unknown>) => call('/api/reports/monthly', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ client_id: clientId, month, ...body }) })
@@ -347,9 +368,35 @@ function Writer({ report, clientId, month, mayDelete, onChange, onDeleted, settl
       setBuilding(null)
     }
   }
+  /**
+   * THE POSTS ARE ALWAYS SHOWN FIRST (19 Nov 2026: MGMT's November was built with no chance to pick the posts). A month
+   * nobody has built before has no figures saved, so the page had no posts to show and the button built straight away.
+   * Now the figures are read first, then the posts are shown. Only a month that truly has no posts builds without them.
+   */
+  const readForPicking = useRef({ key: '', at: 0 })
+  const [opening, setOpening] = useState(false)
+  const startBuild = async () => {
+    if (candidates.length) { setPicking(true); return }
+    if (figuresRead) { if (report.body) setAsking('regen'); else void build(); return }
+    setOpening(true)
+    try {
+      const r = await fetch(`/api/reports/monthly?client_id=${encodeURIComponent(clientId)}&month=${month}&refresh=1`)
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) throw new Error(j.error ?? 'Could not read the figures')
+      if (j.report) onChange(j.report)
+      readForPicking.current = { key: `${clientId}_${month}`, at: Date.now() }
+      const d = readReportData(j.report?.data)
+      const on = includedPlatforms(j.report?.included_platforms, d?.platforms.map(p => p.platform) ?? [])
+      if ((d?.candidates ?? []).some(c => on.has(c.platform))) setPicking(true)
+      else void build()
+    } catch (e) { toast.error(e instanceof Error ? e.message : 'Could not read the figures') } finally { setOpening(false) }
+  }
   const saveBody = async () => {
+    const body = editorHandle.current?.markdown()
+    if (body == null) return
+    if (!body.trim()) { toast.error('The report is empty. Press Cancel to keep the saved one.'); return }
     setSaving(true)
-    try { await patch({ body, notes, objective }); setEditing(false); toast.success('Saved') } catch (e) { toast.error(e instanceof Error ? e.message : 'Could not save') } finally { setSaving(false) }
+    try { await patch({ body, notes, objective }); setEditing(false); setDirty(false); toast.success('Saved') } catch (e) { toast.error(e instanceof Error ? e.message : 'Could not save') } finally { setSaving(false) }
   }
   const tick = async (key: string, v: boolean) => { try { await patch({ checks: { ...checks, [key]: v } }) } catch (e) { toast.error(e instanceof Error ? e.message : 'Could not save') } }
   const remove = async () => {
@@ -383,8 +430,8 @@ function Writer({ report, clientId, month, mayDelete, onChange, onDeleted, settl
         </label>
       </div>
       <div className="flex flex-wrap items-center gap-3">
-        <Button onClick={() => (candidates.length ? setPicking(true) : report.body ? setAsking('regen') : void build())} disabled={writing || !!building} className="h-11 gap-2 rounded-full px-5">
-          <Sparkles className={`h-4 w-4 ${building ? 'animate-pulse' : ''}`} aria-hidden /> {building ? 'Building…' : report.body ? 'Build again' : 'Build report'}
+        <Button onClick={() => void startBuild()} disabled={writing || !!building || opening} className="h-11 gap-2 rounded-full px-5">
+          <Sparkles className={`h-4 w-4 ${building || opening ? 'animate-pulse' : ''}`} aria-hidden /> {building ? 'Building…' : opening ? 'Reading the month’s posts…' : report.body ? 'Build again' : 'Build report'}
         </Button>
         {!building && !settled && (
           <span className="text-[13px] text-muted-foreground">
@@ -411,14 +458,14 @@ function Writer({ report, clientId, month, mayDelete, onChange, onDeleted, settl
             {editing ? (
               <>
                 <Button onClick={() => void saveBody()} disabled={saving || !dirty} className="h-10 rounded-full">{saving ? 'Saving…' : 'Save'}</Button>
-                <Button variant="outline" onClick={() => { setBody(report.body ?? ''); setEditing(false) }} className="h-10 rounded-full">Cancel</Button>
+                <Button variant="outline" onClick={() => { setEditing(false); setDirty(false) }} className="h-10 rounded-full">Cancel</Button>
               </>
             ) : (
               <Button variant="outline" onClick={() => setEditing(true)} className="h-10 gap-1.5 rounded-full"><Pencil className="h-4 w-4" aria-hidden /> Edit</Button>
             )}
           </div>
           {editing
-            ? <Textarea value={body} onChange={e => setBody(e.target.value)} rows={28} className="rounded-[18px] font-mono text-[13px]" aria-label="The report" />
+            ? <ReportEditor key={`${report.id}:${report.updated_at}`} initial={report.body} handle={editorHandle} onDirty={setDirty} />
             : <article className="report-prose rounded-inner border border-border bg-background p-6" dangerouslySetInnerHTML={{ __html: reportHtml(report.body) }} />}
           <EarlierVersions history={readHistory(report.history)} people={people} />
 
@@ -620,7 +667,7 @@ const PRINT_CSS = `
 .report-prose ul{list-style:disc}.report-prose ol{list-style:decimal}
 .report-prose li{margin:3px 0}
 .report-prose table{width:100%;border-collapse:collapse;margin:8px 0 14px;font-size:13px}
-.report-prose th,.report-prose td{border:1px solid var(--border,#ddd);padding:6px 8px;text-align:left}
+.report-prose th,.report-prose td{border:1px solid hsl(var(--border));padding:6px 8px;text-align:left}
 .report-prose a,#report-print a{color:#2f6fed;text-decoration:underline;text-underline-offset:3px}
 #report-print{display:none}
 @media print{

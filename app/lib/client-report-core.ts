@@ -294,9 +294,15 @@ export function reportHtml(md: string): string {
   const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
   // LINKS (the owner, 2 Nov 2026: "provide hyperlinks in the pdf or the summary … so its easy to click"): [words](https://…)
   // opens the post; only http(s) addresses, escaped like everything else, so no link can carry script
+  // A PERSON'S OWN STARS AND BRACKETS (19 Nov 2026, the report editor — report-markdown.ts): `\*`, `\[`, `\|` and the
+  // like are that character as typed, never formatting — set aside before anything is read, put back at the end
   const inline = (s: string) => esc(s)
+    .replace(/\\([\\*[\]|#•.)(-])/g, (_, c: string) => `${c.charCodeAt(0)}`)
     .replace(/\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer noopener">$1</a>')
+    .replace(/\*\*\*([^*\n]+)\*\*\*/g, '<strong><em>$1</em></strong>')
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>')
+    .replace(/(\d+)/g, (_, n: string) => String.fromCharCode(Number(n)))
+    .replace(/​/g, '')
   const lines = md.replace(/\r\n/g, '\n').split('\n')
   const out: string[] = []
   let list: 'ul' | 'ol' | null = null
@@ -314,7 +320,7 @@ export function reportHtml(md: string): string {
     const line = raw.trimEnd()
     if (/^\s*\|.*\|\s*$/.test(line)) {
       flushPara(); flushList()
-      const cells = line.trim().replace(/^\||\|$/g, '').split('|').map(c => c.trim())
+      const cells = line.trim().replace(/^\||\|$/g, '').split(/(?<!\\)\|/).map(c => c.trim())
       if (!cells.every(c => /^:?-{2,}:?$/.test(c))) table.push(cells)
       continue
     }
