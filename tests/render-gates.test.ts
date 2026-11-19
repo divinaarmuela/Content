@@ -80,6 +80,26 @@ describe('the shoot page, rebuilt from the Shoot Brief SOP (13 Sep 2026)', () =>
     // shoot — a super admin or AM on set acknowledges here (14 Sep 2026)
     expect(sop).toMatch(/c\.id === viewerId && onAck/)
   })
+  it('the right side is ONE small card: where it is, what is left, one button — the rest opens in a popup (the owner, 19 Nov 2026: "too many things happening here")', () => {
+    const now = src('app/dashboard/production/shoots/[id]/ShootNow.tsx')
+    // the page draws the one card, not the three it replaced
+    expect(page).toMatch(/<ShootNow /)
+    expect(page).not.toMatch(/<WherePanel|<PeoplePanel|<EditorCardPanel/)
+    // one line of what is left and one button; the people, the client and the rest are a row each
+    expect(now).toContain('data-whats-left-line')
+    for (const row of ['label="People"', 'label="The client"', 'label="More"']) expect(now).toContain(row)
+    // the popups hold the very rows the page had: the panel's own parts, never a second copy of them
+    for (const part of ['part="step"', 'part="client"', 'part="more"', 'part="history"']) expect(now).toContain(part)
+    expect(now).toContain('<PeoplePanel bare')
+    expect(sop).toContain("export type WherePart = 'all' | 'step' | 'client' | 'more' | 'history'")
+    // the team often answers for the client: that press sits with the client, not under More
+    expect(now).toMatch(/data-answer-for-client[\s\S]*?onDecide!\('client_approved'\)[\s\S]*?Client approved — mark it ourselves/)
+    // a step that is one press acts at once; nobody on the shoot goes straight to the people
+    expect(now).toContain("press: () => void onMove('reminder_sent')")
+    expect(now).toContain("onClick={() => setOpen('people')} data-pick-people")
+    // on a phone the card comes before the plan
+    expect(page).toMatch(/order-1 lg:order-none lg:self-start[\s\S]*?<ShootNow /)
+  })
   it('the header says who created the shoot and when', () => {
     expect(page).toMatch(/createdWords\(batch, nameOf\)/)
   })

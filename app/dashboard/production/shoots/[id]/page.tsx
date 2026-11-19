@@ -20,9 +20,10 @@ import BriefCanvas, { type CanvasOp } from './BriefCanvas'
 import PlanReadOnly from './PlanReadOnly'
 import BriefBoardComments from './BriefBoardComments'
 import BriefComments from './BriefComments'
+import ShootNow from './ShootNow'
 import TeamPlanComments from './TeamPlanComments'
 import {
-  EditorCardPanel, PeoplePanel, PlanParts, StageStrip, WherePanel,
+  PlanParts, StageStrip,
   type CrewRow, type ShootSopBatch, type TeamRow,
 } from './ShootSop'
 import { STAGE_LABEL, createdWords, rowsFor, shootDetailsText, shootStage, stampWords, type ShootStage } from '../../../../lib/shoot-sop-core'
@@ -426,8 +427,8 @@ export default function ShootPage({ params }: { params: Promise<{ id: string }> 
       {today && <StageStrip batch={batch} today={today} role={role as never} itemCount={deliverableItems.length} planReviewRequired={planReviewRequired} />}
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
-        {/* ── the plan ── */}
-        <div className="flex flex-col gap-4">
+        {/* ── the plan ── on a phone it comes after the shoot's own card, which says what to do next */}
+        <div className="order-2 flex flex-col gap-4 lg:order-none lg:row-span-2">
           {/* typed when the shoot was made, and until 21 Sep 2026 never shown or editable again. A new
               shoot puts it straight in the Objective row; this card is for the older shoots that kept it apart */}
           {!!batch.description && batch.description !== batch.objective && <Card>
@@ -516,18 +517,19 @@ export default function ShootPage({ params }: { params: Promise<{ id: string }> 
           </div>
         </div>
 
-        {/* ── the rail ── */}
-        <div className="flex flex-col gap-4 lg:sticky lg:top-4 lg:self-start">
+        {/* ── THE SHOOT, RIGHT NOW (19 Nov 2026, ShootNow.tsx): one small card — where it is, what is left, one button;
+            the people, the client and the rest are one row each and open in a popup. First on a phone. ── */}
+        <div className="order-1 lg:order-none lg:self-start">
           {today && (
-            <WherePanel batch={batch} role={role as never} viewerId={viewerId} today={today}
+            <ShootNow batch={batch} role={role as never} viewerId={viewerId} today={today}
               itemCount={deliverableItems.length} busy={busy !== null} nameOf={nameOf} clientEmail={clientEmail}
               onPatch={patchThenLoad} onMove={moveStage} onDecide={decide} onShareClient={shareWithClient} onAskReview={askReview} team={team}
               planReviewRequired={planReviewRequired} viewerIsReviewer={viewerIsReviewer} onPlanReview={planReview}
-              portalToken={portalToken} />
+              portalToken={portalToken}
+              crew={crew} items={items} onUnack={unacknowledge} onAck={acknowledgeMe} onResend={resendPlan} />
           )}
-          <PeoplePanel batch={batch} crew={crew} team={team} busy={busy !== null} onPatch={patchThenLoad} onUnack={unacknowledge}
-            viewerId={viewerId} onAck={acknowledgeMe} onResend={resendPlan} />
-          <EditorCardPanel batch={batch} items={items} editorName={nameOf(batch.editor_id)} />
+        </div>
+        <div className="order-3 lg:order-none lg:self-start">
           <BriefComments batchId={batch.id} cards={canvasCards} />
         </div>
       </div>

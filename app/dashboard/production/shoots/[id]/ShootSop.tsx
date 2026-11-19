@@ -359,7 +359,12 @@ export function PlanParts({ batch, itemCount, booked, onPatch, onShots, team }: 
 
 /* ── where it is, and the one next move ────────────────────────────────── */
 
-export function WherePanel({ batch, role, viewerId, today, itemCount, busy, nameOf, clientEmail, onPatch, onMove, onDecide, onShareClient, onAskReview, team, planReviewRequired, viewerIsReviewer, onPlanReview, portalToken = null }: {
+export type WherePart = 'all' | 'step' | 'client' | 'more' | 'history'
+
+export function WherePanel({ batch, role, viewerId, today, itemCount, busy, nameOf, clientEmail, onPatch, onMove, onDecide, onShareClient, onAskReview, team, planReviewRequired, viewerIsReviewer, onPlanReview, portalToken = null, part = 'all' }: {
+  /** ONE PART OF THE PANEL, WITHOUT ITS CARD (19 Nov 2026, ShootNow.tsx): the same rows and buttons, drawn inside a
+   *  popup that holds only what was asked for. 'all' is the whole panel, as it always was. */
+  part?: WherePart
   batch: ShootSopBatch
   /** the client's portal token — the links to copy once the plan is on it */
   portalToken?: string | null
@@ -436,10 +441,12 @@ export function WherePanel({ batch, role, viewerId, today, itemCount, busy, name
   // a shoot typed by name on the Editor page: already shot, no plan — no
   // ticks, no Go, no share; the footage folder and the log still apply
   const footageOnly = isFootageOnly(batch)
+  const show = (x: WherePart) => part === 'all' || part === x
 
   return (
-    <Card className={late ? 'border-accent-red/40 bg-tint-red' : undefined}>
-      <CardContent className="flex flex-col gap-3 p-4">
+    <Card className={part !== 'all' ? 'border-0 bg-transparent shadow-none' : late ? 'border-accent-red/40 bg-tint-red' : undefined}>
+      <CardContent className={part !== 'all' ? 'flex flex-col gap-3 p-0' : 'flex flex-col gap-3 p-4'}>
+        {part === 'all' && (<>
         <div className="flex flex-wrap items-center gap-2">
           <p className={H}>Where it is</p>
           <Chip tone={stage === 'footage_handed' ? 'green' : stage === 'shoot_day' ? 'amber' : 'ink'} className="ml-auto">{STAGE_LABEL[stage]}</Chip>
@@ -450,6 +457,8 @@ export function WherePanel({ batch, role, viewerId, today, itemCount, busy, name
         {overrideWords(batch) && <Chip tone="amber" className="w-fit">{overrideWords(batch)}</Chip>}
         {footageOnly && <Chip tone="surface" className="w-fit">{FOOTAGE_ONLY_WORDS}</Chip>}
 
+        </>)}
+        {show('step') && (<>
         {stage !== 'footage_handed' && (
           <div className="flex flex-col gap-1">
             <label className="flex min-h-11 cursor-pointer items-center gap-3 text-[14px]">
@@ -689,12 +698,13 @@ export function WherePanel({ batch, role, viewerId, today, itemCount, busy, name
             bar and the time left while it lands, then every file with a Download */}
         {folderShown && batch.footage_url && <DrivePullBar kind="batch" scopeId={batch.id} folderUrl={batch.footage_url} mayStart />}
 
+        </>)}
         {/* THE CLIENT, IN ONE PLACE (the owner, 13 Sep 2026: "share button to
             client should be named differently, and there's another Client
             portal card at the bottom — confusing"). Not on the portal: one
             button puts it there. On the portal: the links to send and the
             way to take it off. No email is ever sent to a client. */}
-        {batch.status !== 'wrapped' && !footageOnly && (
+        {show('client') && batch.status !== 'wrapped' && !footageOnly && (
           <ClientBlock batch={batch} portalToken={portalToken} busy={busy} shareReady={shareReady} clientLine={clientLine}
             onShareClient={onShareClient} onPatch={onPatch} />
         )}
@@ -702,8 +712,9 @@ export function WherePanel({ batch, role, viewerId, today, itemCount, busy, name
         {/* MORE OPTIONS, CLOSED UNTIL WANTED (the owner, 19 Nov 2026: "there is so many buttons on the right"). What is
             pressed on most shoots stays in view: the one next button and the client's. What is pressed on a few —
             the plan's PDF, Delivery only, and the manager's ways past the checks — waits here, one press away. */}
-        <details className="group border-t border-border pt-1" data-more-options>
-          <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 text-[14px] font-semibold [&::-webkit-details-marker]:hidden">
+        {show('more') && (
+        <details className={part === 'more' ? 'group' : 'group border-t border-border pt-1'} open={part === 'more' ? true : undefined} data-more-options>
+          <summary className={part === 'more' ? 'hidden' : 'flex min-h-11 cursor-pointer list-none items-center gap-2 text-[14px] font-semibold [&::-webkit-details-marker]:hidden'}>
             <ChevronRight className="h-4 w-4 transition-transform group-open:rotate-90" aria-hidden />
             More options
             {batch.deliver_only === true && <span className="text-[12px] font-normal text-muted-foreground">· Delivery only is on</span>}
@@ -768,11 +779,12 @@ export function WherePanel({ batch, role, viewerId, today, itemCount, busy, name
         )}
           </div>
         </details>
-
+        )}
 
         {/* who did what, and when — closed until wanted; the latest thing that happened is said on the row */}
-        <details className="group border-t border-border pt-1" data-what-happened>
-          <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 text-[14px] font-semibold [&::-webkit-details-marker]:hidden">
+        {show('history') && (
+        <details className={part === 'history' ? 'group' : 'group border-t border-border pt-1'} open={part === 'history' ? true : undefined} data-what-happened>
+          <summary className={part === 'history' ? 'hidden' : 'flex min-h-11 cursor-pointer list-none items-center gap-2 text-[14px] font-semibold [&::-webkit-details-marker]:hidden'}>
             <ChevronRight className="h-4 w-4 shrink-0 transition-transform group-open:rotate-90" aria-hidden />
             What happened
             <span className="min-w-0 truncate text-[12px] font-normal text-muted-foreground">· {lines.filter(l => l.done).length} of {lines.length} steps done</span>
@@ -788,6 +800,7 @@ export function WherePanel({ batch, role, viewerId, today, itemCount, busy, name
             ))}
           </ul>
         </details>
+        )}
       </CardContent>
     </Card>
   )
@@ -795,7 +808,9 @@ export function WherePanel({ batch, role, viewerId, today, itemCount, busy, name
 
 /* ── who is on the shoot ───────────────────────────────────────────────── */
 
-export function PeoplePanel({ batch, crew, team, busy, onPatch, onUnack, viewerId, onAck, onResend }: {
+export function PeoplePanel({ batch, crew, team, busy, onPatch, onUnack, viewerId, onAck, onResend, bare = false }: {
+  /** inside a popup: the same pickers, no card around them and no heading of their own */
+  bare?: boolean
   batch: ShootSopBatch
   crew: CrewRow[]
   team: TeamRow[]
@@ -819,9 +834,9 @@ export function PeoplePanel({ batch, crew, team, busy, onPatch, onUnack, viewerI
   const [adding, setAdding] = useState('')
 
   return (
-    <Card>
-      <CardContent className="flex flex-col gap-3 p-4">
-        <div className="flex flex-wrap items-center gap-2">
+    <Card className={bare ? 'border-0 bg-transparent shadow-none' : undefined}>
+      <CardContent className={bare ? 'flex flex-col gap-3 p-0' : 'flex flex-col gap-3 p-4'}>
+        <div className={bare ? 'flex flex-wrap items-center gap-2 [&>p:first-child]:sr-only' : 'flex flex-wrap items-center gap-2'}>
           <p className={H}>Who is on this shoot</p>
           {ack.total > 0 && <Chip tone={ack.complete ? 'green' : 'amber'} className="ml-auto"><span role="status">{ack.words}</span></Chip>}
         </div>
