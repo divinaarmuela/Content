@@ -10,7 +10,6 @@ import PortalShell from '../../../../components/portal/PortalShell'
 import PortalLive from '../../../../components/portal/PortalLive'
 import { PortalCardView } from '../../../../components/portal/PortalBoard'
 import ShootBoard from '../../../../components/portal/ShootBoard'
-import CommentThread from '../../../../components/portal/CommentThread'
 
 export const metadata: Metadata = {
   title: 'Your content — MD Media',
@@ -21,8 +20,8 @@ export const dynamic = 'force-dynamic'
 /**
  * One shoot, on its own page — the full-screen view of what the portal
  * already shows under the shoot: the same card (the plan, the PDF, the one
- * tap to approve), the planning board open with a thread on every card, and
- * the shoot's own conversation. No popups. Kept current live.
+ * tap to approve) and the planning board open with a thread on every card.
+ * No popups. Kept current live.
  */
 export default async function PortalShootPage({ params, searchParams }: {
   params: Promise<{ token: string; id: string }>
@@ -80,9 +79,10 @@ export default async function PortalShootPage({ params, searchParams }: {
             />
           )}
 
-          <div className="max-w-3xl">
-            <CommentThread token={token} kind="shoot" id={data.shoot.id} comments={data.comments} />
-          </div>
+          {/* NO SECOND COMMENT BOX (the owner, 19 Nov 2026: "why is there another comment in bottom … remove the
+              bottom"). A "Comments" section sat here posting to the very thread the card's own "Leave a comment"
+              posts to — one conversation drawn twice. A client comments on the plan's words, on a card of the
+              board, or on the shoot from its card. */}
         </main>
         <Toaster position="top-center" />
       </div>
