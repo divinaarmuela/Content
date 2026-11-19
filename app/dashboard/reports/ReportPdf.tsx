@@ -2,7 +2,8 @@
 
 import { useMemo } from 'react'
 import { readPostsExplained } from '../../lib/post-breakdown-core'
-import { change, fmt, monthLabel, monthRange, platformLabel, reportHtml, type ReportData } from '../../lib/client-report-core'
+import { change, fmt, monthLabel, monthRange, platformLabel, type ReportData } from '../../lib/client-report-core'
+import { reportBodyHtml } from '../../lib/report-doc'
 import { REPORT_BLUE, REPORT_TILE, reportProseCss } from '../../lib/report-look'
 import { viewsByType } from '../../lib/report-charts-core'
 import PlatformIcon from '../social/PlatformIcon'
@@ -14,7 +15,7 @@ import { CompareBars, DailyLine, SplitBar } from './ReportCharts'
  */
 
 /** the part of a saved report the PDF reads */
-export type PdfReport = { body?: string | null; objective?: string | null; posts_explained?: unknown } | null
+export type PdfReport = { body?: string | null; body_doc?: unknown; objective?: string | null; posts_explained?: unknown } | null
 
 /** the post breakdowns in the PDF: each post's score and the one-line verdict */
 function PrintBreakdowns({ raw }: { raw: unknown }) {
@@ -161,7 +162,7 @@ export function PrintReport({ data, report, clientName }: { data: ReportData; re
           {data.audience.engaged && <p className="pr-small">Who engaged this month: {data.audience.engaged.age.slice(0, 4).map(b => `${b.label} ${b.pct}%`).join(' · ')}</p>}
         </div>
       )}
-      {report?.body && <div className="pr-block report-prose" dangerouslySetInnerHTML={{ __html: reportHtml(report.body) }} />}
+      {report?.body && <div className="pr-block report-prose" dangerouslySetInnerHTML={{ __html: reportBodyHtml(report) }} />}
     </div>
   )
 }

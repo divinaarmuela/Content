@@ -193,6 +193,8 @@ export const REVIEW_CHECKS: { key: string; words: string }[] = [
 /** one earlier version of the written report, kept when it is rebuilt or edited */
 export type ReportVersion = {
   body: string; objective: string | null; notes: string | null
+  /** that version as the editor's document, when it had been edited as one (19 Nov 2026, report-doc.ts) */
+  body_doc?: string | null
   written_at: string | null; written_by: string | null
   edited_at: string | null; edited_by: string | null
   replaced_at: string; replaced_by: string
@@ -200,11 +202,11 @@ export type ReportVersion = {
 export const HISTORY_KEEP = 30
 
 /** the history with the CURRENT body added on top — called before anything replaces it; nothing to keep, unchanged */
-export function keepVersion(cur: { body?: string | null; objective?: string | null; notes?: string | null; generated_at?: string | null; generated_by?: string | null; updated_at?: string | null; updated_by?: string | null; history?: unknown } | null | undefined, by: string, now: string): ReportVersion[] {
+export function keepVersion(cur: { body?: string | null; body_doc?: string | null; objective?: string | null; notes?: string | null; generated_at?: string | null; generated_by?: string | null; updated_at?: string | null; updated_by?: string | null; history?: unknown } | null | undefined, by: string, now: string): ReportVersion[] {
   const before = Array.isArray(cur?.history) ? (cur!.history as ReportVersion[]) : []
   if (!cur?.body || !cur.body.trim()) return before
   const v: ReportVersion = {
-    body: cur.body, objective: cur.objective ?? null, notes: cur.notes ?? null,
+    body: cur.body, ...(cur.body_doc ? { body_doc: cur.body_doc } : {}), objective: cur.objective ?? null, notes: cur.notes ?? null,
     written_at: cur.generated_at ?? null, written_by: cur.generated_by ?? null,
     edited_at: cur.updated_at ?? null, edited_by: cur.updated_by ?? null,
     replaced_at: now, replaced_by: by,

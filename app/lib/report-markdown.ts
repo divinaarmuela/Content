@@ -105,6 +105,8 @@ function blocks(nodes: DocNode[] | undefined, out: string[]): void {
       }
       case 'bulletList': case 'orderedList': { const l = listLines(n); if (l.length) out.push(l.join('\n')); break }
       case 'table': { const l = tableLines(n); if (l.length) out.push(l.join('\n')); break }
+      // a section that folds: its title is a sub-heading, its inside follows (the Markdown has no fold)
+      case 'detailsSummary': { const t = inline(n.content); if (t) out.push(`### ${t}`); break }
       default: blocks(n.content, out)
     }
   }

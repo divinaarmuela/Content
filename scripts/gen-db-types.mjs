@@ -1272,6 +1272,9 @@ const GHOST_TABLES = {
     ['month', col('string', false)],
     ['data', col('unknown', true, true)],
     ['body', col('string', true)],
+    // the report as the editor's own document, JSON as text (19 Nov 2026, app/lib/report-doc.ts): pictures, column
+    // widths, colours and folding sections live here; `body` stays beside it as the Markdown
+    ['body_doc', col('string', true)],
     ['objective', col('string', true)],
     ['notes', col('string', true)],
     ['checks', col('unknown', true, true)],

@@ -3,11 +3,12 @@
 import { useMemo, useState, type CSSProperties } from 'react'
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { ExternalLink, X } from 'lucide-react'
-import { fmt, reportHtml, type CandidatePost, platformLabel, availableStats, statsFor, STAT_WORD } from '../../lib/client-report-core'
+import { fmt, type CandidatePost, platformLabel, availableStats, statsFor, STAT_WORD } from '../../lib/client-report-core'
 import { Kpi, AudienceSection } from '../../dashboard/reports/ReportFigures'
 import type { PortalReport as Report } from '../../lib/portal-reports'
 import { reportProseCss } from '../../lib/report-look'
 import PlatformIcon from '../../dashboard/social/PlatformIcon'
+import { reportBodyHtml } from '../../lib/report-doc'
 
 /**
  * THE CLIENT'S MONTHLY REPORT, INTERACTIVE (the owner, 5 Nov 2026: "highly interactive with the social media accounts
@@ -155,7 +156,7 @@ export default function PortalReport({ report }: { report: Report }) {
       <section className="flex flex-col gap-3">
         <h2 className="text-[22px] font-semibold tracking-tight">The report</h2>
         <style>{PROSE}</style>
-        <article className="portal-report-prose rounded-card border border-border bg-card p-5 sm:p-7" dangerouslySetInnerHTML={{ __html: reportHtml(report.body) }} />
+        <article className="portal-report-prose rounded-card border border-border bg-card p-5 sm:p-7" dangerouslySetInnerHTML={{ __html: reportBodyHtml(report) }} />
       </section>
 
       {/* ONE POST, OPENED */}

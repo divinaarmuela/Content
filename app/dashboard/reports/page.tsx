@@ -19,6 +19,7 @@ import PostBreakdowns from './PostBreakdowns'
 import PostsInReport from './PostsInReport'
 import type { ReportEditorHandle } from './ReportEditor'
 import { PRINT_CSS, PrintReport } from './ReportPdf'
+import { reportBodyHtml } from '../../lib/report-doc'
 import { ReportV2Body } from './v2/ReportV2'
 import { parseView, viewQuery } from '../../lib/report-v2/filters'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
@@ -36,6 +37,8 @@ import {
 
 type Saved = {
   id: string; month: MonthKey; data: ReportData | null; body: string | null; objective: string | null; notes: string | null
+  /** the report as the editor's document, once it has been edited as one (report-doc.ts) */
+  body_doc?: string | null
   checks: Record<string, boolean> | null; generated_at: string | null; updated_at: string
   generated_by?: string | null; updated_by?: string | null; explained_by?: string | null; history?: unknown
   /** the post breakdowns (PostBreakdowns.tsx), as saved */
@@ -400,12 +403,22 @@ function Writer({ report, clientId, month, mayDelete, onChange, onDeleted, settl
       else void build()
     } catch (e) { toast.error(e instanceof Error ? e.message : 'Could not read the figures') } finally { setOpening(false) }
   }
+  /** a picture for the report: kept in our storage, its address handed to the editor */
+  const uploadImage = async (file: File): Promise<string> => {
+    const form = new FormData()
+    form.set('client_id', clientId); form.set('file', file)
+    const r = await fetch('/api/reports/image', { method: 'POST', body: form })
+    const j = await r.json().catch(() => ({}))
+    if (!r.ok || typeof j.url !== 'string') throw new Error(j.error ?? 'Could not add the picture')
+    return j.url
+  }
   const saveBody = async () => {
     const body = editorHandle.current?.markdown()
+    const body_doc = editorHandle.current?.doc()
     if (body == null) return
-    if (!body.trim()) { toast.error('The report is empty. Press Cancel to keep the saved one.'); return }
+    if (!body.trim() && !/"type":"image"/.test(body_doc ?? '')) { toast.error('The report is empty. Press Cancel to keep the saved one.'); return }
     setSaving(true)
-    try { await patch({ body, notes, objective }); setEditing(false); setDirty(false); toast.success('Saved') } catch (e) { toast.error(e instanceof Error ? e.message : 'Could not save') } finally { setSaving(false) }
+    try { await patch({ body, body_doc, notes, objective }); setEditing(false); setDirty(false); toast.success('Saved') } catch (e) { toast.error(e instanceof Error ? e.message : 'Could not save') } finally { setSaving(false) }
   }
   const tick = async (key: string, v: boolean) => { try { await patch({ checks: { ...checks, [key]: v } }) } catch (e) { toast.error(e instanceof Error ? e.message : 'Could not save') } }
   const remove = async () => {
@@ -474,8 +487,8 @@ function Writer({ report, clientId, month, mayDelete, onChange, onDeleted, settl
             )}
           </div>
           {editing
-            ? <ReportEditor key={`${report.id}:${report.updated_at}`} initial={report.body} handle={editorHandle} onDirty={setDirty} />
-            : <article className="report-prose rounded-inner border border-border bg-background p-6" dangerouslySetInnerHTML={{ __html: reportHtml(report.body) }} />}
+            ? <ReportEditor key={`${report.id}:${report.updated_at}`} initial={report.body} initialDoc={report.body_doc ?? null} handle={editorHandle} onDirty={setDirty} uploadImage={uploadImage} />
+            : <article className="report-prose rounded-inner border border-border bg-background p-6" dangerouslySetInnerHTML={{ __html: reportBodyHtml(report) }} />}
           <EarlierVersions history={readHistory(report.history)} people={people} />
 
           <div className="flex flex-col gap-2 rounded-inner bg-muted/40 p-4">
@@ -618,7 +631,7 @@ function EarlierVersions({ history, people }: { history: ReportVersion[]; people
                   Copy this version
                 </Button>
               </div>
-              <article className="report-prose mt-2 max-h-[480px] overflow-y-auto rounded-inner border border-border bg-background p-4" dangerouslySetInnerHTML={{ __html: reportHtml(v.body) }} />
+              <article className="report-prose mt-2 max-h-[480px] overflow-y-auto rounded-inner border border-border bg-background p-4" dangerouslySetInnerHTML={{ __html: reportBodyHtml(v) }} />
             </details>
           </li>
         ))}

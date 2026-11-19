@@ -24,6 +24,8 @@ export type PortalReport = {
   explained: PostsExplained | null
   /** the written report, Markdown */
   body: string
+  /** the same report as the editor's document, when it was edited as one (report-doc.ts draws it) */
+  body_doc: string | null
 }
 
 export async function sharedReports(clientId: string): Promise<PortalReportRow[]> {
@@ -52,5 +54,6 @@ export async function sharedReport(clientId: string, month: string): Promise<Por
     posts: (data.candidates ?? []).filter(c => picked.has(c.id)),
     explained: readPostsExplained(r.posts_explained),
     body: r.body,
+    body_doc: typeof r.body_doc === 'string' ? r.body_doc : null,
   }
 }

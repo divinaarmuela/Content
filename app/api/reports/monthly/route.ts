@@ -10,6 +10,7 @@ import { generateReport, loadReportData } from '@/app/lib/client-report'
 import { explainMonth } from '@/app/lib/post-breakdown'
 import { logActivity } from '@/app/lib/workflow'
 import { onePortalPath } from '@/app/lib/one-portal-core'
+import { readDoc } from '@/app/lib/report-doc'
 
 /**
  * THE MONTHLY CLIENT REPORT (client-report-core.ts has the why).
@@ -109,7 +110,7 @@ export async function PATCH(req: Request) {
   return withRequestCache(async () => {
     try {
       const user = await who()
-      const body = await req.json().catch(() => ({})) as { client_id?: string; month?: string; body?: unknown; notes?: unknown; objective?: unknown; checks?: unknown; included_post_ids?: unknown; share?: unknown; included_platforms?: unknown }
+      const body = await req.json().catch(() => ({})) as { client_id?: string; month?: string; body?: unknown; body_doc?: unknown; notes?: unknown; objective?: unknown; checks?: unknown; included_post_ids?: unknown; share?: unknown; included_platforms?: unknown }
       if (!body.client_id || !isMonthKey(body.month)) return NextResponse.json({ error: 'Pick a client and a month' }, { status: 400 })
       await mayReportOn(user, body.client_id)
       const id = reportId(body.client_id, body.month)
@@ -125,13 +126,17 @@ export async function PATCH(req: Request) {
         catch (e) { reasons.push(`The figures could not be read to check them (${e instanceof Error ? e.message : 'try again'})`) }
         if (reasons.length) return NextResponse.json({ error: 'Not shared', blockers: reasons }, { status: 409 })
       }
+      // only a document report-doc.ts can read, and not an endless one
+      const doc = typeof body.body_doc === 'string' && body.body_doc.length <= 900_000 && readDoc(body.body_doc) ? body.body_doc : null
       const checks = body.checks && typeof body.checks === 'object'
         ? Object.fromEntries(REVIEW_CHECKS.map(c => [c.key, (body.checks as Record<string, unknown>)[c.key] === true])) : undefined
       const put = await table<ClientReport>('client_reports').claim(id, cur => (cur ? {
         ...cur,
         // an edit to the text keeps what it replaced (4 Nov 2026: "don't overwrite current reports")
-        ...(typeof body.body === 'string' && body.body !== (cur.body ?? '') ? { history: keepVersion(cur, user.id, now) as never } : {}),
-        ...(typeof body.body === 'string' ? { body: body.body.slice(0, 200000) } : {}),
+        ...(typeof body.body === 'string' && (body.body !== (cur.body ?? '') || (doc ?? '') !== (cur.body_doc ?? '')) ? { history: keepVersion(cur, user.id, now) as never } : {}),
+        // THE EDITOR'S DOCUMENT goes in beside the Markdown (19 Nov 2026, report-doc.ts); a save without one clears it,
+        // so the page never draws a document older than its words
+        ...(typeof body.body === 'string' ? { body: body.body.slice(0, 200000), body_doc: doc } : {}),
         ...(typeof body.notes === 'string' ? { notes: body.notes.slice(0, 6000) } : {}),
         ...(typeof body.objective === 'string' ? { objective: body.objective.slice(0, 300) } : {}),
         ...(checks ? { checks: checks as never } : {}),

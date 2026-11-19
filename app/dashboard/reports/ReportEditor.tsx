@@ -1,78 +1,153 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState, type MutableRefObject, type ReactNode } from 'react'
-import { EditorContent, useEditor, useEditorState, type Editor } from '@tiptap/react'
-import { Bold, ChevronDown, Italic, Link2, List, ListOrdered, Redo2, Table2, Undo2 } from 'lucide-react'
+import { EditorContent, useEditor, useEditorState, type Content, type Editor } from '@tiptap/react'
+import { Bold, ChevronDown, ChevronsDownUp, Highlighter, ImagePlus, Italic, Link2, List, ListOrdered, Palette, Redo2, Table2, Undo2 } from 'lucide-react'
+import { toast } from 'sonner'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { reportHtml } from '../../lib/client-report-core'
 import { docToMarkdown, type DocNode } from '../../lib/report-markdown'
+import { readDoc } from '../../lib/report-doc'
 import { reportEditorExtensions } from '../../lib/report-editor-schema'
+import { REPORT_BLUE } from '../../lib/report-look'
 
 /**
  * THE REPORT, EDITED AS A PAGE (the owner, 19 Nov 2026: "use tiptap … editing, creating tables, a toolbar like Google
- * Docs … very quick response to keystrokes and no lagging"). What you see is the report as the client reads it; the
- * toolbar gives headings, bold, italics, lists, links and tables.
+ * Docs … very quick response to keystrokes and no lagging"; then "why can't I minimise things, add images, resize
+ * tables, colours"). What you see is the report as the client reads it. The toolbar gives headings, bold, italics,
+ * colour, a highlight, links, lists, pictures, tables and sections that fold; a table's columns and a picture are
+ * dragged to size.
  *
  * WHY IT DOES NOT LAG. Typing never touches React: the editor keeps its own document, the page is not re-drawn on a
  * keystroke (`shouldRerenderOnTransaction: false`), and the toolbar re-draws only when one of its own lights changes
- * (`useEditorState`). The report is turned back into its saved text once, when Save is pressed — never while typing.
+ * (`useEditorState`). The report is handed back once, when Save is pressed — never while typing.
  */
-export type ReportEditorHandle = { markdown: () => string }
+export type ReportEditorHandle = {
+  /** the report as its Markdown (what the writer reads next month, and the fallback) */
+  markdown: () => string
+  /** the report as the editor's own document, JSON as text (what the page draws) */
+  doc: () => string
+}
 
 type Lights = {
-  bold: boolean; italic: boolean; bullet: boolean; ordered: boolean; link: boolean; table: boolean
-  style: 'p' | 2 | 3 | 4; undo: boolean; redo: boolean
+  bold: boolean; italic: boolean; bullet: boolean; ordered: boolean; link: boolean; table: boolean; highlight: boolean; fold: boolean
+  colour: string | null; style: 'p' | 2 | 3 | 4; undo: boolean; redo: boolean; canMerge: boolean; canSplit: boolean
 }
 const STYLES: { key: Lights['style']; label: string }[] = [
   { key: 'p', label: 'Normal text' }, { key: 2, label: 'Heading' }, { key: 3, label: 'Sub-heading' }, { key: 4, label: 'Small heading' },
 ]
+const COLOURS: { name: string; value: string | null }[] = [
+  { name: 'Black (normal)', value: null }, { name: 'Blue', value: REPORT_BLUE }, { name: 'Green', value: '#1B8A5A' },
+  { name: 'Red', value: '#D92D20' }, { name: 'Orange', value: '#E8590C' }, { name: 'Grey', value: '#6B7280' },
+]
+const HIGHLIGHT = '#FFF1A8'
 
-export default function ReportEditor({ initial, handle, onDirty }: {
+/** a picture no wider than a report needs, and small enough to send: a phone photo is many times both */
+async function shrink(file: File): Promise<File> {
+  const bitmap = await createImageBitmap(file)
+  const scale = Math.min(1, 1600 / bitmap.width)
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.round(bitmap.width * scale); canvas.height = Math.round(bitmap.height * scale)
+  canvas.getContext('2d')!.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
+  const png = file.type === 'image/png'
+  const blob = await new Promise<Blob | null>(res => canvas.toBlob(res, png ? 'image/png' : 'image/jpeg', 0.86))
+  if (!blob) return file
+  // a PNG that is still heavy (a screenshot of a photo) goes as a JPEG
+  if (blob.size > 3_500_000) {
+    const jpeg = await new Promise<Blob | null>(res => canvas.toBlob(res, 'image/jpeg', 0.8))
+    if (jpeg) return new File([jpeg], 'picture.jpg', { type: 'image/jpeg' })
+  }
+  return new File([blob], png ? 'picture.png' : 'picture.jpg', { type: blob.type })
+}
+
+export default function ReportEditor({ initial, initialDoc = null, handle, onDirty, uploadImage }: {
   /** the saved report text */
   initial: string
-  /** how Save reads the page back as text */
+  /** the saved report as the editor's document, when it has been edited as one */
+  initialDoc?: string | null
+  /** how Save reads the page back */
   handle: MutableRefObject<ReportEditorHandle | null>
   onDirty: (dirty: boolean) => void
+  /** keeps a picture and answers with its address */
+  uploadImage: (file: File) => Promise<string>
 }) {
   const extensions = useMemo(() => reportEditorExtensions(), [])
-  const start = useMemo(() => reportHtml(initial), []) // eslint-disable-line react-hooks/exhaustive-deps
+  // the document when there is one, else the page the Markdown draws
+  const start = useMemo<Content>(() => (readDoc(initialDoc) as Content | null) ?? reportHtml(initial), []) // eslint-disable-line react-hooks/exhaustive-deps
   const dirty = useRef(false)
   const tellDirty = useRef(onDirty)
   tellDirty.current = onDirty
+  const upload = useRef(uploadImage)
+  upload.current = uploadImage
+  const live = useRef<Editor | null>(null)
+
+  /** PICTURES IN: from the button, a paste or a drop — shrunk, kept, then put where the cursor is */
+  const addPictures = async (files: File[]) => {
+    const pictures = files.filter(f => /^image\/(png|jpeg|webp)$/.test(f.type))
+    if (!pictures.length) { toast.error('Use a PNG, JPEG or WebP picture'); return }
+    for (const file of pictures) {
+      const wait = toast.loading('Adding the picture…')
+      try {
+        const small = await shrink(file)
+        const src = await upload.current(small)
+        const { width } = await createImageBitmap(small)
+        live.current?.chain().focus().setImage({ src, alt: '', width: Math.min(width, 520) }).run()
+        toast.success('Picture added. Drag a corner to resize it.', { id: wait })
+      } catch (e) { toast.error(e instanceof Error ? e.message : 'Could not add the picture', { id: wait }) }
+    }
+  }
+  const pictures = useRef(addPictures)
+  pictures.current = addPictures
+
   const editor = useEditor({
     extensions,
     content: start,
     immediatelyRender: false,
     shouldRerenderOnTransaction: false,
-    editorProps: { attributes: { class: 'report-prose report-editor-area', role: 'textbox', 'aria-multiline': 'true', 'aria-label': 'The report' } },
+    editorProps: {
+      attributes: { class: 'report-prose report-editor-area', role: 'textbox', 'aria-multiline': 'true', 'aria-label': 'The report' },
+      handlePaste: (_view, event) => {
+        const files = [...(event.clipboardData?.files ?? [])].filter(f => f.type.startsWith('image/'))
+        if (!files.length) return false
+        event.preventDefault(); void pictures.current(files); return true
+      },
+      handleDrop: (_view, event) => {
+        const files = [...((event as DragEvent).dataTransfer?.files ?? [])].filter(f => f.type.startsWith('image/'))
+        if (!files.length) return false
+        event.preventDefault(); void pictures.current(files); return true
+      },
+    },
     onUpdate: () => { if (!dirty.current) { dirty.current = true; tellDirty.current(true) } },
   })
+  live.current = editor
   useEffect(() => {
-    handle.current = editor ? { markdown: () => docToMarkdown(editor.getJSON() as DocNode) } : null
+    handle.current = editor ? { markdown: () => docToMarkdown(editor.getJSON() as DocNode), doc: () => JSON.stringify(editor.getJSON()) } : null
     return () => { handle.current = null }
   }, [editor, handle])
 
   return (
     <div className="rounded-inner border border-border bg-background">
       <style>{EDITOR_CSS}</style>
-      {editor ? <Toolbar editor={editor} /> : <div className="h-[53px] border-b border-border" />}
-      {editor ? <EditorContent editor={editor} /> : <div className="report-prose report-editor-area" dangerouslySetInnerHTML={{ __html: start }} />}
+      {editor ? <Toolbar editor={editor} onPictures={f => void addPictures(f)} /> : <div className="h-[53px] border-b border-border" />}
+      {editor ? <EditorContent editor={editor} /> : <div className="report-prose report-editor-area" dangerouslySetInnerHTML={{ __html: typeof start === 'string' ? start : '' }} />}
     </div>
   )
 }
 
-function Toolbar({ editor }: { editor: Editor }) {
+function Toolbar({ editor, onPictures }: { editor: Editor; onPictures: (files: File[]) => void }) {
   const on = useEditorState({
     editor,
     selector: ({ editor: e }): Lights => ({
       bold: e.isActive('bold'), italic: e.isActive('italic'), bullet: e.isActive('bulletList'), ordered: e.isActive('orderedList'),
-      link: e.isActive('link'), table: e.isActive('table'),
+      link: e.isActive('link'), table: e.isActive('table'), highlight: e.isActive('highlight'), fold: e.isActive('details'),
+      colour: (e.getAttributes('textStyle').color as string | undefined) ?? null,
       style: e.isActive('heading', { level: 2 }) ? 2 : e.isActive('heading', { level: 3 }) ? 3 : e.isActive('heading', { level: 4 }) ? 4 : 'p',
-      undo: e.can().undo(), redo: e.can().redo(),
+      undo: e.can().undo(), redo: e.can().redo(), canMerge: e.can().mergeCells(), canSplit: e.can().splitCell(),
     }),
   })
   const [linking, setLinking] = useState(false)
   const [href, setHref] = useState('')
+  const file = useRef<HTMLInputElement | null>(null)
   const run = () => editor.chain().focus()
   // THE CURSOR NEVER LEAVES THE PAGE FOR LONG: a menu's choice puts it straight back (the menus are not modal, so
   // nothing holds it), and a menu closed without a choice hands it back too — the very next key lands in the report
@@ -112,11 +187,32 @@ function Toolbar({ editor }: { editor: Editor }) {
         <Sep />
         <Tool label="Bold (Ctrl+B)" lit={on.bold} onClick={() => run().toggleBold().run()}><Bold className="h-4 w-4" aria-hidden /></Tool>
         <Tool label="Italic (Ctrl+I)" lit={on.italic} onClick={() => run().toggleItalic().run()}><Italic className="h-4 w-4" aria-hidden /></Tool>
+        <DropdownMenu modal={false}>
+          <DropdownMenuTrigger asChild>
+            <button type="button" title="Text colour" aria-label="Text colour" className="inline-flex h-9 items-center gap-1 rounded-full px-2 hover:bg-muted">
+              <Palette className="h-4 w-4" aria-hidden />
+              <span className="h-1 w-4 rounded-full" style={{ background: on.colour ?? 'currentColor' }} aria-hidden />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="bg-popover" onCloseAutoFocus={backToPage}>
+            {COLOURS.map(c => (
+              <DropdownMenuItem key={c.name} onSelect={() => { if (c.value) run().setColor(c.value).run(); else run().unsetColor().run() }}>
+                <span className="mr-2 inline-block h-4 w-4 rounded-full border border-border" style={{ background: c.value ?? 'currentColor' }} aria-hidden /> {c.name}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <Tool label="Highlight" lit={on.highlight} onClick={() => run().toggleHighlight({ color: HIGHLIGHT }).run()}><Highlighter className="h-4 w-4" aria-hidden /></Tool>
         <Tool label="Link" lit={on.link || linking} onClick={() => (linking ? setLinking(false) : openLink())}><Link2 className="h-4 w-4" aria-hidden /></Tool>
         <Sep />
         <Tool label="Bullet list" lit={on.bullet} onClick={() => run().toggleBulletList().run()}><List className="h-4 w-4" aria-hidden /></Tool>
         <Tool label="Numbered list" lit={on.ordered} onClick={() => run().toggleOrderedList().run()}><ListOrdered className="h-4 w-4" aria-hidden /></Tool>
         <Sep />
+        <button type="button" onMouseDown={e => e.preventDefault()} onClick={() => file.current?.click()} className="inline-flex h-9 items-center gap-1.5 rounded-full px-3 text-[13px] font-medium hover:bg-muted">
+          <ImagePlus className="h-4 w-4" aria-hidden /> Picture
+        </button>
+        <input ref={file} type="file" accept="image/png,image/jpeg,image/webp" multiple hidden
+          onChange={e => { const f = [...(e.target.files ?? [])]; e.target.value = ''; if (f.length) onPictures(f) }} />
         <DropdownMenu modal={false}>
           <DropdownMenuTrigger asChild>
             <button type="button" className={`inline-flex h-9 items-center gap-1.5 rounded-full px-3 text-[13px] font-medium hover:bg-muted ${on.table ? 'bg-muted' : ''}`}>
@@ -131,11 +227,20 @@ function Toolbar({ editor }: { editor: Editor }) {
             <DropdownMenuItem disabled={!on.table} onSelect={() => run().addColumnBefore().run()}>Add a column to the left</DropdownMenuItem>
             <DropdownMenuItem disabled={!on.table} onSelect={() => run().addColumnAfter().run()}>Add a column to the right</DropdownMenuItem>
             <DropdownMenuSeparator />
+            <DropdownMenuItem disabled={!on.canMerge} onSelect={() => run().mergeCells().run()}>Merge the selected cells</DropdownMenuItem>
+            <DropdownMenuItem disabled={!on.canSplit} onSelect={() => run().splitCell().run()}>Split this cell</DropdownMenuItem>
+            <DropdownMenuSeparator />
             <DropdownMenuItem disabled={!on.table} onSelect={() => run().deleteRow().run()}>Delete this row</DropdownMenuItem>
             <DropdownMenuItem disabled={!on.table} onSelect={() => run().deleteColumn().run()}>Delete this column</DropdownMenuItem>
             <DropdownMenuItem disabled={!on.table} onSelect={() => run().deleteTable().run()} className="text-destructive">Delete the table</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+        <button type="button" onMouseDown={e => e.preventDefault()} aria-pressed={on.fold}
+          onClick={() => (on.fold ? run().unsetDetails().run() : foldSection(editor))}
+          title={on.fold ? 'Stop this section folding' : 'Fold this section: its heading stays, the rest tucks under it'}
+          className={`inline-flex h-9 items-center gap-1.5 rounded-full px-3 text-[13px] font-medium hover:bg-muted ${on.fold ? 'bg-muted' : ''}`}>
+          <ChevronsDownUp className="h-4 w-4" aria-hidden /> Fold
+        </button>
         <Sep />
         <Tool label="Undo (Ctrl+Z)" disabled={!on.undo} onClick={() => run().undo().run()}><Undo2 className="h-4 w-4" aria-hidden /></Tool>
         <Tool label="Redo (Ctrl+Y)" disabled={!on.redo} onClick={() => run().redo().run()}><Redo2 className="h-4 w-4" aria-hidden /></Tool>
@@ -151,6 +256,41 @@ function Toolbar({ editor }: { editor: Editor }) {
       )}
     </div>
   )
+}
+
+/**
+ * FOLD THIS SECTION (the owner, 19 Nov 2026: "why can't I minimise things"). With the cursor anywhere in a section, the
+ * section's heading becomes the fold's title and everything under it, up to the next heading of the same size, goes
+ * inside. Words that are selected, or a place with no heading above it, fold just what is there. A new fold starts
+ * open, so nothing seems to vanish.
+ */
+function foldSection(editor: Editor) {
+  const plain = () => editor.chain().focus().setDetails().updateAttributes('details', { open: true }).run()
+  const { state } = editor
+  const { $from, empty } = state.selection
+  const { doc, schema } = state
+  if (!empty || $from.depth < 1) return plain()
+  let h = -1
+  for (let i = $from.index(0); i >= 0; i--) if (doc.child(i).type.name === 'heading') { h = i; break }
+  if (h < 0) return plain()
+  const level = Number(doc.child(h).attrs.level)
+  let end = h + 1
+  while (end < doc.childCount && !(doc.child(end).type.name === 'heading' && Number(doc.child(end).attrs.level) <= level)) end++
+  if (end === h + 1) return plain()
+  let from = 0
+  for (let i = 0; i < h; i++) from += doc.child(i).nodeSize
+  let to = from
+  const inside = []
+  for (let i = h; i < end; i++) { to += doc.child(i).nodeSize; if (i > h) inside.push(doc.child(i)) }
+  try {
+    const fold = schema.nodes.details.create({ open: true }, [
+      schema.nodes.detailsSummary.create(null, doc.child(h).content),
+      schema.nodes.detailsContent.create(null, inside),
+    ])
+    editor.view.dispatch(state.tr.replaceWith(from, to, fold).scrollIntoView())
+    editor.commands.focus(from + 2)
+    return true
+  } catch { return plain() }
 }
 
 const Sep = () => <span className="mx-1 h-5 w-px bg-border" aria-hidden />
@@ -170,8 +310,30 @@ const EDITOR_CSS = `
 .report-editor-area{outline:none;min-height:420px;padding:24px}
 .report-editor-area .tableWrapper{overflow-x:auto;margin:8px 0 14px}
 .report-editor-area table{margin:0;table-layout:fixed}
-.report-editor-area th,.report-editor-area td{position:relative;min-width:72px;vertical-align:top}
+.report-editor-area th,.report-editor-area td{position:relative;min-width:60px;vertical-align:top}
 .report-editor-area li p{margin:0}
-.report-editor-area .selectedCell::after{content:"";position:absolute;inset:0;background:rgba(47,111,237,.14);pointer-events:none}
+.report-editor-area .selectedCell::after{content:"";position:absolute;inset:0;background:rgba(30,129,253,.16);pointer-events:none}
+/* a column's edge, while it is being dragged */
+.report-editor-area .column-resize-handle{position:absolute;right:-2px;top:0;bottom:-1px;width:4px;background:${REPORT_BLUE};pointer-events:none;z-index:2}
+.report-editor-area.resize-cursor{cursor:col-resize}
+/* a picture: a blue edge when picked, a square on each corner to drag */
+.report-editor-area [data-resize-container]{margin:10px 0}
+.report-editor-area [data-resize-wrapper] img{display:block;max-width:100%;height:auto;margin:0}
+.report-editor-area [data-resize-handle]{width:12px;height:12px;background:#fff;border:2px solid ${REPORT_BLUE};border-radius:3px;opacity:0;z-index:2}
+.report-editor-area [data-resize-container]:hover [data-resize-handle],.report-editor-area .ProseMirror-selectednode [data-resize-handle],.report-editor-area [data-resize-state="true"] [data-resize-handle]{opacity:1}
+.report-editor-area [data-resize-handle="top-left"],.report-editor-area [data-resize-handle="bottom-right"]{cursor:nwse-resize}
+.report-editor-area [data-resize-handle="top-right"],.report-editor-area [data-resize-handle="bottom-left"]{cursor:nesw-resize}
+.report-editor-area .ProseMirror-selectednode img{outline:2px solid ${REPORT_BLUE};outline-offset:2px}
+/* a section that folds: the arrow opens and shuts it */
+.report-editor-area .report-fold{display:flex;gap:6px;margin:10px 0;padding:8px 10px;border:1px solid hsl(var(--border));border-radius:10px}
+.report-editor-area .report-fold > button{flex:none;width:24px;height:24px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:11px}
+.report-editor-area .report-fold > button:hover{background:hsl(var(--muted))}
+.report-editor-area .report-fold > button::before{content:"\\25B6"}
+.report-editor-area .report-fold.is-open > button::before{content:"\\25BC"}
+.report-editor-area .report-fold > div{flex:1;min-width:0}
+.report-editor-area .report-fold summary{font-size:17px;font-weight:700;list-style:none;cursor:text}
+.report-editor-area .report-fold summary::-webkit-details-marker{display:none}
+.report-editor-area .report-fold [data-type="detailsContent"]{margin-top:6px}
+.report-editor-area .report-fold [data-type="detailsContent"] > :last-child{margin-bottom:0}
 @media (max-width:640px){.report-editor-area{padding:14px}}
 `

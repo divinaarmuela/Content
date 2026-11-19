@@ -431,7 +431,8 @@ export async function generateReport(clientId: string, m: MonthKey, by: string, 
     ...(cur ?? { id, client_id: clientId, month: m, created_at: now }),
     // the report it replaces is kept, never lost (4 Nov 2026)
     history: keepVersion(cur, by, now) as never,
-    body, objective: opts.objective || null, notes: opts.notes || null, checks: {} as never,
+    // a new draft is Markdown: the document the last one was edited as goes with that version, into the history
+    body, body_doc: null, objective: opts.objective || null, notes: opts.notes || null, checks: {} as never,
     generated_at: now, generated_by: by, updated_by: by, updated_at: now,
     // written from figures read this way — older text is flagged on the page and cannot be shared (5 Nov 2026)
     written_v: all.v ?? null,
