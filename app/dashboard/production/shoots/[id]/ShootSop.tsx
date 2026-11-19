@@ -6,7 +6,7 @@ import TickBox from '../../../ui/TickBox'
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { Check, Circle, FileDown, Link as LinkIcon, Plus, X } from 'lucide-react'
+import { Check, ChevronRight, Circle, FileDown, Link as LinkIcon, Plus, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import CallTimePicker from '../../CallTimePicker'
 import { Card, CardContent } from '@/components/ui/card'
@@ -394,10 +394,13 @@ export function WherePanel({ batch, role, viewerId, today, itemCount, busy, name
   const late = briefIsLate(batch, today)
   const clock = clockWords(batch, today)
   const [reason, setReason] = useState('')
+  const [sureDone, setSureDone] = useState(false)
   const planReview = { required: gate }
   const go = goReady(batch, { itemCount, role, overrideReason: reason, planReview })
   const can = (to: ShootStage) => stageMove(batch, to, { role, today, checklist: { itemCount }, overrideReason: reason, planReview, reviewer: viewerIsReviewer === true }, 'now', viewerId)
   const askOverride = stage === 'shared' && role === 'super_admin' && goReady(batch, { itemCount, planReview }).needsOverride
+  // every reason Go is held back, drawn as one list (a late plan's own line is asked about under it, not listed)
+  const whatsLeft = stage === 'shared' && !batch.go_at && !go.ok && !askOverride && batch.status !== 'wrapped'
   const [folder, setFolder] = useState(batch.footage_url ?? '')
   // THE LINK IS CONFIRMED BEFORE IT IS USED (the owner, 16 Sep 2026: "I
   // submitted the wrong footage — confirm with the user, let me resubmit a
@@ -580,53 +583,30 @@ export function WherePanel({ batch, role, viewerId, today, itemCount, busy, name
           </label>
         )}
 
+        {/* EVERYTHING STILL TO DO, IN ONE LIST (the owner, 19 Nov 2026: "the ui and ux is bad for this"): the strip said
+            "add the editor and the crew" while the button said "Tick Location confirmed" — both true, and nowhere said
+            together. Go's own reasons, all of them, right above the button they hold back. */}
+        {whatsLeft && (
+          <div className="flex flex-col gap-1 rounded-inner border border-accent-amber/40 bg-tint-amber p-3" role="status" data-whats-left>
+            <p className="text-[13px] font-semibold">Still to do before it can be confirmed</p>
+            <ul className="flex list-disc flex-col gap-0.5 pl-5 text-[13px]">
+              {go.reasons.map(r => <li key={r}>{r}</li>)}
+            </ul>
+          </div>
+        )}
         {next && check && (
           <div className="flex flex-col gap-1">
             <Button className={primaryBtn} disabled={busy || !check.ok}
               onClick={() => void onMove(next.to, askOverride ? { reason: reason.trim() } : undefined)}>
               {next.label}
             </Button>
-            {!check.ok && <p className="text-[12px] text-muted-foreground" role="status">{check.reason}</p>}
-            {check.ok && stage === 'shared' && !go.ok && <p className="text-[12px] text-muted-foreground">{go.reasons[0]}</p>}
-          </div>
-        )}
-        {/* WE DECIDE (Manal, 4 Nov 2026: "some clients approve but don't tick it off", "some clients want us to
-            decide", "press done and it disappears as completed"). The checks above stay for everyone else; an
-            account manager or super admin can send it off by hand. Every press is stamped with who and when. */}
-        {onDecide && (role === 'account_manager' || role === 'super_admin') && !footageOnly && (
-          <div className="flex flex-col gap-2 rounded-inner border border-border bg-surface p-3" data-we-decide>
-            <p className="text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">We decide</p>
-            {batch.status === 'wrapped' ? (
-              <Button variant="outline" className="h-11 rounded-full" disabled={busy} onClick={() => void onDecide('reopen')}>
-                Open this shoot again
-              </Button>
-            ) : (
-              <div className="flex flex-wrap gap-2">
-                {(batch.client_approval_needed === true || batch.shared_with_client === true) && batch.client_decision !== 'approved' && (
-                  <Button variant="outline" className="h-11 rounded-full" disabled={busy} onClick={() => void onDecide('client_approved')}>
-                    Client approved — mark it ourselves
-                  </Button>
-                )}
-                {!batch.brief_shared_at && (
-                  <Button variant="outline" className="h-11 rounded-full" disabled={busy} onClick={() => void onMove('shared', { force: true })}>
-                    Share with the team now
-                  </Button>
-                )}
-                {!batch.go_at && (
-                  <Button variant="outline" className="h-11 rounded-full" disabled={busy} onClick={() => void onMove('confirmed', { force: true })}>
-                    Confirm now — we decided
-                  </Button>
-                )}
-                <Button className="h-11 rounded-full" disabled={busy} onClick={() => void onDecide('done')}>
-                  Done — close and archive
-                </Button>
-              </div>
+            {/* the one reason, where the list above is not drawn */}
+            {!whatsLeft && (
+              <>
+                {!check.ok && <p className="text-[12px] text-muted-foreground" role="status">{check.reason}</p>}
+                {check.ok && stage === 'shared' && !go.ok && <p className="text-[12px] text-muted-foreground">{go.reasons[0]}</p>}
+              </>
             )}
-            <p className="text-[12px] text-muted-foreground">
-              {batch.status === 'wrapped'
-                ? 'This shoot is done and archived. Opening it again puts it back on the Shoots page.'
-                : 'Skips the checks. Done takes it off the Shoots page into Archive and stops every reminder.'}
-            </p>
           </div>
         )}
         {stage === 'footage_handed' && !footageOnly && (
@@ -714,28 +694,90 @@ export function WherePanel({ batch, role, viewerId, today, itemCount, busy, name
             portal card at the bottom — confusing"). Not on the portal: one
             button puts it there. On the portal: the links to send and the
             way to take it off. No email is ever sent to a client. */}
+        {batch.status !== 'wrapped' && !footageOnly && (
+          <ClientBlock batch={batch} portalToken={portalToken} busy={busy} shareReady={shareReady} clientLine={clientLine}
+            onShareClient={onShareClient} onPatch={onPatch} />
+        )}
+
+        {/* MORE OPTIONS, CLOSED UNTIL WANTED (the owner, 19 Nov 2026: "there is so many buttons on the right"). What is
+            pressed on most shoots stays in view: the one next button and the client's. What is pressed on a few —
+            the plan's PDF, Delivery only, and the manager's ways past the checks — waits here, one press away. */}
+        <details className="group border-t border-border pt-1" data-more-options>
+          <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 text-[14px] font-semibold [&::-webkit-details-marker]:hidden">
+            <ChevronRight className="h-4 w-4 transition-transform group-open:rotate-90" aria-hidden />
+            More options
+            {batch.deliver_only === true && <span className="text-[12px] font-normal text-muted-foreground">· Delivery only is on</span>}
+          </summary>
+          <div className="flex flex-col gap-3 pb-2 pt-1">
+            <Button variant="outline" className={`${outlineBtn} w-fit`} asChild>
+              <a href={`/api/production/batches/${batch.id}/pdf`} download>
+                <FileDown className="h-4 w-4" aria-hidden /> Download the plan PDF
+              </a>
+            </Button>
         {/* DELIVERY ONLY (the owner, 14 Sep 2026: "when we finish a shoot, how
             can we set it up for only delivery — we won't be sending to a
             scheduler"): one switch; every card on the shoot takes the word,
             and the cards the plan makes are born with it */}
         {(role === 'account_manager' || role === 'super_admin' || role === 'general') && (
-          <label className="flex min-h-11 w-fit cursor-pointer items-start gap-2 border-t border-border pt-3 text-[13px]" data-deliver-only>
+          <label className="flex min-h-11 w-fit cursor-pointer items-start gap-2 text-[13px]" data-deliver-only>
             <TickBox className="mt-0.5" checked={batch.deliver_only === true} disabled={busy} onChange={on => void onPatch('deliver_only', on)} />
             <span>
               <span className="font-semibold">Delivery only</span> — the client posts these themselves. Every card on this shoot ends at approval; nothing goes to a scheduler.
             </span>
           </label>
         )}
-        {batch.status !== 'wrapped' && !footageOnly && (
-          <ClientBlock batch={batch} portalToken={portalToken} busy={busy} shareReady={shareReady} clientLine={clientLine}
-            onShareClient={onShareClient} onPatch={onPatch} />
+        {/* WE DECIDE (Manal, 4 Nov 2026: "some clients approve but don't tick it off", "some clients want us to
+            decide", "press done and it disappears as completed"). The checks above stay for everyone else; an
+            account manager or super admin can send it off by hand. Every press is stamped with who and when. */}
+        {onDecide && (role === 'account_manager' || role === 'super_admin') && !footageOnly && (
+          <div className="flex flex-col gap-2 rounded-inner border border-border bg-surface p-3" data-we-decide>
+            <p className="text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">We decide</p>
+            {batch.status === 'wrapped' ? (
+              <Button variant="outline" className="h-11 rounded-full" disabled={busy} onClick={() => void onDecide('reopen')}>
+                Open this shoot again
+              </Button>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {(batch.client_approval_needed === true || batch.shared_with_client === true) && batch.client_decision !== 'approved' && (
+                  <Button variant="outline" className="h-11 rounded-full" disabled={busy} onClick={() => void onDecide('client_approved')}>
+                    Client approved — mark it ourselves
+                  </Button>
+                )}
+                {!batch.brief_shared_at && (
+                  <Button variant="outline" className="h-11 rounded-full" disabled={busy} onClick={() => void onMove('shared', { force: true })}>
+                    Share with the team now
+                  </Button>
+                )}
+                {!batch.go_at && (
+                  <Button variant="outline" className="h-11 rounded-full" disabled={busy} onClick={() => void onMove('confirmed', { force: true })}>
+                    Confirm now — we decided
+                  </Button>
+                )}
+                <Button variant="outline" className="h-11 rounded-full" disabled={busy}
+                  onClick={() => { if (sureDone) { setSureDone(false); void onDecide('done') } else setSureDone(true) }}>
+                  {sureDone ? 'Press again to close and archive' : 'Done — close and archive'}
+                </Button>
+              </div>
+            )}
+            <p className="text-[12px] text-muted-foreground">
+              {batch.status === 'wrapped'
+                ? 'This shoot is done and archived. Opening it again puts it back on the Shoots page.'
+                : 'Skips the checks. Done takes it off the Shoots page into Archive and stops every reminder.'}
+            </p>
+          </div>
         )}
+          </div>
+        </details>
 
 
-        {/* who did what, and when */}
-        <div className="flex flex-col gap-1 border-t border-border pt-3">
-          <p className={H}>What happened</p>
-          <ul className="flex flex-col gap-1" aria-label="Who did what, and when">
+        {/* who did what, and when — closed until wanted; the latest thing that happened is said on the row */}
+        <details className="group border-t border-border pt-1" data-what-happened>
+          <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 text-[14px] font-semibold [&::-webkit-details-marker]:hidden">
+            <ChevronRight className="h-4 w-4 shrink-0 transition-transform group-open:rotate-90" aria-hidden />
+            What happened
+            <span className="min-w-0 truncate text-[12px] font-normal text-muted-foreground">· {lines.filter(l => l.done).length} of {lines.length} steps done</span>
+          </summary>
+          <ul className="flex flex-col gap-1 pb-2" aria-label="Who did what, and when">
             {lines.map(l => (
               <li key={l.key} className={`flex gap-2 text-[13px] ${l.done ? '' : 'text-muted-foreground'}`}>
                 {/* a tick for what happened; nothing for what has not — the dots read
@@ -745,7 +787,7 @@ export function WherePanel({ batch, role, viewerId, today, itemCount, busy, name
               </li>
             ))}
           </ul>
-        </div>
+        </details>
       </CardContent>
     </Card>
   )
@@ -927,13 +969,6 @@ export function ClientBlock({ batch, portalToken, busy, shareReady, clientLine, 
 }) {
   const [copied, setCopied] = useState<string | null>(null)
   const onPortal = !!batch.shared_with_client
-  const pdf = (
-    <Button variant="outline" className={outlineBtn} asChild>
-      <a href={`/api/production/batches/${batch.id}/pdf`} download>
-        <FileDown className="h-4 w-4" aria-hidden /> Download the plan PDF
-      </a>
-    </Button>
-  )
   /* WHO THE SHOOT IS FOR, AND WHAT THEIR PORTAL CALLS IT (the owner, 15 Sep
    * 2026): the business, or one of the client's people — with the two
    * toggles that decide the plan's title on a person's portal. A person's
@@ -987,7 +1022,6 @@ export function ClientBlock({ batch, portalToken, busy, shareReady, clientLine, 
           <Button variant="outline" className={outlineBtn} disabled={busy || !shareReady.ok} onClick={() => void onShareClient()}>
             Put the plan on the client portal
           </Button>
-          {pdf}
         </div>
         <p className="text-[12px] text-muted-foreground">
           {!shareReady.ok ? shareReady.reason : 'No email is sent — you copy the link and send it yourself once it is on.'}
@@ -1032,7 +1066,6 @@ export function ClientBlock({ batch, portalToken, busy, shareReady, clientLine, 
             <LinkIcon className="h-4 w-4" aria-hidden /> Copy board link
           </Button>
         )}
-        {pdf}
       </div>
       <p className="text-[12px] text-muted-foreground">
         {copied ?? 'They approve on their portal or ask for changes, and the answer shows here. No email is sent.'}
