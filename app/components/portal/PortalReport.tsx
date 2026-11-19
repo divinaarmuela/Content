@@ -6,6 +6,7 @@ import { ExternalLink, X } from 'lucide-react'
 import { fmt, reportHtml, type CandidatePost, platformLabel, availableStats, statsFor, STAT_WORD } from '../../lib/client-report-core'
 import { Kpi, AudienceSection } from '../../dashboard/reports/ReportFigures'
 import type { PortalReport as Report } from '../../lib/portal-reports'
+import { reportProseCss } from '../../lib/report-look'
 
 /**
  * THE CLIENT'S MONTHLY REPORT, INTERACTIVE (the owner, 5 Nov 2026: "highly interactive with the social media accounts
@@ -209,14 +210,7 @@ export default function PortalReport({ report }: { report: Report }) {
   )
 }
 
-const PROSE = `
-.portal-report-prose{font-size:15px;line-height:1.65}
-.portal-report-prose h1,.portal-report-prose h2{font-size:20px;font-weight:600;margin:22px 0 8px}
-.portal-report-prose h3{font-size:16px;font-weight:600;margin:18px 0 6px}
-.portal-report-prose p{margin:8px 0}
-.portal-report-prose ul,.portal-report-prose ol{margin:8px 0;padding-left:22px}
-.portal-report-prose ul{list-style:disc}.portal-report-prose ol{list-style:decimal}
-.portal-report-prose a{text-decoration:underline;text-underline-offset:3px}
-.portal-report-prose table{width:100%;border-collapse:collapse;margin:12px 0;font-size:14px}
-.portal-report-prose th,.portal-report-prose td{border:1px solid hsl(var(--border));padding:6px 8px;text-align:left}
+// the same look as the team's page, the editor and the PDF (report-look.ts) — a table too wide for a phone scrolls in place
+const PROSE = `${reportProseCss('.portal-report-prose')}
+.portal-report-prose{overflow-x:auto}
 `

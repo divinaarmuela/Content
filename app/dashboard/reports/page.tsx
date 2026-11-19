@@ -18,6 +18,7 @@ import TintCard from '../ui/TintCard'
 import PostBreakdowns from './PostBreakdowns'
 import PostsInReport from './PostsInReport'
 import type { ReportEditorHandle } from './ReportEditor'
+import { PRINT_CSS, PrintReport } from './ReportPdf'
 import { ReportV2Body } from './v2/ReportV2'
 import { parseView, viewQuery } from '../../lib/report-v2/filters'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
@@ -252,6 +253,14 @@ function Writer({ report, clientId, month, mayDelete, onChange, onDeleted, settl
   // THE REPORT IS EDITED AS A PAGE (19 Nov 2026, ReportEditor.tsx): the editor keeps its own words while typing —
   // nothing here changes on a keystroke — and hands the text over once, on Save
   const editorHandle = useRef<ReportEditorHandle | null>(null)
+  // A BUILT REPORT OPENS READY TO EDIT (the owner, 19 Nov 2026: "once report is built, immediately should be directed
+  // to the docs section ready to be edited"): the editor opens and the page moves down to it — no hunting for Edit
+  const reportTop = useRef<HTMLDivElement | null>(null)
+  const openForEditing = () => {
+    setDirty(false); setEditing(true)
+    // after the page has drawn the new report (two frames: the report lands, then the editor's place)
+    requestAnimationFrame(() => requestAnimationFrame(() => reportTop.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })))
+  }
   const [dirty, setDirty] = useState(false)
   const [editing, setEditing] = useState(false)
   const [writing, setWriting] = useState(false)
@@ -311,8 +320,8 @@ function Writer({ report, clientId, month, mayDelete, onChange, onDeleted, settl
     try {
       const { ok, j } = await writeReport({ action: 'generate', objective, notes })
       if (!ok) throw new Error(j.error ?? 'Could not write the report')
-      onChange(j.report); setEditing(false)
-      toast.success('Report written — read it through, edit, and tick the checks')
+      onChange(j.report); openForEditing()
+      toast.success('Report written — it is open below, ready to edit. Then tick the checks.')
     } catch (e) { toast.error(e instanceof Error ? e.message : 'Could not write the report') } finally { setWriting(false) }
   }
   /**
@@ -358,9 +367,9 @@ function Writer({ report, clientId, month, mayDelete, onChange, onDeleted, settl
       const gen = await writeReport({ action: 'generate', objective, notes: notesText })
       if (!gen.ok) throw new Error(gen.j.error ?? 'Could not write the report')
       mark(2, 'done')
-      onChange(gen.j.report); setEditing(false)
+      onChange(gen.j.report); openForEditing()
       setTimeout(() => setSteps(null), 8000)
-      toast.success(problems.length ? `Report built — ${problems.join('; ')}. Read it through and tick the checks.` : 'Report built — figures fresh, posts explained, report written. Read it through and tick the checks.')
+      toast.success(problems.length ? `Report built — ${problems.join('; ')}. It is open below, ready to edit.` : 'Report built — figures fresh, posts explained, report written. It is open below, ready to edit.')
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Could not build the report')
       setSteps(cur => cur && cur.map(s => (s.state === 'run' ? { ...s, state: 'fail' as const, to: Date.now(), note: e instanceof Error ? e.message : 'Failed' } : s)))
@@ -454,7 +463,7 @@ function Writer({ report, clientId, month, mayDelete, onChange, onDeleted, settl
 
       {report.body ? (
         <>
-          <div className="flex items-center gap-2">
+          <div ref={reportTop} className="flex scroll-mt-24 items-center gap-2">
             {editing ? (
               <>
                 <Button onClick={() => void saveBody()} disabled={saving || !dirty} className="h-10 rounded-full">{saving ? 'Saving…' : 'Save'}</Button>
@@ -577,121 +586,6 @@ function Writer({ report, clientId, month, mayDelete, onChange, onDeleted, settl
   )
 }
 
-/** the post breakdowns in the PDF: each post's score and the one-line verdict */
-function PrintBreakdowns({ raw }: { raw: unknown }) {
-  const x = readPostsExplained(raw)
-  const items = (x?.items ?? []).filter(i => i.breakdown)
-  if (!items.length) return null
-  const byId = new Map((x?.posts ?? []).map(p => [p.id, p]))
-  return (
-    <>
-      <h3>Why the posts worked</h3>
-      {items.map(i => {
-        const p = byId.get(i.postId)
-        return (
-          <p key={i.postId} className="pr-small">
-            <strong>{p?.publishedAt ? new Date(p.publishedAt).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' }) : ''} · score {i.index.score} ({i.index.multiple}× a typical post).</strong> {i.breakdown!.verdict}
-            {p?.url && <> <a href={p.url}>See the post</a></>}
-          </p>
-        )
-      })}
-    </>
-  )
-}
-
-/* ── the PDF: the print view — the figures, the top posts, the audience and the report ── */
-
-function PrintReport({ data, report, clientName }: { data: ReportData; report: Saved | null; clientName: string }) {
-  return (
-    <div id="report-print" aria-hidden>
-      <div className="pr-cover">
-        <p className="pr-kicker">MD Media · Monthly report</p>
-        <h1>{clientName}</h1>
-        <p className="pr-month">{monthLabel(data.month)}</p>
-      </div>
-      {data.platforms.map(p => (
-        <div key={p.platform} className="pr-block">
-          <h2>{platformLabel(p.platform)}{p.handle ? ` · @${p.handle}` : ''}</h2>
-          <table className="pr-kpis">
-            <tbody>
-              {([
-                ['Followers gained this month', p.followers.gained, p.followers.previousGained ?? null],
-                ['Views', p.views, p.previous.views],
-                ['Accounts reached', p.reach, p.previous.reach],
-                ['Interactions', p.interactions, p.previous.interactions],
-                ...(p.platform === 'instagram' ? [['Profile visits', p.profileVisits, null], ['Bio link taps', p.linkTaps, null]] as const : []),
-              ] as [string, number | null, number | null][]).map(([l, v, w]) => (
-                <tr key={l}><td>{l}</td><td className="pr-num">{fmt(v)}</td><td className="pr-chg">{w != null ? (change(v, w)?.text ?? '') : ''}{w != null ? ` (last month ${fmt(w)})` : ''}</td></tr>
-              ))}
-              {p.viewsFromFollowers != null && <tr><td>Views from followers / non-followers</td><td className="pr-num">{p.viewsFromFollowers}% / {p.viewsFromNonFollowers}%</td><td /></tr>}
-            </tbody>
-          </table>
-          {p.topPosts.length > 0 && (
-            <>
-              <h3>Top posts by views</h3>
-              <div className="pr-posts">
-                {p.topPosts.map((t, i) => (
-                  <div key={t.id} className="pr-post">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    {t.thumbnail && (t.url ? <a href={t.url}><img src={t.thumbnail} alt="" referrerPolicy="no-referrer" /></a> : <img src={t.thumbnail} alt="" referrerPolicy="no-referrer" />)}
-                    <p><strong>{i + 1}. {fmt(t.views)} views</strong></p>
-                    <p className="pr-small">{fmt(t.likes)} likes · {fmt(t.comments)} comments · {fmt(t.shares)} shares</p>
-                    {t.url && <p className="pr-small"><a href={t.url}>See the post</a></p>}
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
-          {p.platform === 'instagram' && <PrintBreakdowns raw={report?.posts_explained} />}
-        </div>
-      ))}
-      {data.audience && (
-        <div className="pr-block">
-          <h2>Audience</h2>
-          <p className="pr-small">Age: {data.audience.age.slice(0, 4).map(b => `${b.label} ${b.pct}%`).join(' · ')}</p>
-          <p className="pr-small">Top cities: {data.audience.cities.slice(0, 5).map(b => `${b.label} ${b.pct}%`).join(' · ')}</p>
-          {data.audience.engaged && <p className="pr-small">Who engaged this month: {data.audience.engaged.age.slice(0, 4).map(b => `${b.label} ${b.pct}%`).join(' · ')}</p>}
-        </div>
-      )}
-      {report?.body && <div className="pr-block report-prose" dangerouslySetInnerHTML={{ __html: reportHtml(report.body) }} />}
-    </div>
-  )
-}
-
-const PRINT_CSS = `
-.report-prose h2{font-size:20px;font-weight:600;margin:22px 0 8px}
-.report-prose h3{font-size:16px;font-weight:600;margin:18px 0 6px}
-.report-prose h4{font-size:14px;font-weight:600;margin:14px 0 4px}
-.report-prose p{font-size:14px;line-height:1.65;margin:0 0 10px}
-.report-prose ul,.report-prose ol{margin:0 0 12px;padding-left:22px;font-size:14px;line-height:1.6}
-.report-prose ul{list-style:disc}.report-prose ol{list-style:decimal}
-.report-prose li{margin:3px 0}
-.report-prose table{width:100%;border-collapse:collapse;margin:8px 0 14px;font-size:13px}
-.report-prose th,.report-prose td{border:1px solid hsl(var(--border));padding:6px 8px;text-align:left}
-.report-prose a,#report-print a{color:#2f6fed;text-decoration:underline;text-underline-offset:3px}
-#report-print{display:none}
-@media print{
-  @page{size:A4;margin:16mm}
-  body *{visibility:hidden}
-  #report-print,#report-print *{visibility:visible}
-  #report-print{display:block;position:absolute;left:0;top:0;width:100%;color:#0a0a0a;background:#fff;font-family:inherit}
-  .pr-cover{border-bottom:3px solid #0a0a0a;padding-bottom:18px;margin-bottom:22px}
-  .pr-kicker{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#666;margin:0}
-  .pr-cover h1{font-size:34px;font-weight:700;margin:6px 0 2px}
-  .pr-month{font-size:16px;color:#444;margin:0}
-  .pr-block{margin:0 0 22px;break-inside:avoid-page}
-  .pr-block h2{font-size:18px;font-weight:600;margin:0 0 8px}
-  .pr-block h3{font-size:14px;font-weight:600;margin:12px 0 6px}
-  .pr-kpis{width:100%;border-collapse:collapse;font-size:13px}
-  .pr-kpis td{border-bottom:1px solid #e5e5e5;padding:6px 4px}
-  .pr-num{font-weight:700;text-align:right;white-space:nowrap}
-  .pr-chg{color:#666;font-size:12px;padding-left:10px}
-  .pr-posts{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
-  .pr-post img{width:100%;aspect-ratio:4/5;object-fit:cover;border-radius:6px}
-  .pr-post p{margin:4px 0 0;font-size:11px}
-  .pr-small{font-size:11px;color:#555}
-}
-`
 
 /** when and who: "Written by Manal · 4 Nov, 6:10 pm · last edited by Karly · 4 Nov, 6:40 pm" */
 const when = (iso: string | null | undefined) => iso ? new Date(iso).toLocaleString('en-AU', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : ''

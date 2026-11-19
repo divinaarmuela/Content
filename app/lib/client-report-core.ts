@@ -243,6 +243,10 @@ export function reportPrompt(input: {
     'Write in plain Australian English. Do not use dashes as punctuation anywhere in the report.',
     'Whenever you name a post, link it in Markdown as [a few words about the post](its url), using only the url given for that post in the data. Never write a link that is not in the data; a post without a url is named without one.',
     'Format the report in Markdown with these sections, in this order: Summary, Key insights, Top performing content, What underperformed, Content themes and formats, Audience, Follower growth, Benchmark comparison, Content gaps, Strategy for next month, Content pillars (with a % split), Content ideas (10 to 20).',
+    // THE REPORT'S LOOK (the owner, 19 Nov 2026, after the Basfoods report): section headings and tables are what the
+    // page, the PDF and the portal draw in the report's blue (report-look.ts), so the writer is asked for them
+    'Start every section with a single # heading. Inside a section, use a ### heading for each named post, pillar or sub-topic.',
+    'Use a Markdown table wherever posts, months or pillars are set side by side: Top performing content (columns: #, Post, Views, Interactions, and any other figure the data gives for every post listed), Benchmark comparison (columns: Metric, last month, this month, Change), and Content pillars (columns: %, Pillar, What it covers, Why). Keep every table cell to one short line with no line breaks, and put the explanation in sentences under the table. A post named in a table is linked the same way as anywhere else.',
   ].join('\n')
   const user = [
     'Data Analytics prompts, Analyse this social media performance dataset.',

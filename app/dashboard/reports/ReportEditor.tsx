@@ -171,8 +171,7 @@ const EDITOR_CSS = `
 .report-editor-area .tableWrapper{overflow-x:auto;margin:8px 0 14px}
 .report-editor-area table{margin:0;table-layout:fixed}
 .report-editor-area th,.report-editor-area td{position:relative;min-width:72px;vertical-align:top}
-.report-editor-area th{background:hsl(var(--muted));font-weight:600}
-.report-editor-area td p,.report-editor-area th p,.report-editor-area li p{margin:0}
+.report-editor-area li p{margin:0}
 .report-editor-area .selectedCell::after{content:"";position:absolute;inset:0;background:rgba(47,111,237,.14);pointer-events:none}
 @media (max-width:640px){.report-editor-area{padding:14px}}
 `
