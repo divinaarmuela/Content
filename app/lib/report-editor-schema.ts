@@ -19,7 +19,8 @@ export const reportEditorExtensions = () => [
     blockquote: false, code: false, codeBlock: false, strike: false, underline: false, horizontalRule: false, hardBreak: false,
     link: { openOnClick: false, autolink: true, linkOnPaste: true, protocols: ['http', 'https'], HTMLAttributes: { rel: 'noreferrer noopener', target: '_blank' } },
   }),
-  Table.configure({ resizable: true, cellMinWidth: 60, lastColumnResizable: true }),
+  // a column's edge is grabbed within 10px of it (5 was easy to miss: the owner, 19 Nov 2026, "resizing table doesn't work")
+  Table.configure({ resizable: true, handleWidth: 10, cellMinWidth: 60, lastColumnResizable: true }),
   TableRow, TableHeader, TableCell,
   Image.configure({ inline: false, allowBase64: false, resize: { enabled: true, directions: ['bottom-right', 'bottom-left', 'top-right', 'top-left'], minWidth: 60, minHeight: 40, alwaysPreserveAspectRatio: true } }),
   TextStyle, Color,

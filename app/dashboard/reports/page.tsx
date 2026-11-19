@@ -5,7 +5,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import { toast } from 'sonner'
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import { ArrowDownRight, ArrowUpRight, Check, CircleHelp, ExternalLink, FileDown, Pencil, RefreshCw, Sparkles, Trash2 } from 'lucide-react'
+import { ArrowDownRight, ArrowUpRight, Check, CircleHelp, ExternalLink, Eye, FileDown, Pencil, RefreshCw, Sparkles, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
@@ -18,7 +18,7 @@ import TintCard from '../ui/TintCard'
 import PostBreakdowns from './PostBreakdowns'
 import PostsInReport from './PostsInReport'
 import type { ReportEditorHandle } from './ReportEditor'
-import { PRINT_CSS, PrintReport } from './ReportPdf'
+import { PRINT_CSS, PrintReport, ReportSheet } from './ReportPdf'
 import { reportBodyHtml } from '../../lib/report-doc'
 import { ReportV2Body } from './v2/ReportV2'
 import { parseView, viewQuery } from '../../lib/report-v2/filters'
@@ -89,6 +89,7 @@ function ReportsInner() {
   const [portalLink, setPortalLink] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [previewing, setPreviewing] = useState(false)
 
   useEffect(() => {
     void fetch('/api/reports/monthly').then(async r => {
@@ -178,8 +179,25 @@ function ReportsInner() {
           <Writer report={report ?? ({ id: `${clientId}_${month}`, month, data: null, body: null, objective: null, notes: null, checks: null, generated_at: null, updated_at: '' } as Saved)}
             clientId={clientId} month={month} mayDelete={mayDelete} onChange={setReport} onDeleted={() => void load()}
             settled={state.kind === 'final'} settlesOn={state.settlesOn} people={people} candidates={data?.candidates ?? []} portalLink={portalLink}
-            connected={data?.platforms.map(p => p.platform) ?? []} blockers={blockers} figuresRead={!!data} />
+            connected={data?.platforms.map(p => p.platform) ?? []} blockers={blockers} figuresRead={!!data} onPreview={() => setPreviewing(true)} />
           {data && <PrintReport data={scopeData(data, includedPlatforms(report?.included_platforms, data.platforms.map(p => p.platform)))} report={report} clientName={clientName} />}
+          {/* THE PREVIEW: the same sheet the PDF prints, on the screen, before anything is downloaded (19 Nov 2026) */}
+          {data && (
+            <Dialog open={previewing} onOpenChange={setPreviewing}>
+              <DialogContent className="max-h-[94vh] overflow-y-auto bg-muted p-0 sm:max-w-[920px]">
+                <DialogHeader className="sticky top-0 z-10 flex-row flex-wrap items-center gap-3 border-b border-border bg-popover px-5 py-3 text-left">
+                  <div className="min-w-0 flex-1">
+                    <DialogTitle>How the PDF will look</DialogTitle>
+                    <DialogDescription>This is the saved report. To change it, close this and press Edit. Where each page ends depends on the paper.</DialogDescription>
+                  </div>
+                  <Button onClick={() => window.print()} className="mr-8 h-10 gap-2 rounded-full px-4"><FileDown className="h-4 w-4" aria-hidden /> Download PDF</Button>
+                </DialogHeader>
+                <div className="p-3 sm:p-6">
+                  <ReportSheet className="report-sheet-screen" data={scopeData(data, includedPlatforms(report?.included_platforms, data.platforms.map(p => p.platform)))} report={report} clientName={clientName} />
+                </div>
+              </DialogContent>
+            </Dialog>
+          )}
         </>
       )}
     </div>
@@ -224,7 +242,9 @@ function FreshnessCard({ state, month, fetchedAt }: { state: MonthState; month: 
 
 /* ── the written report ──────────────────────────────────────────────────── */
 
-function Writer({ report, clientId, month, mayDelete, onChange, onDeleted, settled, settlesOn, people, candidates: allCandidates, portalLink, connected, blockers = [], figuresRead }: {
+function Writer({ report, clientId, month, mayDelete, onChange, onDeleted, settled, settlesOn, people, candidates: allCandidates, portalLink, connected, blockers = [], figuresRead, onPreview }: {
+  /** opens the PDF's own sheet on the screen */
+  onPreview: () => void
   /** the month's figures are saved, so its posts are known (none saved: Build report reads them first) */
   figuresRead: boolean
   report: Saved; clientId: string; month: MonthKey; mayDelete: boolean; onChange: (r: Saved) => void; onDeleted: () => void
@@ -250,6 +270,7 @@ function Writer({ report, clientId, month, mayDelete, onChange, onDeleted, settl
   // ONE THING (the owner, 5 Nov 2026: "why are there two things"): Build report opens a popup with the posts that are
   // included, more can be ticked in there, and its button builds the report
   const [picking, setPicking] = useState(false)
+  const [savingPicks, setSavingPicks] = useState(false)
   const pickedCount = includedIds(report.included_post_ids, candidates).size
   const [objective, setObjective] = useState(report.objective || 'Growth')
   const [notes, setNotes] = useState(report.notes ?? '')
@@ -270,7 +291,13 @@ function Writer({ report, clientId, month, mayDelete, onChange, onDeleted, settl
   const [saving, setSaving] = useState(false)
   const [asking, setAsking] = useState<'regen' | 'delete' | null>(null)
   useEffect(() => { setNotes(report.notes ?? ''); setObjective(report.objective || 'Growth') }, [report.id, report.generated_at]) // eslint-disable-line react-hooks/exhaustive-deps
-  const checks = report.checks ?? {}
+  // A TICK ANSWERS AT ONCE (the owner, 19 Nov 2026: "checkboxes are laggy and slow to get it ticked"). The box used to
+  // wait for the server before it showed its tick, a second or so each. It is ticked on the press and saved behind;
+  // if the save fails the box goes back and says so. While a save is out, an older answer never un-ticks a newer press.
+  const [checks, setChecks] = useState<Record<string, boolean>>(report.checks ?? {})
+  const checksNow = useRef(checks)
+  const tickSaves = useRef(0)
+  useEffect(() => { if (tickSaves.current === 0) { checksNow.current = report.checks ?? {}; setChecks(report.checks ?? {}) } }, [report.checks, report.id])
   // unsaved words are not lost to a closed tab without a warning
   useEffect(() => {
     if (!editing || !dirty) return
@@ -420,7 +447,16 @@ function Writer({ report, clientId, month, mayDelete, onChange, onDeleted, settl
     setSaving(true)
     try { await patch({ body, body_doc, notes, objective }); setEditing(false); setDirty(false); toast.success('Saved') } catch (e) { toast.error(e instanceof Error ? e.message : 'Could not save') } finally { setSaving(false) }
   }
-  const tick = async (key: string, v: boolean) => { try { await patch({ checks: { ...checks, [key]: v } }) } catch (e) { toast.error(e instanceof Error ? e.message : 'Could not save') } }
+  const savedChecks = useRef(report.checks ?? {})
+  savedChecks.current = report.checks ?? {}
+  const tick = (key: string, v: boolean) => {
+    const next = { ...checksNow.current, [key]: v }
+    checksNow.current = next; setChecks(next)
+    tickSaves.current++
+    void patch({ checks: next })
+      .catch(e => { toast.error(e instanceof Error ? e.message : 'Could not save'); checksNow.current = savedChecks.current; setChecks(savedChecks.current) })
+      .finally(() => { tickSaves.current-- })
+  }
   const remove = async () => {
     setAsking(null)
     const r = await fetch(`/api/reports/monthly?client_id=${encodeURIComponent(clientId)}&month=${month}`, { method: 'DELETE' })
@@ -495,16 +531,19 @@ function Writer({ report, clientId, month, mayDelete, onChange, onDeleted, settl
             <p className="text-[14px] font-semibold">Before it goes to the client</p>
             {REVIEW_CHECKS.map(c => (
               <label key={c.key} className="flex min-h-9 cursor-pointer items-center gap-2.5 text-[14px]">
-                <input type="checkbox" className="h-4 w-4 accent-foreground" checked={checks[c.key] === true} onChange={e => void tick(c.key, e.target.checked)} />
+                <input type="checkbox" className="h-4 w-4 accent-foreground" checked={checks[c.key] === true} onChange={e => tick(c.key, e.target.checked)} />
                 {c.words}
               </label>
             ))}
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            <Button onClick={() => window.print()} disabled={editing} className="h-11 gap-2 rounded-full px-5"><FileDown className="h-4 w-4" aria-hidden /> Download PDF</Button>
+            {/* SEE IT BEFORE IT IS DOWNLOADED (the owner, 19 Nov 2026: "there is no way to see the actual look of the doc
+                before it's downloaded and tweak it"): the very sheet the PDF prints, on the screen */}
+            <Button onClick={onPreview} disabled={editing} className="h-11 gap-2 rounded-full px-5"><Eye className="h-4 w-4" aria-hidden /> Preview the PDF</Button>
+            <Button variant="outline" onClick={() => window.print()} disabled={editing} className="h-11 gap-2 rounded-full px-5"><FileDown className="h-4 w-4" aria-hidden /> Download PDF</Button>
             {allChecked(checks)
               ? <span className="inline-flex items-center gap-1 text-[13px] font-semibold text-accent-green"><Check className="h-4 w-4" aria-hidden /> Every check ticked</span>
-              : <span className="text-[13px] text-muted-foreground">Tick every check before it goes to the client. In the print window, choose “Save as PDF”.</span>}
+              : <span className="text-[13px] text-muted-foreground">{editing ? 'Save or cancel your edits to preview or download.' : 'Tick every check before it goes to the client. In the print window, choose “Save as PDF”.'}</span>}
           </div>
           {/* ON THE CLIENT'S PORTAL (Manal, via the owner, 5 Nov 2026): the client reads it, interactive, in their
               portal's Reports tab. Nothing is emailed: the team sends the link themselves. */}
@@ -571,11 +610,11 @@ function Writer({ report, clientId, month, mayDelete, onChange, onDeleted, settl
             </div>
             <p className="text-[12px] text-muted-foreground">Only the ticked accounts go in the written report, the PDF and the client’s portal.</p>
           </div>
-          <PostsInReport candidates={candidates} saved={report.included_post_ids} clientId={clientId} month={month} onChange={r => onChange(r as Saved)} />
+          <PostsInReport candidates={candidates} saved={report.included_post_ids} clientId={clientId} month={month} onChange={r => onChange(r as Saved)} onSaving={setSavingPicks} />
           <div className="sticky bottom-0 -mx-6 -mb-6 flex flex-wrap items-center justify-end gap-3 border-t border-border bg-popover px-6 py-4">
             {report.body && <span className="mr-auto text-[13px] text-muted-foreground">The current report is kept under Earlier versions.</span>}
             <Button variant="ghost" onClick={() => setPicking(false)} className="h-11 rounded-full">Cancel</Button>
-            <Button disabled={pickedCount === 0} onClick={() => { setPicking(false); void build() }} className="h-11 gap-2 rounded-full px-5">
+            <Button disabled={pickedCount === 0 || savingPicks} onClick={() => { setPicking(false); void build() }} className="h-11 gap-2 rounded-full px-5">
               <Sparkles className="h-4 w-4" aria-hidden /> Build report with {pickedCount} post{pickedCount === 1 ? '' : 's'}
             </Button>
           </div>

@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { Check, ExternalLink } from 'lucide-react'
 import { includedIds, type CandidatePost, type MonthKey } from '../../lib/client-report-core'
@@ -9,39 +9,62 @@ import { includedIds, type CandidatePost, type MonthKey } from '../../lib/client
  * THE POSTS IN THIS REPORT (the owner, 5 Nov 2026: "showcase when create a report … these posts are included, add any
  * more, and then it will do it"). Every post of the month, newest first. The ones MD Media published through the app
  * start ticked; the team ticks any other post to add it, or unticks one to leave it out. Build report then explains
- * and writes about the ticked posts only. Each tick saves at once.
+ * and writes about the ticked posts only.
+ *
+ * A PRESS ANSWERS AT ONCE (the owner, 19 Nov 2026: "slow to get it ticked … make it quick"). Each press used to lock
+ * every post until the server answered. Now the tick shows on the press and the picks are saved behind it, one save at
+ * a time, always the latest set; `onSaving` tells the page so Build waits for the last one to land.
  */
-export default function PostsInReport({ candidates, saved, clientId, month, onChange }: {
+export default function PostsInReport({ candidates, saved, clientId, month, onChange, onSaving }: {
   candidates: CandidatePost[]
   /** the report's `included_post_ids` as saved (unset = the default) */
   saved: unknown
   clientId: string
   month: MonthKey
   onChange: (report: unknown) => void
+  /** true while a pick is still being saved */
+  onSaving?: (saving: boolean) => void
 }) {
-  const picked = useMemo(() => includedIds(saved, candidates), [saved, candidates])
-  const [busy, setBusy] = useState(false)
+  const [picked, setPicked] = useState(() => includedIds(saved, candidates))
+  const latest = useRef(picked)
+  const running = useRef(false)
+  const dirty = useRef(false)
+  // what the server holds is taken up only when nothing of ours is on its way
+  useEffect(() => {
+    if (running.current || dirty.current) return
+    const next = includedIds(saved, candidates)
+    latest.current = next; setPicked(next)
+  }, [saved, candidates])
 
-  const save = async (next: Set<string>) => {
-    setBusy(true)
+  const flush = async () => {
+    if (running.current) return
+    running.current = true; onSaving?.(true)
     try {
-      const r = await fetch('/api/reports/monthly', {
-        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ client_id: clientId, month, included_post_ids: [...next] }),
-      })
-      const j = await r.json().catch(() => ({}))
-      if (!r.ok) throw new Error(j.error ?? 'Could not save')
-      onChange(j.report)
+      while (dirty.current) {
+        dirty.current = false
+        const r = await fetch('/api/reports/monthly', {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ client_id: clientId, month, included_post_ids: [...latest.current] }),
+        })
+        const j = await r.json().catch(() => ({}))
+        if (!r.ok) throw new Error(j.error ?? 'Could not save')
+        if (!dirty.current) onChange(j.report)
+      }
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not save')
+      dirty.current = false
+      toast.error(e instanceof Error ? `${e.message}. Your last pick was not saved.` : 'Could not save your last pick')
+      const back = includedIds(saved, candidates)
+      latest.current = back; setPicked(back)
     } finally {
-      setBusy(false)
+      running.current = false; onSaving?.(false)
     }
   }
   const toggle = (id: string) => {
-    const next = new Set(picked)
+    const next = new Set(latest.current)
     if (next.has(id)) next.delete(id); else next.add(id)
-    void save(next)
+    latest.current = next; setPicked(next)
+    dirty.current = true
+    void flush()
   }
 
   const mine = candidates.filter(c => c.byMdm)
@@ -51,7 +74,7 @@ export default function PostsInReport({ candidates, saved, clientId, month, onCh
     const on = picked.has(c.id)
     return (
       <li key={c.id}>
-        <button type="button" onClick={() => toggle(c.id)} disabled={busy} aria-pressed={on}
+        <button type="button" onClick={() => toggle(c.id)} aria-pressed={on}
           className={`group relative flex w-full flex-col overflow-hidden rounded-inner border text-left transition ${on ? 'border-foreground ring-2 ring-foreground/20' : 'border-border opacity-70 hover:opacity-100'}`}>
           <div className="relative aspect-[4/5] w-full bg-muted">
             {/* an expired story's picture is refused by Facebook and Instagram (403, checked 5 Nov 2026): said, not a grey box */}
