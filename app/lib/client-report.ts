@@ -7,7 +7,7 @@ import {
   monthRange, previousMonth, readReportData, reportId, reportPrompt, toBreakdown,
   type Audience, type MonthKey, type PlatformFigures, type ReportData, type TopPost, keepVersion, includedIds, type CandidatePost, REPORT_DATA_VERSION, REPORT_PLATFORMS, platformLabel, includedPlatforms, scopeData, type ReportPlatform, nextMonthStart, followerMonth } from './client-report-core'
 import { breakdownLines, readPostsExplained } from './post-breakdown-core'
-import { keepPictures } from './report-pictures'
+import { keepPicture, keepPictures } from './report-pictures'
 import { aiClient, aiError, viaGateway, writerModel } from './ai-gateway'
 
 /**
@@ -48,14 +48,14 @@ const obj = (v: unknown): Record<string, unknown> => (v && typeof v === 'object'
 const arr = (v: unknown): Record<string, unknown>[] => (Array.isArray(v) ? v.filter(x => x && typeof x === 'object') as Record<string, unknown>[] : [])
 const metricTotal = (metrics: Record<string, unknown>, k: string) => num(obj(metrics[k]).total ?? metrics[k])
 
-export type Account = { id: string; platform: ReportPlatform; handle: string | null }
+export type Account = { id: string; platform: ReportPlatform; handle: string | null; avatar?: string | null }
 
 export async function accountsOf(clientId: string): Promise<Account[]> {
-  const rows = await table<{ id: string; client_id: string | null; platform: string; provider_account_id: string | null; username: string | null; name: string | null; active?: boolean | null }>('social_accounts')
+  const rows = await table<{ id: string; client_id: string | null; platform: string; provider_account_id: string | null; username: string | null; name: string | null; active?: boolean | null; avatar_url?: string | null }>('social_accounts')
     .list({ where: a => a.client_id === clientId && a.active !== false && (REPORT_PLATFORMS as readonly string[]).includes(a.platform) && !!a.provider_account_id })
   const seen = new Set<string>()
   return rows.filter(a => !seen.has(a.platform) && seen.add(a.platform))
-    .map(a => ({ id: String(a.provider_account_id), platform: a.platform as Account['platform'], handle: a.username ?? a.name ?? null }))
+    .map(a => ({ id: String(a.provider_account_id), platform: a.platform as Account['platform'], handle: a.username ?? a.name ?? null, avatar: a.avatar_url ?? null }))
     .sort((a, b) => REPORT_PLATFORMS.indexOf(a.platform) - REPORT_PLATFORMS.indexOf(b.platform))
 }
 
@@ -348,13 +348,18 @@ export async function loadReportData(clientId: string, m: MonthKey): Promise<Rep
   const read: PlatformFigures[] = []
   for (const a of accounts) { const f = await figuresOf(a, profileId, m, gaps, candidates); if (f) read.push(f) }
   // Instagram's own picture addresses expire within days: the top posts keep our own copies (report-pictures.ts)
-  const platforms = await Promise.all(read.map(async p => ({ ...p, topPosts: await keepPictures(p.topPosts) })))
+  // each account's own profile picture, kept (19 Nov 2026) — the first one there is, Instagram's before the rest, is
+  // the logo on the report's cover
+  const platforms = await Promise.all(read.map(async p => ({
+    ...p, topPosts: await keepPictures(p.topPosts), avatar: await keepPicture(accounts.find(a => a.platform === p.platform)?.avatar),
+  })))
+  const logo = platforms.find(p => p.avatar)?.avatar ?? null
   const ig = accounts.find(a => a.platform === 'instagram')
   const audience = ig ? await audienceOf(ig, clientId, m, now) : null
   if (ig && !audience) gaps.push('Audience breakdown: Instagram only gives it for the current month, to accounts with 100+ followers — none was kept for this month')
   const data: ReportData = {
     clientId, clientName: client.name, industry: (client as { industry?: string | null }).industry ?? null,
-    v: REPORT_DATA_VERSION,
+    v: REPORT_DATA_VERSION, logo,
     month: m, fetchedAt: now.toISOString(), platforms, audience, gaps,
     candidates: candidates.sort((a, b) => String(b.publishedAt ?? '').localeCompare(String(a.publishedAt ?? ''))),
   }

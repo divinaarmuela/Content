@@ -7,6 +7,7 @@ import { fmt, reportHtml, type CandidatePost, platformLabel, availableStats, sta
 import { Kpi, AudienceSection } from '../../dashboard/reports/ReportFigures'
 import type { PortalReport as Report } from '../../lib/portal-reports'
 import { reportProseCss } from '../../lib/report-look'
+import PlatformIcon from '../../dashboard/social/PlatformIcon'
 
 /**
  * THE CLIENT'S MONTHLY REPORT, INTERACTIVE (the owner, 5 Nov 2026: "highly interactive with the social media accounts
@@ -67,7 +68,7 @@ export default function PortalReport({ report }: { report: Report }) {
           <div className="flex flex-wrap gap-2" role="tablist" aria-label="Account">
             {accounts.map(a => (
               <button key={a.platform} type="button" role="tab" aria-selected={a.platform === account} onClick={() => setAccount(a.platform)} className={chip(a.platform === account)}>
-                {platformName(a.platform)}{a.handle ? ` · @${a.handle}` : ''}
+                <span className="inline-flex items-center gap-2"><PlatformIcon platform={a.platform} size={20} /> {platformName(a.platform)}{a.handle ? ` · @${a.handle}` : ''}</span>
               </button>
             ))}
           </div>

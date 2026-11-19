@@ -33,6 +33,13 @@ async function keep(url: string): Promise<string> {
   }
 }
 
+/** ONE PICTURE, KEPT — an account's profile picture (19 Nov 2026: the report's cover logo). Every network signs these
+ *  to expire, so it is copied whatever its address; one that cannot be fetched keeps its address. */
+export async function keepPicture(url: string | null | undefined): Promise<string | null> {
+  if (!url) return null
+  return r2Configured() ? keep(url) : url
+}
+
 /** the same posts, with every expiring picture swapped for our own lasting copy */
 export async function keepPictures<T extends Pick<TopPost, 'thumbnail'>>(posts: T[]): Promise<T[]> {
   if (!r2Configured() || !posts.some(p => expires(p.thumbnail))) return posts

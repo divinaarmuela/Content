@@ -84,6 +84,8 @@ export type TopPost = {
 export type PlatformFigures = {
   platform: ReportPlatform
   handle: string | null
+  /** the account's own profile picture, as Zernio gives it, kept as our copy (19 Nov 2026) */
+  avatar?: string | null
   followers: { start: number | null; end: number | null; previousEnd: number | null; gained: number | null
     /** what the month before gained, as Zernio gives it (5 Nov 2026: "each month compared to the previous month") */
     previousGained?: number | null
@@ -134,6 +136,8 @@ export type CandidatePost = {
  *  (5 Nov 2026: stories were saved as "video" and ranked as blank top posts until someone pressed Read again) */
 export const REPORT_DATA_VERSION = 11
 export type ReportData = {
+  /** the client's logo for the report's cover: the profile picture of their first account (19 Nov 2026) */
+  logo?: string | null
   /** REPORT_DATA_VERSION the figures were read under; unset = before 5 Nov 2026 */
   v?: number
   /** every post of the month on each account, marked when MD Media published it (5 Nov 2026) */
@@ -363,6 +367,7 @@ export function readReportData(raw: unknown): ReportData | null {
     gaps: list<string>(d.gaps),
     candidates: list<CandidatePost>(d.candidates),
     v: typeof d.v === 'number' ? d.v : undefined,
+    logo: typeof d.logo === 'string' && d.logo ? d.logo : null,
     audience: a ? {
       asOf: a.asOf ?? null, age: list(a.age), cities: list(a.cities), countries: list(a.countries),
       engaged: a.engaged ? { age: list(a.engaged.age), cities: list(a.engaged.cities), countries: list(a.engaged.countries) } : null,

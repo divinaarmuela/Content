@@ -4,6 +4,9 @@ import { useMemo } from 'react'
 import { readPostsExplained } from '../../lib/post-breakdown-core'
 import { change, fmt, monthLabel, monthRange, platformLabel, reportHtml, type ReportData } from '../../lib/client-report-core'
 import { REPORT_BLUE, REPORT_TILE, reportProseCss } from '../../lib/report-look'
+import { viewsByType } from '../../lib/report-charts-core'
+import PlatformIcon from '../social/PlatformIcon'
+import { CompareBars, DailyLine, SplitBar } from './ReportCharts'
 
 /**
  * THE REPORT'S PDF, AND THE REPORT'S STYLES (moved out of page.tsx, 19 Nov 2026, so the print view can be rendered and
@@ -49,6 +52,10 @@ export function PrintReport({ data, report, clientName }: { data: ReportData; re
       {/* THE COVER, THE SUMMARY ROW AND THE FIGURE TILES (the owner, 19 Nov 2026, after the Basfoods report: "this is how
           the report should look like"). Every number here is the page's own figure — none is typed. */}
       <div className="pr-cover">
+        {/* THE CLIENT'S OWN PICTURE (the owner, 19 Nov 2026: "client logos added … Zernio has that data"): the profile
+            picture of their account, kept as our own copy when the figures are read */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        {data.logo && <img className="pr-logo" src={data.logo} alt="" referrerPolicy="no-referrer" onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} />}
         <p className="pr-kicker">Social media monthly report</p>
         <h1>{clientName}</h1>
         <p className="pr-sub">Monthly Performance Review</p>
@@ -75,7 +82,7 @@ export function PrintReport({ data, report, clientName }: { data: ReportData; re
       )}
       {data.platforms.map(p => (
         <div key={p.platform} className="pr-block">
-          <h2>{platformLabel(p.platform)} at a Glance{p.handle ? ` · @${p.handle}` : ''}</h2>
+          <h2 className="pr-plat"><PlatformIcon platform={p.platform} size={26} /> {platformLabel(p.platform)} at a Glance{p.handle ? <span> · @{p.handle}</span> : null}</h2>
           <div className="pr-tiles">
             {([
               ['Views', p.views, p.previous.views],
@@ -91,7 +98,42 @@ export function PrintReport({ data, report, clientName }: { data: ReportData; re
               </div>
             ))}
           </div>
-          {p.viewsFromFollowers != null && <p className="pr-note">Views from followers {p.viewsFromFollowers}% · from people who do not follow yet {p.viewsFromNonFollowers}%</p>}
+          {/* THE CHARTS (the owner, 19 Nov 2026: "add beautifully designed charts") — each drawn from the figures above */}
+          {p.daily.some(d => d.views > 0) && (
+            <div className="pr-chart">
+              <h3>Views each day</h3>
+              <DailyLine daily={p.daily} />
+            </div>
+          )}
+          <div className="pr-charts">
+            {[p.previous.views, p.previous.reach, p.previous.interactions].some(v => v != null) && (
+              <div className="pr-chart">
+                <h3>This month beside last month</h3>
+                <CompareBars rows={[
+                  { label: 'Views', now: p.views, was: p.previous.views },
+                  { label: 'Accounts reached', now: p.reach, was: p.previous.reach },
+                  { label: 'Interactions', now: p.interactions, was: p.previous.interactions },
+                ]} />
+              </div>
+            )}
+            <div className="pr-chart">
+              {viewsByType(data.candidates ?? [], p.platform).length > 1 && (
+                <>
+                  <h3>Where this month’s posts were seen, by kind of post</h3>
+                  <SplitBar parts={viewsByType(data.candidates ?? [], p.platform)} unit="views" />
+                </>
+              )}
+              {p.viewsFromFollowers != null && p.viewsFromNonFollowers != null && (
+                <>
+                  <h3>Who saw it</h3>
+                  <SplitBar parts={[
+                    { label: 'People who do not follow yet', value: p.viewsFromNonFollowers, pct: p.viewsFromNonFollowers },
+                    { label: 'Followers', value: p.viewsFromFollowers, pct: p.viewsFromFollowers },
+                  ]} />
+                </>
+              )}
+            </div>
+          </div>
           {p.topPosts.length > 0 && (
             <>
               <h3>Top posts by views</h3>
@@ -146,6 +188,14 @@ export const PRINT_CSS = `${reportProseCss('.report-prose')}
   .pr-tile span{display:block;font-size:9px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:#555;margin-top:2px}
   .pr-tile i{display:block;font-size:9px;font-style:normal;color:#777;margin-top:2px}
   .pr-note{font-size:11px;font-style:italic;color:#666;margin:4px 0 0}
+  .pr-logo{width:84px;height:84px;border-radius:50%;object-fit:cover;margin:0 auto 16px;display:block;border:1px solid #e5e5e5}
+  .pr-plat{display:flex;align-items:center;gap:9px}
+  .pr-plat span[role=img]{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .pr-plat > span:not([role=img]){font-weight:400;color:#666}
+  .pr-charts{display:grid;grid-template-columns:1fr 1fr;gap:22px;align-items:start}
+  .pr-chart{break-inside:avoid;margin-top:6px}
+  .pr-chart svg{max-width:100%;height:auto}
+  .pr-chart h3{font-size:12px;font-weight:700;color:#1b1b1b;margin:12px 0 6px}
   .report-prose td{border-color:#d9d9d9}
   .pr-block{margin:0 0 22px;break-inside:avoid-page}
   .pr-block > h3{font-size:14px;font-weight:700;color:${REPORT_BLUE};margin:14px 0 6px}
