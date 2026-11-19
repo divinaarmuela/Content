@@ -426,7 +426,9 @@ export default function ShootPage({ params }: { params: Promise<{ id: string }> 
 
       {today && <StageStrip batch={batch} today={today} role={role as never} itemCount={deliverableItems.length} planReviewRequired={planReviewRequired} />}
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
+      {/* the first row is as tall as the shoot's card and no taller, so the comments sit right under it (the plan
+          spans both rows; left to itself the grid shares the plan's height between them and leaves a gap) */}
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px] lg:grid-rows-[auto_1fr]">
         {/* ── the plan ── on a phone it comes after the shoot's own card, which says what to do next */}
         <div className="order-2 flex flex-col gap-4 lg:order-none lg:row-span-2">
           {/* typed when the shoot was made, and until 21 Sep 2026 never shown or editable again. A new
