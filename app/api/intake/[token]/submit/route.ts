@@ -3,6 +3,8 @@ import { table, withRequestCache } from '@/lib/db'
 import type { Client, Lead, TeamUser } from '@/lib/db-types'
 import { leadFormName } from '../../../../lib/lead-discovery-core'
 import { clientFromDiscovery, leadFromColdDiscovery } from '../../../../lib/lead-discovery'
+import { addClientBrandFile } from '../../../../lib/brand-assets'
+import { intakeFileTarget } from '../../../../lib/gdrive-core'
 import {
   submitIntake, getIntakeDefaultRecipients, listIntakeFiles,
 } from '../../../../lib/intake'
@@ -93,6 +95,25 @@ export async function POST(_req: Request, { params }: { params: Promise<{ token:
     previewVideos(submitted.map(f => f.url))
   } catch (e) {
     console.error('intake drive mirror failed:', e)
+  }
+
+  // THE LOGO AND BRAND FILES GO ONTO THE CLIENT'S BRAND TAB (the owner, 20 Nov 2026: "once we upload here it
+  // immediately goes in their branding tab … files add logo files which will go in client's branding logo files
+  // section"). Every file from a brand question (logos, brand guide, fonts) is added to the tab's "logos and brand
+  // files" list, BESIDE what is already there. Until now only a background job did this, and only when the tab was
+  // empty — a client who already had a logo on file never got what they uploaded on a form. On submit, not on
+  // upload, for the same reason as the mirror above: a file is only real once its bytes have arrived.
+  // One at a time: each add is a claim on the brand profile's revision.
+  if (client) try {
+    const labels = new Map<string, string>()
+    for (const section of form.definition.sections) for (const block of section.blocks) labels.set(block.id, block.label ?? '')
+    for (const f of await listIntakeFiles(form.id)) {
+      if (intakeFileTarget(f.block_id, labels.get(f.block_id) ?? '') !== 'brand') continue
+      const added = await addClientBrandFile(clientId, { name: f.filename, url: f.url }, 'intake form')
+      if (!added.ok) console.error('intake brand file not added:', f.filename, added.error)
+    }
+  } catch (e) {
+    console.error('intake brand files failed:', e)
   }
 
   try {

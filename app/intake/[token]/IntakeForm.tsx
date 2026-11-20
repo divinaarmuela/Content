@@ -6,7 +6,7 @@ import {
   blockShown, completion, type Answers, type IntakeStatus, type TemplateDefinition,
 } from '../../lib/intake-core'
 import {
-  GuidanceBlock, TextBlock, SelectBlock, MultiSelectBlock, FileBlock, MultiFileBlock, SocialHandlesBlock,
+  GuidanceBlock, TextBlock, SelectBlock, MultiSelectBlock, MultiFileBlock, SocialHandlesBlock,
 } from './blocks'
 
 type FileRow = { block_id: string; filename: string; url: string }
@@ -144,13 +144,13 @@ export default function IntakeForm({
       const res = await fetch(`/api/intake/${token}/upload`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ filename: file.name, contentType: file.type, size: file.size, blockId }),
+        body: JSON.stringify({ filename: file.name, contentType: file.type || 'application/octet-stream', size: file.size, blockId }),
       })
       if (!res.ok) throw new Error(String(res.status))
       const { signedUrl, publicUrl } = await res.json()
       // straight to storage, the file never passes through our server
       const put = await fetch(signedUrl, {
-        method: 'PUT', headers: { 'Content-Type': file.type }, body: file,
+        method: 'PUT', headers: { 'Content-Type': file.type || 'application/octet-stream' }, body: file,
       })
       if (!put.ok) throw new Error(`upload ${put.status}`)
       setFiles(prev => [...prev, { block_id: blockId, filename: file.name, url: publicUrl }])
@@ -420,24 +420,15 @@ export default function IntakeForm({
                 const value = answers[block.id]
 
                 if (block.type === 'guidance') return <GuidanceBlock key={block.id} block={block} />
-                // the discovery form's upload box takes several files and says its rules; a client's form keeps its own
-                if (block.type === 'file' && discovery) {
+                // SEVERAL FILES, AND THE RULES SAID FIRST — on every intake form (the owner, 20 Nov 2026: "make sure
+                // normal intake form does the same, for all 4 options"): the Brand tab's kinds and its 1 GB a file
+                if (block.type === 'file') {
                   return (
                     <MultiFileBlock
                       key={block.id} block={block} disabled={false}
                       uploading={uploading === block.id}
                       files={files.filter(f => f.block_id === block.id)}
                       onUpload={f => upload(block.id, f)}
-                    />
-                  )
-                }
-                if (block.type === 'file') {
-                  return (
-                    <FileBlock
-                      key={block.id} block={block} disabled={false}
-                      uploading={uploading === block.id}
-                      files={files.filter(f => f.block_id === block.id)}
-                      onUpload={f => void upload(block.id, f)}
                     />
                   )
                 }

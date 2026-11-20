@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server'
 import { getIntakeByToken, addIntakeFile } from '../../../../lib/intake'
 import { signUpload } from '../../../../lib/storage'
-import { UPLOAD_ALLOWED, UPLOAD_MAX_BYTES, isWritable } from '../../../../lib/intake-core'
+import { isWritable } from '../../../../lib/intake-core'
+import { brandAssetProblem } from '../../../../lib/brand-assets-core'
 
 /**
  * Presigned upload for a file block.
@@ -11,10 +12,6 @@ import { UPLOAD_ALLOWED, UPLOAD_MAX_BYTES, isWritable } from '../../../../lib/in
  */
 
 export const dynamic = 'force-dynamic'
-
-// the limits are intake-core's, so the form can say them before a file is picked (20 Nov 2026); same values as ever
-const MAX_BYTES = UPLOAD_MAX_BYTES
-const ALLOWED = UPLOAD_ALLOWED
 
 export async function POST(req: Request, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params
@@ -38,14 +35,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ token: 
   const known = form.definition.sections.some(s => s.blocks.some(b => b.id === blockId && b.type === 'file'))
   if (!known) return NextResponse.json({ error: 'Unknown upload field' }, { status: 400 })
 
-  if (!ALLOWED.test(contentType)) {
-    return NextResponse.json({ error: 'That file type is not accepted here' }, { status: 415 })
-  }
-  if (!Number.isFinite(size) || size <= 0 || size > MAX_BYTES) {
-    return NextResponse.json({ error: 'Files must be under 50MB' }, { status: 413 })
-  }
+  // EVERY INTAKE FORM TAKES WHAT THE CLIENT BRAND TAB TAKES (the owner, 20 Nov 2026: "50 mb only??? … files are usually
+  // bigger … how come in client branding tab I can upload more than that? … make sure normal intake form does the
+  // same, for all 4 options"): 1 GB a file, and the same kinds — pictures, PDF, AI, EPS, PSD, fonts, a zip, a video.
+  // It was 50MB and a shorter list. Judged by the file's name, as the Brand tab does: a design file often arrives
+  // with no type at all. One rule, in one place (brand-assets-core.ts), because these files end up on that tab.
+  const why = brandAssetProblem(filename, size)
+  if (why) return NextResponse.json({ error: why }, { status: 415 })
 
-  const signed = await signUpload(filename, contentType)
+  const signed = await signUpload(filename, contentType || 'application/octet-stream')
   await addIntakeFile(form.id, blockId, filename, signed.publicUrl, size)
   return NextResponse.json({ signedUrl: signed.signedUrl, publicUrl: signed.publicUrl })
 }

@@ -1,7 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import { SOCIAL_PLATFORMS, UPLOAD_ACCEPT, UPLOAD_RULE, formatSocialHandles, parseSocialHandles, uploadProblem, type Block } from '../../lib/intake-core'
+import { SOCIAL_PLATFORMS, formatSocialHandles, parseSocialHandles, type Block } from '../../lib/intake-core'
+import { BRAND_ASSET_WORDS, brandAssetProblem } from '../../lib/brand-assets-core'
 import PlatformIcon from '../../dashboard/social/PlatformIcon'
 
 /**
@@ -190,8 +191,9 @@ export function SocialHandlesBlock({ block, value, onChange }: { block: Block; v
 
 /**
  * SEVERAL FILES, AND THE RULES SAID FIRST (the owner, 20 Nov 2026: "allow users to upload multiple files … put file
- * type and limit for each file size"). The discovery form's upload box: pick any number of files at once, the types
- * and the size each may be are written under it, and a file that cannot be taken is named with the reason — it used
+ * type and limit for each file size"; then "50 mb only??? … files are usually bigger"). The discovery form's upload
+ * box takes what the client Brand tab takes (brand-assets-core.ts: 1 GB a file, the same kinds): pick any number of
+ * files at once, the kinds and the size each may be are written under it, and a file that cannot be taken is named with the reason — it used
  * to just say "Not saved". Each file is sent in turn; the ones already sent are listed with a tick.
  */
 export function MultiFileBlock({
@@ -209,7 +211,7 @@ export function MultiFileBlock({
   const pick = async (list: File[]) => {
     const bad: string[] = []
     for (const f of list) {
-      const why = uploadProblem(f)
+      const why = brandAssetProblem(f.name, f.size)
       if (why) { bad.push(why); continue }
       setSending(f.name)
       if (!(await onUpload(f))) bad.push(`“${f.name}” could not be uploaded. Please try it again.`)
@@ -228,60 +230,20 @@ export function MultiFileBlock({
           ))}
         </ul>
       )}
-      <label className={`inline-flex min-h-12 cursor-pointer items-center gap-3 rounded-full border border-cream/25 bg-cream/[0.06] px-5 font-lamam text-[11px] uppercase tracking-widest text-cream transition-colors hover:border-cream ${disabled || uploading || sending ? 'pointer-events-none opacity-50' : ''}`}>
+      <label className={`inline-flex min-h-12 cursor-pointer items-center gap-3 rounded-full border border-solid border-cream/25 bg-cream/[0.06] px-5 font-lamam text-[11px] uppercase tracking-widest text-cream transition-colors hover:border-cream ${disabled || uploading || sending ? 'pointer-events-none opacity-50' : ''}`}>
         <span aria-hidden>+</span> {files.length > 0 ? 'Add more files' : 'Choose files'}
         <input
-          type="file" multiple accept={UPLOAD_ACCEPT} disabled={disabled || uploading || !!sending} className="sr-only"
+          type="file" multiple disabled={disabled || uploading || !!sending} className="sr-only"
           onChange={e => { const list = [...(e.target.files ?? [])]; e.target.value = ''; if (list.length) void pick(list) }}
         />
       </label>
-      <p className="mt-3 max-w-[60ch] font-lamah text-[14px] leading-relaxed text-cream-dim">{UPLOAD_RULE}</p>
+      <p className="mt-3 max-w-[60ch] font-lamah text-[14px] leading-relaxed text-cream-dim">We take {BRAND_ASSET_WORDS}. Up to 1 GB each, and you can add more than one.</p>
       {sending && <p role="status" className="mt-3 font-lamam text-[11px] uppercase tracking-widest text-cream-dim">Uploading {sending}…</p>}
       {problems.length > 0 && (
         <ul role="alert" className="mt-3 flex flex-col gap-1.5">
           {problems.map(p => <li key={p} className="font-lamah text-[14px] leading-relaxed text-[#E2725B]">{p}</li>)}
         </ul>
       )}
-    </div>
-  )
-}
-
-export function FileBlock({
-  block, files, onUpload, uploading, disabled,
-}: {
-  block: Block
-  files: { filename: string; url: string }[]
-  onUpload: (file: File) => void
-  uploading: boolean
-  disabled: boolean
-}) {
-  return (
-    <div>
-      <BlockLabel block={block} />
-      {files.length > 0 && (
-        <ul className="mb-4 flex flex-col gap-1">
-          {files.map(f => (
-            <li key={f.url} className="font-lamam text-[12px] text-cream-dim">
-              <span className="text-cream">✓</span> {f.filename}
-            </li>
-          ))}
-        </ul>
-      )}
-      <input
-        type="file" disabled={disabled || uploading}
-        onChange={e => {
-          const f = e.target.files?.[0]
-          if (f) onUpload(f)
-          e.target.value = '' // so the same file can be re-picked after a failure
-        }}
-        className={
-          'font-lamam text-[12px] text-cream-dim file:mr-4 file:cursor-pointer ' +
-          'file:rounded-full file:border file:border-cream/25 file:bg-transparent ' +
-          'file:px-4 file:py-2 file:font-lamam file:text-[11px] file:uppercase ' +
-          'file:tracking-widest file:text-cream hover:file:border-cream'
-        }
-      />
-      {uploading && <p className="mt-3 font-lamam text-[11px] uppercase tracking-widest text-cream-dim">Uploading…</p>}
     </div>
   )
 }

@@ -381,7 +381,7 @@ const DISCOVERY: TemplateDefinition = {
         { id: 'agency_before', type: 'long_text', label: 'Have you worked with an agency or freelancer before? What did you like or not like?' },
         { id: 'has_brand_guidelines', type: 'select', label: 'Do you have brand guidelines, a style guide, or existing assets we can use?', options: ['Yes', 'No'] },
         // only when they said Yes (the owner, 20 Nov 2026: "allow users to upload multiple files if they said yes")
-        { id: 'brand_files', type: 'file', label: 'Upload them here', help: 'Logos, a brand guide, fonts, photos: whatever you have.', showIf: { id: 'has_brand_guidelines', equals: 'Yes' } },
+        { id: 'brand_files', type: 'file', label: 'Your logo files, brand guide and fonts', help: 'Upload what you have. Loose files or a PDF brand guide are both fine.', showIf: { id: 'has_brand_guidelines', equals: 'Yes' } },
       ],
     },
     {

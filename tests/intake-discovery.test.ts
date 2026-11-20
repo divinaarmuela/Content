@@ -72,7 +72,10 @@ describe('social handles, picked by icon', () => {
   })
 })
 
-import { blockShown, uploadProblem, UPLOAD_MAX_BYTES } from '../app/lib/intake-core'
+import { readFileSync } from 'node:fs'
+import { blockShown } from '../app/lib/intake-core'
+import { intakeFileTarget } from '../app/lib/gdrive-core'
+import { brandAssetProblem } from '../app/lib/brand-assets-core'
 
 /** UPLOADS, ONLY AFTER A YES (20 Nov 2026: "allow users to upload multiple files if they said yes … put file type and limit for each file size") */
 describe('the brand files upload', () => {
@@ -98,11 +101,37 @@ describe('the brand files upload', () => {
   it('no question on a client’s intake form waits on another', () => {
     for (const key of ['ongoing', 'rebrand', 'launch', 'one_off'] as const) expect(answerableBlocks(TEMPLATES[key]).some(b => b.showIf), key).toBe(false)
   })
-  it('says why a file cannot be taken, by name', () => {
-    expect(uploadProblem({ name: 'logo.png', type: 'image/png', size: 2000 })).toBeNull()
-    expect(uploadProblem({ name: 'guide.pdf', type: 'application/pdf', size: UPLOAD_MAX_BYTES })).toBeNull()
-    expect(uploadProblem({ name: 'reel.mp4', type: 'video/mp4', size: 2000 })).toContain('not a file type we can take')
-    expect(uploadProblem({ name: 'big.zip', type: 'application/zip', size: UPLOAD_MAX_BYTES + 1 })).toContain('Each file must be under 50MB')
-    expect(uploadProblem({ name: 'empty.png', type: 'image/png', size: 0 })).toContain('is empty')
+  it('takes what the client Brand tab takes: 1 GB a file, and the same kinds, design files and video included', () => {
+    const GB = 1024 * 1024 * 1024
+    expect(brandAssetProblem('logo.png', 2000)).toBeNull()
+    expect(brandAssetProblem('brand-pack.zip', 800 * 1024 * 1024)).toBeNull()
+    expect(brandAssetProblem('master.ai', 300 * 1024 * 1024)).toBeNull()
+    expect(brandAssetProblem('brand-film.mp4', GB)).toBeNull()
+    expect(brandAssetProblem('huge.zip', GB + 1)).toContain('over 1 GB')
+    expect(brandAssetProblem('virus.exe', 2000)).toContain('not a brand file we can take')
+    expect(brandAssetProblem('empty.png', 0)).toContain('is empty')
+  })
+  it('every intake form uploads under that one rule: the old 50MB rule is gone from the route', () => {
+    const route = readFileSync('app/api/intake/[token]/upload/route.ts', 'utf8')
+    expect(route).toContain('const why = brandAssetProblem(filename, size)')
+    expect(route).not.toMatch(/UPLOAD_MAX_BYTES|must be under|template_key === 'discovery'/)
+    expect(readFileSync('app/intake/[token]/blocks.tsx', 'utf8')).toContain('Up to 1 GB each')
+    // one upload box for every form: several files, the rules said first
+    const form = readFileSync('app/intake/[token]/IntakeForm.tsx', 'utf8')
+    expect(form.match(/<MultiFileBlock/g)).toHaveLength(1)
+    expect(form).not.toContain('<FileBlock')
+  })
+  it('all four client forms, and the discovery form, ask for logo and brand files', () => {
+    for (const key of ['ongoing', 'rebrand', 'launch', 'one_off', 'discovery'] as const) {
+      const box = answerableBlocks(TEMPLATES[key]).find(b => b.id === 'brand_files')
+      expect(box?.type, key).toBe('file')
+      // "brand" in the id is what sends its files to the client's Brand tab (intakeFileTarget)
+      expect(intakeFileTarget(box!.id, box!.label), key).toBe('brand')
+    }
+  })
+  it('on submit, a brand question’s files are added to the client’s Brand tab beside what is there', () => {
+    const submit = readFileSync('app/api/intake/[token]/submit/route.ts', 'utf8')
+    expect(submit).toContain("if (intakeFileTarget(f.block_id, labels.get(f.block_id) ?? '') !== 'brand') continue")
+    expect(submit).toContain("await addClientBrandFile(clientId, { name: f.filename, url: f.url }, 'intake form')")
   })
 })

@@ -36,24 +36,6 @@ export function blockShown(block: Block, answers: Answers | null | undefined): b
   return typeof v === 'string' && v === block.showIf.equals
 }
 
-/**
- * WHAT A FORM'S UPLOAD BOX TAKES (the owner, 20 Nov 2026: "put file type and limit for each file size"). One place:
- * the upload route enforces these, and the form says them before anybody picks a file. The values are the ones the
- * route has always had — brand assets (logos, a PDF style guide, a zip of fonts), not video.
- */
-export const UPLOAD_MAX_BYTES = 50 * 1024 * 1024
-export const UPLOAD_ALLOWED = /^(image\/|application\/pdf$|application\/zip$|application\/x-zip-compressed$|font\/)/
-export const UPLOAD_ACCEPT = 'image/*,application/pdf,application/zip,application/x-zip-compressed,.zip,font/*,.ttf,.otf,.woff,.woff2'
-export const UPLOAD_RULE = 'Images (PNG, JPG, SVG), PDF, ZIP or font files. Up to 50MB each. You can add more than one.'
-
-/** why this file cannot be taken, in the person's words — or null when it can */
-export function uploadProblem(file: { name: string; type: string; size: number }): string | null {
-  if (!UPLOAD_ALLOWED.test(file.type)) return `“${file.name}” is not a file type we can take here. Use an image, a PDF, a ZIP or a font file.`
-  if (!Number.isFinite(file.size) || file.size <= 0) return `“${file.name}” is empty.`
-  if (file.size > UPLOAD_MAX_BYTES) return `“${file.name}” is ${Math.ceil(file.size / 1024 / 1024)}MB. Each file must be under 50MB.`
-  return null
-}
-
 export type Section = { id: string; title: string; intro?: string; blocks: Block[] }
 
 export type TemplateDefinition = { key: TemplateKey; name: string; sections: Section[] }

@@ -15,7 +15,7 @@ import {
   type Block, type BlockType, type Section, type TemplateDefinition,
 } from '@/app/lib/intake-core'
 import {
-  GuidanceBlock, TextBlock, SelectBlock, MultiSelectBlock, FileBlock,
+  GuidanceBlock, TextBlock, SelectBlock, MultiSelectBlock, MultiFileBlock,
 } from '@/app/intake/[token]/blocks'
 import IntakeScanDialog, { type ScanDraft } from './IntakeScanDialog'
 
@@ -416,7 +416,7 @@ function Preview({ definition }: { definition: TemplateDefinition }) {
                   }
                   if (b.type === 'guidance') return <GuidanceBlock key={bi} block={b} />
                   if (b.type === 'file') {
-                    return <FileBlock key={bi} block={b} files={[]} uploading={false} disabled onUpload={() => {}} />
+                    return <MultiFileBlock key={bi} block={b} files={[]} uploading={false} disabled onUpload={async () => false} />
                   }
                   if (b.type === 'select') return <SelectBlock key={bi} block={b} value="" onChange={() => {}} />
                   if (b.type === 'multi_select' || b.type === 'checkbox') {
