@@ -42,9 +42,9 @@ export async function POST(req: Request) {
       const html = pdfPageHtml({ sheet, css: PRINT_CSS, styles: ownStyles(j?.styles, origin), htmlClass: paperClasses(j?.html_class), origin, title: fileName.replace(/\.pdf$/, '') })
 
       try {
-        const pdf = await drawPdf(html, origin)
+        const { pdf, fonts } = await drawPdf(html, origin)
         return new NextResponse(Buffer.from(pdf), {
-          headers: { 'Content-Type': 'application/pdf', 'Content-Disposition': pdfDisposition(fileName), 'Cache-Control': 'no-store' },
+          headers: { 'Content-Type': 'application/pdf', 'Content-Disposition': pdfDisposition(fileName), 'Cache-Control': 'no-store', 'X-Report-Fonts': fonts.replace(/[^ -~]/g, '?').slice(0, 120) },
         })
       } catch (e) {
         console.error('[report-pdf] could not make the PDF', process.version, e)

@@ -35,8 +35,8 @@ async function launch() {
   return puppeteer.launch({ executablePath: path, headless: true })
 }
 
-/** draws the page and returns the PDF's bytes */
-export async function drawPdf(html: string, origin: string): Promise<Uint8Array> {
+/** draws the page and returns the PDF's bytes, and what was read of the typeface (so a fallback face is seen, not guessed) */
+export async function drawPdf(html: string, origin: string): Promise<{ pdf: Uint8Array; fonts: string }> {
   const browser = await launch()
   try {
     const page = await browser.newPage()
@@ -51,12 +51,23 @@ export async function drawPdf(html: string, origin: string): Promise<Uint8Array>
     })
     // a picture that never arrives (an expired Instagram address) must not hold the whole file back
     await page.goto(sheetUrl, { waitUntil: 'load', timeout: 25_000 }).catch(e => console.warn('[report-pdf] drew without waiting for everything:', e instanceof Error ? e.message : e))
-    // the typeface is fetched only once the words that use it are laid out: wait for it, or the PDF is set in a fallback
-    await Promise.race([
-      page.evaluate(() => document.fonts.ready.then(() => true)),
-      new Promise(res => setTimeout(res, 8_000)),
-    ]).catch(() => {})
-    return await page.pdf({ format: 'A4', printBackground: true, preferCSSPageSize: true, margin: { top: '16mm', right: '16mm', bottom: '16mm', left: '16mm' } })
+    // THE TYPEFACE IS ASKED FOR, NOT WAITED ON (20 Nov 2026). A web font is fetched only when the words using it are laid
+    // out, and the page may be printed before that: on the server the first PDF came out in the fallback face. So every
+    // weight the sheet uses is loaded here, for the sheet's own letters, before the page is printed.
+    const fonts = await Promise.race([
+      page.evaluate(async () => {
+        const sheet = document.querySelector('.report-sheet')
+        if (!sheet) return 'no sheet'
+        const family = getComputedStyle(sheet).fontFamily.split(',')[0].trim()
+        const text = (sheet.textContent ?? '').slice(0, 20000)
+        const got = await Promise.all([400, 500, 600, 700, 800].map(w => document.fonts.load(`${w} 14px ${family}`, text).then(f => f.length, () => -1)))
+        await document.fonts.ready
+        return `${family} ${got.join('/')}`
+      }),
+      new Promise<string>(res => setTimeout(() => res('timed out'), 10_000)),
+    ]).catch(e => `not read: ${e instanceof Error ? e.message : String(e)}`)
+    const pdf = await page.pdf({ format: 'A4', printBackground: true, preferCSSPageSize: true, margin: { top: '16mm', right: '16mm', bottom: '16mm', left: '16mm' } })
+    return { pdf, fonts }
   } finally {
     await browser.close().catch(() => {})
   }
