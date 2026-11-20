@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { SOCIAL_PLATFORMS, formatSocialHandles, parseSocialHandles, type Block } from '../../lib/intake-core'
+import { SOCIAL_PLATFORMS, UPLOAD_ACCEPT, UPLOAD_RULE, formatSocialHandles, parseSocialHandles, uploadProblem, type Block } from '../../lib/intake-core'
 import PlatformIcon from '../../dashboard/social/PlatformIcon'
 
 /**
@@ -183,6 +183,64 @@ export function SocialHandlesBlock({ block, value, onChange }: { block: Block; v
             </div>
           ))}
         </div>
+      )}
+    </div>
+  )
+}
+
+/**
+ * SEVERAL FILES, AND THE RULES SAID FIRST (the owner, 20 Nov 2026: "allow users to upload multiple files … put file
+ * type and limit for each file size"). The discovery form's upload box: pick any number of files at once, the types
+ * and the size each may be are written under it, and a file that cannot be taken is named with the reason — it used
+ * to just say "Not saved". Each file is sent in turn; the ones already sent are listed with a tick.
+ */
+export function MultiFileBlock({
+  block, files, onUpload, uploading, disabled,
+}: {
+  block: Block
+  files: { filename: string; url: string }[]
+  /** sends one file; resolves true when it is kept */
+  onUpload: (file: File) => Promise<boolean>
+  uploading: boolean
+  disabled: boolean
+}) {
+  const [problems, setProblems] = useState<string[]>([])
+  const [sending, setSending] = useState<string | null>(null)
+  const pick = async (list: File[]) => {
+    const bad: string[] = []
+    for (const f of list) {
+      const why = uploadProblem(f)
+      if (why) { bad.push(why); continue }
+      setSending(f.name)
+      if (!(await onUpload(f))) bad.push(`“${f.name}” could not be uploaded. Please try it again.`)
+    }
+    setSending(null); setProblems(bad)
+  }
+  return (
+    <div>
+      <BlockLabel block={block} />
+      {files.length > 0 && (
+        <ul className="mb-4 flex flex-col gap-1.5" aria-label="Files you have added">
+          {files.map(f => (
+            <li key={f.url} className="break-all font-lamam text-[12px] text-cream-dim">
+              <span className="text-cream">✓</span> {f.filename}
+            </li>
+          ))}
+        </ul>
+      )}
+      <label className={`inline-flex min-h-12 cursor-pointer items-center gap-3 rounded-full border border-cream/25 bg-cream/[0.06] px-5 font-lamam text-[11px] uppercase tracking-widest text-cream transition-colors hover:border-cream ${disabled || uploading || sending ? 'pointer-events-none opacity-50' : ''}`}>
+        <span aria-hidden>+</span> {files.length > 0 ? 'Add more files' : 'Choose files'}
+        <input
+          type="file" multiple accept={UPLOAD_ACCEPT} disabled={disabled || uploading || !!sending} className="sr-only"
+          onChange={e => { const list = [...(e.target.files ?? [])]; e.target.value = ''; if (list.length) void pick(list) }}
+        />
+      </label>
+      <p className="mt-3 max-w-[60ch] font-lamah text-[14px] leading-relaxed text-cream-dim">{UPLOAD_RULE}</p>
+      {sending && <p role="status" className="mt-3 font-lamam text-[11px] uppercase tracking-widest text-cream-dim">Uploading {sending}…</p>}
+      {problems.length > 0 && (
+        <ul role="alert" className="mt-3 flex flex-col gap-1.5">
+          {problems.map(p => <li key={p} className="font-lamah text-[14px] leading-relaxed text-[#E2725B]">{p}</li>)}
+        </ul>
       )}
     </div>
   )

@@ -3,6 +3,7 @@ import { table, withRequestCache } from '@/lib/db'
 import type { Lead } from '@/lib/db-types'
 import { requireRole, authzErrorResponse } from '@/app/lib/authz'
 import { getLeadDiscovery } from '@/app/lib/lead-discovery'
+import { listIntakeFiles } from '@/app/lib/intake'
 import { discoveryAnswers, discoveryState, type DiscoveryRow } from '@/app/lib/lead-discovery-core'
 
 /**
@@ -17,12 +18,14 @@ export const dynamic = 'force-dynamic'
 
 const DAY = (iso: string) => new Date(iso).toLocaleDateString('en-AU', { timeZone: 'Australia/Melbourne', weekday: 'short', day: 'numeric', month: 'short' })
 
-function view(form: DiscoveryRow | null, origin: string) {
+function view(form: DiscoveryRow | null, origin: string, files: { filename: string; url: string }[] = [], clientId: string | null = null) {
   if (!form) return { form: null, state: discoveryState(null) }
   return {
     form: { id: form.id, link: `${origin}/intake/${form.token}`, created_at: form.created_at ?? null, sent_at: form.sent_at ?? null, first_opened_at: form.first_opened_at ?? null, submitted_at: form.submitted_at ?? null },
     state: discoveryState(form, DAY),
     answers: discoveryAnswers(form),
+    // what they uploaded, and the client it made (20 Nov 2026)
+    files, client_id: clientId,
   }
 }
 
@@ -38,7 +41,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       const { id } = await params
       const lead = await guard(id)
       if (!lead) return NextResponse.json({ error: 'Lead not found' }, { status: 404 })
-      return NextResponse.json(view(await getLeadDiscovery(id), new URL(req.url).origin))
+      const form = await getLeadDiscovery(id)
+      const files = form ? (await listIntakeFiles(form.id)).map(f => ({ filename: f.filename, url: f.url })) : []
+      return NextResponse.json(view(form, new URL(req.url).origin, files, form?.client_id || null))
     } catch (e) {
       const { error, status } = authzErrorResponse(e)
       return NextResponse.json({ error }, { status })

@@ -79,8 +79,18 @@ describe('the form is sent cold, from one link, and makes its own lead', () => {
   it('sending it in makes the lead, tells the Leads page, and skips the client-only steps', () => {
     expect(submit).toContain('leadFromColdDiscovery(')
     expect(submit).toContain("source: 'discovery_form'")
-    expect(submit).toMatch(/if \(!forLead\) try \{\s+const labels/)
-    expect(submit).toMatch(/if \(!forLead\) try \{\s+await inngest\.send/)
+    // the client-only steps (their files, filling their record) run only when there is a client to run them for
+    expect(submit).toMatch(/if \(client\) try \{\s+const labels/)
+    expect(submit).toMatch(/if \(client\) try \{\s+await inngest\.send/)
+  })
+  it('whoever sends it in goes in as a prospect client too, once, and never on top of an existing client', () => {
+    expect(submit).toContain('if (cold && lead) client = await clientFromDiscovery(')
+    expect(lib).toContain("status: 'prospect', source: 'discovery_form',")
+    expect(lib).not.toContain("status: 'active'")
+    expect(lib).toContain("createHash('sha256').update(`discovery-client:${form.id}`)")
+    // a client with this name or email already: none is made, and the form is not attached to theirs
+    expect(lib).toMatch(/if \(taken\) \{[\s\S]{0,400}return null/)
+    expect(lib).toContain("title: 'Added to Clients as a prospect'")
   })
   it('the lead’s page shows their answers, the list has the one link to copy, and nothing is made from a lead', () => {
     expect(readFileSync('app/dashboard/leads/[id]/LeadPage.tsx', 'utf8')).toContain('<LeadDiscovery id={id} />')

@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { table, withRequestCache } from '@/lib/db'
 import type { Client, Lead, TeamUser } from '@/lib/db-types'
 import { leadFormName } from '../../../../lib/lead-discovery-core'
-import { leadFromColdDiscovery } from '../../../../lib/lead-discovery'
+import { clientFromDiscovery, leadFromColdDiscovery } from '../../../../lib/lead-discovery'
 import {
   submitIntake, getIntakeDefaultRecipients, listIntakeFiles,
 } from '../../../../lib/intake'
@@ -31,13 +31,17 @@ export async function POST(_req: Request, { params }: { params: Promise<{ token:
   // A COLD FORM (the general /discovery link) makes its lead here, from what they wrote; a second Submit finds the
   // same lead. `fresh` is true only for the press that made it, so the "new lead" toast is said once.
   const leadId = (form as { lead_id?: string | null }).lead_id ?? null
-  const client = form.client_id ? await table<Client>('clients').get(form.client_id) : null
+  let client = form.client_id ? await table<Client>('clients').get(form.client_id) : null
   const cold = !client && !leadId && form.template_key === 'discovery'
   const lead = client ? null
     : leadId ? await table<Lead>('leads').get(leadId).catch(() => null)
     : cold ? await leadFromColdDiscovery(form as never).catch(e => { console.error('discovery lead not made', e); return null })
     : null
   const forLead = !!lead || cold
+  // …AND GOES IN AS A CLIENT TOO, marked prospect (the owner, 20 Nov 2026) — with the form and its files on the client.
+  // From here `client` is that new client, so the client's own steps below (their files, filling their record) run.
+  if (cold && lead) client = await clientFromDiscovery(form as never, lead).catch(e => { console.error('discovery client not made', e); return null })
+  const clientId = client?.id ?? form.client_id
   if (cold && lead) announceAfter('leads', { id: lead.id, label: leadFormName(lead) || lead.email || 'Discovery form', source: 'discovery_form' })
   const name = client?.name ?? (leadFormName(lead) || (forLead ? 'A lead' : 'A client'))
   const progress = completion(form.definition, form.answers)
@@ -71,14 +75,14 @@ export async function POST(_req: Request, { params }: { params: Promise<{ token:
   // SUBMIT, not on upload — the upload route only signs a URL, and the bytes
   // arrive from the browser afterwards, so a mirror queued there would race
   // the file into existence and spend its retries fetching a 404.
-  if (!forLead) try {
+  if (client) try {
     const labels = new Map<string, string>()
     for (const section of form.definition.sections) {
       for (const block of section.blocks) labels.set(block.id, block.label ?? '')
     }
     const submitted = await listIntakeFiles(form.id)
     mirrorIntakeFiles(
-      form.client_id,
+      clientId,
       submitted.map(f => ({ ...f, label: labels.get(f.block_id) ?? null })),
       new Date().toISOString(),
     )
@@ -132,7 +136,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ token:
         `— ${progress.answered} of ${progress.total} questions answered. ` +
         `The full brief is attached as a PDF.</p>${attachedList}${linkedList}`,
         forLead ? 'Open the lead' : 'Open in dashboard',
-        forLead ? (lead ? `${base}/dashboard/leads/${lead.id}` : `${base}/dashboard/leads`) : `${base}/dashboard/clients/${form.client_id}/intake/${form.id}`,
+        forLead ? (lead ? `${base}/dashboard/leads/${lead.id}` : `${base}/dashboard/leads`) : `${base}/dashboard/clients/${clientId}/intake/${form.id}`,
       ),
       attachments: [
         { filename: `${safeName}-intake.pdf`, content: pdf, contentType: 'application/pdf' },
@@ -148,10 +152,10 @@ export async function POST(_req: Request, { params }: { params: Promise<{ token:
   // a background Inngest function does the work (it may make a Haiku call), so a
   // failure here can never delay or break the submission. The event is dropped
   // silently until the function is synced into Inngest Cloud (CLAUDE.md trap 5b).
-  if (!forLead) try {
+  if (client) try {
     await inngest.send({
       name: 'app/intake.enrich.requested',
-      data: { form_id: form.id, client_id: form.client_id },
+      data: { form_id: form.id, client_id: clientId },
     })
   } catch (e) {
     console.error('intake enrich dispatch failed:', e)

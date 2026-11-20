@@ -93,7 +93,7 @@ export default function DiscoveryStart() {
       <BrandBackdrop />
 
       {/* THE LOGO, IN THE MIDDLE, AND NOTHING ELSE (the owner, 20 Nov 2026: "just put logo in the middle") */}
-      <header className="relative z-10 border-b border-cream/15">
+      <header className="relative z-10">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-center px-6 sm:px-10">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <a href="https://www.mdmmarketing.com.au" aria-label="MD Media"><img src="/MDLogo-trim.png" alt="MD Media" className="h-5 w-auto" /></a>

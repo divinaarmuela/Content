@@ -21,6 +21,37 @@ export type Block = {
   help?: string
   options?: string[]
   placeholder?: string
+  /**
+   * SHOWN ONLY WHEN ANOTHER QUESTION HAS THIS ANSWER (the owner, 20 Nov 2026, of the brand guidelines question:
+   * "allow users to upload multiple files if they said yes"). The block is hidden, and not counted, until the block
+   * with this id holds exactly this answer. No block of a client's intake form carries one.
+   */
+  showIf?: { id: string; equals: string }
+}
+
+/** is this block on the page, given what has been answered? (a block with no `showIf` always is) */
+export function blockShown(block: Block, answers: Answers | null | undefined): boolean {
+  if (!block.showIf) return true
+  const v = (answers ?? {})[block.showIf.id]
+  return typeof v === 'string' && v === block.showIf.equals
+}
+
+/**
+ * WHAT A FORM'S UPLOAD BOX TAKES (the owner, 20 Nov 2026: "put file type and limit for each file size"). One place:
+ * the upload route enforces these, and the form says them before anybody picks a file. The values are the ones the
+ * route has always had — brand assets (logos, a PDF style guide, a zip of fonts), not video.
+ */
+export const UPLOAD_MAX_BYTES = 50 * 1024 * 1024
+export const UPLOAD_ALLOWED = /^(image\/|application\/pdf$|application\/zip$|application\/x-zip-compressed$|font\/)/
+export const UPLOAD_ACCEPT = 'image/*,application/pdf,application/zip,application/x-zip-compressed,.zip,font/*,.ttf,.otf,.woff,.woff2'
+export const UPLOAD_RULE = 'Images (PNG, JPG, SVG), PDF, ZIP or font files. Up to 50MB each. You can add more than one.'
+
+/** why this file cannot be taken, in the person's words — or null when it can */
+export function uploadProblem(file: { name: string; type: string; size: number }): string | null {
+  if (!UPLOAD_ALLOWED.test(file.type)) return `“${file.name}” is not a file type we can take here. Use an image, a PDF, a ZIP or a font file.`
+  if (!Number.isFinite(file.size) || file.size <= 0) return `“${file.name}” is empty.`
+  if (file.size > UPLOAD_MAX_BYTES) return `“${file.name}” is ${Math.ceil(file.size / 1024 / 1024)}MB. Each file must be under 50MB.`
+  return null
 }
 
 export type Section = { id: string; title: string; intro?: string; blocks: Block[] }
@@ -175,6 +206,11 @@ export function normaliseDefinition(raw: unknown, key: TemplateKey): TemplateDef
           if ((type === 'select' || type === 'multi_select') && options.length > 0) {
             block.options = options
           }
+          // a question that waits on another's answer keeps the rule (both halves must be words)
+          const when = b.showIf as { id?: unknown; equals?: unknown } | undefined
+          if (when && typeof when.id === 'string' && when.id.trim() && typeof when.equals === 'string' && when.equals.trim()) {
+            block.showIf = { id: when.id.trim(), equals: when.equals.trim() }
+          }
           return block
         })
       const section: Section = { id: uniqueId(String(s.id ?? ''), `s_${si}`), title, blocks }
@@ -254,7 +290,8 @@ export function completion(def: TemplateDefinition, answers: Answers | null | un
   // through: treat missing as empty rather than throwing on `answers[b.id]`.
   const given = answers ?? {}
   const sections = (def?.sections ?? []).map(s => {
-    const blocks = s.blocks.filter(b => b.type !== 'guidance')
+    // a question that is not on the page (it waits on another's answer) is not counted as unanswered
+    const blocks = s.blocks.filter(b => b.type !== 'guidance' && blockShown(b, given))
     return {
       id: s.id,
       title: s.title,

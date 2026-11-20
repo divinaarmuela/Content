@@ -3,10 +3,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import BrandBackdrop from '../../components/BrandBackdrop'
 import {
-  completion, type Answers, type IntakeStatus, type TemplateDefinition,
+  blockShown, completion, type Answers, type IntakeStatus, type TemplateDefinition,
 } from '../../lib/intake-core'
 import {
-  GuidanceBlock, TextBlock, SelectBlock, MultiSelectBlock, FileBlock, SocialHandlesBlock,
+  GuidanceBlock, TextBlock, SelectBlock, MultiSelectBlock, FileBlock, MultiFileBlock, SocialHandlesBlock,
 } from './blocks'
 
 type FileRow = { block_id: string; filename: string; url: string }
@@ -149,8 +149,10 @@ export default function IntakeForm({
         return list.includes(file.name) ? prev : { ...prev, [blockId]: [...list, file.name] }
       })
       setSave('saved')
+      return true
     } catch {
       setSave('error')
+      return false
     } finally {
       setUploading(null)
     }
@@ -182,7 +184,7 @@ export default function IntakeForm({
   // ── already submitted ──────────────────────────────────────────────────────
   if (locked) {
     return (
-      <div className={`flex min-h-screen flex-col items-center justify-center bg-ink px-6 text-cream ${discovery ? 'relative overflow-hidden [&>*]:relative [&>*]:z-10' : ''}`}>
+      <div className={`flex min-h-screen flex-col items-center justify-center bg-ink px-6 text-cream ${discovery ? 'relative overflow-hidden [&>*:not([aria-hidden])]:relative [&>*:not([aria-hidden])]:z-10' : ''}`}>
         {discovery && <BrandBackdrop fixed />}
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/MDLogo-trim.png" alt="MD Media" className="mb-10 h-6 w-auto" />
@@ -394,9 +396,22 @@ export default function IntakeForm({
 
             <div className={isCover ? 'flex max-w-[58ch] flex-col gap-8' : 'flex flex-col gap-9'}>
               {section.blocks.map(block => {
+                // a question that waits on another's answer is not drawn until it has it (no client's form has one)
+                if (!blockShown(block, answers)) return null
                 const value = answers[block.id]
 
                 if (block.type === 'guidance') return <GuidanceBlock key={block.id} block={block} />
+                // the discovery form's upload box takes several files and says its rules; a client's form keeps its own
+                if (block.type === 'file' && discovery) {
+                  return (
+                    <MultiFileBlock
+                      key={block.id} block={block} disabled={false}
+                      uploading={uploading === block.id}
+                      files={files.filter(f => f.block_id === block.id)}
+                      onUpload={f => upload(block.id, f)}
+                    />
+                  )
+                }
                 if (block.type === 'file') {
                   return (
                     <FileBlock

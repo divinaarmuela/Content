@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getIntakeByToken, addIntakeFile } from '../../../../lib/intake'
 import { signUpload } from '../../../../lib/storage'
-import { isWritable } from '../../../../lib/intake-core'
+import { UPLOAD_ALLOWED, UPLOAD_MAX_BYTES, isWritable } from '../../../../lib/intake-core'
 
 /**
  * Presigned upload for a file block.
@@ -12,9 +12,9 @@ import { isWritable } from '../../../../lib/intake-core'
 
 export const dynamic = 'force-dynamic'
 
-const MAX_BYTES = 50 * 1024 * 1024
-// brand assets: logos, a PDF style guide, a zip of fonts. Not video.
-const ALLOWED = /^(image\/|application\/pdf$|application\/zip$|application\/x-zip-compressed$|font\/)/
+// the limits are intake-core's, so the form can say them before a file is picked (20 Nov 2026); same values as ever
+const MAX_BYTES = UPLOAD_MAX_BYTES
+const ALLOWED = UPLOAD_ALLOWED
 
 export async function POST(req: Request, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params

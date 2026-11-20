@@ -9,7 +9,8 @@ describe('the discovery form', () => {
 
   it('asks who they are, then the twenty questions, plus one line for "Other"', () => {
     expect(def.name).toBe('Discovery form')
-    expect(asked).toHaveLength(24)
+    // 24 questions always on the page, plus the upload box that shows only after a Yes
+    expect(asked).toHaveLength(25)
     // it is sent cold: without a name, an email or a phone number there is nobody to answer
     expect(asked.slice(0, 3).map(b => b.id)).toEqual(['primary_contact', 'contact_email', 'contact_mobile'])
     expect(asked[3].label).toBe('What’s your company name?')
@@ -68,5 +69,40 @@ describe('social handles, picked by icon', () => {
     expect(saved.socials).toBe('Instagram: @acme')
     expect(completion(def, saved).answered).toBe(1)
     expect(mergeAnswers(def, saved, { socials: formatSocialHandles([{ platform: 'instagram', handle: '' }]) }).socials).toBeUndefined()
+  })
+})
+
+import { blockShown, uploadProblem, UPLOAD_MAX_BYTES } from '../app/lib/intake-core'
+
+/** UPLOADS, ONLY AFTER A YES (20 Nov 2026: "allow users to upload multiple files if they said yes … put file type and limit for each file size") */
+describe('the brand files upload', () => {
+  const def = templateFor('discovery')
+  const box = answerableBlocks(def).find(b => b.id === 'brand_files')!
+  it('is a file box that waits on Yes to the brand guidelines question', () => {
+    expect(box.type).toBe('file')
+    expect(box.showIf).toEqual({ id: 'has_brand_guidelines', equals: 'Yes' })
+    expect(blockShown(box, {})).toBe(false)
+    expect(blockShown(box, { has_brand_guidelines: 'No' })).toBe(false)
+    expect(blockShown(box, { has_brand_guidelines: 'Yes' })).toBe(true)
+  })
+  it('is not counted as unanswered while it is not on the page', () => {
+    expect(completion(def, {}).total).toBe(24)
+    expect(completion(def, { has_brand_guidelines: 'No' })).toMatchObject({ answered: 1, total: 24 })
+    expect(completion(def, { has_brand_guidelines: 'Yes' })).toMatchObject({ answered: 1, total: 25 })
+    expect(completion(def, { has_brand_guidelines: 'Yes', brand_files: ['logo.png', 'guide.pdf'] })).toMatchObject({ answered: 2, total: 25 })
+  })
+  it('the rule survives the form being saved and read back', () => {
+    const back = normaliseDefinition(JSON.parse(JSON.stringify(def)), 'discovery')
+    expect(answerableBlocks(back).find(b => b.id === 'brand_files')?.showIf).toEqual({ id: 'has_brand_guidelines', equals: 'Yes' })
+  })
+  it('no question on a client’s intake form waits on another', () => {
+    for (const key of ['ongoing', 'rebrand', 'launch', 'one_off'] as const) expect(answerableBlocks(TEMPLATES[key]).some(b => b.showIf), key).toBe(false)
+  })
+  it('says why a file cannot be taken, by name', () => {
+    expect(uploadProblem({ name: 'logo.png', type: 'image/png', size: 2000 })).toBeNull()
+    expect(uploadProblem({ name: 'guide.pdf', type: 'application/pdf', size: UPLOAD_MAX_BYTES })).toBeNull()
+    expect(uploadProblem({ name: 'reel.mp4', type: 'video/mp4', size: 2000 })).toContain('not a file type we can take')
+    expect(uploadProblem({ name: 'big.zip', type: 'application/zip', size: UPLOAD_MAX_BYTES + 1 })).toContain('Each file must be under 50MB')
+    expect(uploadProblem({ name: 'empty.png', type: 'image/png', size: 0 })).toContain('is empty')
   })
 })
