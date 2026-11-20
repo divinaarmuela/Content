@@ -34,7 +34,11 @@ function Tile({ t, big }: { t: WorkTile; big?: boolean }) {
         : <img src={t.image} alt="" loading="lazy" decoding="async" className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.04]" />}
       {/* the name sits on the picture, on a shade dark enough to read it over any frame */}
       <span aria-hidden className="absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-black/85 via-black/35 to-transparent" />
-      <span aria-hidden className={`absolute right-3 top-3 flex items-center justify-center rounded-full bg-black/45 text-cream backdrop-blur transition-transform duration-300 group-hover:-translate-y-0.5 group-hover:translate-x-0.5 ${big ? 'h-10 w-10 text-[16px]' : 'h-8 w-8 text-[13px]'}`}>↗</span>
+      {/* a still arrow: it says "this opens", and does not move (the owner, 20 Nov 2026: "not an animated one") */}
+      <span aria-hidden className={`absolute right-3 top-3 flex items-center justify-center rounded-full bg-black/45 text-cream backdrop-blur ${big ? 'h-10 w-10' : 'h-8 w-8'}`}>
+        {/* drawn, not typed: the typed arrow is an emoji on some phones */}
+        <svg viewBox="0 0 16 16" width={big ? 16 : 13} height={big ? 16 : 13} fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M4.5 11.5l7-7M5.5 4.5h6v6" /></svg>
+      </span>
       <span className={`absolute inset-x-0 bottom-0 block ${big ? 'p-5 sm:p-6' : 'p-3.5 sm:p-4'}`}>
         <span className="block font-lamam text-[10px] uppercase tracking-widest text-cream/70">{t.sector}</span>
         <span className={`mt-1.5 block font-lamah font-medium leading-tight tracking-[-0.01em] ${big ? 'text-[22px] sm:text-[28px]' : 'text-[15px] sm:text-[16px]'}`}>{t.name}</span>
