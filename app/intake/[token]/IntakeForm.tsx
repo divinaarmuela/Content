@@ -117,8 +117,24 @@ export default function IntakeForm({
     timer.current = setTimeout(() => void flush(), 800)
   }, [flush])
 
+  // WHILE FILES ARE GOING UP, THE FORM STAYS PUT (the owner, 20 Nov 2026: "when files are uploading there is no loading
+  // state and also users are able to move to other pages when uploading, make sure the button can't"). A file can be
+  // 1 GB now, so the wait is real. The upload box says it is busy and how far each file has got; until it is done
+  // every way off the page is shut — Continue, Back, the step bar, Send — and closing the tab asks first.
+  const [uploadsBusy, setUploadsBusy] = useState(false)
+  const busyNow = useRef(false)
+  const markBusy = useCallback((busy: boolean) => { busyNow.current = busy; setUploadsBusy(busy) }, [])
+  useEffect(() => {
+    if (!uploadsBusy) return
+    const warn = (e: BeforeUnloadEvent) => { e.preventDefault() }
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  }, [uploadsBusy])
+
   /** Never leave a step without saving what is in it. */
   const goto = useCallback(async (next: number) => {
+    // files still going up: the page does not change under them
+    if (busyNow.current) return
     if (timer.current) clearTimeout(timer.current)
     await flush()
     setStep(Math.max(0, Math.min(lastStep, next)))
@@ -138,7 +154,7 @@ export default function IntakeForm({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step, status === 'submitted', discovery])
 
-  const upload = useCallback(async (blockId: string, file: File) => {
+  const upload = useCallback(async (blockId: string, file: File, onProgress?: (fraction: number) => void) => {
     setUploading(blockId)
     try {
       const res = await fetch(`/api/intake/${token}/upload`, {
@@ -149,10 +165,18 @@ export default function IntakeForm({
       if (!res.ok) throw new Error(String(res.status))
       const { signedUrl, publicUrl } = await res.json()
       // straight to storage, the file never passes through our server
-      const put = await fetch(signedUrl, {
-        method: 'PUT', headers: { 'Content-Type': file.type || 'application/octet-stream' }, body: file,
+      // (not fetch: only this way does the browser say how many bytes have gone, which is the loading bar)
+      await new Promise<void>((resolve, reject) => {
+        const xhr = new XMLHttpRequest()
+        xhr.open('PUT', signedUrl)
+        xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream')
+        xhr.upload.onprogress = e => { if (e.lengthComputable) onProgress?.(e.loaded / e.total) }
+        xhr.onload = () => (xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(`upload ${xhr.status}`)))
+        xhr.onerror = () => reject(new Error('upload failed'))
+        xhr.onabort = () => reject(new Error('upload stopped'))
+        xhr.send(file)
       })
-      if (!put.ok) throw new Error(`upload ${put.status}`)
+      onProgress?.(1)
       setFiles(prev => [...prev, { block_id: blockId, filename: file.name, url: publicUrl }])
       // mirror what the server just wrote into `answers`, so the progress
       // counter moves now rather than on the next page load
@@ -172,6 +196,7 @@ export default function IntakeForm({
   }, [token])
 
   const submit = useCallback(async () => {
+    if (busyNow.current) return
     setSubmitting(true)
     if (timer.current) clearTimeout(timer.current)
     await flush()
@@ -428,7 +453,8 @@ export default function IntakeForm({
                       key={block.id} block={block} disabled={false}
                       uploading={uploading === block.id}
                       files={files.filter(f => f.block_id === block.id)}
-                      onUpload={f => upload(block.id, f)}
+                      onUpload={(f, onProgress) => upload(block.id, f, onProgress)}
+                      onBusy={markBusy}
                     />
                   )
                 }
@@ -472,7 +498,7 @@ export default function IntakeForm({
             <div className="flex flex-wrap items-center gap-x-4 gap-y-5 border-t border-cream/15 pt-8 lg:col-span-2">
               {step > 0 && (
                 <button
-                  type="button" onClick={() => void goto(step - 1)}
+                  type="button" onClick={() => void goto(step - 1)} disabled={uploadsBusy}
                   // explicit background: the marketing stylesheet is shared with
                   // this page, so a bare button cannot be left to inherit
                   className="bg-transparent font-lamam text-[11px] uppercase tracking-widest text-cream-dim transition-colors hover:text-cream"
@@ -482,23 +508,23 @@ export default function IntakeForm({
               )}
               {reviewed && step < lastStep - 1 && (
                 <button
-                  type="button" onClick={() => void goto(lastStep)}
+                  type="button" onClick={() => void goto(lastStep)} disabled={uploadsBusy}
                   className="ml-auto bg-transparent font-lamam text-[11px] uppercase tracking-widest text-cream-dim transition-colors hover:text-cream"
                 >
                   Skip to review
                 </button>
               )}
               <button
-                type="button" onClick={() => void goto(step + 1)}
+                type="button" onClick={() => void goto(step + 1)} disabled={uploadsBusy} aria-busy={uploadsBusy}
                 className={
                   'group inline-flex items-center gap-3 bg-cream px-7 py-3.5 ' +
                   'font-lamam text-[11px] uppercase tracking-widest text-ink ' +
-                  'transition-opacity hover:opacity-85 ' +
+                  'transition-opacity hover:opacity-85 disabled:cursor-not-allowed disabled:opacity-50 ' +
                   (reviewed && step < lastStep - 1 ? '' : 'ml-auto')
                 }
               >
-                {isCover ? 'Begin' : step === lastStep - 1 ? 'Review' : 'Continue'}
-                <span className="transition-transform group-hover:translate-x-1">→</span>
+                {uploadsBusy ? 'Uploading your files…' : isCover ? 'Begin' : step === lastStep - 1 ? 'Review' : 'Continue'}
+                {!uploadsBusy && <span className="transition-transform group-hover:translate-x-1">→</span>}
               </button>
             </div>
           </div>

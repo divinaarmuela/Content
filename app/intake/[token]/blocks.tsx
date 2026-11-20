@@ -197,32 +197,46 @@ export function SocialHandlesBlock({ block, value, onChange }: { block: Block; v
  * to just say "Not saved". Each file is sent in turn; the ones already sent are listed with a tick.
  */
 export function MultiFileBlock({
-  block, files, onUpload, uploading, disabled,
+  block, files, onUpload, uploading, disabled, onBusy,
 }: {
   block: Block
   files: { filename: string; url: string }[]
-  /** sends one file; resolves true when it is kept */
-  onUpload: (file: File) => Promise<boolean>
+  /** sends one file, reporting how far it has got (0 to 1); resolves true when it is kept */
+  onUpload: (file: File, onProgress: (fraction: number) => void) => Promise<boolean>
   uploading: boolean
   disabled: boolean
+  /** tells the form files are going up, so it can shut every way off the page until they are done */
+  onBusy?: (busy: boolean) => void
 }) {
   const [problems, setProblems] = useState<string[]>([])
-  const [sending, setSending] = useState<string | null>(null)
+  // THE LOADING STATE (the owner, 20 Nov 2026: "when files are uploading there is no loading state"): which file is
+  // going up, how many are left, and how far this one has got
+  const [sending, setSending] = useState<{ name: string; at: number; of: number; fraction: number } | null>(null)
   const pick = async (list: File[]) => {
     const bad: string[] = []
-    for (const f of list) {
-      const why = brandAssetProblem(f.name, f.size)
-      if (why) { bad.push(why); continue }
-      setSending(f.name)
-      if (!(await onUpload(f))) bad.push(`“${f.name}” could not be uploaded. Please try it again.`)
+    const good: File[] = []
+    for (const f of list) { const why = brandAssetProblem(f.name, f.size); if (why) bad.push(why); else good.push(f) }
+    setProblems(bad)
+    if (!good.length) return
+    onBusy?.(true)
+    try {
+      for (let i = 0; i < good.length; i++) {
+        const f = good[i]
+        setSending({ name: f.name, at: i + 1, of: good.length, fraction: 0 })
+        const kept = await onUpload(f, fraction => setSending(s => (s && s.name === f.name ? { ...s, fraction } : s)))
+        if (!kept) bad.push(`“${f.name}” could not be uploaded. Please try it again.`)
+      }
+    } finally {
+      setSending(null); setProblems([...bad]); onBusy?.(false)
     }
-    setSending(null); setProblems(bad)
   }
+  const busy = disabled || uploading || !!sending
+  const pct = sending ? Math.min(100, Math.round(sending.fraction * 100)) : 0
   return (
     <div>
       <BlockLabel block={block} />
       {files.length > 0 && (
-        <ul className="mb-4 flex flex-col gap-1.5" aria-label="Files you have added">
+        <ul className="mb-4 flex list-none flex-col gap-1.5 p-0" aria-label="Files you have added">
           {files.map(f => (
             <li key={f.url} className="break-all font-lamam text-[12px] text-cream-dim">
               <span className="text-cream">✓</span> {f.filename}
@@ -230,17 +244,34 @@ export function MultiFileBlock({
           ))}
         </ul>
       )}
-      <label className={`inline-flex min-h-12 cursor-pointer items-center gap-3 rounded-full border border-solid border-cream/25 bg-cream/[0.06] px-5 font-lamam text-[11px] uppercase tracking-widest text-cream transition-colors hover:border-cream ${disabled || uploading || sending ? 'pointer-events-none opacity-50' : ''}`}>
-        <span aria-hidden>+</span> {files.length > 0 ? 'Add more files' : 'Choose files'}
-        <input
-          type="file" multiple disabled={disabled || uploading || !!sending} className="sr-only"
-          onChange={e => { const list = [...(e.target.files ?? [])]; e.target.value = ''; if (list.length) void pick(list) }}
-        />
-      </label>
+      {sending ? (
+        <div role="status" aria-live="polite" className="rounded-lg border border-solid border-cream/25 bg-cream/[0.06] p-4">
+          <div className="flex items-center gap-3">
+            <span aria-hidden className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-solid border-cream/25 border-t-cream" />
+            <p className="min-w-0 flex-1 break-all font-lamah text-[15px] leading-snug text-cream">
+              Uploading {sending.name}
+            </p>
+            <span className="shrink-0 font-lamam text-[12px] tabular-nums tracking-widest text-cream">{pct}%</span>
+          </div>
+          <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-cream/15" aria-hidden>
+            <div className="h-full rounded-full bg-cream transition-[width] duration-200 ease-out" style={{ width: `${pct}%` }} />
+          </div>
+          <p className="mt-3 font-lamam text-[10px] uppercase tracking-widest text-cream-dim">
+            {sending.of > 1 ? `File ${sending.at} of ${sending.of} · ` : ''}Keep this page open until it finishes
+          </p>
+        </div>
+      ) : (
+        <label className={`inline-flex min-h-12 cursor-pointer items-center gap-3 rounded-full border border-solid border-cream/25 bg-cream/[0.06] px-5 font-lamam text-[11px] uppercase tracking-widest text-cream transition-colors hover:border-cream ${busy ? 'pointer-events-none opacity-50' : ''}`}>
+          <span aria-hidden>+</span> {files.length > 0 ? 'Add more files' : 'Choose files'}
+          <input
+            type="file" multiple disabled={busy} className="sr-only"
+            onChange={e => { const list = [...(e.target.files ?? [])]; e.target.value = ''; if (list.length) void pick(list) }}
+          />
+        </label>
+      )}
       <p className="mt-3 max-w-[60ch] font-lamah text-[14px] leading-relaxed text-cream-dim">We take {BRAND_ASSET_WORDS}. Up to 1 GB each, and you can add more than one.</p>
-      {sending && <p role="status" className="mt-3 font-lamam text-[11px] uppercase tracking-widest text-cream-dim">Uploading {sending}…</p>}
       {problems.length > 0 && (
-        <ul role="alert" className="mt-3 flex flex-col gap-1.5">
+        <ul role="alert" className="mt-3 flex list-none flex-col gap-1.5 p-0">
           {problems.map(p => <li key={p} className="font-lamah text-[14px] leading-relaxed text-[#E2725B]">{p}</li>)}
         </ul>
       )}
