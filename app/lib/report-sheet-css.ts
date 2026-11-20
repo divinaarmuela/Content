@@ -40,6 +40,12 @@ export const PRINT_CSS = `${reportProseCss('.report-prose')}
 .report-sheet .pr-chart h3{font-size:12px;font-weight:700;color:#1b1b1b;margin:12px 0 6px}
 .report-sheet .report-prose td{border-color:#d9d9d9}
 .report-sheet .pr-block{margin:0 0 22px}
+/* a figure is a block of the report (20 Nov 2026): close to its neighbours, with air above an account's heading */
+.report-sheet .pr-block.pr-fig{margin:0 0 8px}
+.report-sheet .pr-block.pr-fig-platform,.report-sheet .pr-block.pr-fig-audience{margin-top:24px}
+.report-sheet .pr-block.pr-fig-summary{margin-bottom:22px}
+.report-sheet .pr-block.report-prose{margin-top:18px}
+.report-sheet .pr-fig .report-prose table{margin:0}
 .report-sheet .pr-block > h3{font-size:14px;font-weight:700;color:${REPORT_BLUE};margin:14px 0 6px}
 .report-sheet .pr-posts{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
 .report-sheet .pr-post img{width:100%;aspect-ratio:4/5;object-fit:cover;border-radius:6px}

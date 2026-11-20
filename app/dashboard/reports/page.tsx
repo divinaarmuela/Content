@@ -213,7 +213,8 @@ function ReportsInner() {
           <Writer report={report ?? ({ id: `${clientId}_${month}`, month, data: null, body: null, objective: null, notes: null, checks: null, generated_at: null, updated_at: '' } as Saved)}
             clientId={clientId} month={month} mayDelete={mayDelete} onChange={setReport} onDeleted={() => void load()}
             settled={state.kind === 'final'} settlesOn={state.settlesOn} people={people} candidates={data?.candidates ?? []} portalLink={portalLink}
-            connected={data?.platforms.map(p => p.platform) ?? []} blockers={blockers} figuresRead={!!data} onPreview={() => setPreviewing(true)} onDownload={() => void downloadPdf()} makingPdf={makingPdf} />
+            connected={data?.platforms.map(p => p.platform) ?? []} blockers={blockers} figuresRead={!!data} onPreview={() => setPreviewing(true)} onDownload={() => void downloadPdf()} makingPdf={makingPdf}
+            sheetData={data ? scopeData(data, includedPlatforms(report?.included_platforms, data.platforms.map(p => p.platform))) : null} />
           {data && <PrintReport data={scopeData(data, includedPlatforms(report?.included_platforms, data.platforms.map(p => p.platform)))} report={report} clientName={clientName} />}
           {/* THE PREVIEW: the same sheet the PDF prints, on the screen, before anything is downloaded (19 Nov 2026) */}
           {data && (
@@ -278,7 +279,9 @@ function FreshnessCard({ state, month, fetchedAt }: { state: MonthState; month: 
 
 /* ── the written report ──────────────────────────────────────────────────── */
 
-function Writer({ report, clientId, month, mayDelete, onChange, onDeleted, settled, settlesOn, people, candidates: allCandidates, portalLink, connected, blockers = [], figuresRead, onPreview, onDownload, makingPdf }: {
+function Writer({ report, clientId, month, mayDelete, onChange, onDeleted, settled, settlesOn, people, candidates: allCandidates, portalLink, connected, blockers = [], figuresRead, onPreview, onDownload, makingPdf, sheetData }: {
+  /** the figures the report shows (the accounts ticked into it): what the editor's figure blocks draw from */
+  sheetData: ReportData | null
   /** makes the PDF file and downloads it */
   onDownload: () => void
   /** true while the PDF is being made */
@@ -483,7 +486,7 @@ function Writer({ report, clientId, month, mayDelete, onChange, onDeleted, settl
     const body = editorHandle.current?.markdown()
     const body_doc = editorHandle.current?.doc()
     if (body == null) return
-    if (!body.trim() && !/"type":"image"/.test(body_doc ?? '')) { toast.error('The report is empty. Press Cancel to keep the saved one.'); return }
+    if (!body.trim() && !/"type":"(image|reportFigure)"/.test(body_doc ?? '')) { toast.error('The report is empty. Press Cancel to keep the saved one.'); return }
     setSaving(true)
     try { await patch({ body, body_doc, notes, objective }); setEditing(false); setDirty(false); toast.success('Saved') } catch (e) { toast.error(e instanceof Error ? e.message : 'Could not save') } finally { setSaving(false) }
   }
@@ -563,7 +566,7 @@ function Writer({ report, clientId, month, mayDelete, onChange, onDeleted, settl
             )}
           </div>
           {editing
-            ? <ReportEditor key={`${report.id}:${report.updated_at}`} initial={report.body} initialDoc={report.body_doc ?? null} handle={editorHandle} onDirty={setDirty} uploadImage={uploadImage} />
+            ? <ReportEditor key={`${report.id}:${report.updated_at}`} initial={report.body} initialDoc={report.body_doc ?? null} handle={editorHandle} onDirty={setDirty} uploadImage={uploadImage} data={sheetData} report={report} />
             : <article className="report-prose rounded-inner border border-border bg-background p-6" dangerouslySetInnerHTML={{ __html: reportBodyHtml(report) }} />}
           <EarlierVersions history={readHistory(report.history)} people={people} />
 
