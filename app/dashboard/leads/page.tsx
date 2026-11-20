@@ -23,7 +23,7 @@ import {
 import {
   ArrowRight, ArrowUpDown, Copy, Download, Mail, MoreHorizontal, RefreshCw, Trash2, UserPlus,
 } from 'lucide-react'
-import Chip from '../ui/Chip'
+import Chip, { type ChipTone } from '../ui/Chip'
 import Bookings from './Bookings'
 import { useRole } from '../useRole'
 import { LoadFailed } from '../NotSetUp'
@@ -159,6 +159,12 @@ export default function LeadsPage() {
    */
   const { rows: leads, loading, error } = useTable<Lead>('leads', { orderBy: BY_NEWEST })
   const { rows: prospects } = useTable<ProspectLink & { id: string }>('prospects')
+  // WHERE EACH LEAD'S DISCOVERY FORM IS UP TO (20 Nov 2026: "how can we keep track"): a second chip on the row —
+  // sent, opened, started, filled in. Only the chip's words are read here, never the answers.
+  const [discovery, setDiscovery] = useState<Record<string, { label: string; tone: ChipTone; step: string }>>({})
+  useEffect(() => {
+    void fetch('/api/leads/discovery').then(r => (r.ok ? r.json() : null)).then(j => { if (j?.forms) setDiscovery(j.forms) }).catch(() => {})
+  }, [leads.length])
 
   /**
    * A new lead announces itself the moment it is created. The table does not
@@ -224,6 +230,7 @@ export default function LeadsPage() {
     return (
       <div className="flex flex-col items-start gap-1">
         <Chip tone={STATUS_TONE[words] ?? 'amber'}>{words}</Chip>
+        {discovery[l.id] && <Chip tone={discovery[l.id].tone}>{discovery[l.id].label}</Chip>}
         {p && <span className="whitespace-nowrap text-[12px] text-muted-foreground">{`In acquisition · ${acqStageByKey(p.stage).label}`}</span>}
       </div>
     )

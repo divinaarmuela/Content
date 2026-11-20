@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import PageTitle from '../../ui/PageTitle'
 import LeadTimeline from './LeadTimeline'
+import LeadDiscovery from './LeadDiscovery'
 import Chip from '../../ui/Chip'
 import { LoadFailed } from '../../NotSetUp'
 import { useRole } from '../../useRole'
@@ -47,6 +48,8 @@ export default function LeadPage({ id }: { id: string }) {
   const [draft, setDraft] = useState<Partial<LeadLike>>({})
   const [busy, setBusy] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  // the timeline is read again when the discovery form changes (made, link copied)
+  const [tick, setTick] = useState(0)
   useEffect(() => { setDraft({}) }, [lead?.id])
 
   const prospect = lead ? prospectForLead(lead, prospects) : null
@@ -123,7 +126,9 @@ export default function LeadPage({ id }: { id: string }) {
         </p>
       )}
 
-      <LeadTimeline id={id} refreshKey={JSON.stringify(lead)} />
+      <LeadDiscovery id={id} onChange={() => setTick(t => t + 1)} />
+
+      <LeadTimeline id={id} refreshKey={`${JSON.stringify(lead)}:${tick}`} />
 
       <section aria-label="What they wrote" className="rounded-card border border-border bg-card">
         <h2 className={`border-b border-border px-4 py-3 ${H}`}>What they wrote</h2>

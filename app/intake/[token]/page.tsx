@@ -3,7 +3,9 @@ import { notFound, redirect } from 'next/navigation'
 import { onePortalFormRedirect } from '../../lib/one-portal-forms'
 import { archivo, sometype } from '../../components/lama/fonts'
 import { table, withRequestCache } from '@/lib/db'
-import type { Client } from '@/lib/db-types'
+import type { Client, Lead } from '@/lib/db-types'
+import { leadFormName } from '../../lib/lead-discovery-core'
+import { logLeadEvent } from '../../lib/lead-events'
 import { getIntakeByToken, listIntakeFiles } from '../../lib/intake'
 import IntakeForm from './IntakeForm'
 
@@ -35,13 +37,18 @@ export default async function IntakePage({ params }: { params: Promise<{ token: 
   const form = await getIntakeByToken(token)
   if (!form) notFound()
 
-  const client = await table<Client>('clients').get(form.client_id)
+  // A LEAD'S DISCOVERY FORM has no client yet (20 Nov 2026): it greets the lead by their business, and the first time
+  // it is opened goes on the lead's timeline (the key makes that one line, however often they come back)
+  const leadId = (form as { lead_id?: string | null }).lead_id ?? null
+  const client = form.client_id ? await table<Client>('clients').get(form.client_id) : null
+  const lead = !client && leadId ? await table<Lead>('leads').get(leadId).catch(() => null) : null
+  if (lead && form.status !== 'draft') await logLeadEvent({ leadId: lead.id, kind: 'discovery', title: 'Opened the discovery form', key: `discovery-opened:${form.id}` })
 
   return (
     <div className={`${archivo.variable} ${sometype.variable}`}>
       <IntakeForm
         token={token}
-        clientName={client?.name ?? ''}
+        clientName={client?.name ?? leadFormName(lead)}
         title={form.title || 'Intake'}
         definition={form.definition}
         initialAnswers={form.answers}

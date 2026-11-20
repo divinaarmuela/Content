@@ -315,7 +315,87 @@ const ONGOING: TemplateDefinition = {
   ],
 }
 
+/**
+ * THE DISCOVERY FORM (the team, via the owner, 20 Nov 2026: "a discovery intake form we can send to potential
+ * clients"). Twenty short questions for somebody who has not signed yet: who they are, what they want, what they
+ * use today, what they want from us, and their budget and timing. Far shorter than the four client intakes above,
+ * which are for a client we already work with.
+ *
+ * The first three questions and the ideal customer keep the ids the other forms use (public_name, website, socials,
+ * ideal_customer), so what a prospect writes here fills their client record the same way.
+ */
+const DISCOVERY: TemplateDefinition = {
+  key: 'discovery',
+  name: 'Discovery form',
+  sections: [
+    {
+      id: 'intro', title: 'Welcome',
+      blocks: [{
+        id: 'welcome', type: 'guidance',
+        label:
+          'Thanks for getting in touch. These questions take about ten minutes and help us come to our first ' +
+          'conversation prepared. Short answers are fine, and you can skip anything you are not sure about.',
+      }],
+    },
+    {
+      id: 'about', title: 'About your business',
+      blocks: [
+        { id: 'public_name', type: 'short_text', label: 'What’s your company name?' },
+        { id: 'website', type: 'link', label: 'What’s your website?', placeholder: 'yourbusiness.com.au' },
+        { id: 'socials', type: 'short_text', label: 'What are your main social media handles?' },
+        { id: 'what_you_do', type: 'long_text', label: 'How would you describe what you do in a sentence or two?' },
+        { id: 'ideal_customer', type: 'long_text', label: 'Who is your ideal customer?' },
+        { id: 'main_competitors', type: 'long_text', label: 'Who do you see as your main competitors?' },
+      ],
+    },
+    {
+      id: 'goals', title: 'Goals and challenges',
+      blocks: [
+        { id: 'why_now', type: 'long_text', label: 'What made you reach out to us now?' },
+        { id: 'top_goals', type: 'long_text', label: 'What are the top 2–3 goals you’d like to hit in the next 6–12 months?' },
+        { id: 'in_the_way', type: 'long_text', label: 'What’s getting in the way of those goals right now?' },
+        { id: 'success_looks_like', type: 'long_text', label: 'How will you know this partnership is working? What does success look like to you?' },
+      ],
+    },
+    {
+      id: 'current', title: 'Current marketing and media',
+      blocks: [
+        {
+          id: 'channels_today', type: 'multi_select', label: 'Which channels are you using today?', help: 'Tick all that apply.',
+          options: ['Social media', 'Email marketing', 'Paid ads', 'SEO', 'Content (blog, video, podcast)', 'PR', 'None yet', 'Other'],
+        },
+        { id: 'channels_other', type: 'short_text', label: 'If you ticked Other, which?' },
+        { id: 'worked_and_not', type: 'long_text', label: 'What has worked well for you so far, and what hasn’t?' },
+        { id: 'agency_before', type: 'long_text', label: 'Have you worked with an agency or freelancer before? What did you like or not like?' },
+        { id: 'has_brand_guidelines', type: 'select', label: 'Do you have brand guidelines, a style guide, or existing assets we can use?', options: ['Yes', 'No'] },
+      ],
+    },
+    {
+      id: 'scope', title: 'Scope and services',
+      blocks: [
+        { id: 'services_wanted', type: 'long_text', label: 'Which services are you most interested in?' },
+        { id: 'deliverables_in_mind', type: 'long_text', label: 'Are there any specific deliverables you already have in mind?' },
+        { id: 'coming_up', type: 'long_text', label: 'Is there a launch, campaign, or event coming up that we should plan around?' },
+      ],
+    },
+    {
+      id: 'budget', title: 'Budget and timeline',
+      blocks: [
+        { id: 'budget_range', type: 'short_text', label: 'What budget range are you working with (monthly or per project)?' },
+        { id: 'start_when', type: 'short_text', label: 'When are you hoping to get started?' },
+      ],
+    },
+    {
+      id: 'last', title: 'One last thing',
+      blocks: [
+        { id: 'heard_from', type: 'short_text', label: 'How did you hear about us?' },
+      ],
+    },
+  ],
+}
+
 export const TEMPLATES: Record<TemplateKey, TemplateDefinition> = {
+  discovery: DISCOVERY,
   rebrand: REBRAND,
   launch: LAUNCH,
   one_off: ONE_OFF,

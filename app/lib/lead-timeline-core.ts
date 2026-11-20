@@ -10,7 +10,7 @@
  */
 import { sourceLabel, placementLabel, pageLabel } from './calendly-core'
 
-export type TimelineKind = 'first_visit' | 'form' | 'email' | 'booked' | 'rebooked' | 'cancelled' | 'came_in' | 'acquisition' | 'no_show' | 'showed'
+export type TimelineKind = 'first_visit' | 'form' | 'email' | 'booked' | 'rebooked' | 'cancelled' | 'came_in' | 'acquisition' | 'no_show' | 'showed' | 'discovery'
 
 export type TimelineItem = { id: string; at: string; kind: TimelineKind; title: string; detail: string | null; lines: string[] }
 
@@ -22,7 +22,7 @@ type LeadRow = {
   ad_campaign?: string | null; ad_set?: string | null; ad_name?: string | null; ad_placement?: string | null
 }
 
-const KINDS = new Set<TimelineKind>(['first_visit', 'form', 'email', 'booked', 'rebooked', 'cancelled', 'came_in', 'acquisition', 'no_show', 'showed'])
+const KINDS = new Set<TimelineKind>(['first_visit', 'form', 'email', 'booked', 'rebooked', 'cancelled', 'came_in', 'acquisition', 'no_show', 'showed', 'discovery'])
 
 /** the ad and page details, as short "Label: value" lines */
 export function adLines(m: Record<string, unknown> | null | undefined): string[] {

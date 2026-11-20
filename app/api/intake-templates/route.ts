@@ -14,7 +14,7 @@ import { normaliseDefinition, type TemplateKey } from '../../lib/intake-core'
  * reshape every future form.
  */
 
-const KEYS: TemplateKey[] = ['one_off', 'launch', 'rebrand', 'ongoing']
+const KEYS: TemplateKey[] = ['one_off', 'launch', 'rebrand', 'ongoing', 'discovery']
 
 export async function GET() {
   return withRequestCache(async () => {

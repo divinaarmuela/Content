@@ -1124,6 +1124,7 @@ export interface IntakeForm {
   reopened_at: string | null
   created_by: string | null
   title: string | null
+  lead_id: string | null
   show_on_portal: boolean | null
   notify_emails: string[] | null
 }
@@ -2174,7 +2175,7 @@ export const TABLE_COLUMNS = {
   inbox_views: ['id', 'user_id', 'client_id', 'seen_at'],
   instagram_videos: ['id', 'video', 'audio', 'audio_known', 'poster', 'caption', 'author', 'duration', 'fetched_at', 'expires_at', 'fail_count', 'last_error', 'updated_at'],
   intake_files: ['id', 'created_at', 'form_id', 'block_id', 'filename', 'url', 'size_bytes'],
-  intake_forms: ['id', 'created_at', 'client_id', 'template_key', 'definition', 'token', 'status', 'answers', 'send_copy_to_client', 'sent_at', 'first_opened_at', 'submitted_at', 'reopened_at', 'created_by', 'title', 'show_on_portal', 'notify_emails'],
+  intake_forms: ['id', 'created_at', 'client_id', 'template_key', 'definition', 'token', 'status', 'answers', 'send_copy_to_client', 'sent_at', 'first_opened_at', 'submitted_at', 'reopened_at', 'created_by', 'title', 'lead_id', 'show_on_portal', 'notify_emails'],
   intake_settings: ['id', 'notify_emails', 'updated_at', 'updated_by'],
   intake_templates: ['key', 'definition', 'updated_at', 'updated_by', 'id'],
   item_comments: ['id', 'created_at', 'item_id', 'parent_id', 'author_id', 'visibility', 'body', 'video_timestamp_sec', 'assigned_to', 'resolved', 'reactions', 'video_file_id', 'video_file_name'],
@@ -2302,7 +2303,7 @@ export const NULLABLE_COLUMNS = {
   inbox_views: [],
   instagram_videos: ['video', 'audio', 'poster', 'caption', 'author', 'duration', 'expires_at', 'last_error'],
   intake_files: [],
-  intake_forms: ['sent_at', 'first_opened_at', 'submitted_at', 'reopened_at', 'created_by', 'title', 'show_on_portal', 'notify_emails'],
+  intake_forms: ['sent_at', 'first_opened_at', 'submitted_at', 'reopened_at', 'created_by', 'title', 'lead_id', 'show_on_portal', 'notify_emails'],
   intake_settings: ['updated_by'],
   intake_templates: ['updated_by'],
   item_comments: ['parent_id', 'author_id', 'video_timestamp_sec', 'assigned_to', 'reactions', 'video_file_id', 'video_file_name'],

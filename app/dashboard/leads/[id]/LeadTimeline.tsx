@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { CalendarCheck, CalendarX, Globe, Mail, FileText, UserX, Sparkles, type LucideIcon } from 'lucide-react'
+import { CalendarCheck, CalendarX, ClipboardList, Globe, Mail, FileText, UserX, Sparkles, type LucideIcon } from 'lucide-react'
 import type { TimelineItem, TimelineKind } from '@/app/lib/lead-timeline-core'
 
 /** A lead's timeline, newest at the top and their first time here at the bottom (owner, 9 Nov 2026: "like a timeline"). */
@@ -16,6 +16,8 @@ const LOOK: Record<TimelineKind, { icon: LucideIcon; dot: string }> = {
   cancelled: { icon: CalendarX, dot: 'bg-tint-red text-foreground' },
   no_show: { icon: UserX, dot: 'bg-tint-red text-foreground' },
   acquisition: { icon: Sparkles, dot: 'bg-tint-amber text-foreground' },
+  // the discovery form: made, sent, opened, filled in (20 Nov 2026)
+  discovery: { icon: ClipboardList, dot: 'bg-tint-amber text-foreground' },
 }
 
 const whenWords = (iso: string) => {

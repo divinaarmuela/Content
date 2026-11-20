@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { table, withRequestCache } from '@/lib/db'
-import type { Client } from '@/lib/db-types'
+import type { Client, Lead, TeamUser } from '@/lib/db-types'
+import { leadFormName } from '../../../../lib/lead-discovery-core'
+import { logLeadEvent } from '../../../../lib/lead-events'
 import {
   submitIntake, getIntakeDefaultRecipients, listIntakeFiles,
 } from '../../../../lib/intake'
@@ -24,8 +26,13 @@ export async function POST(_req: Request, { params }: { params: Promise<{ token:
   const form = await submitIntake(token)
   if (!form) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  const client = await table<Client>('clients').get(form.client_id)
-  const name = client?.name ?? 'A client'
+  // A LEAD'S DISCOVERY FORM (20 Nov 2026) has no client: it is named for the lead, its email opens the lead's page,
+  // and the client-only steps below (their Drive folder, filling their record) are skipped
+  const leadId = (form as { lead_id?: string | null }).lead_id ?? null
+  const client = form.client_id ? await table<Client>('clients').get(form.client_id) : null
+  const lead = !client && leadId ? await table<Lead>('leads').get(leadId).catch(() => null) : null
+  const forLead = !!lead
+  const name = client?.name ?? (leadFormName(lead) || (forLead ? 'A lead' : 'A client'))
   const progress = completion(form.definition, form.answers)
   // An email link must be absolute. NEXT_PUBLIC_APP_URL is set in production;
   // VERCEL_URL covers previews; the domain is the last resort.
@@ -41,6 +48,13 @@ export async function POST(_req: Request, { params }: { params: Promise<{ token:
     await getIntakeDefaultRecipients(),
     process.env.GMAIL_USER ?? '',
   )
+  if (lead) {
+    // whoever owns the lead hears too
+    const owner = lead.owner_id ? await table<TeamUser>('team_users').get(lead.owner_id).catch(() => null) : null
+    const email = String(owner?.email ?? '').trim().toLowerCase()
+    if (email && owner?.active_status !== false && !recipients.includes(email)) recipients.push(email)
+    await logLeadEvent({ leadId: lead.id, kind: 'discovery', title: 'Filled in the discovery form', detail: `${progress.answered} of ${progress.total} questions answered`, key: `discovery-filled:${form.id}:${form.submitted_at ?? ''}` })
+  }
 
   // Everything below is best-effort. The answers are already saved and the
   // client has done their part, so a failed PDF, a missing attachment or a
@@ -51,7 +65,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ token:
   // SUBMIT, not on upload — the upload route only signs a URL, and the bytes
   // arrive from the browser afterwards, so a mirror queued there would race
   // the file into existence and spend its retries fetching a 404.
-  try {
+  if (!forLead) try {
     const labels = new Map<string, string>()
     for (const section of form.definition.sections) {
       for (const block of section.blocks) labels.set(block.id, block.label ?? '')
@@ -105,14 +119,14 @@ export async function POST(_req: Request, { params }: { params: Promise<{ token:
       entityType: 'intake_form',
       entityId: form.id,
       recipientEmail: to,
-      subject: `Intake form submitted — ${name}`,
+      subject: forLead ? `Discovery form filled in — ${name}` : `Intake form submitted — ${name}`,
       bodyHtml: renderEmail(
-        'Intake form submitted',
-        `<p>${name} has completed their ${form.template_key.replace('_', '-')} intake form ` +
+        forLead ? 'Discovery form filled in' : 'Intake form submitted',
+        `<p>${name} has completed their ${forLead ? 'discovery form' : `${form.template_key.replace('_', '-')} intake form`} ` +
         `— ${progress.answered} of ${progress.total} questions answered. ` +
         `The full brief is attached as a PDF.</p>${attachedList}${linkedList}`,
-        'Open in dashboard',
-        `${base}/dashboard/clients/${form.client_id}/intake/${form.id}`,
+        forLead ? 'Open the lead' : 'Open in dashboard',
+        forLead ? `${base}/dashboard/leads/${lead!.id}` : `${base}/dashboard/clients/${form.client_id}/intake/${form.id}`,
       ),
       attachments: [
         { filename: `${safeName}-intake.pdf`, content: pdf, contentType: 'application/pdf' },
@@ -128,7 +142,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ token:
   // a background Inngest function does the work (it may make a Haiku call), so a
   // failure here can never delay or break the submission. The event is dropped
   // silently until the function is synced into Inngest Cloud (CLAUDE.md trap 5b).
-  try {
+  if (!forLead) try {
     await inngest.send({
       name: 'app/intake.enrich.requested',
       data: { form_id: form.id, client_id: form.client_id },

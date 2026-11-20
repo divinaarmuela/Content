@@ -44,7 +44,7 @@ const MODEL = 'claude-sonnet-5'
 const MAX_OUTPUT_TOKENS = 8000
 const CALL_TIMEOUT_MS = 50_000
 
-const KEYS: TemplateKey[] = ['one_off', 'launch', 'rebrand', 'ongoing']
+const KEYS: TemplateKey[] = ['one_off', 'launch', 'rebrand', 'ongoing', 'discovery']
 
 /** The shape we want back, expressed as a tool so the model fills fields rather
  *  than composing prose. It is still validated field by field in

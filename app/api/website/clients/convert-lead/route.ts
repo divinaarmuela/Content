@@ -1,3 +1,4 @@
+import { moveLeadDiscoveryToClient } from '@/app/lib/lead-discovery'
 import { NextResponse } from 'next/server'
 import { randomUUID } from 'node:crypto'
 import { table, withRequestCache, DbError } from '@/lib/db'
@@ -59,6 +60,8 @@ export async function POST(req: Request) {
       // a client made here was landing on the old portal because only the link was set, not the switch)
       portal_one: true,
     })
+    // their discovery form, if they filled one in as a lead, goes with them onto the client's forms (20 Nov 2026)
+    await moveLeadDiscoveryToClient(String(lead.id), String((client as { id: string }).id))
     return NextResponse.json(client, { status: 201 })
   } catch (e) {
     const dup = e instanceof DbError && e.code === 'unique'

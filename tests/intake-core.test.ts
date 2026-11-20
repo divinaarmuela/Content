@@ -237,7 +237,7 @@ describe('normaliseDefinition', () => {
 
 describe('templates', () => {
   it('defines every engagement type', () => {
-    expect(Object.keys(TEMPLATES).sort()).toEqual(['launch', 'one_off', 'ongoing', 'rebrand'])
+    expect(Object.keys(TEMPLATES).sort()).toEqual(['discovery', 'launch', 'one_off', 'ongoing', 'rebrand'])
   })
 
   it('asks the ongoing client about the founders and paid ads, the one-off client neither', () => {
@@ -277,8 +277,9 @@ describe('templates', () => {
     expect(answerableBlocks(TEMPLATES.one_off).map(b => b.id)).not.toContain('history')
   })
 
-  it('captures the approval contact in every template — production needs it', () => {
-    for (const def of Object.values(TEMPLATES)) {
+  it('captures the approval contact in every client template — production needs it', () => {
+    // the discovery form is for somebody who has not signed yet (20 Nov 2026): there is no production to approve
+    for (const def of Object.values(TEMPLATES).filter(d => d.key !== 'discovery')) {
       expect(answerableBlocks(def).map(b => b.id), def.key).toContain('approval_contact')
     }
   })

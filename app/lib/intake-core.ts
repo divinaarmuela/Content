@@ -5,7 +5,7 @@
  * decides what a valid answer set looks like.
  */
 
-export type TemplateKey = 'one_off' | 'launch' | 'rebrand' | 'ongoing'
+export type TemplateKey = 'one_off' | 'launch' | 'rebrand' | 'ongoing' | 'discovery'
 
 /** `guidance` is copy, not a question — the italic "why we're asking" text that
  *  produces a considered answer instead of a one-liner. It never holds a value. */
@@ -78,7 +78,7 @@ export const BLOCK_TYPES: BlockType[] = [
   'select', 'multi_select', 'checkbox', 'file',
 ]
 
-const TEMPLATE_KEYS: TemplateKey[] = ['one_off', 'launch', 'rebrand', 'ongoing']
+const TEMPLATE_KEYS: TemplateKey[] = ['one_off', 'launch', 'rebrand', 'ongoing', 'discovery']
 
 /** Turn a label into a stable id. Answers key off block ids, so this only ever
  *  runs for NEW blocks — an existing id is carried through untouched. */

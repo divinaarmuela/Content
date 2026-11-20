@@ -47,6 +47,8 @@ const TYPES = [
   { key: 'rebrand', label: 'Rebrand / rebuild' },
   { key: 'launch', label: 'Launch' },
   { key: 'one_off', label: 'One-off project' },
+  // for somebody who has not signed yet (20 Nov 2026): twenty short questions before the first conversation
+  { key: 'discovery', label: 'Discovery (potential client)' },
 ]
 
 /** Each pill sets its own text colour AND border. Without an explicit colour a
