@@ -87,7 +87,7 @@ export default function DiscoveryStart() {
           second button was a grey box with unreadable words). The site's reset covers only the dashboard, so a plain
           button here wore the browser's grey face, and lists and headings its margins. Zero-weight rules, so every
           class on the page still wins. */}
-      <style>{`:where(.disc) :where(h1,h2,h3,p,ol,dl,dd){margin:0}:where(.disc) :where(ol){list-style:none;padding:0}:where(.disc) :where(button){appearance:none;background:none;border:0;padding:0;font:inherit;color:inherit;cursor:pointer;border-radius:0}:where(.disc) :where(button:disabled){cursor:default}@keyframes disc-a{0%{transform:translate(-78%,-6%) scale(1)}50%{transform:translate(-24%,10%) scale(1.18)}100%{transform:translate(-78%,-6%) scale(1)}}@keyframes disc-b{0%{transform:translate(-8%,18%) scale(1.1)}50%{transform:translate(-92%,-4%) scale(.9)}100%{transform:translate(-8%,18%) scale(1.1)}}.disc-glow-a{transform:translate(-50%,0);animation:disc-a 16s ease-in-out infinite}.disc-glow-b{transform:translate(-50%,0);animation:disc-b 21s ease-in-out infinite}@keyframes disc-logos{from{transform:translateX(0)}to{transform:translateX(-50%)}}.disc-logos{animation:disc-logos 45s linear infinite}@media (prefers-reduced-motion:reduce){.disc-glow,.disc-logos{animation:none}}`}</style>
+      <style>{`.disc section{border-bottom:0}:where(.disc) :where(*,::before,::after){border-width:0;border-style:solid}:where(.disc) :where(h1,h2,h3,p,ol,dl,dd){margin:0}:where(.disc) :where(ol){list-style:none;padding:0}:where(.disc) :where(button){appearance:none;background:none;border:0;padding:0;font:inherit;color:inherit;cursor:pointer;border-radius:0}:where(.disc) :where(button:disabled){cursor:default}@keyframes disc-a{0%{transform:translate(-78%,-6%) scale(1)}50%{transform:translate(-24%,10%) scale(1.18)}100%{transform:translate(-78%,-6%) scale(1)}}@keyframes disc-b{0%{transform:translate(-8%,18%) scale(1.1)}50%{transform:translate(-92%,-4%) scale(.9)}100%{transform:translate(-8%,18%) scale(1.1)}}.disc-glow-a{transform:translate(-50%,0);animation:disc-a 16s ease-in-out infinite}.disc-glow-b{transform:translate(-50%,0);animation:disc-b 21s ease-in-out infinite}@keyframes disc-logos{from{transform:translate3d(0,0,0)}to{transform:translate3d(-100%,0,0)}}.disc-logos{animation:disc-logos 40s linear infinite;will-change:transform}@media (prefers-reduced-motion:reduce){.disc-glow,.disc-logos{animation:none}}`}</style>
       {/* the site's dotted field, and one soft blue light behind the headline */}
       <div aria-hidden className="pointer-events-none absolute inset-0 bg-lama-dots [background-size:22px_22px] [mask-image:linear-gradient(to_bottom,black,transparent_78%)]" />
       {/* THE BLUE LIGHT MOVES (the owner, 20 Nov 2026: "make the blue thing on hero gradient moving"): two soft lights
@@ -122,7 +122,7 @@ export default function DiscoveryStart() {
                 Start a new one
               </button>
             ) : (
-              <p className="font-lamam text-[11px] uppercase tracking-widest text-cream-dim">Saves as you go · Skip what you like</p>
+              <p className="font-lamam text-[11px] uppercase tracking-widest text-cream-dim">Saves as you go</p>
             )}
           </div>
           {error && <p role="alert" className="mt-5 text-[15px] text-[#E2725B]">{error}</p>}
@@ -131,22 +131,22 @@ export default function DiscoveryStart() {
 
         {/* THE CLIENTS' LOGOS, MOVING, where the three numbers were (the owner, 20 Nov 2026: "remove the minutes and
             stats, have the client marquee logos instead") */}
-        <div className="border-y border-cream/15 py-9 sm:py-10">
+        <div className="py-9 sm:py-10">
           <p className="mb-7 text-center font-lamam text-[11px] uppercase tracking-widest text-cream-dim">Trusted by founders &amp; local businesses</p>
-          {/* A BELT WITH NO END (the owner, 20 Nov 2026: "marquee logos suddenly disappear on the right"). The homepage's
-              strip loads each logo only as it nears the screen, so they popped in and out at the right edge. Here both
-              halves are loaded up front and are exactly alike, so sliding by one half is seamless; the edges fade. */}
-          <div aria-label="Clients and partners" className="overflow-hidden [mask-image:linear-gradient(to_right,transparent,black_8%,black_92%,transparent)]">
-            <div className="disc-logos flex w-max">
-              {[0, 1, 2, 3].map(half => (
-                <div key={half} aria-hidden={half > 0} className="flex shrink-0 items-center gap-14 pr-14 sm:gap-16 sm:pr-16">
-                  {LOGOS.map(src => (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img key={src} src={src} alt="" loading="eager" decoding="async" className="h-9 w-auto opacity-70 [filter:brightness(0)_invert(1)] sm:h-10" />
-                  ))}
-                </div>
-              ))}
-            </div>
+          {/* A BELT WITH NO END (the owner, 20 Nov 2026: "marquee logos suddenly disappear on the right", then "the marquee
+              logo is disappearing after some time"). Two faults, both gone: the homepage's strip loads each logo only as
+              it nears the screen, so they popped in at the right edge — here every logo is loaded up front. And one
+              long moving strip is a single layer wider than a phone will draw (about 4,096px), so it blanked out —
+              here three short strips, each its own layer and exactly alike, each slide by their own width together. */}
+          <div aria-label="Clients and partners" className="flex overflow-hidden">
+            {[0, 1, 2].map(n => (
+              <div key={n} aria-hidden={n > 0} className="disc-logos flex shrink-0 items-center gap-14 pr-14 sm:gap-16 sm:pr-16">
+                {LOGOS.map(src => (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img key={src} src={src} alt="" loading="eager" decoding="sync" className="h-9 w-auto opacity-70 [filter:brightness(0)_invert(1)] sm:h-10" />
+                ))}
+              </div>
+            ))}
           </div>
         </div>
 
