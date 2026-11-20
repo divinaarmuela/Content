@@ -16,11 +16,20 @@ export const DISCOVERY_INDUSTRIES: string[] = SECTORS.map(s => s.name)
 /** `image` is the still (a loop's poster); `video` is the loop itself when the brand has one */
 export type WorkTile = { name: string; sector: string; image: string; video: string | null; href: string }
 
+/**
+ * THE OWNER'S PICKS FOR THIS SHELF (20 Nov 2026, of the live thank-you screen: "remove real deal, it's an ugly photo,
+ * use senorita"). Real Deal Property stays on the Work page; it is only left off this shelf. Senorita leads wherever
+ * she is on it, so she is the large tile unless their own industry's brands come first.
+ */
+const LEFT_OFF = new Set(['Real Deal Property'])
+const LEADS = 'Senorita Debutante Dresses'
+const leadFirst = (list: WorkTile[]): WorkTile[] => [...list.filter(t => t.name === LEADS), ...list.filter(t => t.name !== LEADS)]
+
 const tileOf = (c: SectorClient, sector: string): WorkTile | null => {
   // a loop is `x.mp4` beside its poster `x.jpg`
   const image = c.media?.image ?? (c.media?.video ? `${c.media.video}.jpg` : null)
   // a brand with no picture is not shown: an empty frame is no inspiration
-  if (!image) return null
+  if (!image || LEFT_OFF.has(c.name)) return null
   return { name: c.name, sector, image, video: c.media?.video ? `${c.media.video}.mp4` : null, href: c.slug ? `/work/${c.slug}` : '/work' }
 }
 
@@ -32,7 +41,7 @@ function spread(skip: string | null): WorkTile[] {
   const rows = SECTORS.filter(s => s.name !== skip).map(tiles)
   const out: WorkTile[] = []
   for (let i = 0; rows.some(r => i < r.length); i++) for (const r of rows) if (r[i]) out.push(r[i])
-  return out
+  return leadFirst(out)
 }
 
 /**
@@ -44,7 +53,7 @@ function spread(skip: string | null): WorkTile[] {
 export function workPeek(industry: string | null | undefined, max = 5): { matched: string | null; mixed: boolean; tiles: WorkTile[] } {
   const want = String(industry ?? '').trim().toLowerCase()
   const sector = SECTORS.find(s => s.name.toLowerCase() === want)
-  const own = sector ? tiles(sector).slice(0, max) : []
+  const own = sector ? leadFirst(tiles(sector)).slice(0, max) : []
   const rest = spread(own.length ? sector!.name : null).slice(0, max - own.length)
   return { matched: own.length ? sector!.name : null, mixed: rest.length > 0, tiles: [...own, ...rest] }
 }

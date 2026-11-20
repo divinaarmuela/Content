@@ -200,8 +200,8 @@ describe('the industry question and the work shown on the thank-you screen', () 
     const peek = workPeek('Finance & Property')
     expect(peek).toMatchObject({ matched: 'Finance & Property', mixed: true })
     expect(peek.tiles).toHaveLength(5)
-    expect(peek.tiles.slice(0, 2).map(t => t.sector)).toEqual(['Finance & Property', 'Finance & Property'])
-    expect(peek.tiles.slice(2).every(t => t.sector !== 'Finance & Property')).toBe(true)
+    expect(peek.tiles[0].name).toBe('Capila Finance')
+    expect(peek.tiles.slice(1).every(t => t.sector !== 'Finance & Property')).toBe(true)
     expect(new Set(peek.tiles.map(t => t.name)).size).toBe(5)
   })
   it('for Other, no answer or a made-up industry: a spread across the sectors, and it does not pretend to be a match', () => {
@@ -221,6 +221,16 @@ describe('the industry question and the work shown on the thank-you screen', () 
       }
     }
     expect(workPeek('Trades & Logistics')).toMatchObject({ matched: 'Trades & Logistics', mixed: true })
+  })
+  it('leaves Real Deal off the shelf and leads with Senorita (the owner, 20 Nov 2026)', () => {
+    for (const industry of [...DISCOVERY_INDUSTRIES, 'Other']) {
+      expect(workPeek(industry, 99).tiles.some(t => t.name === 'Real Deal Property'), industry).toBe(false)
+    }
+    expect(workPeek('Other').tiles[0].name).toBe('Senorita Debutante Dresses')
+    expect(workPeek('Product & Retail').tiles[0].name).toBe('Senorita Debutante Dresses')
+    // their own industry still comes before her
+    expect(workPeek('Hospitality').tiles[0].sector).toBe('Hospitality')
+    expect(workPeek('Finance & Property').tiles.map(t => t.name).slice(0, 2)).toEqual(['Capila Finance', 'Senorita Debutante Dresses'])
   })
   it('a brand with a loop plays it, over its own still', () => {
     const t = workPeek('Hospitality').tiles.find(x => x.video)!
