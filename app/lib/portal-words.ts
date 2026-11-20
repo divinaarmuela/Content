@@ -106,17 +106,36 @@ export const SHOOT_STATUS_LABELS: Record<string, string> = {
 export const shootStatusLabel = (status: string | null | undefined): string =>
   SHOOT_STATUS_LABELS[String(status ?? '')] ?? 'Being planned'
 
+/**
+ * A CLIENT CAN HAVE MORE THAN ONE ACCOUNT MANAGER (the owner, 20 Nov 2026: "client facing can show both"). The client
+ * used to be told one name, whichever the database happened to list first, and never heard of the other. Every
+ * account manager on the client is named now: "Karly", "Karly or Manal", "Karly, Manal or Joy".
+ */
+export function joinManagers(names: readonly (string | null | undefined)[]): string | null {
+  const seen = new Set<string>()
+  const list: string[] = []
+  for (const raw of names) {
+    const first = (raw ?? '').trim().split(/\s+/)[0]
+    if (first && !seen.has(first.toLowerCase())) { seen.add(first.toLowerCase()); list.push(first) }
+  }
+  if (!list.length) return null
+  return list.length === 1 ? list[0] : `${list.slice(0, -1).join(', ')} or ${list[list.length - 1]}`
+}
+
+/** "your account manager", or "your account managers" when the name given is more than one person */
+export const managersWord = (amName?: string | null): string => (/ or /.test(amName ?? '') ? 'your account managers' : 'your account manager')
+
 /** "Priya, your account manager" when we know who that is — the phrase alone
- *  when the client has no manager assigned. */
+ *  when the client has no manager assigned. With two: "Priya or Sam, your account managers". */
 export function amPhrase(amName?: string | null): string {
   const n = (amName ?? '').trim()
-  return n ? `${n}, your account manager` : 'your account manager'
+  return n ? `${n}, ${managersWord(n)}` : 'your account manager'
 }
 
 /** The same person, mid-sentence, with the commas a clause needs. */
 export function amClause(amName?: string | null): string {
   const n = (amName ?? '').trim()
-  return n ? `${n}, your account manager,` : 'your account manager'
+  return n ? `${n}, ${managersWord(n)},` : 'your account manager'
 }
 
 /** What approving actually causes — stated before the tap, in plain words. */

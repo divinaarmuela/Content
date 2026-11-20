@@ -35,7 +35,8 @@ export async function onboardingContext(client: Client, req: Request): Promise<{
   const agreement = agreements[0] ?? null
   const primary = contacts.find(c => c.is_primary === true) ?? null
   const people = await Promise.all(links.map(l => table<TeamUser>('team_users').get(l.team_user_id).catch(() => null)))
-  const manager = people.find(u => u && u.active_status && u.role === 'account_manager') ?? null
+  // every account manager on the client is named (the owner, 20 Nov 2026: more than one per client, "client facing can show both")
+  const managerName = people.filter(u => u && u.active_status && u.role === 'account_manager').map(u => String(u!.name ?? '').trim()).filter(Boolean).join(' and ') || null
   const contactName = primary?.name || client.contact_name || ''
   const assetBase = assetBaseOf(req)
   const portalUrl = client.share_token ? `${assetBase}/portal/${client.share_token}` : null
@@ -45,7 +46,7 @@ export async function onboardingContext(client: Client, req: Request): Promise<{
     lines: Array.isArray(agreement?.deliverable_lines) ? agreement!.deliverable_lines as { label: string; monthly_qty: number }[] : [],
     services: Array.isArray(agreement?.services) ? agreement!.services as { label: string; active: boolean }[] : [],
     startDate: agreement?.start_date ?? null,
-    managerName: manager?.name ?? null,
+    managerName,
   })
   return { suggested, portalUrl, assetBase }
 }

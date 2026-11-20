@@ -24,6 +24,7 @@ import { readPostedSlides, takenSlideUrls } from './posted-slides-core'
 import {
   clientStatusWord, planState, progressLine, scheduledWhen, shootStatusLabel,
   type LastStatusChange, type PlanState,
+  joinManagers,
 } from './portal-words'
 import { analyticsForItems, refreshStaleAnalyticsInBackground } from './post-analytics'
 import { portalPerformance, readPerformance, type PortalPerformance } from './post-performance-core'
@@ -351,9 +352,11 @@ async function loadPortalIntake(clientId: string): Promise<PortalIntakeForm[]> {
 }
 
 /** The first name of the manager this client deals with, or null. Shared by
- *  the portal home and the child pages so they name the same person. */
+ *  the portal home and the child pages so they name the same person.
+ *  EVERY ACCOUNT MANAGER ON THE CLIENT IS NAMED (20 Nov 2026, joinManagers): "Karly or Manal", in the order they
+ *  were put on the client. A super admin on the client is named only when no account manager is. */
 export async function accountManagerName(clientId: string): Promise<string | null> {
-  let joined: { team_users: Record<string, unknown> | null }[]
+  let joined: { assigned_at?: string | null; team_users: Record<string, unknown> | null }[]
   try {
     const links = await table<TeamUserClient>('team_user_clients')
       .list({ by: { client_id: clientId } })
@@ -361,11 +364,12 @@ export async function accountManagerName(clientId: string): Promise<string | nul
   } catch {
     return null
   }
-  const managers = joined
+  const managers = [...joined]
+    .sort((a, b) => String(a.assigned_at ?? '').localeCompare(String(b.assigned_at ?? '')))
     .map(r => r.team_users as unknown as { name: string | null; role: string | null; active_status: boolean | null })
     .filter(u => u && u.active_status !== false && (u.role === 'account_manager' || u.role === 'super_admin'))
-  const am = managers.find(u => u.role === 'account_manager') ?? managers[0] ?? null
-  return (am?.name ?? '').trim().split(/\s+/)[0] || null
+  const ams = managers.filter(u => u.role === 'account_manager')
+  return joinManagers((ams.length ? ams : managers.slice(0, 1)).map(u => u.name))
 }
 
 export async function getPortalData(clientId: string, scope: PortalScope = { kind: 'business' }): Promise<PortalData | null> {

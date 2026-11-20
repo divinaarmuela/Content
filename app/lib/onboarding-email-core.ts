@@ -86,7 +86,8 @@ export function defaultOnboarding(input: {
   agreed.push({ label: 'Approvals', value: 'Nothing is posted without your yes. You approve each post in your portal.' })
   // the account manager BY NAME, and the shared inbox to reach them on (the owner, 13 Nov 2026: "under acct manager, put a
   // name of the AM and the info@ email"). With no manager on the client yet, the inbox still stands.
-  agreed.push({ label: 'Your account manager', value: [input.managerName?.trim(), ONBOARDING_INBOX].filter(Boolean).join('\n') })
+  // two account managers on the client: both are named ("Sam Manager and Jo Lead"), under a heading that says so (20 Nov 2026)
+  agreed.push({ label: / and /.test(input.managerName ?? '') ? 'Your account managers' : 'Your account manager', value: [input.managerName?.trim(), ONBOARDING_INBOX].filter(Boolean).join('\n') })
   return {
     subject: `Welcome to MD Media, ${who}`,
     greeting: `Hi ${who},`,

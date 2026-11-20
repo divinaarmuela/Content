@@ -8,6 +8,7 @@ import { formatWithZone, safeZone } from './timezone-core'
 import { clientRecipients, pickRecipients } from './client-recipients-core'
 import { accountManagerName } from './portal-data'
 import { roundOutcomeWords } from './post-notify-core'
+import { managersWord } from './portal-words'
 import { readPostState, type PostState } from './post-stage-core'
 import { onePortal, onePortalPath, readClientReview, reminderDue } from './one-portal-core'
 
@@ -57,7 +58,7 @@ export function previewEmail(input: {
     ...(n > 12 ? [`…and ${n - 12} more on your portal.`] : []),
     ...(input.note?.trim() ? [input.note.trim()] : []),
     'Approve each one, or tell us what to change — anything you say is not approved comes off the schedule straight away. Posts go out at their time unless you say otherwise.',
-    `Please don't reply to this email — it is not read. Answer or comment on your portal${input.amName ? `, and for anything else contact ${input.amName}, your account manager` : ''}.`,
+    `Please don't reply to this email — it is not read. Answer or comment on your portal${input.amName ? `, and for anything else contact ${input.amName}, ${managersWord(input.amName)}` : ''}.`,
     '— MD Media',
   ]
   return { subject, heading: input.reminder ? 'A reminder from MD Media' : 'Your scheduled posts', lines, cta: 'See my scheduled posts' }
