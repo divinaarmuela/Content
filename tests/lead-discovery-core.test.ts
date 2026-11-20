@@ -124,3 +124,19 @@ describe('the discovery form wears its landing page’s look, and a client’s i
     expect(form).toContain('come back with a shot list and a content plan built around it')
   })
 })
+
+describe('the discovery form’s last page, its clean edges, and starting each page at the top', () => {
+  const form = readFileSync('app/intake/[token]/IntakeForm.tsx', 'utf8')
+  it('the browser’s own button edges and list dots come off only on the discovery form', () => {
+    expect(form).toContain("discovery ? 'intake-disc relative' : ''")
+    expect(form).toMatch(/\{discovery && <style>\{`:where\(\.intake-disc\)/)
+  })
+  it('goes to the top of each new page, and never while somebody is typing', () => {
+    expect(form).toMatch(/if \(!discovery\) return\s+const el = document\.activeElement/)
+    expect(form).toContain("}, [step, status === 'submitted', discovery])")
+  })
+  it('a client’s form keeps its own last page', () => {
+    expect(form).toContain("'flex flex-col divide-y divide-cream/10 border-y border-cream/10'")
+    expect(form).toContain("'flex flex-wrap items-center gap-5'")
+  })
+})

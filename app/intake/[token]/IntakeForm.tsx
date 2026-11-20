@@ -125,6 +125,19 @@ export default function IntakeForm({
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }, [flush, lastStep])
 
+  // A NEW PAGE STARTS AT ITS TOP (the owner, 20 Nov 2026: "every time we move to the next question page on phone it's
+  // taking us down the page instead of the top"). The gentle scroll above is started before the next page is drawn, and
+  // a phone drops it when the page changes height under it. So once the new page IS drawn, the discovery form goes to
+  // the top at once, and lets go of the box that was being typed in (which is what holds a phone's view down).
+  useEffect(() => {
+    if (!discovery) return
+    const el = document.activeElement
+    if (el instanceof HTMLElement && el !== document.body) el.blur()
+    window.scrollTo(0, 0)
+  // (only the step, and the form being sent in: a save in the middle of typing must never take the cursor away)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, status === 'submitted', discovery])
+
   const upload = useCallback(async (blockId: string, file: File) => {
     setUploading(blockId)
     try {
@@ -206,8 +219,12 @@ export default function IntakeForm({
   }
 
   return (
-    <div className={`intake min-h-screen bg-ink text-cream antialiased ${discovery ? 'relative' : ''}`}>
+    <div className={`intake min-h-screen bg-ink text-cream antialiased ${discovery ? 'intake-disc relative' : ''}`}>
       {discovery && <BrandBackdrop fixed />}
+      {/* THE BROWSER'S OWN EDGES AND BULLETS COME OFF (the owner, 20 Nov 2026, of the last page: "doesn't look nice by
+          design … the button state is overlapping"). The site's reset covers only the dashboard, so here every button
+          wore the browser's bevelled grey edge and every list its dots. Zero-weight rules, so each class still wins. */}
+      {discovery && <style>{`:where(.intake-disc) :where(*,::before,::after){border-width:0;border-style:solid}:where(.intake-disc) :where(ul,ol){list-style:none;margin:0;padding:0}:where(.intake-disc) :where(button){padding:0;border-radius:0;appearance:none}`}</style>}
       {/* ── docked bar ── */}
       <header className={`sticky top-0 z-30 border-b border-cream/15 backdrop-blur ${discovery ? 'bg-ink/70' : 'bg-ink/95'}`}>
         {/* the discovery form: the logo in the middle, as on its landing page, and the count on the right */}
@@ -306,7 +323,7 @@ export default function IntakeForm({
               </p>
             </div>
 
-            <ul className="flex flex-col divide-y divide-cream/10 border-y border-cream/10">
+            <ul className={discovery ? 'flex flex-col border-y border-cream/15 [&>li+li]:border-t [&>li+li]:border-cream/15' : 'flex flex-col divide-y divide-cream/10 border-y border-cream/10'}>
               {definition.sections.map((s, i) => {
                 const done = progress.sections[i]
                 if (done.total === 0) return null
@@ -314,12 +331,12 @@ export default function IntakeForm({
                   <li key={s.id}>
                     <button
                       type="button" onClick={() => void goto(i)}
-                      className="group flex w-full items-center gap-4 py-4 text-left"
+                      className={`group flex w-full items-center gap-4 text-left ${discovery ? 'min-h-[60px] py-4' : 'py-4'}`}
                     >
                       <span className="font-lamam text-[10px] tabular-nums tracking-widest text-cream-faint">
                         {String(i + 1).padStart(2, '0')}
                       </span>
-                      <span className="font-lamah text-[15px] text-cream-dim transition-colors group-hover:text-cream">
+                      <span className={`font-lamah transition-colors group-hover:text-cream ${discovery ? 'text-[17px] text-cream' : 'text-[15px] text-cream-dim'}`}>
                         {s.title}
                       </span>
                       <span
@@ -328,7 +345,7 @@ export default function IntakeForm({
                           (done.answered === done.total ? 'text-cream' : 'text-cream-faint')
                         }
                       >
-                        {done.answered}/{done.total}
+                        {discovery && done.answered === done.total ? '✓ ' : ''}{done.answered}/{done.total}
                       </span>
                     </button>
                   </li>
@@ -336,21 +353,23 @@ export default function IntakeForm({
               })}
             </ul>
 
-            <div className="flex flex-wrap items-center gap-5">
+            <div className={discovery ? 'flex flex-col-reverse items-stretch gap-4 sm:flex-row-reverse sm:items-center sm:justify-end sm:gap-6' : 'flex flex-wrap items-center gap-5'}>
               <button
                 type="button" onClick={() => void submit()} disabled={submitting}
                 className={
                   'group inline-flex items-center gap-3 bg-cream px-8 py-4 font-lamam ' +
                   'text-[11px] uppercase tracking-widest text-ink transition-opacity ' +
-                  'hover:opacity-85 disabled:opacity-50'
+                  'hover:opacity-85 disabled:opacity-50' +
+                  // the discovery form: the one action, full width on a phone, as on its landing page
+                  (discovery ? ' order-last min-h-[56px] justify-center text-[12px] tracking-[0.2em] sm:order-none' : '')
                 }
               >
                 {submitting ? 'Sending' : 'Send to MD Media'}
                 <span className="transition-transform group-hover:translate-x-1">→</span>
               </button>
               <button
-                type="button" onClick={() => void goto(lastStep - 1)}
-                className="bg-transparent font-lamam text-[11px] uppercase tracking-widest text-cream-dim transition-colors hover:text-cream"
+                type="button" onClick={() => void goto(lastStep - 1)} disabled={discovery && submitting}
+                className={`bg-transparent font-lamam text-[11px] uppercase tracking-widest text-cream-dim transition-colors hover:text-cream ${discovery ? 'min-h-11 disabled:opacity-40' : ''}`}
               >
                 ← Back
               </button>
