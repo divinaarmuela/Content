@@ -5,7 +5,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import { toast } from 'sonner'
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import { ArrowDownRight, ArrowUpRight, Check, CircleHelp, ExternalLink, Eye, FileDown, Pencil, RefreshCw, Sparkles, Trash2 } from 'lucide-react'
+import { ArrowDownRight, ArrowUpRight, Check, CircleHelp, ExternalLink, Eye, FileDown, Loader2, Pencil, RefreshCw, Sparkles, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
@@ -90,6 +90,8 @@ function ReportsInner() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [previewing, setPreviewing] = useState(false)
+  const [makingPdf, setMakingPdf] = useState(false)
+  const pdfRunning = useRef(false)
 
   useEffect(() => {
     void fetch('/api/reports/monthly').then(async r => {
@@ -122,6 +124,38 @@ function ReportsInner() {
   const clientName = clients?.find(c => c.id === clientId)?.name ?? ''
   // where the month stands: still running (nothing compared), settling (Instagram still sending), or final
   const state = useMemo(() => monthState(month, melbourneDay(new Date()), data?.fetchedAt), [month, data?.fetchedAt])
+
+  // DOWNLOAD PDF IS A FILE, NOT THE PRINT WINDOW (the owner, 20 Nov 2026: "why is download pdf still a print … add a
+  // loader to tell the user it's being made"). The page's own print sheet goes to the server, which draws it on A4 and
+  // sends the file back; the button and a message say it is being made. Only if that fails is the print window offered.
+  const downloadPdf = async () => {
+    if (pdfRunning.current) return
+    const sheet = document.querySelector('#report-print')?.innerHTML ?? ''
+    if (!sheet) { toast.error('The report is not ready to download yet'); return }
+    pdfRunning.current = true; setMakingPdf(true)
+    const note = toast.loading('Making your PDF… this takes about 10 seconds')
+    try {
+      const r = await fetch('/api/reports/pdf', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          client_id: clientId, month, sheet, html_class: document.documentElement.className,
+          styles: [...document.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]')].map(l => l.href),
+        }),
+      })
+      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error ?? 'The PDF could not be made')
+      const url = URL.createObjectURL(await r.blob())
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${clientName.replace(/[\/:*?"<>|]+/g, ' ').trim() || 'Client'} - ${monthLabel(month)} report.pdf`
+      document.body.appendChild(a); a.click(); a.remove()
+      setTimeout(() => URL.revokeObjectURL(url), 60_000)
+      toast.success('Your PDF is in your downloads', { id: note })
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'The PDF could not be made', { id: note, action: { label: 'Use the print window', onClick: () => window.print() } })
+    } finally {
+      pdfRunning.current = false; setMakingPdf(false)
+    }
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -179,7 +213,7 @@ function ReportsInner() {
           <Writer report={report ?? ({ id: `${clientId}_${month}`, month, data: null, body: null, objective: null, notes: null, checks: null, generated_at: null, updated_at: '' } as Saved)}
             clientId={clientId} month={month} mayDelete={mayDelete} onChange={setReport} onDeleted={() => void load()}
             settled={state.kind === 'final'} settlesOn={state.settlesOn} people={people} candidates={data?.candidates ?? []} portalLink={portalLink}
-            connected={data?.platforms.map(p => p.platform) ?? []} blockers={blockers} figuresRead={!!data} onPreview={() => setPreviewing(true)} />
+            connected={data?.platforms.map(p => p.platform) ?? []} blockers={blockers} figuresRead={!!data} onPreview={() => setPreviewing(true)} onDownload={() => void downloadPdf()} makingPdf={makingPdf} />
           {data && <PrintReport data={scopeData(data, includedPlatforms(report?.included_platforms, data.platforms.map(p => p.platform)))} report={report} clientName={clientName} />}
           {/* THE PREVIEW: the same sheet the PDF prints, on the screen, before anything is downloaded (19 Nov 2026) */}
           {data && (
@@ -190,7 +224,9 @@ function ReportsInner() {
                     <DialogTitle>How the PDF will look</DialogTitle>
                     <DialogDescription>This is the saved report. To change it, close this and press Edit. Where each page ends depends on the paper.</DialogDescription>
                   </div>
-                  <Button onClick={() => window.print()} className="mr-8 h-10 gap-2 rounded-full px-4"><FileDown className="h-4 w-4" aria-hidden /> Download PDF</Button>
+                  <Button onClick={() => void downloadPdf()} disabled={makingPdf} aria-busy={makingPdf} className="mr-8 h-10 gap-2 rounded-full px-4">
+                    {makingPdf ? <><Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Making your PDF…</> : <><FileDown className="h-4 w-4" aria-hidden /> Download PDF</>}
+                  </Button>
                 </DialogHeader>
                 <div className="p-3 sm:p-6">
                   <ReportSheet className="report-sheet-screen" data={scopeData(data, includedPlatforms(report?.included_platforms, data.platforms.map(p => p.platform)))} report={report} clientName={clientName} />
@@ -242,7 +278,11 @@ function FreshnessCard({ state, month, fetchedAt }: { state: MonthState; month: 
 
 /* ── the written report ──────────────────────────────────────────────────── */
 
-function Writer({ report, clientId, month, mayDelete, onChange, onDeleted, settled, settlesOn, people, candidates: allCandidates, portalLink, connected, blockers = [], figuresRead, onPreview }: {
+function Writer({ report, clientId, month, mayDelete, onChange, onDeleted, settled, settlesOn, people, candidates: allCandidates, portalLink, connected, blockers = [], figuresRead, onPreview, onDownload, makingPdf }: {
+  /** makes the PDF file and downloads it */
+  onDownload: () => void
+  /** true while the PDF is being made */
+  makingPdf: boolean
   /** opens the PDF's own sheet on the screen */
   onPreview: () => void
   /** the month's figures are saved, so its posts are known (none saved: Build report reads them first) */
@@ -540,10 +580,12 @@ function Writer({ report, clientId, month, mayDelete, onChange, onDeleted, settl
             {/* SEE IT BEFORE IT IS DOWNLOADED (the owner, 19 Nov 2026: "there is no way to see the actual look of the doc
                 before it's downloaded and tweak it"): the very sheet the PDF prints, on the screen */}
             <Button onClick={onPreview} disabled={editing} className="h-11 gap-2 rounded-full px-5"><Eye className="h-4 w-4" aria-hidden /> Preview the PDF</Button>
-            <Button variant="outline" onClick={() => window.print()} disabled={editing} className="h-11 gap-2 rounded-full px-5"><FileDown className="h-4 w-4" aria-hidden /> Download PDF</Button>
+            <Button variant="outline" onClick={onDownload} disabled={editing || makingPdf} aria-busy={makingPdf} className="h-11 gap-2 rounded-full px-5">
+              {makingPdf ? <><Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Making your PDF…</> : <><FileDown className="h-4 w-4" aria-hidden /> Download PDF</>}
+            </Button>
             {allChecked(checks)
               ? <span className="inline-flex items-center gap-1 text-[13px] font-semibold text-accent-green"><Check className="h-4 w-4" aria-hidden /> Every check ticked</span>
-              : <span className="text-[13px] text-muted-foreground">{editing ? 'Save or cancel your edits to preview or download.' : 'Tick every check before it goes to the client. In the print window, choose “Save as PDF”.'}</span>}
+              : <span className="text-[13px] text-muted-foreground">{editing ? 'Save or cancel your edits to preview or download.' : 'Tick every check before it goes to the client.'}</span>}
           </div>
           {/* ON THE CLIENT'S PORTAL (Manal, via the owner, 5 Nov 2026): the client reads it, interactive, in their
               portal's Reports tab. Nothing is emailed: the team sends the link themselves. */}

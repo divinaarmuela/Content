@@ -39,6 +39,7 @@
     "@react-email/components": "^1.0.12",
     "@react-three/drei": "^10.7.7",
     "@react-three/fiber": "^9.6.1",
+    "@sparticuz/chromium": "^148.0.0",
     "@stripe/react-stripe-js": "^6.8.2",
     "@stripe/stripe-js": "^9.14.0",
     "@tiptap/extension-details": "^3.34.0",
@@ -68,6 +69,7 @@
     "nodemailer": "^8.0.10",
     "pdf-lib": "^1.17.1",
     "pdfkit": "^0.19.1",
+    "puppeteer-core": "^24.43.1",
     "react": "^19.0.0",
     "react-day-picker": "^10.0.1",
     "react-dom": "^19.0.0",
@@ -97,7 +99,6 @@
     "happy-dom": "^20.14.6",
     "playwright": "^1.62.1",
     "postcss": "^8.5.15",
-    "puppeteer-core": "^24.43.1",
     "tailwindcss": "^3.4.19",
     "typescript": "^5",
     "vitest": "^4.1.10"
