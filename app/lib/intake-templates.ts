@@ -374,7 +374,7 @@ const DISCOVERY: TemplateDefinition = {
       blocks: [
         {
           id: 'channels_today', type: 'multi_select', label: 'Which channels are you using today?', help: 'Tick all that apply.',
-          options: ['Social media', 'Email marketing', 'Paid ads', 'SEO', 'Content (blog, video, podcast)', 'PR', 'None yet', 'Other'],
+          options: ['Social media', 'Website', 'Email marketing', 'Paid ads', 'SEO', 'Content (blog, video, podcast)', 'PR', 'None yet', 'Other'],
         },
         { id: 'channels_other', type: 'short_text', label: 'If you ticked Other, which?' },
         { id: 'worked_and_not', type: 'long_text', label: 'What has worked well for you so far, and what hasn’t?' },

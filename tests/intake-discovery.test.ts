@@ -24,7 +24,7 @@ describe('the discovery form', () => {
   it('the channels are ticked from a list, and brand guidelines is Yes or No', () => {
     const channels = asked.find(b => b.id === 'channels_today')!
     expect(channels.type).toBe('multi_select')
-    expect(channels.options).toEqual(['Social media', 'Email marketing', 'Paid ads', 'SEO', 'Content (blog, video, podcast)', 'PR', 'None yet', 'Other'])
+    expect(channels.options).toEqual(['Social media', 'Website', 'Email marketing', 'Paid ads', 'SEO', 'Content (blog, video, podcast)', 'PR', 'None yet', 'Other'])
     const guide = asked.find(b => b.id === 'has_brand_guidelines')!
     expect(guide.type).toBe('select')
     expect(guide.options).toEqual(['Yes', 'No'])
@@ -133,5 +133,33 @@ describe('the brand files upload', () => {
     const submit = readFileSync('app/api/intake/[token]/submit/route.ts', 'utf8')
     expect(submit).toContain("if (intakeFileTarget(f.block_id, labels.get(f.block_id) ?? '') !== 'brand') continue")
     expect(submit).toContain("await addClientBrandFile(clientId, { name: f.filename, url: f.url }, 'intake form')")
+  })
+})
+
+/** UPLOADING: BUSY, LOCKED, AND REMOVABLE (20 Nov 2026: "no loading state … users are able to move to other pages when
+ *  uploading … once uploaded why is there no delete or remove") */
+describe('a form’s uploads while they are going up, and after', () => {
+  const form = readFileSync('app/intake/[token]/IntakeForm.tsx', 'utf8')
+  const box = readFileSync('app/intake/[token]/blocks.tsx', 'utf8')
+  const route = readFileSync('app/api/intake/[token]/upload/route.ts', 'utf8')
+  const lib = readFileSync('app/lib/intake.ts', 'utf8')
+  it('no way off the page while files are going up', () => {
+    expect(form.match(/if \(busyNow\.current\) return/g)).toHaveLength(2) // changing page, and sending
+    expect(form).toContain("uploadsBusy ? 'Uploading your files…'")
+    expect(form).toContain("window.addEventListener('beforeunload', warn)")
+  })
+  it('the box says which file, how far, and to keep the page open', () => {
+    expect(box).toContain('Keep this page open until it finishes')
+    expect(form).toContain('xhr.upload.onprogress')
+  })
+  it('a file can be taken back off, but only before the form is sent, and only from its own form', () => {
+    expect(box).toContain('aria-label={`Remove ${f.filename}`}')
+    expect(route).toMatch(/export async function DELETE[\s\S]*?if \(!isWritable\(form\.status\)\)[\s\S]*?removeIntakeFile\(form\.id, url\)/)
+    expect(lib).toContain("f.form_id === formId && f.url === url")
+  })
+  it('a save never undoes another save: answers and file names are written as claims on the row', () => {
+    expect(lib).not.toMatch(/forms\(\)\.update\(data\.id, \{ answers, status: next \}\)/)
+    expect(lib).not.toMatch(/forms\(\)\.update\(formId, \{ answers: \{ \.\.\.answers, \[blockId\]/)
+    expect(lib.match(/await forms\(\)\.claim\(/g)!.length).toBeGreaterThanOrEqual(4)
   })
 })

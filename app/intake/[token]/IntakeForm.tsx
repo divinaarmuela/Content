@@ -195,6 +195,28 @@ export default function IntakeForm({
     }
   }, [token])
 
+  /** takes one uploaded file back off the form; resolves true when it is gone */
+  const removeFile = useCallback(async (blockId: string, file: { filename: string; url: string }) => {
+    try {
+      const res = await fetch(`/api/intake/${token}/upload`, { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: file.url }) })
+      if (!res.ok) throw new Error(String(res.status))
+      let left: FileRow[] = []
+      setFiles(prev => { left = prev.filter(f => !(f.block_id === blockId && f.url === file.url)); return left })
+      // the question's answer follows its files, so the count of what is answered moves at once
+      setAnswers(prev => {
+        const names = left.filter(f => f.block_id === blockId).map(f => f.filename)
+        const next = { ...prev }
+        if (names.length) next[blockId] = [...new Set(names)]; else delete next[blockId]
+        return next
+      })
+      setSave('saved')
+      return true
+    } catch {
+      setSave('error')
+      return false
+    }
+  }, [token])
+
   const submit = useCallback(async () => {
     if (busyNow.current) return
     setSubmitting(true)
@@ -455,6 +477,7 @@ export default function IntakeForm({
                       files={files.filter(f => f.block_id === block.id)}
                       onUpload={(f, onProgress) => upload(block.id, f, onProgress)}
                       onBusy={markBusy}
+                      onRemove={f => removeFile(block.id, f)}
                     />
                   )
                 }

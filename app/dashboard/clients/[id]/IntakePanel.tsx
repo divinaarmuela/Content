@@ -613,6 +613,10 @@ export default function IntakePanel({ clientId }: { clientId: string }) {
                     {form.files.length > 0 && ` · ${form.files.length} file${form.files.length === 1 ? '' : 's'}`}
                   </a>
                 </Button>
+                {/* the answers as a PDF file, straight from the tab (20 Nov 2026) */}
+                <Button size="sm" variant="ghost" asChild className="ml-2">
+                  <a href={`/api/clients/${clientId}/intake/pdf?form_id=${form.id}`} download>Download PDF</a>
+                </Button>
               </div>
             )}
 

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getIntakeByToken, addIntakeFile } from '../../../../lib/intake'
+import { getIntakeByToken, addIntakeFile, removeIntakeFile } from '../../../../lib/intake'
 import { signUpload } from '../../../../lib/storage'
 import { isWritable } from '../../../../lib/intake-core'
 import { brandAssetProblem } from '../../../../lib/brand-assets-core'
@@ -46,4 +46,25 @@ export async function POST(req: Request, { params }: { params: Promise<{ token: 
   const signed = await signUpload(filename, contentType || 'application/octet-stream')
   await addIntakeFile(form.id, blockId, filename, signed.publicUrl, size)
   return NextResponse.json({ signedUrl: signed.signedUrl, publicUrl: signed.publicUrl })
+}
+
+/**
+ * TAKE A FILE BACK OFF THE FORM, before it is sent (the owner, 20 Nov 2026: "once uploaded why is there no delete or
+ * remove"). The token is the only authorisation, as for the upload, so this removes a file from THIS form and no
+ * other, and nothing once the form is submitted.
+ *
+ *   DELETE  json: { url }  →  { ok: true }
+ */
+export async function DELETE(req: Request, { params }: { params: Promise<{ token: string }> }) {
+  const { token } = await params
+  const form = await getIntakeByToken(token)
+  if (!form) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  if (!isWritable(form.status)) {
+    return NextResponse.json({ error: 'This form has already been submitted' }, { status: 409 })
+  }
+  const body = await req.json().catch(() => null)
+  const url = String(body?.url ?? '')
+  if (!url) return NextResponse.json({ error: 'Which file?' }, { status: 400 })
+  if (!(await removeIntakeFile(form.id, url))) return NextResponse.json({ error: 'That file is not on this form' }, { status: 404 })
+  return NextResponse.json({ ok: true })
 }

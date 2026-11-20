@@ -197,7 +197,7 @@ export function SocialHandlesBlock({ block, value, onChange }: { block: Block; v
  * to just say "Not saved". Each file is sent in turn; the ones already sent are listed with a tick.
  */
 export function MultiFileBlock({
-  block, files, onUpload, uploading, disabled, onBusy,
+  block, files, onUpload, uploading, disabled, onBusy, onRemove,
 }: {
   block: Block
   files: { filename: string; url: string }[]
@@ -207,7 +207,10 @@ export function MultiFileBlock({
   disabled: boolean
   /** tells the form files are going up, so it can shut every way off the page until they are done */
   onBusy?: (busy: boolean) => void
+  /** takes one file back off the form (the owner, 20 Nov 2026: "once uploaded why is there no delete or remove") */
+  onRemove?: (file: { filename: string; url: string }) => Promise<boolean>
 }) {
+  const [removing, setRemoving] = useState<string | null>(null)
   const [problems, setProblems] = useState<string[]>([])
   // THE LOADING STATE (the owner, 20 Nov 2026: "when files are uploading there is no loading state"): which file is
   // going up, how many are left, and how far this one has got
@@ -236,10 +239,23 @@ export function MultiFileBlock({
     <div>
       <BlockLabel block={block} />
       {files.length > 0 && (
-        <ul className="mb-4 flex list-none flex-col gap-1.5 p-0" aria-label="Files you have added">
+        <ul className="mb-4 flex list-none flex-col gap-2 p-0" aria-label="Files you have added">
           {files.map(f => (
-            <li key={f.url} className="break-all font-lamam text-[12px] text-cream-dim">
-              <span className="text-cream">✓</span> {f.filename}
+            <li key={f.url} className="flex items-center gap-3 font-lamam text-[12px] text-cream-dim">
+              <span className="min-w-0 flex-1 break-all"><span className="text-cream">✓</span> {f.filename}</span>
+              {onRemove && (
+                <button type="button" disabled={busy || removing !== null}
+                  onClick={async () => {
+                    setRemoving(f.url)
+                    const gone = await onRemove(f)
+                    setRemoving(null)
+                    setProblems(gone ? [] : [`“${f.filename}” could not be removed. Please try again.`])
+                  }}
+                  aria-label={`Remove ${f.filename}`}
+                  className="inline-flex min-h-9 shrink-0 items-center rounded-full border border-solid border-cream/25 bg-transparent px-3 font-lamam text-[10px] uppercase tracking-widest text-cream-dim transition-colors hover:border-[#E2725B] hover:text-[#E2725B] disabled:opacity-40">
+                  {removing === f.url ? 'Removing…' : 'Remove'}
+                </button>
+              )}
             </li>
           ))}
         </ul>

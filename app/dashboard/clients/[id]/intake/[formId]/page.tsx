@@ -128,8 +128,15 @@ export default function IntakeSubmissionPage() {
               <ExternalLink className="mr-1.5 h-3.5 w-3.5" /> Open the client's view
             </a>
           </Button>
+          {/* THE PDF, AS A FILE (the owner, 20 Nov 2026: "can we see the answers and pdf in client intake tab too?"):
+              the one that is emailed when a form is sent in, downloaded here; printing is still offered beside it */}
+          <Button size="sm" variant="secondary" asChild>
+            <a href={`/api/clients/${params.id}/intake/pdf?form_id=${params.formId}`} download>
+              <Download className="mr-1.5 h-3.5 w-3.5" /> Download PDF
+            </a>
+          </Button>
           <Button size="sm" variant="ghost" onClick={() => window.print()}>
-            <Download className="mr-1.5 h-3.5 w-3.5" /> Print or save as PDF
+            Print
           </Button>
         </div>
       </div>

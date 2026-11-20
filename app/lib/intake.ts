@@ -140,10 +140,22 @@ export async function saveIntakeAnswers(
   const current = (data.answers ?? {}) as Answers
   if (!isWritable(status)) return { answers: current, status }
 
-  const answers = mergeAnswers(data.definition as TemplateDefinition, current, patch)
-  const next = nextStatus(status, 'save')
-  await forms().update(data.id, { answers, status: next })
-  return { answers, status: next }
+  // A SAVE NEVER UNDOES ANOTHER SAVE (20 Nov 2026). This used to read the answers, merge, and write the whole set
+  // back. A file being added at the same moment does the same (addIntakeFile), and whichever wrote second silently
+  // erased the other: tap "Yes", upload straight away, and the "Yes" was gone. The merge is now a claim on the row as
+  // it is at the moment of writing, so the two interleave instead of colliding.
+  let out: { answers: Answers; status: IntakeStatus } = { answers: current, status }
+  await forms().claim(data.id, cur => {
+    if (!cur) return null
+    const live = cur.status as IntakeStatus
+    const have = (cur.answers ?? {}) as Answers
+    if (!isWritable(live)) { out = { answers: have, status: live }; return null }
+    const answers = mergeAnswers(cur.definition as TemplateDefinition, have, patch)
+    const next = nextStatus(live, 'save')
+    out = { answers, status: next }
+    return { ...cur, answers, status: next }
+  })
+  return out
 }
 
 export async function submitIntake(token: string): Promise<IntakeForm | null> {
@@ -227,13 +239,41 @@ export async function addIntakeFile(
   await table('intake_files')
     .insert({ form_id: formId, block_id: blockId, filename, url, size_bytes: size })
 
-  const data = await forms().get(formId)
-  const answers = ((data?.answers ?? {}) as Answers)
-  const current = answers[blockId]
-  const list = Array.isArray(current) ? current : []
-  if (list.includes(filename)) return
+  // the file's name joins the question's answer as a claim on the row as it is now, so an answer being saved at the
+  // same moment is never erased (see saveIntakeAnswers)
+  await forms().claim(formId, cur => {
+    if (!cur) return null
+    const answers = ((cur.answers ?? {}) as Answers)
+    const current = answers[blockId]
+    const list = Array.isArray(current) ? current : []
+    if (list.includes(filename)) return null
+    return { ...cur, answers: { ...answers, [blockId]: [...list, filename] } }
+  })
+}
 
-  await forms().update(formId, { answers: { ...answers, [blockId]: [...list, filename] } })
+/**
+ * TAKE A FILE BACK OFF A FORM (the owner, 20 Nov 2026: "once uploaded why is there no delete or remove"). The person
+ * filling the form in picked the wrong file, or the wrong version. The file's row goes, and its name comes out of the
+ * question's answer — but only when no other file of that name is still on the question, so the count of what is
+ * answered stays true. The answer is rewritten as a claim on the row, so a save landing at the same moment is not lost.
+ * Returns false when this form has no such file.
+ */
+export async function removeIntakeFile(formId: string, url: string): Promise<boolean> {
+  const rows = await table<IntakeFileRow>('intake_files').list({ where: f => f.form_id === formId && f.url === url })
+  if (rows.length === 0) return false
+  const { block_id, filename } = rows[0]
+  await table<IntakeFileRow>('intake_files').removeWhere(f => f.form_id === formId && f.url === url)
+  const left = await table<IntakeFileRow>('intake_files').list({ where: f => f.form_id === formId && f.block_id === block_id && f.filename === filename })
+  if (left.length === 0) {
+    await forms().claim(formId, cur => {
+      if (!cur) return null
+      const answers = { ...((cur.answers ?? {}) as Answers) }
+      const list = (Array.isArray(answers[block_id]) ? answers[block_id] as string[] : []).filter(n => n !== filename)
+      if (list.length) answers[block_id] = list; else delete answers[block_id]
+      return { ...cur, answers }
+    })
+  }
+  return true
 }
 
 export async function listIntakeFiles(formId: string): Promise<IntakeFile[]> {
