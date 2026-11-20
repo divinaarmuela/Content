@@ -6,7 +6,7 @@ import {
   completion, type Answers, type IntakeStatus, type TemplateDefinition,
 } from '../../lib/intake-core'
 import {
-  GuidanceBlock, TextBlock, SelectBlock, MultiSelectBlock, FileBlock,
+  GuidanceBlock, TextBlock, SelectBlock, MultiSelectBlock, FileBlock, SocialHandlesBlock,
 } from './blocks'
 
 type FileRow = { block_id: string; filename: string; url: string }
@@ -410,6 +410,15 @@ export default function IntakeForm({
                 if (block.type === 'select') {
                   return (
                     <SelectBlock
+                      key={block.id} block={block}
+                      value={typeof value === 'string' ? value : ''}
+                      onChange={v => set(block.id, v)}
+                    />
+                  )
+                }
+                if (block.type === 'social_handles') {
+                  return (
+                    <SocialHandlesBlock
                       key={block.id} block={block}
                       value={typeof value === 'string' ? value : ''}
                       onChange={v => set(block.id, v)}

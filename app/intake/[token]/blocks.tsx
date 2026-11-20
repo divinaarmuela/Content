@@ -1,6 +1,8 @@
 'use client'
 
-import type { Block } from '../../lib/intake-core'
+import { useState } from 'react'
+import { SOCIAL_PLATFORMS, formatSocialHandles, parseSocialHandles, type Block } from '../../lib/intake-core'
+import PlatformIcon from '../../dashboard/social/PlatformIcon'
 
 /**
  * One renderer per block type, kept apart from IntakeForm so that file stays
@@ -136,6 +138,52 @@ export function MultiSelectBlock({
           )
         })}
       </div>
+    </div>
+  )
+}
+
+/**
+ * SOCIAL HANDLES (the owner, 20 Nov 2026: "selecting social media icons and providing the handle there, for each").
+ * A row of the platforms' own marks to tap; each one tapped opens a box for its handle. What is picked is kept here
+ * while they type — the answer that is saved holds only the platforms with a handle (intake-core.ts).
+ */
+export function SocialHandlesBlock({ block, value, onChange }: { block: Block; value: string; onChange: (v: string) => void }) {
+  const [rows, setRows] = useState(() => parseSocialHandles(value))
+  const put = (next: { platform: string; handle: string }[]) => { setRows(next); onChange(formatSocialHandles(next)) }
+  const toggle = (key: string) => put(rows.some(r => r.platform === key) ? rows.filter(r => r.platform !== key) : [...rows, { platform: key, handle: '' }])
+  const picked = SOCIAL_PLATFORMS.filter(p => rows.some(r => r.platform === p.key))
+  return (
+    <div>
+      <BlockLabel block={block} />
+      <div className="flex flex-wrap gap-2" role="group" aria-label={block.label}>
+        {SOCIAL_PLATFORMS.map(p => {
+          const on = rows.some(r => r.platform === p.key)
+          return (
+            <button key={p.key} type="button" onClick={() => toggle(p.key)} aria-pressed={on}
+              className={`${CHIP} min-h-11 ${on ? CHIP_ON : CHIP_OFF}`}>
+              <PlatformIcon platform={p.key} size={20} />
+              {p.label}
+              <span aria-hidden className={on ? 'opacity-100' : 'opacity-30'}>{on ? '✓' : '+'}</span>
+            </button>
+          )
+        })}
+      </div>
+      {picked.length > 0 && (
+        <div className="mt-4 flex flex-col gap-3">
+          {picked.map(p => (
+            <div key={p.key} className="flex items-center gap-3">
+              <PlatformIcon platform={p.key} size={28} className="shrink-0" />
+              <input
+                id={`${block.id}-${p.key}`} type="text" inputMode="text" autoCapitalize="none" autoCorrect="off" spellCheck={false}
+                aria-label={`Your ${p.label} handle`} placeholder={`Your ${p.label} handle or link`}
+                value={rows.find(r => r.platform === p.key)?.handle ?? ''}
+                onChange={e => put(rows.map(r => (r.platform === p.key ? { ...r, handle: e.target.value } : r)))}
+                className={FIELD}
+              />
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

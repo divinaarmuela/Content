@@ -41,3 +41,32 @@ describe('the discovery form', () => {
     expect(Object.keys(TEMPLATES).sort()).toEqual(['discovery', 'launch', 'one_off', 'ongoing', 'rebrand'])
   })
 })
+
+import { formatSocialHandles, mergeAnswers, parseSocialHandles } from '../app/lib/intake-core'
+
+/** SOCIAL HANDLES, ONE PER PLATFORM (20 Nov 2026: "selecting social media icons and providing the handle there, for each") */
+describe('social handles, picked by icon', () => {
+  const def = templateFor('discovery')
+  it('the discovery form asks for them by platform; a client’s intake keeps its one-line box', () => {
+    expect(answerableBlocks(def).find(b => b.id === 'socials')?.type).toBe('social_handles')
+    for (const key of ['ongoing', 'rebrand', 'launch', 'one_off'] as const) {
+      expect(answerableBlocks(TEMPLATES[key]).some(b => b.type === 'social_handles'), key).toBe(false)
+    }
+  })
+  it('the answer is one piece of text, a line per platform, in the platforms’ own order', () => {
+    const text = formatSocialHandles([{ platform: 'tiktok', handle: ' @acme.tt ' }, { platform: 'instagram', handle: '@acme' }, { platform: 'facebook', handle: '' }])
+    expect(text).toBe('Instagram: @acme\nTikTok: @acme.tt')
+    expect(parseSocialHandles(text)).toEqual([{ platform: 'instagram', handle: '@acme' }, { platform: 'tiktok', handle: '@acme.tt' }])
+  })
+  it('reads only what it knows, and a link with a colon in it stays whole', () => {
+    expect(parseSocialHandles('Instagram: https://instagram.com/acme\nMySpace: tom\nnot a line')).toEqual([{ platform: 'instagram', handle: 'https://instagram.com/acme' }])
+    expect(parseSocialHandles(null)).toEqual([])
+    expect(parseSocialHandles('X: @acme')).toEqual([{ platform: 'twitter', handle: '@acme' }])
+  })
+  it('saves like any text answer, counts as answered, and clears when every handle is removed', () => {
+    const saved = mergeAnswers(def, {}, { socials: 'Instagram: @acme' })
+    expect(saved.socials).toBe('Instagram: @acme')
+    expect(completion(def, saved).answered).toBe(1)
+    expect(mergeAnswers(def, saved, { socials: formatSocialHandles([{ platform: 'instagram', handle: '' }]) }).socials).toBeUndefined()
+  })
+})

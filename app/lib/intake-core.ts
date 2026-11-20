@@ -11,7 +11,7 @@ export type TemplateKey = 'one_off' | 'launch' | 'rebrand' | 'ongoing' | 'discov
  *  produces a considered answer instead of a one-liner. It never holds a value. */
 export type BlockType =
   | 'guidance' | 'short_text' | 'long_text' | 'link'
-  | 'select' | 'multi_select' | 'checkbox' | 'file'
+  | 'select' | 'multi_select' | 'checkbox' | 'file' | 'social_handles'
 
 export type Block = {
   /** stable — answers key off this, so relabelling a question never orphans one */
@@ -73,9 +73,47 @@ export function mergeAnswers(
   return out
 }
 
+/**
+ * SOCIAL HANDLES, ONE PER PLATFORM (the owner, 20 Nov 2026, of "What are your main social media handles?": "it should
+ * be selecting social media icons and providing the handle there, for each"). The person taps the platforms they are
+ * on and types a handle beside each.
+ *
+ * THE ANSWER IS STILL ONE PIECE OF TEXT — a line per platform, "Instagram: @acme" — so everything that already reads
+ * an answer (the count of what is answered, the PDF, the lead's page, filling a client's record) reads this one with
+ * no change. These two functions are the only place the text is taken apart and put back.
+ */
+export const SOCIAL_PLATFORMS: { key: string; label: string }[] = [
+  { key: 'instagram', label: 'Instagram' }, { key: 'facebook', label: 'Facebook' }, { key: 'tiktok', label: 'TikTok' },
+  { key: 'linkedin', label: 'LinkedIn' }, { key: 'youtube', label: 'YouTube' }, { key: 'twitter', label: 'X' },
+  { key: 'threads', label: 'Threads' }, { key: 'pinterest', label: 'Pinterest' },
+]
+
+export type SocialHandle = { platform: string; handle: string }
+
+/** the answer's text, as the platforms picked and the handle typed for each (a line it cannot read is left out) */
+export function parseSocialHandles(value: string | null | undefined): SocialHandle[] {
+  const out: SocialHandle[] = []
+  for (const line of String(value ?? '').split(/\r?\n/)) {
+    const m = line.match(/^\s*([^:]+):\s*(.*)$/)
+    if (!m) continue
+    const p = SOCIAL_PLATFORMS.find(x => x.label.toLowerCase() === m[1].trim().toLowerCase())
+    if (p && !out.some(o => o.platform === p.key)) out.push({ platform: p.key, handle: m[2].trim() })
+  }
+  return out
+}
+
+/** the picks, as the answer's text: only a platform with a handle typed is kept, in the platforms' own order */
+export function formatSocialHandles(list: readonly SocialHandle[]): string {
+  return SOCIAL_PLATFORMS
+    .map(p => ({ p, handle: (list.find(l => l.platform === p.key)?.handle ?? '').replace(/\s+/g, ' ').trim().slice(0, 120) }))
+    .filter(x => x.handle)
+    .map(x => `${x.p.label}: ${x.handle}`)
+    .join('\n')
+}
+
 export const BLOCK_TYPES: BlockType[] = [
   'guidance', 'short_text', 'long_text', 'link',
-  'select', 'multi_select', 'checkbox', 'file',
+  'select', 'multi_select', 'checkbox', 'file', 'social_handles',
 ]
 
 const TEMPLATE_KEYS: TemplateKey[] = ['one_off', 'launch', 'rebrand', 'ongoing', 'discovery']

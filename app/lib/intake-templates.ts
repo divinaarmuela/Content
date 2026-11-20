@@ -353,7 +353,8 @@ const DISCOVERY: TemplateDefinition = {
       blocks: [
         { id: 'public_name', type: 'short_text', label: 'What’s your company name?' },
         { id: 'website', type: 'link', label: 'What’s your website?', placeholder: 'yourbusiness.com.au' },
-        { id: 'socials', type: 'short_text', label: 'What are your main social media handles?' },
+        // tapped by icon, a handle for each (the owner, 20 Nov 2026) — the client intakes keep their one-line box
+        { id: 'socials', type: 'social_handles', label: 'What are your main social media handles?', help: 'Tap each one you use, then type your handle.' },
         { id: 'what_you_do', type: 'long_text', label: 'How would you describe what you do in a sentence or two?' },
         { id: 'ideal_customer', type: 'long_text', label: 'Who is your ideal customer?' },
         { id: 'main_competitors', type: 'long_text', label: 'Who do you see as your main competitors?' },

@@ -40,6 +40,7 @@ const TYPES: { value: BlockType; label: string; hint: string }[] = [
   { value: 'select', label: 'Pick one', hint: 'From your options' },
   { value: 'multi_select', label: 'Pick several', hint: 'From your options' },
   { value: 'link', label: 'Link', hint: 'A URL' },
+  { value: 'social_handles', label: 'Social handles', hint: 'Tap an icon, type a handle' },
   { value: 'file', label: 'File upload', hint: 'Logos, brand guide' },
   { value: 'guidance', label: 'Note (no answer)', hint: 'Text they read' },
 ]
