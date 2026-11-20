@@ -115,7 +115,7 @@ export function parseBooking(json: unknown): Booking | null {
 }
 
 const NAMED: Record<string, string> = {
-  web_form: 'Website form', website: 'Website', email_ingest: 'Email', facebook: 'Facebook', fb: 'Facebook', instagram: 'Instagram', ig: 'Instagram',
+  web_form: 'Website form', discovery_form: 'Discovery form', website: 'Website', email_ingest: 'Email', facebook: 'Facebook', fb: 'Facebook', instagram: 'Instagram', ig: 'Instagram',
   msg: 'Messenger', an: 'Audience Network', google: 'Google', email: 'Email', 'lead-email': 'Email', tiktok: 'TikTok',
   linkedin: 'LinkedIn', calendly: 'Calendly', referral: 'Referral',
 }

@@ -54,8 +54,8 @@ export function buildTimeline(lead: LeadRow, events: readonly EventRow[], emails
     items.push({ id: `em_${m.id}`, at, kind: 'email', title: 'Emailed us', detail: m.subject ?? null, lines: [] })
   }
   // older leads: nothing was logged, so say what the row knows
-  if (!logged.has('form') && !logged.has('booked') && !logged.has('came_in') && lead.created_at && !(lead.source === 'email_ingest' && emails.length)) {
-    const how = lead.source === 'web_form' ? 'Filled in the website form' : lead.source === 'email_ingest' ? 'Emailed us' : `Came in · ${sourceLabel(lead.source)}`
+  if (!logged.has('form') && !logged.has('booked') && !logged.has('came_in') && !logged.has('discovery') && lead.created_at && !(lead.source === 'email_ingest' && emails.length)) {
+    const how = lead.source === 'web_form' ? 'Filled in the website form' : lead.source === 'discovery_form' ? 'Sent in the discovery form' : lead.source === 'email_ingest' ? 'Emailed us' : `Came in · ${sourceLabel(lead.source)}`
     items.push({ id: 'row_in', at: lead.created_at, kind: lead.source === 'web_form' ? 'form' : 'came_in', title: how, detail: null, lines: adLines(lead as unknown as Record<string, unknown>) })
   }
   if (!logged.has('booked') && !logged.has('rebooked') && lead.booking_status && lead.created_at) {

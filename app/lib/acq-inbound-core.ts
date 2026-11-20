@@ -39,6 +39,7 @@ export function inboundFromWords(source: string | null | undefined): string {
   const s = String(source ?? '')
   if (s === 'web_form') return 'Wrote in through the website form'
   if (s === 'email_ingest') return 'Emailed the agency'
+  if (s === 'discovery_form') return 'Filled in the discovery form'
   return 'Came in as a lead'
 }
 

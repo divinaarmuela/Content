@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { table, withRequestCache } from '@/lib/db'
 import type { Client, Lead, TeamUser } from '@/lib/db-types'
 import { leadFormName } from '../../../../lib/lead-discovery-core'
-import { logLeadEvent } from '../../../../lib/lead-events'
+import { leadFromColdDiscovery } from '../../../../lib/lead-discovery'
 import {
   submitIntake, getIntakeDefaultRecipients, listIntakeFiles,
 } from '../../../../lib/intake'
@@ -28,10 +28,17 @@ export async function POST(_req: Request, { params }: { params: Promise<{ token:
 
   // A LEAD'S DISCOVERY FORM (20 Nov 2026) has no client: it is named for the lead, its email opens the lead's page,
   // and the client-only steps below (their Drive folder, filling their record) are skipped
+  // A COLD FORM (the general /discovery link) makes its lead here, from what they wrote; a second Submit finds the
+  // same lead. `fresh` is true only for the press that made it, so the "new lead" toast is said once.
   const leadId = (form as { lead_id?: string | null }).lead_id ?? null
   const client = form.client_id ? await table<Client>('clients').get(form.client_id) : null
-  const lead = !client && leadId ? await table<Lead>('leads').get(leadId).catch(() => null) : null
-  const forLead = !!lead
+  const cold = !client && !leadId && form.template_key === 'discovery'
+  const lead = client ? null
+    : leadId ? await table<Lead>('leads').get(leadId).catch(() => null)
+    : cold ? await leadFromColdDiscovery(form as never).catch(e => { console.error('discovery lead not made', e); return null })
+    : null
+  const forLead = !!lead || cold
+  if (cold && lead) announceAfter('leads', { id: lead.id, label: leadFormName(lead) || lead.email || 'Discovery form', source: 'discovery_form' })
   const name = client?.name ?? (leadFormName(lead) || (forLead ? 'A lead' : 'A client'))
   const progress = completion(form.definition, form.answers)
   // An email link must be absolute. NEXT_PUBLIC_APP_URL is set in production;
@@ -53,7 +60,6 @@ export async function POST(_req: Request, { params }: { params: Promise<{ token:
     const owner = lead.owner_id ? await table<TeamUser>('team_users').get(lead.owner_id).catch(() => null) : null
     const email = String(owner?.email ?? '').trim().toLowerCase()
     if (email && owner?.active_status !== false && !recipients.includes(email)) recipients.push(email)
-    await logLeadEvent({ leadId: lead.id, kind: 'discovery', title: 'Filled in the discovery form', detail: `${progress.answered} of ${progress.total} questions answered`, key: `discovery-filled:${form.id}:${form.submitted_at ?? ''}` })
   }
 
   // Everything below is best-effort. The answers are already saved and the
@@ -126,7 +132,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ token:
         `— ${progress.answered} of ${progress.total} questions answered. ` +
         `The full brief is attached as a PDF.</p>${attachedList}${linkedList}`,
         forLead ? 'Open the lead' : 'Open in dashboard',
-        forLead ? `${base}/dashboard/leads/${lead!.id}` : `${base}/dashboard/clients/${form.client_id}/intake/${form.id}`,
+        forLead ? (lead ? `${base}/dashboard/leads/${lead.id}` : `${base}/dashboard/leads`) : `${base}/dashboard/clients/${form.client_id}/intake/${form.id}`,
       ),
       attachments: [
         { filename: `${safeName}-intake.pdf`, content: pdf, contentType: 'application/pdf' },

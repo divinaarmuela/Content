@@ -21,7 +21,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table'
 import {
-  ArrowRight, ArrowUpDown, Copy, Download, Mail, MoreHorizontal, RefreshCw, Trash2, UserPlus,
+  ArrowRight, ArrowUpDown, Copy, Download, Mail, MoreHorizontal, RefreshCw, Trash2, UserPlus, ClipboardList,
 } from 'lucide-react'
 import Chip, { type ChipTone } from '../ui/Chip'
 import Bookings from './Bookings'
@@ -291,6 +291,11 @@ export default function LeadsPage() {
         summary={LEADS_SUMMARY}
         actions={<>
           <div className="flex items-center gap-2">
+            {/* THE DISCOVERY FORM'S ONE LINK (the owner, 20 Nov 2026: "this is cold send … one link for anyone"): pasted
+                into any cold email or message; whoever fills it in turns up here as a lead with their answers */}
+            <Button size="sm" onClick={() => void copyText(Promise.resolve(`${window.location.origin}/discovery`)).then(ok => { if (ok) toast.success('Discovery form link copied. Paste it into your email or message.'); else toast.error(`Could not copy. The link is ${window.location.origin}/discovery`) })}>
+              <ClipboardList className="h-4 w-4" /> Copy discovery form link
+            </Button>
             {/* Export is a monthly reporting job. It used to be the only filled
                 button on the page, so the page looked like it was FOR exporting
                 — the daily work is opening a lead and contacting it. */}

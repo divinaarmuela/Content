@@ -17,7 +17,7 @@ describe('where a lead’s form is up to', () => {
     expect(discoveryState(form()).label).toBe('Form not sent')
     expect(discoveryState(form({ status: 'sent', sent_at: '2026-11-20T01:00:00Z' }), day)).toMatchObject({ step: 'sent', label: 'Form sent', tone: 'amber' })
     expect(discoveryState(form({ status: 'sent', first_opened_at: '2026-11-20T02:00:00Z' }), day)).toMatchObject({ step: 'opened', label: 'Form opened' })
-    expect(discoveryState(form({ status: 'in_progress', answers: { public_name: 'Acme' } }))).toMatchObject({ step: 'started', label: 'Form started', answered: 1, total: 21 })
+    expect(discoveryState(form({ status: 'in_progress', answers: { public_name: 'Acme' } }))).toMatchObject({ step: 'started', label: 'Form started', answered: 1, total: 24 })
     expect(discoveryState(form({ status: 'submitted', submitted_at: '2026-11-20T03:00:00Z', answers: { public_name: 'Acme', website: 'acme.com' } }), day))
       .toMatchObject({ step: 'filled', label: 'Form filled in', tone: 'green', answered: 2 })
   })
@@ -26,7 +26,7 @@ describe('where a lead’s form is up to', () => {
   })
   it('the sentence says what happened and what to do next', () => {
     expect(discoveryState(form()).line).toBe('The form is ready. Copy its link and send it to them.')
-    expect(discoveryState(form({ status: 'submitted', submitted_at: 'x', answers: { public_name: 'Acme' } }), day).line).toBe('They filled it in on Fri 20 Nov: 1 of 21 questions answered. Their answers are below.')
+    expect(discoveryState(form({ status: 'submitted', submitted_at: 'x', answers: { public_name: 'Acme' } }), day).line).toBe('They filled it in on Fri 20 Nov: 1 of 24 questions answered. Their answers are below.')
   })
 })
 
@@ -55,20 +55,37 @@ describe('the lead’s timeline carries the form', () => {
   })
 })
 
-describe('a lead’s form never runs the client-only steps', () => {
+describe('the form is sent cold, from one link, and makes its own lead', () => {
   const submit = readFileSync('app/api/intake/[token]/submit/route.ts', 'utf8')
-  it('no Drive folder and no client record to fill, and its email opens the lead', () => {
-    expect(submit).toContain('if (!forLead) try {\n    const labels'.replace('\n', submit.includes('\r\n') ? '\r\n' : '\n'))
-    expect(submit).toMatch(/if \(!forLead\) try \{\r?\n\s+await inngest\.send/)
-    expect(submit).toContain('/dashboard/leads/${lead!.id}')
+  const lib = readFileSync('app/lib/lead-discovery.ts', 'utf8')
+  it('opening the link makes nothing; only Begin does', () => {
+    expect(readFileSync('app/discovery/page.tsx', 'utf8')).not.toMatch(/startColdDiscovery|table\(/)
+    expect(readFileSync('app/discovery/DiscoveryStart.tsx', 'utf8')).toContain("fetch('/api/discovery/start', { method: 'POST' })")
+    expect(readFileSync('app/api/discovery/start/route.ts', 'utf8')).toMatch(/export async function POST/)
+    expect(readFileSync('app/api/discovery/start/route.ts', 'utf8')).not.toMatch(/export async function GET/)
   })
-  it('the form is one per lead, claimed by an id made from the lead’s own', () => {
-    const lib = readFileSync('app/lib/lead-discovery.ts', 'utf8')
+  it('the lead is made once, by an id worked out from the form, and only when there is somebody to contact', () => {
+    expect(lib).toContain("createHash('sha256').update(`discovery-lead:${form.id}`)")
     expect(lib).toContain(".claim(id, cur => (cur ? null : {")
-    expect(lib).not.toMatch(/intake_forms'\)\.insert\(/)
+    expect(lib).toContain("if (!name && !email && !phone && !biz) return null")
+    expect(lib).not.toMatch(/'leads'\)\.insert\(/)
   })
-  it('the lead’s page draws the card, and the list shows where the form is up to', () => {
-    expect(readFileSync('app/dashboard/leads/[id]/LeadPage.tsx', 'utf8')).toContain('<LeadDiscovery id={id}')
-    expect(readFileSync('app/dashboard/leads/page.tsx', 'utf8')).toContain("fetch('/api/leads/discovery')")
+  it('sending it in makes the lead, tells the Leads page, and skips the client-only steps', () => {
+    expect(submit).toContain('leadFromColdDiscovery(')
+    expect(submit).toContain("source: 'discovery_form'")
+    expect(submit).toMatch(/if \(!forLead\) try \{\s+const labels/)
+    expect(submit).toMatch(/if \(!forLead\) try \{\s+await inngest\.send/)
+  })
+  it('the lead’s page shows their answers, the list has the one link to copy, and nothing is made from a lead', () => {
+    expect(readFileSync('app/dashboard/leads/[id]/LeadPage.tsx', 'utf8')).toContain('<LeadDiscovery id={id} />')
+    expect(readFileSync('app/dashboard/leads/[id]/LeadDiscovery.tsx', 'utf8')).not.toMatch(/method: 'POST'|Make the discovery form/)
+    expect(readFileSync('app/dashboard/leads/page.tsx', 'utf8')).toContain('Copy discovery form link')
+    expect(readFileSync('app/api/leads/[id]/discovery/route.ts', 'utf8')).not.toMatch(/export async function (POST|PATCH)/)
+  })
+  it('the timeline says it once: the form’s own line, not a second "came in"', () => {
+    const items = buildTimeline({ id: 'l1', created_at: '2026-11-20T00:00:00Z', source: 'discovery_form' }, [{ id: 'e1', at: '2026-11-20T00:00:00Z', kind: 'discovery', title: 'Filled in the discovery form' }], [])
+    expect(items.map(i => i.title)).toEqual(['Filled in the discovery form'])
+    // a lead whose line was never logged still says where it came from
+    expect(buildTimeline({ id: 'l2', created_at: '2026-11-20T00:00:00Z', source: 'discovery_form' }, [], []).map(i => i.title)).toEqual(['Sent in the discovery form'])
   })
 })

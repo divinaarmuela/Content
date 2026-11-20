@@ -337,6 +337,17 @@ const DISCOVERY: TemplateDefinition = {
           'conversation prepared. Short answers are fine, and you can skip anything you are not sure about.',
       }],
     },
+    // WHO THEY ARE. The form goes out cold, to somebody we hold nothing on (the owner, 20 Nov 2026: "this is cold
+    // send"), so it asks for the three things a lead needs before anything else. The ids are the ones the client
+    // intakes use, so the answers fill a client's record the same way later.
+    {
+      id: 'you', title: 'Your details',
+      blocks: [
+        { id: 'primary_contact', type: 'short_text', label: 'Your name' },
+        { id: 'contact_email', type: 'short_text', label: 'Your email', placeholder: 'you@yourbusiness.com.au' },
+        { id: 'contact_mobile', type: 'short_text', label: 'Your phone number' },
+      ],
+    },
     {
       id: 'about', title: 'About your business',
       blocks: [

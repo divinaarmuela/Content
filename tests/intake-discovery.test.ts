@@ -7,15 +7,17 @@ describe('the discovery form', () => {
   const def = templateFor('discovery')
   const asked = answerableBlocks(def)
 
-  it('asks the twenty questions, plus one line for "Other"', () => {
+  it('asks who they are, then the twenty questions, plus one line for "Other"', () => {
     expect(def.name).toBe('Discovery form')
-    expect(asked).toHaveLength(21)
-    expect(asked[0].label).toBe('What’s your company name?')
+    expect(asked).toHaveLength(24)
+    // it is sent cold: without a name, an email or a phone number there is nobody to answer
+    expect(asked.slice(0, 3).map(b => b.id)).toEqual(['primary_contact', 'contact_email', 'contact_mobile'])
+    expect(asked[3].label).toBe('What’s your company name?')
     expect(asked[asked.length - 1].label).toBe('How did you hear about us?')
   })
-  it('is in the six parts the team wrote it in, after a welcome', () => {
+  it('is in the six parts the team wrote it in, after a welcome and their details', () => {
     expect(def.sections.map(s => s.title)).toEqual([
-      'Welcome', 'About your business', 'Goals and challenges', 'Current marketing and media', 'Scope and services', 'Budget and timeline', 'One last thing',
+      'Welcome', 'Your details', 'About your business', 'Goals and challenges', 'Current marketing and media', 'Scope and services', 'Budget and timeline', 'One last thing',
     ])
   })
   it('the channels are ticked from a list, and brand guidelines is Yes or No', () => {
@@ -33,7 +35,7 @@ describe('the discovery form', () => {
   })
   it('survives being saved and read back, and counts what is answered', () => {
     expect(normaliseDefinition(JSON.parse(JSON.stringify(def)), 'discovery')).toEqual(def)
-    expect(completion(def, { public_name: 'Acme', channels_today: ['SEO'] })).toMatchObject({ answered: 2, total: 21 })
+    expect(completion(def, { public_name: 'Acme', channels_today: ['SEO'] })).toMatchObject({ answered: 2, total: 24 })
   })
   it('sits beside the four client intakes without changing them', () => {
     expect(Object.keys(TEMPLATES).sort()).toEqual(['discovery', 'launch', 'one_off', 'ongoing', 'rebrand'])

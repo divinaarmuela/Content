@@ -48,8 +48,6 @@ export default function LeadPage({ id }: { id: string }) {
   const [draft, setDraft] = useState<Partial<LeadLike>>({})
   const [busy, setBusy] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
-  // the timeline is read again when the discovery form changes (made, link copied)
-  const [tick, setTick] = useState(0)
   useEffect(() => { setDraft({}) }, [lead?.id])
 
   const prospect = lead ? prospectForLead(lead, prospects) : null
@@ -126,9 +124,9 @@ export default function LeadPage({ id }: { id: string }) {
         </p>
       )}
 
-      <LeadDiscovery id={id} onChange={() => setTick(t => t + 1)} />
+      <LeadTimeline id={id} refreshKey={JSON.stringify(lead)} />
 
-      <LeadTimeline id={id} refreshKey={`${JSON.stringify(lead)}:${tick}`} />
+      <LeadDiscovery id={id} />
 
       <section aria-label="What they wrote" className="rounded-card border border-border bg-card">
         <h2 className={`border-b border-border px-4 py-3 ${H}`}>What they wrote</h2>
