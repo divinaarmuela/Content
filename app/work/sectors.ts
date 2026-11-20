@@ -44,7 +44,10 @@ export const SECTORS: Sector[] = [
     name: 'Trades & Logistics',
     tags: ['Positioning', 'B2B content', 'Founder led'],
     clients: [
-      { name: 'Intersign', slug: 'intersign', current: true, desc: 'Brand positioning and content for a trade business ready to move upmarket. B2B content that speaks to builders, architects, and developers.', media: { image: '/images/strategy/intersign.jpg' } },
+      { name: 'Intersign', slug: 'intersign', current: true, desc: 'Brand positioning and content for a trade business ready to move upmarket. B2B content that speaks to builders, architects, and developers.' },
+      // THE AUSTRALIAN OPEN PHOTO IS PATTONS' JOB, not Intersign's (the owner, 20 Nov 2026: "intersign is wrong, that's
+      // the Pattons image … relabel it"). The file keeps its old name; only the brand it is shown under changed.
+      { name: 'Pattons', slug: 'pattons', current: true, media: { image: '/images/strategy/intersign.jpg' } },
       { name: 'Prowall' },
       { name: 'BuildOne' },
       { name: 'Arko Joinery' },

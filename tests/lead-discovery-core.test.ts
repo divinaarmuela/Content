@@ -17,7 +17,7 @@ describe('where a lead’s form is up to', () => {
     expect(discoveryState(form()).label).toBe('Form not sent')
     expect(discoveryState(form({ status: 'sent', sent_at: '2026-11-20T01:00:00Z' }), day)).toMatchObject({ step: 'sent', label: 'Form sent', tone: 'amber' })
     expect(discoveryState(form({ status: 'sent', first_opened_at: '2026-11-20T02:00:00Z' }), day)).toMatchObject({ step: 'opened', label: 'Form opened' })
-    expect(discoveryState(form({ status: 'in_progress', answers: { public_name: 'Acme' } }))).toMatchObject({ step: 'started', label: 'Form started', answered: 1, total: 24 })
+    expect(discoveryState(form({ status: 'in_progress', answers: { public_name: 'Acme' } }))).toMatchObject({ step: 'started', label: 'Form started', answered: 1, total: 27 })
     expect(discoveryState(form({ status: 'submitted', submitted_at: '2026-11-20T03:00:00Z', answers: { public_name: 'Acme', website: 'acme.com' } }), day))
       .toMatchObject({ step: 'filled', label: 'Form filled in', tone: 'green', answered: 2 })
   })
@@ -26,7 +26,7 @@ describe('where a lead’s form is up to', () => {
   })
   it('the sentence says what happened and what to do next', () => {
     expect(discoveryState(form()).line).toBe('The form is ready. Copy its link and send it to them.')
-    expect(discoveryState(form({ status: 'submitted', submitted_at: 'x', answers: { public_name: 'Acme' } }), day).line).toBe('They filled it in on Fri 20 Nov: 1 of 24 questions answered. Their answers are below.')
+    expect(discoveryState(form({ status: 'submitted', submitted_at: 'x', answers: { public_name: 'Acme' } }), day).line).toBe('They filled it in on Fri 20 Nov: 1 of 27 questions answered. Their answers are below.')
   })
 })
 

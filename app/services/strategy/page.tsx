@@ -55,7 +55,7 @@ export default function StrategyPage() {
       ]}
       work={[
         { name: 'StretchWorks', href: 'https://www.stretchworks.com.au', media: { video: '/videos/strategy/stretchworks', label: 'StretchWorks — stretch coach in studio' } },
-        { name: 'Intersign', href: '/work/intersign', media: { image: '/images/strategy/intersign.jpg', label: 'Intersign — signage at the Australian Open' } },
+        { name: 'Pattons', href: '/work/pattons', media: { image: '/images/strategy/intersign.jpg', label: 'Pattons at the Australian Open' } },
         { name: 'Real Deal', href: 'https://www.realdealproperty.com.au', media: { image: '/images/strategy/real-deal.jpg', label: 'Real Deal Property founders' } },
       ]}
       faqs={[

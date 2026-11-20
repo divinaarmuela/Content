@@ -9,8 +9,10 @@ describe('the discovery form', () => {
 
   it('asks who they are, then the twenty questions, plus one line for "Other"', () => {
     expect(def.name).toBe('Discovery form')
-    // 24 questions always on the page, plus the upload box that shows only after a Yes
-    expect(asked).toHaveLength(25)
+    // somebody only enquiring is not asked to upload anything (20 Nov 2026): no file box on this form
+    // (27 boxes: the twenty questions, their details, their industry, and a line for "Other" under industry, channels and services)
+    expect(asked).toHaveLength(27)
+    expect(asked.some(b => b.type === 'file')).toBe(false)
     // it is sent cold: without a name, an email or a phone number there is nobody to answer
     expect(asked.slice(0, 3).map(b => b.id)).toEqual(['primary_contact', 'contact_email', 'contact_mobile'])
     expect(asked[3].label).toBe('What’s your company name?')
@@ -29,6 +31,14 @@ describe('the discovery form', () => {
     expect(guide.type).toBe('select')
     expect(guide.options).toEqual(['Yes', 'No'])
   })
+  it('services are ticked from our own list, the Services page’s names, with Other and a line for specifics', () => {
+    const services = asked.find(b => b.id === 'services_wanted')!
+    expect(services.type).toBe('multi_select')
+    expect(services.options).toEqual(['Content Production', 'Ongoing Marketing', 'Brand & Strategy', 'Personal Brand', 'Podcast Studio', 'Website Optimisation', 'Not sure yet', 'Other'])
+    const page = readFileSync('app/services/page.tsx', 'utf8')
+    for (const name of services.options!.slice(0, 6)) expect(page, name).toContain(`name: '${name}'`)
+    expect(asked.find(b => b.id === 'services_other')?.type).toBe('short_text')
+  })
   it('no two questions share an id, and the first four keep the ids a client record is filled from', () => {
     const ids = asked.map(b => b.id)
     expect(new Set(ids).size).toBe(ids.length)
@@ -36,7 +46,7 @@ describe('the discovery form', () => {
   })
   it('survives being saved and read back, and counts what is answered', () => {
     expect(normaliseDefinition(JSON.parse(JSON.stringify(def)), 'discovery')).toEqual(def)
-    expect(completion(def, { public_name: 'Acme', channels_today: ['SEO'] })).toMatchObject({ answered: 2, total: 24 })
+    expect(completion(def, { public_name: 'Acme', channels_today: ['SEO'] })).toMatchObject({ answered: 2, total: 27 })
   })
   it('sits beside the four client intakes without changing them', () => {
     expect(Object.keys(TEMPLATES).sort()).toEqual(['discovery', 'launch', 'one_off', 'ongoing', 'rebrand'])
@@ -73,33 +83,34 @@ describe('social handles, picked by icon', () => {
 })
 
 import { readFileSync } from 'node:fs'
-import { blockShown } from '../app/lib/intake-core'
+import { blockShown, type Block, type TemplateDefinition } from '../app/lib/intake-core'
 import { intakeFileTarget } from '../app/lib/gdrive-core'
 import { brandAssetProblem } from '../app/lib/brand-assets-core'
 
-/** UPLOADS, ONLY AFTER A YES (20 Nov 2026: "allow users to upload multiple files if they said yes … put file type and limit for each file size") */
+/** A QUESTION THAT WAITS ON ANOTHER'S ANSWER, and the upload rule (20 Nov 2026). The discovery form used this for an
+ *  upload box after "Yes"; that box is gone ("they don't have to upload anything yet"), the rule stays for any form. */
 describe('the brand files upload', () => {
-  const def = templateFor('discovery')
-  const box = answerableBlocks(def).find(b => b.id === 'brand_files')!
-  it('is a file box that waits on Yes to the brand guidelines question', () => {
-    expect(box.type).toBe('file')
-    expect(box.showIf).toEqual({ id: 'has_brand_guidelines', equals: 'Yes' })
-    expect(blockShown(box, {})).toBe(false)
-    expect(blockShown(box, { has_brand_guidelines: 'No' })).toBe(false)
-    expect(blockShown(box, { has_brand_guidelines: 'Yes' })).toBe(true)
+  const waits: Block = { id: 'brand_files', type: 'file', label: 'Files', showIf: { id: 'has_brand_guidelines', equals: 'Yes' } }
+  const def: TemplateDefinition = { key: 'discovery', name: 'T', sections: [{ id: 's', title: 'S', blocks: [
+    { id: 'has_brand_guidelines', type: 'select', label: 'Have you?', options: ['Yes', 'No'] }, waits,
+  ] }] }
+  it('a block that waits on an answer is drawn only once it has it', () => {
+    expect(blockShown(waits, {})).toBe(false)
+    expect(blockShown(waits, { has_brand_guidelines: 'No' })).toBe(false)
+    expect(blockShown(waits, { has_brand_guidelines: 'Yes' })).toBe(true)
   })
-  it('is not counted as unanswered while it is not on the page', () => {
-    expect(completion(def, {}).total).toBe(24)
-    expect(completion(def, { has_brand_guidelines: 'No' })).toMatchObject({ answered: 1, total: 24 })
-    expect(completion(def, { has_brand_guidelines: 'Yes' })).toMatchObject({ answered: 1, total: 25 })
-    expect(completion(def, { has_brand_guidelines: 'Yes', brand_files: ['logo.png', 'guide.pdf'] })).toMatchObject({ answered: 2, total: 25 })
+  it('and is not counted as unanswered while it is not on the page', () => {
+    expect(completion(def, {}).total).toBe(1)
+    expect(completion(def, { has_brand_guidelines: 'No' })).toMatchObject({ answered: 1, total: 1 })
+    expect(completion(def, { has_brand_guidelines: 'Yes' })).toMatchObject({ answered: 1, total: 2 })
+    expect(completion(def, { has_brand_guidelines: 'Yes', brand_files: ['logo.png', 'guide.pdf'] })).toMatchObject({ answered: 2, total: 2 })
   })
   it('the rule survives the form being saved and read back', () => {
     const back = normaliseDefinition(JSON.parse(JSON.stringify(def)), 'discovery')
     expect(answerableBlocks(back).find(b => b.id === 'brand_files')?.showIf).toEqual({ id: 'has_brand_guidelines', equals: 'Yes' })
   })
-  it('no question on a client’s intake form waits on another', () => {
-    for (const key of ['ongoing', 'rebrand', 'launch', 'one_off'] as const) expect(answerableBlocks(TEMPLATES[key]).some(b => b.showIf), key).toBe(false)
+  it('no question on any of the five forms waits on another today', () => {
+    for (const key of ['ongoing', 'rebrand', 'launch', 'one_off', 'discovery'] as const) expect(answerableBlocks(TEMPLATES[key]).some(b => b.showIf), key).toBe(false)
   })
   it('takes what the client Brand tab takes: 1 GB a file, and the same kinds, design files and video included', () => {
     const GB = 1024 * 1024 * 1024
@@ -121,8 +132,9 @@ describe('the brand files upload', () => {
     expect(form.match(/<MultiFileBlock/g)).toHaveLength(1)
     expect(form).not.toContain('<FileBlock')
   })
-  it('all four client forms, and the discovery form, ask for logo and brand files', () => {
-    for (const key of ['ongoing', 'rebrand', 'launch', 'one_off', 'discovery'] as const) {
+  it('all four client forms ask for logo and brand files; the discovery form does not', () => {
+    expect(answerableBlocks(TEMPLATES.discovery).some(b => b.id === 'brand_files')).toBe(false)
+    for (const key of ['ongoing', 'rebrand', 'launch', 'one_off'] as const) {
       const box = answerableBlocks(TEMPLATES[key]).find(b => b.id === 'brand_files')
       expect(box?.type, key).toBe('file')
       // "brand" in the id is what sends its files to the client's Brand tab (intakeFileTarget)
@@ -161,5 +173,73 @@ describe('a form’s uploads while they are going up, and after', () => {
     expect(lib).not.toMatch(/forms\(\)\.update\(data\.id, \{ answers, status: next \}\)/)
     expect(lib).not.toMatch(/forms\(\)\.update\(formId, \{ answers: \{ \.\.\.answers, \[blockId\]/)
     expect(lib.match(/await forms\(\)\.claim\(/g)!.length).toBeGreaterThanOrEqual(4)
+  })
+})
+
+import { DISCOVERY_INDUSTRIES, workPeek } from '../app/lib/discovery-work'
+import { SECTORS } from '../app/work/sectors'
+import { existsSync } from 'node:fs'
+
+/** THEIR INDUSTRY, AND A SNEAK PEEK OF OUR WORK IN IT (Abby, via the owner, 20 Nov 2026) */
+describe('the industry question and the work shown on the thank-you screen', () => {
+  const def = templateFor('discovery')
+  it('asks their industry from the Work page’s own sectors, plus Other', () => {
+    const q = answerableBlocks(def).find(b => b.id === 'industry')!
+    expect(q.type).toBe('select')
+    expect(q.options).toEqual([...SECTORS.map(s => s.name), 'Other'])
+    expect(DISCOVERY_INDUSTRIES).toEqual(['Finance & Property', 'Trades & Logistics', 'Clinics & Health', 'Hospitality', 'Product & Retail'])
+    expect(answerableBlocks(def).find(b => b.id === 'industry_other')?.type).toBe('short_text')
+  })
+  it('shows their own industry’s brands first, and always a full shelf of five', () => {
+    const peek = workPeek('Hospitality')
+    expect(peek).toMatchObject({ matched: 'Hospitality', mixed: false })
+    expect(peek.tiles).toHaveLength(5)
+    for (const t of peek.tiles) { expect(t.sector).toBe('Hospitality'); expect(t.href).toMatch(/^\/work(\/[a-z-]+)?$/) }
+  })
+  it('a sector with few pictures is filled from the others, theirs first, and says so', () => {
+    const peek = workPeek('Finance & Property')
+    expect(peek).toMatchObject({ matched: 'Finance & Property', mixed: true })
+    expect(peek.tiles).toHaveLength(5)
+    expect(peek.tiles.slice(0, 2).map(t => t.sector)).toEqual(['Finance & Property', 'Finance & Property'])
+    expect(peek.tiles.slice(2).every(t => t.sector !== 'Finance & Property')).toBe(true)
+    expect(new Set(peek.tiles.map(t => t.name)).size).toBe(5)
+  })
+  it('for Other, no answer or a made-up industry: a spread across the sectors, and it does not pretend to be a match', () => {
+    for (const given of ['Other', '', null, undefined, 'Space travel']) {
+      const peek = workPeek(given)
+      expect(peek.matched).toBeNull()
+      expect(peek.tiles).toHaveLength(5)
+      expect(new Set(peek.tiles.map(t => t.sector)).size).toBeGreaterThanOrEqual(4)
+    }
+  })
+  it('the Australian Open photo is shown as Pattons, never as Intersign (the owner, 20 Nov 2026)', () => {
+    const shown = workPeek('Trades & Logistics', 99).tiles.filter(t => t.image === '/images/strategy/intersign.jpg')
+    expect(shown.map(t => t.name)).toEqual(['Pattons'])
+    for (const f of ['app/work/sectors.ts', 'app/landing/strategy/page.tsx', 'app/services/strategy/page.tsx']) {
+      for (const line of readFileSync(f, 'utf8').split(/\r?\n/).filter(l => l.includes('strategy/intersign') && !l.trim().startsWith('//'))) {
+        expect(line, f).not.toMatch(/Intersign/)
+      }
+    }
+    expect(workPeek('Trades & Logistics')).toMatchObject({ matched: 'Trades & Logistics', mixed: true })
+  })
+  it('a brand with a loop plays it, over its own still', () => {
+    const t = workPeek('Hospitality').tiles.find(x => x.video)!
+    expect(t.video).toMatch(/\.mp4$/)
+    expect(t.image).toBe(t.video!.replace(/\.mp4$/, '.jpg'))
+  })
+  it('never shows a brand the Work page does not, and every picture is a file the site really has', () => {
+    const known = new Set(SECTORS.flatMap(s => s.clients.map(c => c.name)))
+    for (const industry of [...DISCOVERY_INDUSTRIES, 'Other']) {
+      for (const t of workPeek(industry, 99).tiles) {
+        expect(known.has(t.name), t.name).toBe(true)
+        expect(existsSync(`public${t.image}`), t.image).toBe(true)
+        if (t.video) expect(existsSync(`public${t.video}`), t.video).toBe(true)
+      }
+    }
+  })
+  it('is drawn only on the discovery form’s thank-you screen', () => {
+    const form = readFileSync('app/intake/[token]/IntakeForm.tsx', 'utf8')
+    expect(form.match(/<WorkPeek/g)).toHaveLength(1)
+    expect(form).toContain("{discovery && <WorkPeek industry={typeof answers.industry === 'string' ? answers.industry : null} />}")
   })
 })

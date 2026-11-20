@@ -24,7 +24,7 @@ export default function Page() {
     workHeading: 'Brands we’ve sharpened.',
     work: [
       { name: 'StretchWorks', kind: 'Health & wellness', href: 'https://www.stretchworks.com.au', media: { video: '/videos/strategy/stretchworks', label: 'StretchWorks — stretch coach in studio', shape: 'landscape' } },
-      { name: 'Intersign', kind: 'Signage, seen at the Australian Open', href: '/work/intersign', media: { image: '/images/strategy/intersign.jpg', label: 'Intersign — signage at the Australian Open' } },
+      { name: 'Pattons', kind: 'Seen at the Australian Open', href: '/work/pattons', media: { image: '/images/strategy/intersign.jpg', label: 'Pattons at the Australian Open' } },
       { name: 'Real Deal', kind: 'Property', href: 'https://www.realdealproperty.com.au', media: { image: '/images/strategy/real-deal.jpg', label: 'Real Deal Property founders' } },
     ],
     included: {
@@ -39,7 +39,7 @@ export default function Page() {
     },
     strip: [
       { src: '/images/strategy/team', alt: 'The MD Media team' },
-      { src: '/images/strategy/intersign', alt: 'Intersign at the Australian Open' },
+      { src: '/images/strategy/intersign', alt: 'Pattons at the Australian Open' },
       { src: '/videos/strategy/hero-bts', alt: 'Behind the scenes on a shoot' },
       { src: '/images/strategy/real-deal', alt: 'Real Deal Property founders' },
       { src: '/videos/strategy/stretchworks', alt: 'StretchWorks in studio' },

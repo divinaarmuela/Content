@@ -57,10 +57,11 @@ export async function leadFromColdDiscovery(form: Row): Promise<Lead | null> {
   const made = await table<Lead>('leads').claim(id, cur => (cur ? null : {
     id, created_at: now, source: 'discovery_form',
     fname: fname ?? '', lname: rest.join(' '), email: /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email) ? email : null, phone: phone || null, biz: biz || null,
-    model: text(a.services_wanted, 300) || null,
+    // the services they ticked, with what they wrote for "Other" beside them
+    model: [text(a.services_wanted, 300), text(a.services_other, 300)].filter(Boolean).join(' · ') || null,
     // labelled, so "What they wrote" on the lead reads as two answers and not one run-on (the owner, 20 Nov 2026:
     // "what is this in the leads I just submitted")
-    need: [text(a.what_you_do, 1500) && `What they do: ${text(a.what_you_do, 1500)}`, text(a.top_goals, 1500) && `Their goals: ${text(a.top_goals, 1500)}`].filter(Boolean).join('\n\n') || null,
+    need: [industryOf(a) && `Industry: ${industryOf(a)}`, text(a.what_you_do, 1500) && `What they do: ${text(a.what_you_do, 1500)}`, text(a.top_goals, 1500) && `Their goals: ${text(a.top_goals, 1500)}`].filter(Boolean).join('\n\n') || null,
     budget: text(a.budget_range, 200) || null, timeline: text(a.start_when, 200) || null,
   } as unknown as Lead))
   const lead = made.claimed ? made.row : made.current
@@ -73,6 +74,12 @@ export async function leadFromColdDiscovery(form: Row): Promise<Lead | null> {
     await logLeadEvent({ leadId: lead.id, kind: 'discovery', title: 'Filled in the discovery form', detail: `${c.answered} of ${c.total} questions answered. Their answers are on this page.`, key: `discovery-filled:${form.id}` })
   }
   return lead
+}
+
+/** their industry as they gave it: the one they picked, or what they typed for "Other" */
+const industryOf = (a: Record<string, unknown>): string => {
+  const picked = text(a.industry, 120)
+  return picked && picked !== 'Other' ? picked : text(a.industry_other, 120)
 }
 
 const slugOf = (name: string) => name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
@@ -111,7 +118,7 @@ export async function clientFromDiscovery(form: Row, lead: Lead): Promise<Client
       id, created_at: now, updated_at: now, name, slug,
       contact_name: person || null, email, phone: lead.phone ?? null,
       website: site ? (/^https?:\/\//i.test(site) ? site : `https://${site}`) : null,
-      status: 'prospect', source: 'discovery_form',
+      status: 'prospect', source: 'discovery_form', industry: industryOf(a) || null,
       notes: ['Came in through the discovery form.', lead.model && `Services wanted: ${lead.model}`, lead.need, lead.budget && `Budget: ${lead.budget}`, lead.timeline && `Wants to start: ${lead.timeline}`].filter(Boolean).join('\n'),
       // the portal link IS this token, and it is the one portal (as a client made from a lead is)
       share_token: randomUUID(), portal_one: true,

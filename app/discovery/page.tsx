@@ -6,6 +6,17 @@ export const metadata: Metadata = {
   title: 'Discovery form · MD Media',
   description: 'A few short questions before our first conversation.',
   robots: 'noindex, nofollow',
+  // how the link looks when it is pasted into a chat or an email (the picture is opengraph-image.tsx, beside this file)
+  metadataBase: new URL('https://www.mdmmarketing.com.au'),
+  openGraph: {
+    type: 'website',
+    url: 'https://www.mdmmarketing.com.au/discovery',
+    title: 'Discovery form · MD Media',
+    description: 'A few short questions before our first conversation.',
+    siteName: 'MD Media Marketing',
+    locale: 'en_AU',
+  },
+  twitter: { card: 'summary_large_image', title: 'Discovery form · MD Media', description: 'A few short questions before our first conversation.' },
 }
 export const viewport: Viewport = { width: 'device-width', initialScale: 1 }
 

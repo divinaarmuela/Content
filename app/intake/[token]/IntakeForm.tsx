@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import BrandBackdrop from '../../components/BrandBackdrop'
+import WorkPeek from './WorkPeek'
 import {
   blockShown, completion, type Answers, type IntakeStatus, type TemplateDefinition,
 } from '../../lib/intake-core'
@@ -244,7 +245,7 @@ export default function IntakeForm({
   // ── already submitted ──────────────────────────────────────────────────────
   if (locked) {
     return (
-      <div className={`flex min-h-screen flex-col items-center justify-center bg-ink px-6 text-cream ${discovery ? 'relative overflow-hidden [&>*:not([aria-hidden])]:relative [&>*:not([aria-hidden])]:z-10' : ''}`}>
+      <div className={`flex min-h-screen flex-col items-center justify-center bg-ink px-6 text-cream ${discovery ? 'relative overflow-hidden py-16 [&>*:not([aria-hidden])]:relative [&>*:not([aria-hidden])]:z-10' : ''}`}>
         {discovery && <BrandBackdrop fixed />}
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/MDLogo-trim.png" alt="MD Media" className="mb-10 h-6 w-auto" />
@@ -261,6 +262,8 @@ export default function IntakeForm({
         <p className="mt-10 font-lamam text-[10px] uppercase tracking-widest text-cream-faint">
           {progress.answered} of {progress.total} answered
         </p>
+        {/* A SNEAK PEEK OF OUR WORK, their own industry's where we have it (Abby, via the owner, 20 Nov 2026) */}
+        {discovery && <WorkPeek industry={typeof answers.industry === 'string' ? answers.industry : null} />}
       </div>
     )
   }

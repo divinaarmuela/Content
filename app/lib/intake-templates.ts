@@ -1,4 +1,5 @@
 import type { Section, TemplateDefinition, TemplateKey } from './intake-core'
+import { DISCOVERY_INDUSTRIES } from './discovery-work'
 
 /**
  * The three intake questionnaires, as data.
@@ -356,6 +357,10 @@ const DISCOVERY: TemplateDefinition = {
         // tapped by icon, a handle for each (the owner, 20 Nov 2026) — the client intakes keep their one-line box
         { id: 'socials', type: 'social_handles', label: 'What are your main social media handles?', help: 'Tap each one you use, then type your handle.' },
         { id: 'what_you_do', type: 'long_text', label: 'How would you describe what you do in a sentence or two?' },
+        // THEIR INDUSTRY (Abby, via the owner, 20 Nov 2026: "add what business industry you are in"), picked from the
+        // Work page's own sectors, so the thank-you screen can show them work from their own field (discovery-work.ts)
+        { id: 'industry', type: 'select', label: 'What industry are you in?', options: [...DISCOVERY_INDUSTRIES, 'Other'] },
+        { id: 'industry_other', type: 'short_text', label: 'If Other, which industry?' },
         { id: 'ideal_customer', type: 'long_text', label: 'Who is your ideal customer?' },
         { id: 'main_competitors', type: 'long_text', label: 'Who do you see as your main competitors?' },
       ],
@@ -380,14 +385,22 @@ const DISCOVERY: TemplateDefinition = {
         { id: 'worked_and_not', type: 'long_text', label: 'What has worked well for you so far, and what hasn’t?' },
         { id: 'agency_before', type: 'long_text', label: 'Have you worked with an agency or freelancer before? What did you like or not like?' },
         { id: 'has_brand_guidelines', type: 'select', label: 'Do you have brand guidelines, a style guide, or existing assets we can use?', options: ['Yes', 'No'] },
-        // only when they said Yes (the owner, 20 Nov 2026: "allow users to upload multiple files if they said yes")
-        { id: 'brand_files', type: 'file', label: 'Your logo files, brand guide and fonts', help: 'Upload what you have. Loose files or a PDF brand guide are both fine.', showIf: { id: 'has_brand_guidelines', equals: 'Yes' } },
+        // NO UPLOAD HERE (the team, via the owner, 20 Nov 2026: "they don't have to upload anything yet cause we haven't
+        // closed them yet, they are more like enquiring … remove that file upload for discovery"). The question stays;
+        // a client's own intake form is where their logo and brand files are asked for.
       ],
     },
     {
       id: 'scope', title: 'Scope and services',
       blocks: [
-        { id: 'services_wanted', type: 'long_text', label: 'Which services are you most interested in?' },
+        // TICKED FROM OUR OWN SERVICES (the team, via the owner, 20 Nov 2026: "under which services you are interested in,
+        // we can give options of our services + Other, they can input specific needs"). The names are the Services
+        // page's own (app/services/page.tsx), so the form and the site never say two different things.
+        {
+          id: 'services_wanted', type: 'multi_select', label: 'Which services are you most interested in?', help: 'Tick all that apply.',
+          options: ['Content Production', 'Ongoing Marketing', 'Brand & Strategy', 'Personal Brand', 'Podcast Studio', 'Website Optimisation', 'Not sure yet', 'Other'],
+        },
+        { id: 'services_other', type: 'short_text', label: 'If you ticked Other, or have a specific need, tell us here' },
         { id: 'deliverables_in_mind', type: 'long_text', label: 'Are there any specific deliverables you already have in mind?' },
         { id: 'coming_up', type: 'long_text', label: 'Is there a launch, campaign, or event coming up that we should plan around?' },
       ],
