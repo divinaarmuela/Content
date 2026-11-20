@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { discoveryAnswers, discoveryState, leadFormName, type DiscoveryRow } from '../app/lib/lead-discovery-core'
+import { DISCOVERY_NOTIFY, DISCOVERY_NOTIFY_LIVE, discoveryAnswers, discoveryState, leadFormName, type DiscoveryRow } from '../app/lib/lead-discovery-core'
 import { buildTimeline } from '../app/lib/lead-timeline-core'
 import { templateFor } from '../app/lib/intake-templates'
 
@@ -63,6 +63,12 @@ describe('the form is sent cold, from one link, and makes its own lead', () => {
     expect(readFileSync('app/discovery/DiscoveryStart.tsx', 'utf8')).toContain("fetch('/api/discovery/start', { method: 'POST' })")
     expect(readFileSync('app/api/discovery/start/route.ts', 'utf8')).toMatch(/export async function POST/)
     expect(readFileSync('app/api/discovery/start/route.ts', 'utf8')).not.toMatch(/export async function GET/)
+  })
+  it('says who is emailed when one is sent in', () => {
+    expect([...DISCOVERY_NOTIFY_LIVE]).toEqual(['hello@mdmmarketing.com.au', 'contact@mdmmarketing.com.au'])
+    // while it is being tested: the owner's own address only (to go live, DISCOVERY_NOTIFY becomes the list above)
+    expect([...DISCOVERY_NOTIFY]).toEqual(['akmalashwin23@gmail.com'])
+    expect(lib).toContain('notify_emails: [...DISCOVERY_NOTIFY]')
   })
   it('the lead is made once, by an id worked out from the form, and only when there is somebody to contact', () => {
     expect(lib).toContain("createHash('sha256').update(`discovery-lead:${form.id}`)")

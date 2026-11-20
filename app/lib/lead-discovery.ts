@@ -5,6 +5,7 @@ import type { IntakeForm, Lead } from '@/lib/db-types'
 import { resolveTemplate } from './intake'
 import { completion, normaliseDefinition } from './intake-core'
 import { logLeadEvent } from './lead-events'
+import { DISCOVERY_NOTIFY } from './lead-discovery-core'
 
 /**
  * THE DISCOVERY FORM — the server half (lead-discovery-core.ts says what a form's state means).
@@ -25,6 +26,7 @@ export async function startColdDiscovery(): Promise<{ token: string }> {
   const row = await table('intake_forms').insert({
     client_id: '', template_key: 'discovery', definition: def, title: def.name,
     token: randomUUID(), status: 'sent', sent_at: new Date().toISOString(), answers: {},
+    notify_emails: [...DISCOVERY_NOTIFY],
   }) as unknown as Row
   return { token: row.token }
 }

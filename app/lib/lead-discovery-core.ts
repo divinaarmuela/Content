@@ -9,6 +9,16 @@ import { completion, normaliseDefinition, type Answers, type TemplateDefinition 
  * Pure: what the page and the list say about a form, from the form's own row.
  */
 
+/**
+ * WHO IS EMAILED WHEN A DISCOVERY FORM IS SENT IN (the owner, 20 Nov 2026: "both contact and hello should receive it").
+ * Until then it fell to the sending mailbox alone. Each form carries this list from the moment it is started, so it
+ * does not depend on the intake forms' own default list.
+ */
+export const DISCOVERY_NOTIFY_LIVE = ['hello@mdmmarketing.com.au', 'contact@mdmmarketing.com.au'] as const
+/** WHILE IT IS BEING TESTED (the owner, 20 Nov 2026: "for now keep akmalashwin23@… for testing … once tested we will
+ *  replace it with the two emails"): only the owner's own address. To go live, make this DISCOVERY_NOTIFY_LIVE. */
+export const DISCOVERY_NOTIFY: readonly string[] = ['akmalashwin23@gmail.com']
+
 export type DiscoveryRow = {
   id: string; token: string; status?: string | null; definition?: unknown; answers?: unknown
   created_at?: string | null; sent_at?: string | null; first_opened_at?: string | null; submitted_at?: string | null
