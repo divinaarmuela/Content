@@ -51,6 +51,8 @@ export default async function IntakePage({ params }: { params: Promise<{ token: 
         definition={form.definition}
         initialAnswers={form.answers}
         initialStatus={form.status}
+        // only the discovery form wears its landing page's look; a client's intake form is drawn as it always was
+        discovery={form.template_key === 'discovery'}
         files={await listIntakeFiles(form.id)}
       />
     </div>

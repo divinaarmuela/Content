@@ -95,3 +95,22 @@ describe('the form is sent cold, from one link, and makes its own lead', () => {
     expect(buildTimeline({ id: 'l2', created_at: '2026-11-20T00:00:00Z', source: 'discovery_form' }, [], []).map(i => i.title)).toEqual(['Sent in the discovery form'])
   })
 })
+
+describe('the discovery form wears its landing page’s look, and a client’s intake form does not', () => {
+  const form = readFileSync('app/intake/[token]/IntakeForm.tsx', 'utf8')
+  it('the look is behind one switch that is off unless the page turns it on', () => {
+    expect(form).toContain('discovery = false,')
+    expect(readFileSync('app/intake/[token]/page.tsx', 'utf8')).toContain("discovery={form.template_key === 'discovery'}")
+    // the portal's own copy of a client's form never turns it on
+    expect(readFileSync('app/portal/[token]/home/page.tsx', 'utf8')).not.toMatch(/<IntakeForm[^>]*discovery/)
+  })
+  it('the backdrop is drawn only for the discovery form', () => {
+    expect(form.match(/<BrandBackdrop/g)).toHaveLength(2)
+    expect(form.match(/\{discovery && <BrandBackdrop fixed \/>\}/g)).toHaveLength(2)
+  })
+  it('a client’s form keeps its own bar, its own welcome, and its own thank-you words', () => {
+    expect(form).toContain("discovery ? 'bg-ink/70' : 'bg-ink/95'")
+    expect(form).toContain('useState(discovery && definition.sections.length > 1 ? 1 : 0)')
+    expect(form).toContain('come back with a shot list and a content plan built around it')
+  })
+})

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Reveal from '../components/lama/Reveal'
+import BrandBackdrop from '../components/BrandBackdrop'
 
 /**
  * THE DISCOVERY FORM'S FRONT DOOR (the owner, 20 Nov 2026: "can you please create this landing page a very nice
@@ -87,13 +88,9 @@ export default function DiscoveryStart() {
           second button was a grey box with unreadable words). The site's reset covers only the dashboard, so a plain
           button here wore the browser's grey face, and lists and headings its margins. Zero-weight rules, so every
           class on the page still wins. */}
-      <style>{`.disc section{border-bottom:0}:where(.disc) :where(*,::before,::after){border-width:0;border-style:solid}:where(.disc) :where(h1,h2,h3,p,ol,dl,dd){margin:0}:where(.disc) :where(ol){list-style:none;padding:0}:where(.disc) :where(button){appearance:none;background:none;border:0;padding:0;font:inherit;color:inherit;cursor:pointer;border-radius:0}:where(.disc) :where(button:disabled){cursor:default}@keyframes disc-a{0%{transform:translate(-78%,-6%) scale(1)}50%{transform:translate(-24%,10%) scale(1.18)}100%{transform:translate(-78%,-6%) scale(1)}}@keyframes disc-b{0%{transform:translate(-8%,18%) scale(1.1)}50%{transform:translate(-92%,-4%) scale(.9)}100%{transform:translate(-8%,18%) scale(1.1)}}.disc-glow-a{transform:translate(-50%,0);animation:disc-a 16s ease-in-out infinite}.disc-glow-b{transform:translate(-50%,0);animation:disc-b 21s ease-in-out infinite}@keyframes disc-logos{from{transform:translate3d(0,0,0)}to{transform:translate3d(-100%,0,0)}}.disc-logos{animation:disc-logos 40s linear infinite;will-change:transform}@media (prefers-reduced-motion:reduce){.disc-glow,.disc-logos{animation:none}}`}</style>
-      {/* the site's dotted field, and one soft blue light behind the headline */}
-      <div aria-hidden className="pointer-events-none absolute inset-0 bg-lama-dots [background-size:22px_22px] [mask-image:linear-gradient(to_bottom,black,transparent_78%)]" />
-      {/* THE BLUE LIGHT MOVES (the owner, 20 Nov 2026: "make the blue thing on hero gradient moving"): two soft lights
-          drifting slowly past one another; still for anyone who has asked their device for less motion */}
-      <div aria-hidden className="disc-glow disc-glow-a pointer-events-none absolute -top-40 left-1/2 h-[520px] w-[820px] max-w-[140vw] rounded-full bg-accent/25 blur-[120px]" />
-      <div aria-hidden className="disc-glow disc-glow-b pointer-events-none absolute -top-10 left-1/2 h-[380px] w-[560px] max-w-[110vw] rounded-full bg-[#5b3df5]/20 blur-[110px]" />
+      <style>{`.disc section{border-bottom:0}:where(.disc) :where(*,::before,::after){border-width:0;border-style:solid}:where(.disc) :where(h1,h2,h3,p,ol,dl,dd){margin:0}:where(.disc) :where(ol){list-style:none;padding:0}:where(.disc) :where(button){appearance:none;background:none;border:0;padding:0;font:inherit;color:inherit;cursor:pointer;border-radius:0}:where(.disc) :where(button:disabled){cursor:default}@keyframes disc-logos{from{transform:translate3d(0,0,0)}to{transform:translate3d(-100%,0,0)}}.disc-logos{animation:disc-logos 40s linear infinite;will-change:transform}@media (prefers-reduced-motion:reduce){.disc-logos{animation:none}}`}</style>
+      {/* the dotted field and the drifting blue light: the same backdrop the discovery form draws */}
+      <BrandBackdrop />
 
       {/* THE LOGO, IN THE MIDDLE, AND NOTHING ELSE (the owner, 20 Nov 2026: "just put logo in the middle") */}
       <header className="relative z-10 border-b border-cream/15">

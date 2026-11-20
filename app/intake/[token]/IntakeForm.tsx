@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import BrandBackdrop from '../../components/BrandBackdrop'
 import {
   completion, type Answers, type IntakeStatus, type TemplateDefinition,
 } from '../../lib/intake-core'
@@ -24,9 +25,18 @@ type SaveState = 'idle' | 'saving' | 'saved' | 'error'
  * the top.
  */
 export default function IntakeForm({
-  token, clientName, title, definition, initialAnswers, initialStatus, files: initialFiles, backHref,
+  token, clientName, title, definition, initialAnswers, initialStatus, files: initialFiles, backHref, discovery = false,
 }: {
   token: string
+  /**
+   * THE DISCOVERY FORM WEARS ITS LANDING PAGE'S LOOK (the owner, 20 Nov 2026: "i want the form pages to be like the
+   * landing page … but not the client intake form … make sure to not disturb existing intake form client functions").
+   * True only for the discovery form. It changes what the page LOOKS like — the dotted field and drifting light, the
+   * logo in the middle, the words on the thank-you screen — and that a visitor who has just read the landing page is
+   * not shown a second welcome. Saving, uploading, the steps, the review and sending are the same code for every
+   * form, and a client's intake form (this left false) is drawn exactly as it always was.
+   */
+  discovery?: boolean
   /** on the one portal: the way back to it (app/portal/[token]/home) */
   backHref?: string | null
   clientName: string
@@ -42,7 +52,8 @@ export default function IntakeForm({
   const [save, setSave] = useState<SaveState>('idle')
   const [uploading, setUploading] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
-  const [step, setStep] = useState(0)
+  // the discovery form's landing page has already welcomed them: it opens on the first questions
+  const [step, setStep] = useState(discovery && definition.sections.length > 1 ? 1 : 0)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   // the newest value per field, so a debounced flush sends what is on screen
   // rather than what was there when the timer started
@@ -171,7 +182,8 @@ export default function IntakeForm({
   // ── already submitted ──────────────────────────────────────────────────────
   if (locked) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-ink px-6 text-cream">
+      <div className={`flex min-h-screen flex-col items-center justify-center bg-ink px-6 text-cream ${discovery ? 'relative overflow-hidden [&>*]:relative [&>*]:z-10' : ''}`}>
+        {discovery && <BrandBackdrop fixed />}
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/MDLogo-trim.png" alt="MD Media" className="mb-10 h-6 w-auto" />
         {backHref && <a href={backHref} className="mb-6 inline-flex min-h-11 items-center font-lamam text-[11px] uppercase tracking-widest text-cream-dim underline-offset-4 hover:underline">← Your portal</a>}
@@ -179,9 +191,10 @@ export default function IntakeForm({
           Thank you. This is with us now.
         </h1>
         <p className="mt-6 max-w-[46ch] text-center font-lamah text-[16px] leading-relaxed text-cream-dim">
-          We will read every word before the call, and come back with a shot list
-          and a content plan built around it. If something needs changing, email
-          us at hello@mdmmarketing.com.au and we will reopen it for you.
+          {discovery
+            // a potential client has no shoot or content plan yet: say what really happens next
+            ? 'We will read every answer before we speak, and be in touch to find a time to talk. If something needs changing, email us at hello@mdmmarketing.com.au.'
+            : 'We will read every word before the call, and come back with a shot list and a content plan built around it. If something needs changing, email us at hello@mdmmarketing.com.au and we will reopen it for you.'}
         </p>
         <p className="mt-10 font-lamam text-[10px] uppercase tracking-widest text-cream-faint">
           {progress.answered} of {progress.total} answered
@@ -191,9 +204,20 @@ export default function IntakeForm({
   }
 
   return (
-    <div className="intake min-h-screen bg-ink text-cream antialiased">
+    <div className={`intake min-h-screen bg-ink text-cream antialiased ${discovery ? 'relative' : ''}`}>
+      {discovery && <BrandBackdrop fixed />}
       {/* ── docked bar ── */}
-      <header className="sticky top-0 z-30 border-b border-cream/15 bg-ink/95 backdrop-blur">
+      <header className={`sticky top-0 z-30 border-b border-cream/15 backdrop-blur ${discovery ? 'bg-ink/70' : 'bg-ink/95'}`}>
+        {/* the discovery form: the logo in the middle, as on its landing page, and the count on the right */}
+        {discovery ? (
+          <div className="relative mx-auto flex h-16 max-w-5xl items-center px-6">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/MDLogo-trim.png" alt="MD Media" className="absolute left-1/2 top-1/2 h-5 w-auto -translate-x-1/2 -translate-y-1/2" />
+            <p className={'ml-auto font-lamam text-[10px] uppercase tracking-widest tabular-nums ' + (save === 'error' ? 'text-[#E2725B]' : 'text-cream-dim')}>
+              {savedLabel}<span className="hidden sm:inline">{save === 'idle' ? ' answered' : ''}</span>
+            </p>
+          </div>
+        ) : (
         <div className="mx-auto flex h-16 max-w-5xl items-center gap-4 px-6">
           {/* same treatment as LamaNav: the PNG is already light on transparent,
               so any filter here destroys it */}
@@ -213,12 +237,13 @@ export default function IntakeForm({
             {savedLabel}{save === 'idle' ? ' answered' : ''}
           </p>
         </div>
+        )}
         <div className="h-px w-full bg-cream/10">
           <div className="h-px bg-cream transition-[width] duration-500 ease-out" style={{ width: `${pct}%` }} />
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-5xl px-6 py-12 sm:py-16">
+      <main className={`mx-auto w-full max-w-5xl px-6 py-12 sm:py-16 ${discovery ? 'relative z-10' : ''}`}>
         {/* Step rail. A plain <div>, NOT <nav>: globals.css styles bare nav
             elements for the marketing site (cream ground, borders), and this
             page shares that stylesheet — CLAUDE.md trap 2. */}
