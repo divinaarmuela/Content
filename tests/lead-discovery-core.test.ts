@@ -66,8 +66,8 @@ describe('the form is sent cold, from one link, and makes its own lead', () => {
   })
   it('says who is emailed when one is sent in', () => {
     expect([...DISCOVERY_NOTIFY_LIVE]).toEqual(['hello@mdmmarketing.com.au', 'contact@mdmmarketing.com.au'])
-    // while it is being tested: the owner's own address only (to go live, DISCOVERY_NOTIFY becomes the list above)
-    expect([...DISCOVERY_NOTIFY]).toEqual(['akmalashwin23@gmail.com'])
+    // live since the owner tested it with his own address (20 Nov 2026): both mailboxes, and nobody's personal one
+    expect([...DISCOVERY_NOTIFY]).toEqual(['hello@mdmmarketing.com.au', 'contact@mdmmarketing.com.au'])
     expect(lib).toContain('notify_emails: [...DISCOVERY_NOTIFY]')
   })
   it('the lead is made once, by an id worked out from the form, and only when there is somebody to contact', () => {

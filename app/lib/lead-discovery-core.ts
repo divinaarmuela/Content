@@ -15,9 +15,9 @@ import { completion, normaliseDefinition, type Answers, type TemplateDefinition 
  * does not depend on the intake forms' own default list.
  */
 export const DISCOVERY_NOTIFY_LIVE = ['hello@mdmmarketing.com.au', 'contact@mdmmarketing.com.au'] as const
-/** WHILE IT IS BEING TESTED (the owner, 20 Nov 2026: "for now keep akmalashwin23@… for testing … once tested we will
- *  replace it with the two emails"): only the owner's own address. To go live, make this DISCOVERY_NOTIFY_LIVE. */
-export const DISCOVERY_NOTIFY: readonly string[] = ['akmalashwin23@gmail.com']
+/** LIVE (the owner, 20 Nov 2026, after testing it with his own address: "looks good, can you change the email to send
+ *  to contact and hello?"): both mailboxes hear of every discovery form sent in. */
+export const DISCOVERY_NOTIFY: readonly string[] = DISCOVERY_NOTIFY_LIVE
 
 export type DiscoveryRow = {
   id: string; token: string; status?: string | null; definition?: unknown; answers?: unknown
