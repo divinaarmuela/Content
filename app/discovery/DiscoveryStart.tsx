@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react'
 import Reveal from '../components/lama/Reveal'
-import LamaLogos from '../components/lama/LamaLogos'
 
 /**
  * THE DISCOVERY FORM'S FRONT DOOR (the owner, 20 Nov 2026: "can you please create this landing page a very nice
@@ -14,6 +13,9 @@ import LamaLogos from '../components/lama/LamaLogos'
  * their own form; the browser remembers it, so coming back to the link carries on where they stopped.
  */
 const KEY = 'mdm-discovery-form'
+
+/** the clients' logos, the same thirteen as the homepage's strip */
+const LOGOS = Array.from({ length: 13 }, (_, i) => `/logos/logo-${String(i + 1).padStart(2, '0')}.png`)
 
 /** the form's own seven parts, in its order (intake-templates.ts) */
 const PARTS: [string, string][] = [
@@ -37,6 +39,18 @@ export default function DiscoveryStart() {
   const [error, setError] = useState<string | null>(null)
   const [resume, setResume] = useState<string | null>(null)
   useEffect(() => { try { const t = localStorage.getItem(KEY); if (t && /^[0-9a-f-]{36}$/i.test(t)) setResume(t) } catch { /* private window */ } }, [])
+
+  // BACK FROM THE FORM, THE BUTTON IS A BUTTON AGAIN (the owner, 20 Nov 2026: "go back to discovery page, the state is
+  // still opening the form"). The browser brings this page back exactly as it was left — mid-press — so every time the
+  // page is shown the press is cleared and the remembered form is read again.
+  useEffect(() => {
+    const shown = () => {
+      setBusy(false); setError(null)
+      try { const t = localStorage.getItem(KEY); setResume(t && /^[0-9a-f-]{36}$/i.test(t) ? t : null) } catch { /* private window */ }
+    }
+    window.addEventListener('pageshow', shown)
+    return () => window.removeEventListener('pageshow', shown)
+  }, [])
 
   const begin = async () => {
     if (busy) return
@@ -73,34 +87,35 @@ export default function DiscoveryStart() {
           second button was a grey box with unreadable words). The site's reset covers only the dashboard, so a plain
           button here wore the browser's grey face, and lists and headings its margins. Zero-weight rules, so every
           class on the page still wins. */}
-      <style>{`:where(.disc) :where(h1,h2,h3,p,ol,dl,dd){margin:0}:where(.disc) :where(ol){list-style:none;padding:0}:where(.disc) :where(button){appearance:none;background:none;border:0;padding:0;font:inherit;color:inherit;cursor:pointer;border-radius:0}:where(.disc) :where(button:disabled){cursor:default}`}</style>
+      <style>{`:where(.disc) :where(h1,h2,h3,p,ol,dl,dd){margin:0}:where(.disc) :where(ol){list-style:none;padding:0}:where(.disc) :where(button){appearance:none;background:none;border:0;padding:0;font:inherit;color:inherit;cursor:pointer;border-radius:0}:where(.disc) :where(button:disabled){cursor:default}@keyframes disc-a{0%{transform:translate(-78%,-6%) scale(1)}50%{transform:translate(-24%,10%) scale(1.18)}100%{transform:translate(-78%,-6%) scale(1)}}@keyframes disc-b{0%{transform:translate(-8%,18%) scale(1.1)}50%{transform:translate(-92%,-4%) scale(.9)}100%{transform:translate(-8%,18%) scale(1.1)}}.disc-glow-a{transform:translate(-50%,0);animation:disc-a 16s ease-in-out infinite}.disc-glow-b{transform:translate(-50%,0);animation:disc-b 21s ease-in-out infinite}@keyframes disc-logos{from{transform:translateX(0)}to{transform:translateX(-50%)}}.disc-logos{animation:disc-logos 45s linear infinite}@media (prefers-reduced-motion:reduce){.disc-glow,.disc-logos{animation:none}}`}</style>
       {/* the site's dotted field, and one soft blue light behind the headline */}
       <div aria-hidden className="pointer-events-none absolute inset-0 bg-lama-dots [background-size:22px_22px] [mask-image:linear-gradient(to_bottom,black,transparent_78%)]" />
-      <div aria-hidden className="pointer-events-none absolute -top-40 left-1/2 h-[520px] w-[820px] max-w-[140vw] -translate-x-1/2 rounded-full bg-accent/20 blur-[120px]" />
+      {/* THE BLUE LIGHT MOVES (the owner, 20 Nov 2026: "make the blue thing on hero gradient moving"): two soft lights
+          drifting slowly past one another; still for anyone who has asked their device for less motion */}
+      <div aria-hidden className="disc-glow disc-glow-a pointer-events-none absolute -top-40 left-1/2 h-[520px] w-[820px] max-w-[140vw] rounded-full bg-accent/25 blur-[120px]" />
+      <div aria-hidden className="disc-glow disc-glow-b pointer-events-none absolute -top-10 left-1/2 h-[380px] w-[560px] max-w-[110vw] rounded-full bg-[#5b3df5]/20 blur-[110px]" />
 
+      {/* THE LOGO, IN THE MIDDLE, AND NOTHING ELSE (the owner, 20 Nov 2026: "just put logo in the middle") */}
       <header className="relative z-10 border-b border-cream/15">
-        <div className="mx-auto flex h-16 max-w-6xl items-center gap-4 px-6 sm:px-10">
+        <div className="mx-auto flex h-16 max-w-6xl items-center justify-center px-6 sm:px-10">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <a href="https://www.mdmmarketing.com.au" aria-label="MD Media"><img src="/MDLogo-trim.png" alt="MD Media" className="h-5 w-auto" /></a>
-          <p className="font-lamam text-[10px] uppercase tracking-widest text-cream-dim">Discovery form</p>
-          <p className="ml-auto hidden font-lamam text-[10px] uppercase tracking-widest text-cream-dim sm:block">About 10 minutes · No login</p>
         </div>
       </header>
 
       <main className="relative z-10">
         {/* ── the hero: what this is, and the one thing to do ── */}
-        <section className="mx-auto max-w-6xl px-6 pb-20 pt-20 sm:px-10 sm:pb-28 sm:pt-28">
-          <p className="mb-7 font-lamam text-[11px] uppercase tracking-widest text-accent [word-spacing:0.35em]">[ Before we talk ]</p>
+        <section className="mx-auto max-w-6xl px-6 pb-8 pt-9 sm:px-10 sm:pb-20 sm:pt-28">
           <h1 className="max-w-4xl font-lamah text-[clamp(2.6rem,8vw,6.25rem)] font-medium leading-[0.98] tracking-[-0.04em]">
             <Reveal gate={false} className="block">Tell us about</Reveal>
             <Reveal gate={false} delay={110} className="block">your business.</Reveal>
           </h1>
           <Reveal gate={false} delay={240}>
-            <p className="mt-8 max-w-xl font-lamah text-[18px] leading-relaxed text-cream-dim sm:text-[20px]">
+            <p className="mt-5 max-w-xl font-lamah text-[16px] leading-relaxed text-cream-dim sm:mt-8 sm:text-[20px]">
               A few short questions, so that when we speak we already know where you are, where you want to be, and what is in the way.
             </p>
           </Reveal>
-          <div className="mt-11 flex flex-col items-start gap-5 sm:flex-row sm:items-center">
+          <div className="mt-7 flex flex-col items-start gap-3 sm:mt-11 sm:flex-row sm:items-center sm:gap-5">
             <Begin wide />
             {resume && !busy ? (
               <button type="button" onClick={startOver} className="inline-flex min-h-11 items-center font-lamam text-[11px] uppercase tracking-widest text-cream-dim underline underline-offset-4 hover:text-cream">
@@ -112,23 +127,33 @@ export default function DiscoveryStart() {
           </div>
           {error && <p role="alert" className="mt-5 text-[15px] text-[#E2725B]">{error}</p>}
 
-          <dl className="mt-16 grid max-w-3xl grid-cols-3 border-t border-cream/15">
-            {[['10', 'minutes'], ['7', 'short parts'], ['0', 'logins']].map(([n, w]) => (
-              <div key={w} className="border-r border-cream/15 py-6 pr-4 last:border-r-0 sm:px-6 sm:first:pl-0">
-                <dt className="font-lamah text-[clamp(2rem,6vw,3.5rem)] font-medium leading-none tracking-[-0.04em]">{n}</dt>
-                <dd className="mt-2 font-lamam text-[10px] uppercase tracking-widest text-cream-dim">{w}</dd>
-              </div>
-            ))}
-          </dl>
         </section>
 
-        <div className="border-y border-cream/15"><LamaLogos /></div>
+        {/* THE CLIENTS' LOGOS, MOVING, where the three numbers were (the owner, 20 Nov 2026: "remove the minutes and
+            stats, have the client marquee logos instead") */}
+        <div className="border-y border-cream/15 py-9 sm:py-10">
+          <p className="mb-7 text-center font-lamam text-[11px] uppercase tracking-widest text-cream-dim">Trusted by founders &amp; local businesses</p>
+          {/* A BELT WITH NO END (the owner, 20 Nov 2026: "marquee logos suddenly disappear on the right"). The homepage's
+              strip loads each logo only as it nears the screen, so they popped in and out at the right edge. Here both
+              halves are loaded up front and are exactly alike, so sliding by one half is seamless; the edges fade. */}
+          <div aria-label="Clients and partners" className="overflow-hidden [mask-image:linear-gradient(to_right,transparent,black_8%,black_92%,transparent)]">
+            <div className="disc-logos flex w-max">
+              {[0, 1, 2, 3].map(half => (
+                <div key={half} aria-hidden={half > 0} className="flex shrink-0 items-center gap-14 pr-14 sm:gap-16 sm:pr-16">
+                  {LOGOS.map(src => (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img key={src} src={src} alt="" loading="eager" decoding="async" className="h-9 w-auto opacity-70 [filter:brightness(0)_invert(1)] sm:h-10" />
+                  ))}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
 
         {/* ── what they will be asked ── */}
         <section className="mx-auto max-w-6xl px-6 py-20 sm:px-10 sm:py-28">
           <div className="grid gap-10 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-16">
             <div>
-              <p className="mb-5 font-lamam text-[11px] uppercase tracking-widest text-cream-dim">[ 01 ] What we ask</p>
               <h2 className="font-lamah text-[clamp(2rem,5vw,3.5rem)] font-medium leading-[1.02] tracking-[-0.035em]">Seven short parts.<br />No wrong answers.</h2>
               <p className="mt-6 max-w-md text-[16px] leading-relaxed text-cream-dim">Honest and incomplete beats polished. If you do not know something yet, say so and we will pick it up when we talk.</p>
             </div>
@@ -149,7 +174,6 @@ export default function DiscoveryStart() {
         {/* ── what happens after ── */}
         <section className="border-t border-cream/15">
           <div className="mx-auto max-w-6xl px-6 py-20 sm:px-10 sm:py-28">
-            <p className="mb-5 font-lamam text-[11px] uppercase tracking-widest text-cream-dim">[ 02 ] What happens next</p>
             <h2 className="max-w-3xl font-lamah text-[clamp(2rem,5vw,3.5rem)] font-medium leading-[1.02] tracking-[-0.035em]">So our first conversation is about you, not a questionnaire.</h2>
             <ol className="mt-12 grid gap-px overflow-hidden border border-cream/15 bg-cream/15 md:grid-cols-3">
               {NEXT.map(([title, line], i) => (

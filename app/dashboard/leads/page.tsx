@@ -53,6 +53,10 @@ type Lead = LeadLike & {
 
 /** newest first, as the leads API always ordered them — module-level so the
  *  live query stays referentially stable across renders */
+/** the discovery form's one link, on the main site's address (the owner, 20 Nov 2026: "why can't we have the url as mdmm
+ *  instead of app") — the same page answers there, and it is the address a stranger recognises */
+const DISCOVERY_LINK = 'https://www.mdmmarketing.com.au/discovery'
+
 const BY_NEWEST: ['created_at', 'desc'][] = [['created_at', 'desc']]
 
 /** 9 Nov 2026, owner: "redesign the column" + "put it in each column" (campaign, ad set, ad, placement). */
@@ -293,7 +297,7 @@ export default function LeadsPage() {
           <div className="flex items-center gap-2">
             {/* THE DISCOVERY FORM'S ONE LINK (the owner, 20 Nov 2026: "this is cold send … one link for anyone"): pasted
                 into any cold email or message; whoever fills it in turns up here as a lead with their answers */}
-            <Button size="sm" onClick={() => void copyText(Promise.resolve(`${window.location.origin}/discovery`)).then(ok => { if (ok) toast.success('Discovery form link copied. Paste it into your email or message.'); else toast.error(`Could not copy. The link is ${window.location.origin}/discovery`) })}>
+            <Button size="sm" onClick={() => void copyText(Promise.resolve(DISCOVERY_LINK)).then(ok => { if (ok) toast.success('Discovery form link copied. Paste it into your email or message.'); else toast.error(`Could not copy. The link is ${DISCOVERY_LINK}`) })}>
               <ClipboardList className="h-4 w-4" /> Copy discovery form link
             </Button>
             {/* Export is a monthly reporting job. It used to be the only filled
