@@ -212,7 +212,7 @@ export async function claimEncodeJob(input: {
  */
 export async function reclaimEncodeJob(
   id: string,
-  opts: { olderThanMs: number; now?: number; from?: readonly EncodeStatus[]; keepAttempts?: boolean },
+  opts: { olderThanMs: number; now?: number; from?: readonly EncodeStatus[] },
 ): Promise<{ reclaimed: boolean; row: EncodeJob | null }> {
   const now = opts.now ?? Date.now()
   const before = new Date(now - opts.olderThanMs).toISOString()
@@ -226,8 +226,7 @@ export async function reclaimEncodeJob(
     return {
       ...cur,
       status: 'queued',
-      // a "busy, ask again" was never a try at making the copy, so it does not spend one (22 Nov 2026)
-      attempts: (cur.attempts ?? 0) + (opts.keepAttempts ? 0 : 1),
+      attempts: (cur.attempts ?? 0) + 1,
       updated_at: new Date(now).toISOString(),
     }
   })
@@ -304,6 +303,18 @@ export async function staleEncodeJobs(now = Date.now()): Promise<EncodeJob[]> {
     },
     limit: 50,
   }).catch(() => [])
+}
+
+/**
+ * THE ENCODER SAID "BUSY": THE TRY IS HANDED BACK (live, 22 Nov 2026). `attempts` is the three tries a copy gets at
+ * being MADE. A full encoder turning the ask away is not one of them, yet each re-ask spent one, so five masters
+ * that were only ever told "busy" reached three and could never be asked for again. Still queued, one fewer.
+ */
+export async function returnBusyAttempt(id: string): Promise<void> {
+  await table<EncodeJob>('encode_jobs').claim(id, cur =>
+    cur && cur.status === 'queued' && (cur.attempts ?? 0) > 0
+      ? { ...cur, attempts: (cur.attempts ?? 0) - 1, updated_at: new Date().toISOString() }
+      : null).catch(() => null)
 }
 
 /** The encoder took the job. queued → running, and only from queued. */

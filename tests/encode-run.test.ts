@@ -165,6 +165,22 @@ describe('when the encoder will not take it', () => {
     expect(rows()).toHaveLength(1)
     expect(rows()[0].status).toBe('queued')
     expect(rows()[0].output_key).toBe('key-1-copy-instagram.mp4')
+    // and the try is handed back: a full encoder turning it away is not a try at making the copy (22 Nov 2026)
+    expect(rows()[0].attempts).toBe(0)
+  })
+
+  it('however often it is told "busy", a copy never runs out of tries', async () => {
+    answer = 'busy'
+    await expect(runEncodeRequest({ sourceUrl: SOURCE, platform: 'instagram', seconds: 20 })).rejects.toThrow(/busy/)
+    for (let i = 0; i < 6; i++) {
+      await expect(runEncodeRequest({ sourceUrl: SOURCE, platform: 'instagram', seconds: 20, retry: true })).rejects.toThrow(/busy/)
+    }
+    expect(rows()[0].attempts).toBe(0)
+    answer = 'accepted'
+    const out = await runEncodeRequest({ sourceUrl: SOURCE, platform: 'instagram', seconds: 20, retry: true })
+    expect(out.at).toBe('asked')
+    expect(rows()[0].status).toBe('running')
+    expect(rows()[0].attempts).toBe(1)
   })
 
   it('marks the job failed when the refusal will not fix itself', async () => {
@@ -228,9 +244,9 @@ describe('the key never moves', () => {
     expect(asked).toHaveLength(0)
   })
 
-  it('its own retry after "busy" asks at once and spends no attempt (22 Nov 2026)', async () => {
+  it('its own retry after "busy" asks at once (22 Nov 2026)', async () => {
     fake.restore()
-    fake = seedDb({ encode_jobs: [cold({ updated_at: new Date().toISOString() })] })
+    fake = seedDb({ encode_jobs: [cold({ attempts: 0, updated_at: new Date().toISOString() })] })
     const out = await runEncodeRequest({ sourceUrl: SOURCE, platform: 'instagram', seconds: 20, retry: true })
     expect(out.at).toBe('asked')
     expect(asked).toHaveLength(1)

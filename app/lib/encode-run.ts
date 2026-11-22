@@ -2,7 +2,7 @@ import 'server-only'
 import type { EncodeJob } from '@/lib/db-types'
 import {
   GAVE_UP_MESSAGE, MAX_ENCODE_ATTEMPTS, claimEncodeJob, markEncodeRunning,
-  reclaimEncodeJob, reopenEncodeJob, settleEncodeJob, staleEncodeJobs,
+  reclaimEncodeJob, reopenEncodeJob, returnBusyAttempt, settleEncodeJob, staleEncodeJobs,
 } from './encode-jobs'
 import { callbackUrl, requestEncode } from './encoder'
 import { encodeTargetFor, type EncodeTarget } from './media-fit-core'
@@ -70,7 +70,7 @@ export type EncodeRunInput = {
   /**
    * This is the job's OWN retry after the encoder said "busy" (live, 22 Nov 2026). The retry came inside the
    * minute of grace, read its own row as "somebody else has just asked", and left without asking: seven of ten
-   * copies then sat at `queued` until the 90-minute sweep. Its own retry asks at once, and spends no attempt.
+   * copies then sat at `queued` until the 90-minute sweep. Its own retry asks at once.
    */
   retry?: boolean
 }
@@ -116,8 +116,10 @@ async function askEncoder(
        *
        * The row STAYS `queued` with its key. Throwing hands the step to
        * Inngest's backoff, and the 15-minute sweep is the backstop if every
-       * one of those is lost too.
+       * one of those is lost too. The try is handed back first: being turned away by a full
+       * encoder is not one of the three tries at making the copy.
        */
+      await returnBusyAttempt(jobId)
       throw new Error(asked.reason)
     }
     await settleEncodeJob({ id: jobId, ok: false, error: asked.reason, permanent: asked.permanent })
@@ -195,7 +197,7 @@ export async function runEncodeRequest(input: EncodeRunInput): Promise<EncodeRun
     // it back — atomically, so the step's retry and the sweep cannot both —
     // and ask again with the SAME key and the SAME target the row records.
     if (row.status === 'queued') {
-      const retaken = await reclaimEncodeJob(row.id, input.retry ? { olderThanMs: 0, keepAttempts: true } : { olderThanMs: REASK_GRACE_MS })
+      const retaken = await reclaimEncodeJob(row.id, { olderThanMs: input.retry ? 0 : REASK_GRACE_MS })
       const again = retaken.row ? targetFor(retaken.row) : null
       if (retaken.reclaimed && retaken.row && again) return askEncoder(retaken.row, again)
     }
