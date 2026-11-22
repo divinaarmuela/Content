@@ -2,13 +2,14 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { Download, FileText, Plus } from 'lucide-react'
+import { Download, FileText, Plus, Trash2 } from 'lucide-react'
 import { BRAND_ASSET_WORDS, brandAssetProblem, bytesWords, type PortalBrandFile } from '../../lib/brand-assets-core'
 
 /**
  * THE PORTAL'S BRAND ASSETS TAB (the owner, 13 Nov 2026): the client's brand guideline PDFs and brand files, and one
  * button to add more. A file goes straight from the client's device to storage, with its progress shown, and then
- * joins the list. Nothing here deletes: taking a file off is the team's, on the dashboard's Brand tab.
+ * joins the list. A file they added themselves has a Remove button (the owner, 22 Nov 2026), asked twice before it
+ * goes; a file the team added has none, since taking that off is the team's, on the dashboard's Brand tab.
  */
 
 const NAME_KEY = 'mdm-portal-name'
@@ -38,6 +39,9 @@ export default function OnePortalBrand({ token, files: first, mayAdd }: {
   const [busy, setBusy] = useState(false)
   const [name, setName] = useState('')
   const input = useRef<HTMLInputElement>(null)
+  /** the file they pressed Remove on, waiting for their yes; and the one being taken off right now */
+  const [asking, setAsking] = useState<string | null>(null)
+  const [removing, setRemoving] = useState<string | null>(null)
   useEffect(() => { try { setName(localStorage.getItem(NAME_KEY) ?? '') } catch { /* private window */ } }, [])
 
   const api = async (body: Record<string, unknown>) => {
@@ -79,6 +83,20 @@ export default function OnePortalBrand({ token, files: first, mayAdd }: {
     }
     if (input.current) input.current.value = ''
     setBusy(false)
+  }
+
+  const remove = async (f: PortalBrandFile) => {
+    if (removing) return
+    setRemoving(f.url)
+    try {
+      const json = await api({ action: 'remove', url: f.url, who: name.trim() })
+      if (Array.isArray(json.files)) setFiles(json.files)
+      toast.success(`${f.name} removed`)
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not remove that file')
+    }
+    setRemoving(null)
+    setAsking(null)
   }
 
   return (
@@ -124,9 +142,9 @@ export default function OnePortalBrand({ token, files: first, mayAdd }: {
       ) : (
         <ul className="flex flex-col gap-2">
           {files.map(f => (
-            <li key={f.url}>
+            <li key={f.url} className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
               <a href={f.url} target="_blank" rel="noreferrer noopener"
-                className="flex min-h-14 items-center gap-3 rounded-[18px] border border-border bg-card px-4 py-3 transition-colors hover:border-foreground/40">
+                className="flex min-h-14 min-w-0 flex-1 items-center gap-3 rounded-[18px] border border-border bg-card px-4 py-3 transition-colors hover:border-foreground/40">
                 <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-foreground/[0.06] text-muted-foreground"><FileText className="h-5 w-5" strokeWidth={1.6} aria-hidden /></span>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-[15px] font-semibold">{f.name}</span>
@@ -135,6 +153,24 @@ export default function OnePortalBrand({ token, files: first, mayAdd }: {
                 <Download className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
                 <span className="sr-only">Open {f.name}</span>
               </a>
+              {/* only on a file they added themselves, and it asks once more before it goes */}
+              {mayAdd && f.mine && (asking === f.url ? (
+                <div className="flex shrink-0 items-center gap-2">
+                  <button type="button" disabled={removing === f.url} onClick={() => void remove(f)}
+                    className="inline-flex min-h-11 flex-1 items-center justify-center rounded-full bg-red-600 px-4 text-[14px] font-semibold text-white disabled:opacity-60 sm:flex-none">
+                    {removing === f.url ? 'Removing…' : 'Yes, remove'}
+                  </button>
+                  <button type="button" disabled={removing === f.url} onClick={() => setAsking(null)}
+                    className="inline-flex min-h-11 flex-1 items-center justify-center rounded-full border border-border px-4 text-[14px] font-semibold disabled:opacity-60 sm:flex-none">
+                    Keep it
+                  </button>
+                </div>
+              ) : (
+                <button type="button" onClick={() => setAsking(f.url)} aria-label={`Remove ${f.name}`}
+                  className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-full border border-border px-4 text-[14px] font-semibold text-muted-foreground transition-colors hover:border-foreground/40 hover:text-foreground">
+                  <Trash2 className="h-4 w-4" aria-hidden /> Remove
+                </button>
+              ))}
             </li>
           ))}
         </ul>

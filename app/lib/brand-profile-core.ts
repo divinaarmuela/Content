@@ -25,7 +25,9 @@ export const FONT_ROLE_LABEL: Record<FontRole, string> = { heading: 'Headings', 
 
 export type BrandColour = { name: string; hex: string; role: ColourRole }
 export type BrandFont = { name: string; role: FontRole; url?: string }
-export type BrandFile = { name: string; url: string }
+/** `from: 'client'` marks a file the client added themselves (their portal, or an intake form): the only files they
+ *  may take off again from their portal (the owner, 22 Nov 2026). The team's own files carry no mark. */
+export type BrandFile = { name: string; url: string; from?: 'client' }
 
 export type BrandProfile = {
   version: 1
@@ -141,7 +143,7 @@ export function normaliseProfile(raw: unknown): BrandProfile {
     const url = text(o.url, 1000)
     if (!isUrl(url) || seenUrl.has(url)) continue
     seenUrl.add(url)
-    out.logo_files.push({ name: text(o.name, 120) || url.split('/').pop() || 'file', url })
+    out.logo_files.push({ name: text(o.name, 120) || url.split('/').pop() || 'file', url, ...(o.from === 'client' ? { from: 'client' as const } : {}) })
     if (out.logo_files.length >= MAX_ITEMS) break
   }
 

@@ -89,3 +89,46 @@ describe('a new client is on the one portal, and an old-portal client never gets
     expect(readFileSync('app/api/clients/[id]/onboarding/route.ts', 'utf8')).toContain('brand_tab: client.portal_one === true,')
   })
 })
+
+import { withoutClientBrandFile } from '../app/lib/brand-assets-core'
+import { normaliseProfile } from '../app/lib/brand-profile-core'
+
+/** THE CLIENT TAKES THEIR OWN FILE OFF (the owner, 22 Nov 2026: "add the remove one") */
+describe('a client removes a brand file they added, and only one they added', () => {
+  const teams = { name: 'Master logo.ai', url: 'https://f/team.ai' }
+  const theirs = { name: 'Our font.otf', url: 'https://f/theirs.otf', from: 'client' as const }
+  it('a file added from the portal or an intake form is marked theirs, and the mark survives a save', () => {
+    expect(withBrandFile([], { ...teams, from: 'client' }).files[0].from).toBe('client')
+    expect(withBrandFile([], teams).files[0].from).toBeUndefined()
+    const back = normaliseProfile({ logo_files: [teams, theirs, { name: 'x', url: 'https://f/x.png', from: 'somebody' }] })
+    expect(back.logo_files.map(f => f.from)).toEqual([undefined, 'client', undefined])
+    expect(readFileSync('app/lib/brand-assets.ts', 'utf8')).toContain("withBrandFile(profile.logo_files, { ...file, from: 'client' })")
+  })
+  it('the portal says which files are theirs', () => {
+    const shown = portalBrandFiles([{ filename: 'Guide.pdf', url: 'https://f/guide.pdf' }], [teams, theirs])
+    expect(shown.map(f => [f.name, f.mine])).toEqual([['Guide.pdf', false], ['Master logo.ai', false], ['Our font.otf', true]])
+  })
+  it('their own file comes off; the team’s never does; one already gone is no error', () => {
+    expect(withoutClientBrandFile([teams, theirs], theirs.url)).toMatchObject({ files: [teams], removed: theirs, notTheirs: false })
+    expect(withoutClientBrandFile([teams, theirs], teams.url)).toMatchObject({ files: [teams, theirs], removed: null, notTheirs: true })
+    expect(withoutClientBrandFile([teams], 'https://f/gone.png')).toMatchObject({ files: [teams], removed: null, notTheirs: false })
+  })
+  it('the server decides, behind the business link, against the revision it read, and tells the managers', () => {
+    const route = readFileSync('app/api/portal/brand/route.ts', 'utf8')
+    const lib = readFileSync('app/lib/brand-assets.ts', 'utf8')
+    // the scope check comes before every action, remove included
+    expect(route.indexOf("if (owner.scope.kind !== 'business')")).toBeLessThan(route.indexOf("body?.action === 'remove'"))
+    expect(route).toContain("tellManagersOfBrandFiles(clientId, owner.client.name, who, [res.removed], 'removed')")
+    expect(lib).toContain('const next = withoutClientBrandFile(profile.logo_files, url)')
+    expect(lib).toContain('if (String(liveRev ?? \'\') !== String(seen)) return null')
+    // only the listing goes: nothing in storage is deleted from the portal
+    expect(lib).not.toMatch(/deleteStoredObject|removeStored|DeleteObject/)
+  })
+  it('the button is only on their own files, and asks once more before it removes', () => {
+    const page = readFileSync('app/components/portal/OnePortalBrand.tsx', 'utf8')
+    expect(page).toContain('{mayAdd && f.mine && (asking === f.url ? (')
+    expect(page).toContain('Yes, remove')
+    expect(page).toContain('Keep it')
+    expect(page).not.toMatch(/window\.confirm|\bconfirm\(/)
+  })
+})

@@ -4,7 +4,7 @@ import type { Client, ClientBrand, TeamUserClient } from '@/lib/db-types'
 import { attachOne } from '@/lib/db-join'
 import { loadBrandProfile } from './brand-profile'
 import { normaliseProfile, type BrandProfile } from './brand-profile-core'
-import { portalBrandFiles, withBrandFile, type PortalBrandFile } from './brand-assets-core'
+import { portalBrandFiles, withBrandFile, withoutClientBrandFile, type PortalBrandFile } from './brand-assets-core'
 import { notify, renderEmail, escapeHtml } from './mailer'
 
 /**
@@ -33,7 +33,8 @@ export async function addClientBrandFile(clientId: string, file: { name: string;
     const loaded = await loadBrandProfile(clientId, `portal:${who}`)
     if (!loaded) return { ok: false, error: 'Client not found' }
     const profile = loaded.profile as BrandProfile
-    const next = withBrandFile(profile.logo_files, file)
+    // every caller of this is the client's own hand (their portal, an intake form), so the file is marked theirs
+    const next = withBrandFile(profile.logo_files, { ...file, from: 'client' })
     if (next.full) return { ok: false, error: 'This brand already has 100 files. Ask your account manager to clear some first.' }
     if (!next.added) return { ok: true, added: false }
     const seen = profile.rev
@@ -55,17 +56,47 @@ export async function addClientBrandFile(clientId: string, file: { name: string;
 }
 
 /**
+ * The client takes one of their own files off the list. The same revision claim as adding, so a save on the dashboard
+ * in the same second is never overwritten. The file itself stays in storage: only the listing goes, so a slip can be
+ * put right by the team.
+ */
+export async function removeClientBrandFile(clientId: string, url: string, who: string): Promise<{ ok: true; removed: string | null } | { ok: false; error: string }> {
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const loaded = await loadBrandProfile(clientId, `portal:${who}`)
+    if (!loaded) return { ok: false, error: 'Client not found' }
+    const profile = loaded.profile as BrandProfile
+    const next = withoutClientBrandFile(profile.logo_files, url)
+    if (next.notTheirs) return { ok: false, error: 'Your team added that file. Ask your account manager to take it off.' }
+    if (!next.removed) return { ok: true, removed: null }
+    const seen = profile.rev
+    const saved = await table<Client>('clients').claim(clientId, cur => {
+      if (!cur) return null
+      const liveRev = (cur.brand_profile as { rev?: unknown } | null)?.rev
+      if (String(liveRev ?? '') !== String(seen)) return null
+      return {
+        ...cur,
+        brand_profile: { ...profile, logo_files: next.files, rev: seen + 1 },
+        brand_profile_updated_at: new Date().toISOString(),
+        brand_profile_updated_by: `portal:${who}`,
+      }
+    })
+    if (saved.claimed) return { ok: true, removed: next.removed.name }
+  }
+  return { ok: false, error: 'The brand profile was being edited. Please try again.' }
+}
+
+/**
  * The client's managers are told in the app's bell, with no email (a client adding five files is not five emails).
  * Never the client. A test client's bell reaches test people only: that gate is the mailer's own.
  */
-export async function tellManagersOfBrandFiles(clientId: string, clientName: string, who: string, names: string[]): Promise<void> {
+export async function tellManagersOfBrandFiles(clientId: string, clientName: string, who: string, names: string[], did: 'added' | 'removed' = 'added'): Promise<void> {
   if (names.length === 0) return
   type Person = { id: string; email: string; role: string; active_status: boolean }
   const links = await table<TeamUserClient>('team_user_clients').list({ by: { client_id: clientId } })
   const joined = await attachOne(links, 'team_user_id', 'team_users', ['id', 'email', 'name', 'role', 'active_status'])
   const managers = joined.map(r => r.team_users as unknown as Person | null)
     .filter((u): u is Person => !!u && (u.role === 'account_manager' || u.role === 'super_admin') && u.active_status)
-  const subject = `${clientName} added ${names.length === 1 ? 'a brand file' : `${names.length} brand files`}`
+  const subject = `${clientName} ${did} ${names.length === 1 ? 'a brand file' : `${names.length} brand files`}`
   const path = `/dashboard/clients/${clientId}/brand`
   for (const m of managers) {
     await notify({
@@ -79,7 +110,7 @@ export async function tellManagersOfBrandFiles(clientId: string, clientName: str
       recipientEmail: m.email,
       clientId,
       subject,
-      bodyHtml: renderEmail(subject, `<p>${escapeHtml(names.slice(0, 8).join(', '))}${names.length > 8 ? ' and more' : ''}</p><p style="color:#a1a1aa;font-size:12px;">Added by ${escapeHtml(who)} on the client portal. They are on the client's Brand tab.</p>`, 'Open the Brand tab', path),
+      bodyHtml: renderEmail(subject, `<p>${escapeHtml(names.slice(0, 8).join(', '))}${names.length > 8 ? ' and more' : ''}</p><p style="color:#a1a1aa;font-size:12px;">${did === 'added' ? 'Added' : 'Removed'} by ${escapeHtml(who)} on the client portal. ${did === 'added' ? 'They are on the client’s Brand tab.' : 'It was one they had added themselves.'}</p>`, 'Open the Brand tab', path),
     }).catch(() => {})
   }
 }

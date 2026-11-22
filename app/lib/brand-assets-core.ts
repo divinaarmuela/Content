@@ -23,6 +23,8 @@ export type PortalBrandFile = {
   source: 'guide' | 'file'
   /** a word for what it is: PDF, Picture, Font, Design file, Video, Zip, File */
   kind: string
+  /** the client added this one themselves, so they may take it off again */
+  mine: boolean
 }
 
 export function assetKind(name: string): string {
@@ -57,14 +59,14 @@ const rows = (v: unknown): Record<string, unknown>[] =>
 export function portalBrandFiles(docs: unknown, logoFiles: unknown): PortalBrandFile[] {
   const out: PortalBrandFile[] = []
   const seen = new Set<string>()
-  const add = (name: string, url: string, source: PortalBrandFile['source']) => {
+  const add = (name: string, url: string, source: PortalBrandFile['source'], mine = false) => {
     if (!/^https:\/\//i.test(url) || seen.has(url)) return
     seen.add(url)
     const shown = name.trim() || decodeURIComponent(url.split('?')[0].split('/').pop() ?? 'file')
-    out.push({ name: shown, url, source, kind: assetKind(shown) })
+    out.push({ name: shown, url, source, kind: assetKind(shown), mine })
   }
   for (const d of rows(docs)) add(str(d.filename) || str(d.name), str(d.url), 'guide')
-  for (const f of rows(logoFiles)) add(str(f.name), str(f.url), 'file')
+  for (const f of rows(logoFiles)) add(str(f.name), str(f.url), 'file', f.from === 'client')
   return out
 }
 
@@ -72,7 +74,20 @@ export function portalBrandFiles(docs: unknown, logoFiles: unknown): PortalBrand
 export function withBrandFile(current: readonly BrandFile[], file: BrandFile): { files: BrandFile[]; added: boolean; full: boolean } {
   if (current.some(f => f.url === file.url)) return { files: [...current], added: false, full: false }
   if (current.length >= MAX_ITEMS) return { files: [...current], added: false, full: true }
-  return { files: [...current, { name: file.name.trim().slice(0, 120) || 'file', url: file.url }], added: true, full: false }
+  return { files: [...current, { name: file.name.trim().slice(0, 120) || 'file', url: file.url, ...(file.from === 'client' ? { from: 'client' as const } : {}) }], added: true, full: false }
+}
+
+/**
+ * THE CLIENT TAKES ONE OF THEIR OWN FILES OFF (the owner, 22 Nov 2026: "once uploaded why is there no delete or remove
+ * in portal … add the remove one"). Only a file they added themselves: the portal link is the only key to this page,
+ * so it must never be able to strip the logos and guides the team put there. `notTheirs` says a file was found but is
+ * the team's; neither flag set means it is not on the list at all (already gone, which is fine).
+ */
+export function withoutClientBrandFile(current: readonly BrandFile[], url: string): { files: BrandFile[]; removed: BrandFile | null; notTheirs: boolean } {
+  const hit = current.find(f => f.url === url)
+  if (!hit) return { files: [...current], removed: null, notTheirs: false }
+  if (hit.from !== 'client') return { files: [...current], removed: null, notTheirs: true }
+  return { files: current.filter(f => f.url !== url), removed: hit, notTheirs: false }
 }
 
 /** "2.4 MB" */

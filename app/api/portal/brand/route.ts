@@ -3,7 +3,7 @@ import { withRequestCache } from '@/lib/db'
 import { portalOwnerByToken } from '../../../lib/portal-owner'
 import { headStoredObject, signUpload } from '../../../lib/storage'
 import { brandAssetProblem, MAX_BRAND_ASSET_BYTES } from '../../../lib/brand-assets-core'
-import { addClientBrandFile, loadPortalBrandFiles, tellManagersOfBrandFiles } from '../../../lib/brand-assets'
+import { addClientBrandFile, loadPortalBrandFiles, removeClientBrandFile, tellManagersOfBrandFiles } from '../../../lib/brand-assets'
 
 /**
  * BRAND ASSETS FROM THE PORTAL (the owner, 13 Nov 2026). The client adds brand files from their portal's Brand assets
@@ -12,6 +12,7 @@ import { addClientBrandFile, loadPortalBrandFiles, tellManagersOfBrandFiles } fr
  *
  *   sign  → a one-hour address the browser uploads ONE file straight to storage with (the bytes never pass through us)
  *   add   → the uploaded files go onto the brand's file list, once storage confirms each is really there
+ *   remove → ONE file comes off the list, and only a file the client added themselves (never the team's)
  */
 
 export const dynamic = 'force-dynamic'
@@ -55,6 +56,14 @@ export async function POST(req: Request) {
       }
       await tellManagersOfBrandFiles(clientId, owner.client.name, who, added)
       return NextResponse.json({ added: added.length, files: await loadPortalBrandFiles(clientId) })
+    }
+
+    if (body?.action === 'remove') {
+      const who = String(body?.who ?? '').trim().slice(0, 80) || owner.client.name
+      const res = await removeClientBrandFile(clientId, String(body?.url ?? ''), who)
+      if (!res.ok) return NextResponse.json({ error: res.error }, { status: 409 })
+      if (res.removed) await tellManagersOfBrandFiles(clientId, owner.client.name, who, [res.removed], 'removed')
+      return NextResponse.json({ removed: res.removed ? 1 : 0, files: await loadPortalBrandFiles(clientId) })
     }
 
     return NextResponse.json({ error: 'Unknown action' }, { status: 400 })
