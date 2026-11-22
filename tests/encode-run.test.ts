@@ -228,6 +228,25 @@ describe('the key never moves', () => {
     expect(asked).toHaveLength(0)
   })
 
+  it('its own retry after "busy" asks at once and spends no attempt (22 Nov 2026)', async () => {
+    fake.restore()
+    fake = seedDb({ encode_jobs: [cold({ updated_at: new Date().toISOString() })] })
+    const out = await runEncodeRequest({ sourceUrl: SOURCE, platform: 'instagram', seconds: 20, retry: true })
+    expect(out.at).toBe('asked')
+    expect(asked).toHaveLength(1)
+    expect(rows()[0].attempts).toBe(1)
+    expect(rows()[0].output_key).toBe('key-original-copy-instagram.mp4')
+  })
+
+  it('a busy encoder is asked again every 45 seconds for 15 minutes, by the job itself', async () => {
+    const { readFileSync } = await import('node:fs')
+    const src = readFileSync('app/inngest/functions.ts', 'utf8')
+    const fn = src.slice(src.indexOf("id: 'media-encode',"), src.indexOf('export const mediaEncodeFinished'))
+    expect(fn).toMatch(/retries: 20,/)
+    expect(fn).toMatch(/retry: attempt > 0,/)
+    expect(fn).toMatch(/new RetryAfterError\([^)]*'45s'\)/)
+  })
+
   it('will not re-ask a row that is out of tries', async () => {
     fake.restore()
     fake = seedDb({ encode_jobs: [cold({ attempts: 3 })] })

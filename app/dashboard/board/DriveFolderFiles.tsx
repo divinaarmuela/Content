@@ -13,7 +13,7 @@ import type { PullFile } from '../../lib/drive-pull-core'
 import { fileRound, roundLabel, roundsOf } from '../../lib/edit-round-core'
 import HoverClip from '../../components/media/HoverClip'
 import { usePreviewRows } from '../../components/media/usePreviewRows'
-import { pickPoster, streamThumbnailUrl } from '../../lib/stream-core'
+import { pickPoster, streamThumbnailUrl, TILE_STILL_HEIGHT } from '../../lib/stream-core'
 
 /**
  * THE FILES BEHIND A CARD'S DRIVE LINK, AS TILES (the owner, 15 Sep 2026:
@@ -149,7 +149,7 @@ export default function DriveFolderFiles({ url, wide = false, reviewHref, approv
               // THE CLIP'S OWN FIRST FRAME (16 Sep 2026): our copy is seekable, so
               // the tile is the clip a moment in, and no picture has to be made
               ? <HoverClip src={t.preview} className="h-full w-full object-cover" poster={pickPoster(previewOf(t), null)} duration={previewOf(t)?.duration_sec ?? null}
-                  frames={previewOf(t) ? (s => streamThumbnailUrl(previewOf(t), { time: `${s}s`, height: 480 }) as string) : null} />
+                  frames={previewOf(t) ? (s => streamThumbnailUrl(previewOf(t), { time: `${s}s`, height: TILE_STILL_HEIGHT }) as string) : null} />
               : <span className="flex h-full w-full items-center justify-center text-muted-foreground"><Glyph className="h-6 w-6" strokeWidth={1.6} aria-hidden /></span>}
           {approvedIds?.includes(t.id) && (
             <span className="absolute left-1.5 top-1.5 z-10 inline-flex items-center gap-1 rounded-full bg-accent-green px-2 py-0.5 text-[11px] font-semibold text-ink shadow" title="Approved by the client">

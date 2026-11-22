@@ -67,6 +67,12 @@ export type EncodeRunInput = {
    * restarting the encode there would park the post for another hour instead.
    */
   reopen?: boolean
+  /**
+   * This is the job's OWN retry after the encoder said "busy" (live, 22 Nov 2026). The retry came inside the
+   * minute of grace, read its own row as "somebody else has just asked", and left without asking: seven of ten
+   * copies then sat at `queued` until the 90-minute sweep. Its own retry asks at once, and spends no attempt.
+   */
+  retry?: boolean
 }
 
 export type EncodeRunResult =
@@ -189,7 +195,7 @@ export async function runEncodeRequest(input: EncodeRunInput): Promise<EncodeRun
     // it back — atomically, so the step's retry and the sweep cannot both —
     // and ask again with the SAME key and the SAME target the row records.
     if (row.status === 'queued') {
-      const retaken = await reclaimEncodeJob(row.id, { olderThanMs: REASK_GRACE_MS })
+      const retaken = await reclaimEncodeJob(row.id, input.retry ? { olderThanMs: 0, keepAttempts: true } : { olderThanMs: REASK_GRACE_MS })
       const again = retaken.row ? targetFor(retaken.row) : null
       if (retaken.reclaimed && retaken.row && again) return askEncoder(retaken.row, again)
     }

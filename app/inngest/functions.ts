@@ -656,9 +656,10 @@ export const mediaEncode = inngest.createFunction(
     id: 'media-encode',
     name: 'Make a publish-grade copy',
     triggers: [{ event: 'media/encode' }],
-    // a transient refusal (the machine is busy) is retried with backoff; a
-    // real refusal settles the row and never comes back here
-    retries: 3,
+    // a transient refusal (the machine is busy) is asked again every 45 seconds, up to 15 minutes: the encoder
+    // takes about three at a time and a card's worth of masters is a queue, not a fault (22 Nov 2026). A real
+    // refusal settles the row and never comes back here
+    retries: 20,
     // Three at once, unkeyed. What stops two events for the same copy becoming
     // two encodes is NOT this number — it is the claim on the row id
     // (`<hash of source url>__<platform>`), which is atomic and holds however
@@ -666,7 +667,7 @@ export const mediaEncode = inngest.createFunction(
     // (one-job-at-a-time) attention the app asks for at once.
     concurrency: { limit: 3 },
   },
-  async ({ event, step }) => withRequestCache(async () => {
+  async ({ event, step, attempt }) => withRequestCache(async () => {
     const data = (event.data ?? {}) as Record<string, unknown>
     const sourceUrl = String(data.sourceUrl ?? '')
     const platform = String(data.platform ?? '')
@@ -674,7 +675,9 @@ export const mediaEncode = inngest.createFunction(
 
     return step.run('encode', async () => {
       const { runEncodeRequest } = await import('../lib/encode-run')
+      const { RetryAfterError } = await import('inngest')
       return runEncodeRequest({
+        retry: attempt > 0,
         sourceUrl,
         platform,
         kind: data.kind ? String(data.kind) : null,
@@ -685,7 +688,7 @@ export const mediaEncode = inngest.createFunction(
         // only the attach path asks for this: a copy that gave up may be
         // asked for again when the clip is put on a post afresh
         reopen: data.reopen === true,
-      })
+      }).catch(e => { throw new RetryAfterError(e instanceof Error ? e.message : 'the encoder could not be asked', '45s') })
     })
   })
 )

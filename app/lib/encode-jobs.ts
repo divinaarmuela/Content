@@ -212,7 +212,7 @@ export async function claimEncodeJob(input: {
  */
 export async function reclaimEncodeJob(
   id: string,
-  opts: { olderThanMs: number; now?: number; from?: readonly EncodeStatus[] },
+  opts: { olderThanMs: number; now?: number; from?: readonly EncodeStatus[]; keepAttempts?: boolean },
 ): Promise<{ reclaimed: boolean; row: EncodeJob | null }> {
   const now = opts.now ?? Date.now()
   const before = new Date(now - opts.olderThanMs).toISOString()
@@ -226,7 +226,8 @@ export async function reclaimEncodeJob(
     return {
       ...cur,
       status: 'queued',
-      attempts: (cur.attempts ?? 0) + 1,
+      // a "busy, ask again" was never a try at making the copy, so it does not spend one (22 Nov 2026)
+      attempts: (cur.attempts ?? 0) + (opts.keepAttempts ? 0 : 1),
       updated_at: new Date(now).toISOString(),
     }
   })

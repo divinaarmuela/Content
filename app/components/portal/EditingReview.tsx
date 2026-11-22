@@ -348,8 +348,8 @@ export default function EditingReview({ data, approved: clientApproved = false }
                               ? <img src={c.thumb} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" />
                               // the clip's own first frame, from our copy (16 Sep 2026)
                               : <HoverClip src={c.src} className="h-full w-full object-cover"
-                                  poster={c.stream ? `${c.stream.base}/thumbnails/thumbnail.jpg?time=1s&height=480` : null} duration={c.stream?.duration ?? null}
-                                  frames={c.stream ? (s => `${c.stream!.base}/thumbnails/thumbnail.jpg?time=${s}s&height=480`) : null} />}
+                                  poster={c.stream ? `${c.stream.base}/thumbnails/thumbnail.jpg?time=1s&height=960` : null} duration={c.stream?.duration ?? null}
+                                  frames={c.stream ? (s => `${c.stream!.base}/thumbnails/thumbnail.jpg?time=${s}s&height=960`) : null} />}
                             {tick && (
                               <span className="absolute left-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-emerald-400 text-black" title="Approved">
                                 <Check className="h-3.5 w-3.5" strokeWidth={3} aria-hidden />

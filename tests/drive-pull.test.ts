@@ -165,7 +165,7 @@ describe('the job, the triggers and the pages (source pins)', () => {
     expect(tiles).toContain("{(labelOf ?? roundLabel)(r)}{r === rounds[0] ? ' · latest' : ''}")
     // the hover shows the preview's stills once it is ready; the copy itself before
     expect(tiles).toContain('const previews = usePreviewRows(')
-    expect(tiles).toContain('frames={previewOf(t) ? (s => streamThumbnailUrl(previewOf(t), { time: `${s}s`, height: 480 }) as string) : null}')
+    expect(tiles).toContain('frames={previewOf(t) ? (s => streamThumbnailUrl(previewOf(t), { time: `${s}s`, height: TILE_STILL_HEIGHT }) as string) : null}')
     const hover = src('app/components/media/HoverClip.tsx')
     expect(hover).toContain("const stills = !!frames && !!poster && typeof duration === 'number' && duration > 0")
     const bar = src('app/dashboard/board/DrivePullBar.tsx')

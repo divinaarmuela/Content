@@ -172,12 +172,20 @@ export function streamThumbnailUrl(
  * — the browser cannot decode a frame of the original to show one — so this
  * is the difference between a labelled card and a black rectangle.
  */
+/**
+ * How tall a tile's still and its hover frames are asked for (the owner, 22 Nov 2026: "why are the quality so bad and
+ * looks pixelated on all"). Measured that day on a vertical clip: Cloudflare's default still is 360 x 640 and the
+ * hover frames were asked at 270 x 480, then stretched over a tile on a sharp screen. At 960 a vertical clip comes
+ * back 540 wide and a landscape one 1707 wide, about 60 KB each.
+ */
+export const TILE_STILL_HEIGHT = 960
+
 export function pickPoster(
   row: PreviewRow | null | undefined,
   fallback?: string | null,
 ): string | null {
   if (row?.state === 'ready') {
-    const thumb = streamThumbnailUrl(row)
+    const thumb = streamThumbnailUrl(row, { height: TILE_STILL_HEIGHT })
     if (thumb) return thumb
   }
   return fallback ?? null
