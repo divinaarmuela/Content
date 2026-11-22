@@ -11,6 +11,7 @@ import {
   videoKbpsOf,
   type EncodeTarget, type SourceInfo,
 } from './ladder.js'
+import { fileBytes, posterArgs, scrubArgs, type StillsAsk } from './stills.js'
 
 /**
  * One job, start to finish: download, probe, encode, upload, report.
@@ -45,6 +46,17 @@ export type EncodeRequest = {
   /** a presigned R2 PUT — the finished copy goes straight there */
   uploadUrl: string
   callbackUrl: string
+  /** where the copy's poster and scrub copy go, when the app wants them (stills.ts) */
+  stills?: StillsAsk | null
+}
+
+/** Pictures only, of a copy that already exists: how the clips converted before 22 Nov 2026 get theirs. */
+export type StillsRequest = {
+  jobId: string
+  /** the finished copy, in our own storage */
+  sourceUrl: string
+  callbackUrl: string
+  stills: StillsAsk
 }
 
 export type EncodeResult = {
@@ -56,6 +68,10 @@ export type EncodeResult = {
   height: number | null
   videoKbps: number | null
   error?: string
+  /** 1 when the poster and the scrub copy were made and stored; 0 or absent when they were not */
+  stills?: number
+  /** set on the answer to a pictures-only job, so the app does not read it as a copy finishing */
+  only?: 'stills'
 }
 
 export type Logger = (message: string, extra?: Record<string, unknown>) => void
@@ -159,7 +175,7 @@ async function download(url: string, to: string, log: Logger): Promise<void> {
   log('downloaded', { bytes: size })
 }
 
-async function upload(url: string, from: string, bytes: number, log: Logger): Promise<void> {
+async function upload(url: string, from: string, bytes: number, log: Logger, contentType = 'video/mp4', quiet = false): Promise<void> {
   const control = new AbortController()
   const timer = setTimeout(() => control.abort(), UPLOAD_TIMEOUT_MS)
   const handle = await open(from, 'r')
@@ -168,7 +184,7 @@ async function upload(url: string, from: string, bytes: number, log: Logger): Pr
       method: 'PUT',
       // the presigned URL was signed for this content type; anything else is
       // rejected by R2 as a signature mismatch
-      headers: { 'content-type': 'video/mp4', 'content-length': String(bytes) },
+      headers: { 'content-type': contentType, 'content-length': String(bytes) },
       // the stream, not the bytes — the same reason the download is streamed
       body: Readable.toWeb(handle.createReadStream()),
       // Node needs telling that a streamed body is not a duplex request
@@ -181,7 +197,68 @@ async function upload(url: string, from: string, bytes: number, log: Logger): Pr
     clearTimeout(timer)
     await handle.close().catch(() => {})
   }
-  log('uploaded', { bytes })
+  if (!quiet) log('uploaded', { bytes })
+}
+
+/** Pictures are small and many; ten minutes is a machine that has stopped. */
+export const STILLS_TIMEOUT_MS = 10 * 60 * 1000
+
+/**
+ * The poster and the scrub copy of one finished copy, made and stored. Returns 1 when both are, 0 otherwise.
+ *
+ * BOTH OR NEITHER, and never a throw: the app is told a number, and a number it can trust means the poster and the
+ * scrub copy are really there. A clip whose length is not known, an ffmpeg that failed, a PUT that was refused: 0,
+ * and the tile stays plain.
+ */
+export async function makeStills(
+  dir: string, video: string, durationSec: number | null, sourceFps: number | null, ask: StillsAsk, log: Logger,
+): Promise<number> {
+  try {
+    const seconds = Number(durationSec)
+    if (!(seconds > 0)) { log('no pictures: the length is not known'); return 0 }
+    const poster = join(dir, 'poster.jpg')
+    const p = await run('ffmpeg', posterArgs(video, poster, seconds), STILLS_TIMEOUT_MS)
+    const posterBytes = await fileBytes(poster)
+    if (p.code !== 0 || posterBytes === 0) { log('no pictures: the poster could not be cut', { error: lastLine(p.stderr) }); return 0 }
+    const scrub = join(dir, 'scrub.mp4')
+    const s = await run('ffmpeg', scrubArgs(video, scrub, seconds, sourceFps), STILLS_TIMEOUT_MS)
+    const scrubBytes = await fileBytes(scrub)
+    if (s.code !== 0 || scrubBytes === 0) { log('no pictures: the scrub copy could not be made', { error: lastLine(s.stderr) }); return 0 }
+    await upload(ask.posterUrl, poster, posterBytes, log, 'image/jpeg', true)
+    await upload(ask.scrubUrl, scrub, scrubBytes, log, 'video/mp4', true)
+    log('pictures stored', { posterBytes, scrubBytes })
+    return 1
+  } catch (e) {
+    log('no pictures', { error: e instanceof Error ? e.message : String(e) })
+    return 0
+  }
+}
+
+/** A pictures-only job, start to finish. Never throws. */
+export async function runStills(req: StillsRequest): Promise<EncodeResult> {
+  const log = loggerFor(req.jobId)
+  const empty = {
+    jobId: req.jobId, ok: false, bytes: null, durationSec: null,
+    width: null, height: null, videoKbps: null, only: 'stills', stills: 0,
+  } satisfies EncodeResult
+  try {
+    return await withTempDir(async dir => {
+      const input = join(dir, 'copy.mp4')
+      log('pictures start', { source: safeUrl(req.sourceUrl) })
+      await download(req.sourceUrl, input, log)
+      const probed = await run('ffprobe', ffprobeArgs(input), 60_000)
+      let parsed: unknown = null
+      try { parsed = JSON.parse(probed.stdout) } catch { parsed = null }
+      const source = probed.code === 0 ? parseProbe(parsed) : null
+      if (!source) return { ...empty, error: 'the copy could not be read' }
+      const stills = await makeStills(dir, input, source.durationSec ?? null, source.fps ?? null, req.stills, log)
+      return { ...empty, ok: stills > 0, durationSec: source.durationSec ?? null, stills, ...(stills > 0 ? {} : { error: 'the pictures could not be made' }) }
+    })
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e)
+    log('pictures failed', { error: message })
+    return { ...empty, error: message }
+  }
 }
 
 /**
@@ -279,6 +356,8 @@ export async function runEncode(req: EncodeRequest): Promise<EncodeResult> {
       log('encoded', { bytes: size, width: dims.width, height: dims.height, videoKbps: result.videoKbps })
 
       await upload(req.uploadUrl, output, size, log)
+      // the copy is safe; now its pictures, which can never cost it (stills.ts)
+      if (req.stills) result.stills = await makeStills(dir, output, durationSec, verdict.info.fps ?? null, req.stills, log)
       return result
     })
   } catch (e) {

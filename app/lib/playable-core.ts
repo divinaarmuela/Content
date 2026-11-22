@@ -14,6 +14,9 @@ export type EncodeRowLike = {
   output_key?: string | null
   status?: string | null
   platform?: string | null
+  /** 1 when the encoder stored a poster and a scrub copy beside the copy (0 or null: none) */
+  stills?: number | null
+  duration_sec?: number | null
 }
 
 const VIDEO_EXT = /\.(mov|mp4|m4v|webm|avi|mkv|mts|m2ts)(\?|#|$)/i
@@ -44,6 +47,38 @@ export function playableUrl(master: string, rows: readonly EncodeRowLike[] | nul
   try { return `${new URL(master).origin}/${key.replace(/^\/+/, '')}` } catch { /* not an absolute URL */ }
   const cut = master.lastIndexOf('/')
   return cut > 0 ? `${master.slice(0, cut + 1)}${key}` : key
+}
+
+/* ── THE COPY'S OWN POSTER AND SCRUB COPY (the owner, 22 Nov 2026: "how to get frames with good quality regardless
+ * of size and file format … I need exact frames, so when it is hovered it is the actual hover process") ────────────
+ * A tile's still and what it shows under the pointer came only from Cloudflare Stream, which turns the heaviest
+ * masters away, so a card of ProRes exports was a card of blank tiles. Our encoder now makes two things from every
+ * copy (services/encoder/src/stills.ts) and stores them beside it: a sharp poster, and a small silent SCRUB COPY of
+ * the whole clip with a keyframe every six frames, which a browser jumps around in at about 6 ms a jump. Under the
+ * pointer the tile shows that copy at that moment: every frame of the clip, not a set of pictures.
+ * Nothing but a flag is written down (`stills`): both addresses are worked out from the copy's own key, here.
+ */
+
+/** the storage keys of a copy's poster and scrub copy, from the copy's key: `x-copy-instagram.mp4` → `….poster.jpg`, `….scrub.mp4` */
+export function stillKeys(outputKey: string): { poster: string; scrub: string } {
+  const base = String(outputKey).replace(/\.mp4$/i, '')
+  return { poster: `${base}.poster.jpg`, scrub: `${base}.scrub.mp4` }
+}
+
+export type ClipStills = { poster: string; scrub: string; duration: number }
+
+/** A master's own poster and scrub copy, when our encoder has made them. */
+export function encoderStills(master: string, rows: readonly EncodeRowLike[] | null | undefined): ClipStills | null {
+  if (!master || !isVideoUrl(master)) return null
+  const have = (rows ?? []).filter(r => r && r.source_url === master && r.status === 'done'
+    && typeof r.output_key === 'string' && r.output_key && Number(r.stills) > 0 && Number(r.duration_sec) > 0)
+  if (have.length === 0) return null
+  have.sort((a, b) => rank(a.platform) - rank(b.platform))
+  const row = have[0]
+  let origin: string
+  try { origin = new URL(master).origin } catch { return null }
+  const keys = stillKeys(String(row.output_key).replace(/^\/+/, ''))
+  return { poster: `${origin}/${keys.poster}`, scrub: `${origin}/${keys.scrub}`, duration: Number(row.duration_sec) }
 }
 
 function rank(platform: string | null | undefined): number {

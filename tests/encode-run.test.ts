@@ -44,6 +44,7 @@ vi.mock('../app/lib/encoder', async () => {
  */
 let minted = 0
 let presigned: string[] = []
+let presignedStills: string[] = []
 vi.mock('../app/lib/storage', async () => {
   const real = await vi.importActual<typeof import('../app/lib/storage')>('../app/lib/storage')
   return {
@@ -51,7 +52,10 @@ vi.mock('../app/lib/storage', async () => {
     publicBase: () => 'https://media.example.com',
     objectKey: (filename: string) => `key-${++minted}-${filename}`,
     signUploadForKey: async (key: string) => {
-      presigned.push(key)
+      // the copy's poster and scrub copy are signed alongside it (22 Nov 2026); `presigned` stays the copy alone,
+      // which is what the rules about the key never moving are about
+      if (/\.(poster\.jpg|scrub\.mp4)$/.test(key)) presignedStills.push(key)
+      else presigned.push(key)
       return {
         key,
         signedUrl: `https://r2.example.com/${key}?sig=${presigned.length}`,
@@ -74,6 +78,7 @@ let fake: ReturnType<typeof seedDb>
 beforeEach(() => {
   asked = []
   presigned = []
+  presignedStills = []
   minted = 0
   answer = 'accepted'
   fake = seedDb({ encode_jobs: [] as Row[] })
@@ -151,6 +156,14 @@ describe('asking for one copy', () => {
     expect(row.asset_id).toBe('item-1')
     expect(row.version_id).toBe('item-1__3')
     expect(row.slide_index).toBe(0)
+  })
+})
+
+describe('the copy’s poster and scrub copy (22 Nov 2026)', () => {
+  it('are asked for with the copy, at addresses made from the copy’s own key', async () => {
+    await runEncodeRequest({ sourceUrl: SOURCE, platform: 'instagram', seconds: 20 })
+    expect(presigned).toEqual(['key-1-copy-instagram.mp4'])
+    expect(presignedStills).toEqual(['key-1-copy-instagram.poster.jpg', 'key-1-copy-instagram.scrub.mp4'])
   })
 })
 

@@ -9,7 +9,7 @@ import { encodeTargetFor, PLATFORM_MEDIA } from './media-fit-core'
 import { cleanCopyWords, copyDuration, type CopyState } from './shrink-core'
 import type { Platform, PostKind } from './publish-core'
 import {
-  POLL_AFTER_MS, PREVIEW_MAX_BYTES, coldQueuedJobs, isVideoUrl, missingPreviewSources, pollablePreviews, refusedWithoutCopy,
+  POLL_AFTER_MS, PREVIEW_MAX_BYTES, coldQueuedJobs, copiesWithoutStills, isVideoUrl, missingPreviewSources, pollablePreviews, refusedWithoutCopy,
   previewPatchFrom, parseWebhookSignature, webhookSignatureSource,
   webhookTimestampFresh,
   askCloudflareOnLookup, type PreviewPatch, type PreviewRow,
@@ -571,6 +571,7 @@ export async function sweepMissingPreviews(): Promise<PreviewSweep> {
   let missing: string[] = []
   let refused: string[] = []
   let cold: EncodeJob[] = []
+  let bare: EncodeJob[] = []
   if (videos.length > 0 || heavies.length > 0) {
     // ask only about the URLs we are considering — a bounded set, never a
     // walk of every file ever uploaded
@@ -590,6 +591,8 @@ export async function sweepMissingPreviews(): Promise<PreviewSweep> {
         refused = refusedWithoutCopy([...heavies, ...videos.filter(isOwnStorageUrl)], [...have, ...unsent], jobs.map(j => j.source_url))
         // asked for, then left: the encoder was full and every retry ran out
         cold = coldQueuedJobs(jobs, Date.now())
+        // finished copies made before the encoder cut its own pictures
+        bare = copiesWithoutStills(jobs)
       }
     }
   }
@@ -618,6 +621,18 @@ export async function sweepMissingPreviews(): Promise<PreviewSweep> {
   for (const url of cold.length > 0 ? [] : refused) {
     const out = await smallerCopyOf(url, 'instagram').catch(() => null)
     if (out?.status === 'encoding') handed++
+  }
+
+  // …and the pictures of copies that have none: seconds each, on the encoder's own short line
+  let pictured = 0
+  if (bare.length > 0) {
+    try {
+      const { askForStills } = await import('./encode-run')
+      for (const j of bare) { if (await askForStills(j)) pictured++; else break }
+    } catch (e) {
+      console.error('[stream] could not ask for pictures:', e instanceof Error ? e.message : e)
+    }
+    if (pictured) console.log(`[stream] sweep: asked for the pictures of ${pictured} cop${pictured === 1 ? 'y' : 'ies'}`)
   }
 
   const polled = await pollStalePreviews()

@@ -16,7 +16,7 @@ import { finalFilesAsPulls } from '../../../../../lib/final-files-core'
 import { usePreviewRows } from '../../../../../components/media/usePreviewRows'
 import { hlsManifestUrl, useHlsSource } from '../../../../../components/media/useHlsSource'
 import { pickPoster, streamBaseUrl } from '../../../../../lib/stream-core'
-import { clipSource, needsPreviewCopy, playableUrl } from '../../../../../lib/playable-core'
+import { clipSource, encoderStills, needsPreviewCopy, playableUrl } from '../../../../../lib/playable-core'
 import { DEFAULT_TZ, formatInZone } from '../../../../../lib/timezone-core'
 import PageTitle from '../../../../ui/PageTitle'
 import { personLabel } from '../../../../../lib/identity-core'
@@ -173,7 +173,8 @@ export default function VideoReviewPage() {
   // while it loads, and the clip fades in once it can show a frame. Nothing
   // jumps, nothing flashes white.
   const [ready, setReady] = useState(false)
-  const poster = pickPoster(preview, null)
+  // our encoder's own poster of the clip first, Cloudflare's otherwise (22 Nov 2026)
+  const poster = (copyUrl ? encoderStills(copyUrl, encodeRows)?.poster : null) ?? pickPoster(preview, null)
   useEffect(() => {
     setReady(false)
     // a master the browser only reads the header of never says "loaded" until

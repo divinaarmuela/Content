@@ -209,7 +209,7 @@ describe('db-types (generated)', () => {
     expect(TABLE_COLUMNS.encode_jobs).toEqual([
       'id', 'source_url', 'platform', 'kind', 'asset_id', 'version_id',
       'slide_index', 'status', 'attempts', 'output_key', 'target_source',
-      'bytes', 'width', 'height', 'duration_sec', 'video_kbps', 'error',
+      'bytes', 'width', 'height', 'duration_sec', 'video_kbps', 'stills', 'error',
       'created_at', 'updated_at',
     ])
     // a job always knows what it is copying, for which channel, how many

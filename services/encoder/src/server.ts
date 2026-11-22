@@ -1,5 +1,5 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
-import { ENCODE_TIMEOUT_MS, runEncode, loggerFor, safeUrl, type EncodeRequest, type EncodeResult } from './encode.js'
+import { ENCODE_TIMEOUT_MS, runEncode, runStills, loggerFor, safeUrl, type EncodeRequest, type EncodeResult } from './encode.js'
 import { JobQueue, shouldExit } from './queue.js'
 import { parseJob as parseJobWith } from './request.js'
 import { SIGNATURE_HEADER, signCallback } from './sign.js'
@@ -52,6 +52,11 @@ export const IDLE_EXIT_MS = 5 * 60 * 1000
 const IDLE_TICK_MS = 30 * 1000
 
 const queue = new JobQueue()
+/** Pictures-only jobs: seconds each, so a longer line of their own, never taking an encode's place. */
+const STILLS_WAITING = 40
+const stillsQueue = new JobQueue(STILLS_WAITING)
+/** everything this machine is holding */
+const holding = (): number => queue.depth + stillsQueue.depth
 /** The job being encoded, so a crash can still report a failure for it. */
 let currentJob: EncodeRequest | null = null
 /** The last moment this machine had anything to do. */
@@ -95,7 +100,7 @@ function authorised(req: IncomingMessage): boolean {
 }
 
 /** Tell the app what happened, with a few tries — this is the only report. */
-async function report(job: EncodeRequest, result: EncodeResult): Promise<void> {
+async function report(job: { jobId: string; callbackUrl: string }, result: EncodeResult): Promise<void> {
   const log = loggerFor(job.jobId)
   const payload = JSON.stringify(result)
   for (let attempt = 1; attempt <= 4; attempt++) {
@@ -169,6 +174,17 @@ const server = createServer((req, res) => {
       send(res, 400, { error: parsed.problem })
       return
     }
+    if ('stillsJob' in parsed) {
+      const sj = parsed.stillsJob
+      const id = `${sj.jobId}#stills`
+      if (stillsQueue.has(id)) { send(res, 202, { accepted: true, jobId: sj.jobId, note: 'already queued' }); return }
+      const took = stillsQueue.add(id, async () => { await report(sj, await runStills(sj)) })
+      if (!took) { send(res, 503, { error: 'busy', jobs: holding() }); return }
+      lastBusyAt = Date.now()
+      loggerFor(sj.jobId)('pictures accepted', { source: safeUrl(sj.sourceUrl), queued: stillsQueue.depth })
+      send(res, 202, { accepted: true, jobId: sj.jobId, jobs: holding() })
+      return
+    }
     const { job } = parsed
 
     // a retried POST for a job already here — running OR waiting — is the
@@ -223,8 +239,8 @@ server.listen(PORT, () => {
  */
 const idleTimer = setInterval(() => {
   const now = Date.now()
-  if (queue.depth > 0) { lastBusyAt = now; return }
-  if (!shouldExit(queue.depth, lastBusyAt, now, IDLE_EXIT_MS)) return
+  if (holding() > 0) { lastBusyAt = now; return }
+  if (!shouldExit(holding(), lastBusyAt, now, IDLE_EXIT_MS)) return
   console.log('[encoder] idle; stopping. Fly will start a machine when the next job arrives.')
   stopping = true
   server.close(() => process.exit(0))
@@ -243,13 +259,13 @@ idleTimer.unref()
 async function shutdown(signal: string): Promise<void> {
   if (stopping) return
   stopping = true
-  console.log(`[encoder] ${signal}: finishing ${queue.depth} job(s) before closing`)
+  console.log(`[encoder] ${signal}: finishing ${holding()} job(s) before closing`)
   server.close()
   const deadline = Date.now() + ENCODE_TIMEOUT_MS
-  while (queue.depth > 0 && Date.now() < deadline) {
+  while (holding() > 0 && Date.now() < deadline) {
     await new Promise(r => setTimeout(r, 2_000))
   }
-  if (queue.depth > 0) console.error('[encoder] gave up waiting; a job is still running')
+  if (holding() > 0) console.error('[encoder] gave up waiting; a job is still running')
   process.exit(0)
 }
 for (const signal of ['SIGTERM', 'SIGINT'] as const) {

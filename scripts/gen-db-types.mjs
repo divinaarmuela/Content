@@ -769,6 +769,11 @@ const GHOST_TABLES = {
     // for again — and confirmed by the callback with what ffprobe actually saw.
     ['duration_sec', col('number', true)],
     ['video_kbps', col('number', true)],
+    // THE COPY'S OWN POSTER AND SCRUB COPY (the owner, 22 Nov 2026): whether the encoder made a poster and a small
+    // every-frame scrub copy from the copy and stored them beside it. Their keys are worked out from `output_key`
+    // (playable-core stillKeys), so nothing but this flag is kept. null = never asked for; 0 = asked, and they
+    // could not be made; 1 = they are there.
+    ['stills', col('number', true)],
     ['error', col('string', true)],
     ['created_at', col('string', false)],
     ['updated_at', col('string', false)],

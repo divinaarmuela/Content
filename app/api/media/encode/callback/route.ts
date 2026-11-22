@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { parseReport, verifyCallback, CALLBACK_SIGNATURE_HEADER } from '../../../../lib/encoder'
-import { settleEncodeJob } from '../../../../lib/encode-jobs'
+import { recordStills, settleEncodeJob } from '../../../../lib/encode-jobs'
 
 /**
  * The encoder telling us how a copy went.
@@ -38,6 +38,13 @@ export async function POST(req: Request) {
   const report = parseReport(body)
   if (!report) return NextResponse.json({ error: 'no job in that report' }, { status: 400 })
 
+  // PICTURES ONLY (22 Nov 2026): the copy finished long ago; this is its poster and hover frames arriving. It settles
+  // nothing and wakes nothing, it only writes how many there are.
+  if (report.only === 'stills') {
+    const changed = await recordStills(report.jobId, report.ok ? (report.stills ?? 0) : 0)
+    return NextResponse.json({ ok: true, changed })
+  }
+
   const settled = await settleEncodeJob({
     id: report.jobId,
     ok: report.ok,
@@ -47,6 +54,7 @@ export async function POST(req: Request) {
     durationSec: report.durationSec,
     videoKbps: report.videoKbps,
     error: report.error ?? null,
+    stills: report.stills,
   })
 
   // A report about a job that was already settled — or one we have no row for

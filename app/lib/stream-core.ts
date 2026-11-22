@@ -387,6 +387,16 @@ export function coldQueuedJobs<T extends { status?: string | null; error?: strin
   return jobs.filter(j => j.status === 'queued' && !j.error && String(j.updated_at ?? '') <= before).slice(0, cap)
 }
 
+/**
+ * Finished copies that have never been asked for their pictures (22 Nov 2026). `stills` is null on every copy made
+ * before the encoder cut them; 0 means it was asked and could not, and is left alone.
+ */
+export function copiesWithoutStills<T extends { status?: string | null; output_key?: string | null; stills?: number | null }>(
+  jobs: readonly T[], cap = 40,
+): T[] {
+  return jobs.filter(j => j.status === 'done' && !!j.output_key && (j.stills === null || j.stills === undefined)).slice(0, cap)
+}
+
 /** How long a `processing` row may sit before a PLAYER asking about it asks Cloudflare too. */
 export const ASK_ON_LOOKUP_AFTER_MS = 20 * 1000
 

@@ -68,6 +68,8 @@ export type EncodeAsk = {
   /** a presigned R2 PUT the finished copy goes straight into */
   uploadUrl: string
   callbackUrl: string
+  /** presigned PUTs for the copy's poster and its scrub copy (22 Nov 2026); left out, neither is made */
+  stills?: { posterUrl: string; scrubUrl: string } | null
 }
 
 export type EncodeAsked =
@@ -110,6 +112,7 @@ export async function requestEncode(ask: EncodeAsk): Promise<EncodeAsked> {
         uploadUrl: ask.uploadUrl,
         callbackUrl: ask.callbackUrl,
         target: ask.target,
+        ...(ask.stills ? { stills: ask.stills } : {}),
       }),
       signal: AbortSignal.timeout(ASK_TIMEOUT_MS),
       cache: 'no-store',
@@ -136,6 +139,35 @@ export async function requestEncode(ask: EncodeAsk): Promise<EncodeAsked> {
   }
 }
 
+/**
+ * PICTURES ONLY, of a copy that already exists: how the clips converted before 22 Nov 2026 get their poster and
+ * scrub copy. Seconds of work on the encoder's own short line, so it never takes an encode's place. Never throws.
+ */
+export async function requestStills(ask: {
+  jobId: string
+  /** the finished copy, in our own storage */
+  copyUrl: string
+  callbackUrl: string
+  stills: { posterUrl: string; scrubUrl: string }
+}): Promise<{ accepted: boolean; reason?: string }> {
+  const base = encoderUrl()
+  const token = encoderToken()
+  if (!base || !token) return { accepted: false, reason: 'no encoder is configured' }
+  try {
+    const res = await fetch(`${base}/encode`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+      body: JSON.stringify({ jobId: ask.jobId, sourceUrl: ask.copyUrl, callbackUrl: ask.callbackUrl, only: 'stills', stills: ask.stills }),
+      signal: AbortSignal.timeout(ASK_TIMEOUT_MS),
+      cache: 'no-store',
+    })
+    if (res.ok) return { accepted: true }
+    return { accepted: false, reason: `the encoder answered ${res.status}` }
+  } catch (e) {
+    return { accepted: false, reason: e instanceof Error ? e.message : 'could not reach the encoder' }
+  }
+}
+
 export type EncodeReport = {
   jobId: string
   ok: boolean
@@ -145,6 +177,10 @@ export type EncodeReport = {
   height: number | null
   videoKbps: number | null
   error?: string
+  /** 1 when the poster and the scrub copy were stored, 0 when they could not be; null when the report says nothing of them */
+  stills: number | null
+  /** the answer to a pictures-only job: it is not a copy finishing, and must not settle one */
+  only: 'stills' | null
 }
 
 /** `t=<unix seconds>,v1=<hex>` — the header the encoder signs with. */
@@ -211,6 +247,8 @@ export function parseReport(raw: unknown): EncodeReport | null {
     width: num(body.width),
     height: num(body.height),
     videoKbps: num(body.videoKbps),
+    stills: 'stills' in body && Number.isFinite(Number(body.stills)) ? (Number(body.stills) > 0 ? 1 : 0) : null,
+    only: body.only === 'stills' ? 'stills' : null,
     ...(typeof body.error === 'string' && body.error ? { error: body.error.slice(0, 500) } : {}),
   }
 }

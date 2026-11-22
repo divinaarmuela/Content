@@ -1003,6 +1003,7 @@ export interface EncodeJob {
   height: number | null
   duration_sec: number | null
   video_kbps: number | null
+  stills: number | null
   error: string | null
   created_at: string
   updated_at: string
@@ -2164,7 +2165,7 @@ export const TABLE_COLUMNS = {
   drive_sources: ['id', 'item_id', 'link', 'drive_id', 'kind', 'added_by', 'stage_at_add', 'last_checked_at', 'last_error', 'file_count', 'created_at', 'updated_at'],
   drive_uploads: ['id', 'upload_uri', 'name', 'parent_id', 'mime_type', 'size', 'received', 'client_id', 'status', 'drive_file_id', 'created_by', 'created_at', 'updated_at', 'purpose', 'item_id', 'version', 'copied_at', 'final_file_id', 'error', 'replaces'],
   email_ingest_log: ['id', 'created_at', 'gmail_message_id', 'mailbox', 'from_email', 'subject', 'received_at', 'status', 'is_lead', 'confidence', 'reasoning', 'lead_id', 'error'],
-  encode_jobs: ['id', 'source_url', 'platform', 'kind', 'asset_id', 'version_id', 'slide_index', 'status', 'attempts', 'output_key', 'target_source', 'bytes', 'width', 'height', 'duration_sec', 'video_kbps', 'error', 'created_at', 'updated_at'],
+  encode_jobs: ['id', 'source_url', 'platform', 'kind', 'asset_id', 'version_id', 'slide_index', 'status', 'attempts', 'output_key', 'target_source', 'bytes', 'width', 'height', 'duration_sec', 'video_kbps', 'stills', 'error', 'created_at', 'updated_at'],
   inbox_account_sync: ['id', 'cursor', 'fetched_at'],
   inbox_client_sync: ['id', 'viewed_at', 'checked_at'],
   inbox_comment_cache: ['id', 'account_id', 'post_id', 'comments', 'needs_reply', 'replied', 'fetched_at'],
@@ -2292,7 +2293,7 @@ export const NULLABLE_COLUMNS = {
   drive_sources: ['added_by', 'stage_at_add', 'last_checked_at', 'last_error', 'file_count'],
   drive_uploads: ['mime_type', 'size', 'client_id', 'drive_file_id', 'created_by', 'purpose', 'item_id', 'version', 'copied_at', 'final_file_id', 'error', 'replaces'],
   email_ingest_log: ['from_email', 'subject', 'received_at', 'is_lead', 'confidence', 'reasoning', 'lead_id', 'error'],
-  encode_jobs: ['kind', 'asset_id', 'version_id', 'slide_index', 'output_key', 'bytes', 'width', 'height', 'duration_sec', 'video_kbps', 'error'],
+  encode_jobs: ['kind', 'asset_id', 'version_id', 'slide_index', 'output_key', 'bytes', 'width', 'height', 'duration_sec', 'video_kbps', 'stills', 'error'],
   inbox_account_sync: ['cursor', 'fetched_at'],
   inbox_client_sync: ['viewed_at', 'checked_at'],
   inbox_comment_cache: [],

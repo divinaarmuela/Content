@@ -188,7 +188,7 @@ describe('reading a report', () => {
       width: 1080, height: 1920, videoKbps: 9820,
     })).toEqual({
       jobId: 'job-1', ok: true, bytes: 100, durationSec: 20,
-      width: 1080, height: 1920, videoKbps: 9820,
+      width: 1080, height: 1920, videoKbps: 9820, stills: null, only: null,
     })
   })
 

@@ -14,6 +14,9 @@ import { fileRound, roundLabel, roundsOf } from '../../lib/edit-round-core'
 import HoverClip from '../../components/media/HoverClip'
 import { usePreviewRows } from '../../components/media/usePreviewRows'
 import { pickPoster, streamThumbnailUrl, TILE_STILL_HEIGHT } from '../../lib/stream-core'
+import { HEAVY_MASTER_BYTES, encoderStills, needsPreviewCopy, playableUrl } from '../../lib/playable-core'
+import { useTable } from '@/lib/db-client'
+import type { EncodeJob } from '@/lib/db-types'
 
 /**
  * THE FILES BEHIND A CARD'S DRIVE LINK, AS TILES (the owner, 15 Sep 2026:
@@ -81,6 +84,16 @@ export default function DriveFolderFiles({ url, wide = false, reviewHref, approv
   // hover frames the moment they are ready (16 Sep 2026)
   const previews = usePreviewRows(done.filter(f => kindOf(f.mime, f.name) === 'video').map(f => f.url as string))
   const previewOf = (t: FolderTile) => { const r = previews.get(t.preview); return r && r.state === 'ready' ? r : null }
+  // OUR ENCODER'S OWN POSTER AND SCRUB COPY FIRST (the owner, 22 Nov 2026: "I need exact frames, so when it is hovered
+  // it is the actual hover process"): a sharp poster at rest, and under the pointer the clip itself at that moment,
+  // every frame of it, whatever the master's size or format. Cloudflare's stills stand in for a clip our encoder
+  // has not made a copy of. And the tile's own video is the small copy, never a heavy master the browser cannot draw.
+  const hasVideo = done.some(f => kindOf(f.mime, f.name) === 'video')
+  const { rows: encodeRows } = useTable<EncodeJob>('encode_jobs', { enabled: hasVideo })
+  const ownStills = (t: FolderTile) => encoderStills(t.preview, encodeRows)
+  const tileSrc = (t: FolderTile) => playableUrl(t.preview, encodeRows)
+  const heavyBare = (t: FolderTile) => tileSrc(t) === t.preview && needsPreviewCopy(t.preview)
+    && Number(done.find(f => f.id === t.id)?.size ?? 0) > HEAVY_MASTER_BYTES
 
   useEffect(() => {
     setShowing(null)
@@ -148,8 +161,13 @@ export default function DriveFolderFiles({ url, wide = false, reviewHref, approv
             : isCopy(t) && t.kind === 'video'
               // THE CLIP'S OWN FIRST FRAME (16 Sep 2026): our copy is seekable, so
               // the tile is the clip a moment in, and no picture has to be made
-              ? <HoverClip src={t.preview} className="h-full w-full object-cover" poster={pickPoster(previewOf(t), null)} duration={previewOf(t)?.duration_sec ?? null}
-                  frames={previewOf(t) ? (s => streamThumbnailUrl(previewOf(t), { time: `${s}s`, height: TILE_STILL_HEIGHT }) as string) : null} />
+              ? (ownStills(t)
+                ? <HoverClip src={tileSrc(t)} className="h-full w-full object-cover" poster={ownStills(t)!.poster} duration={ownStills(t)!.duration} scrub={ownStills(t)!.scrub} />
+                : heavyBare(t) && !previewOf(t)
+                  // a heavy master with no copy yet: nothing a browser can draw, so nothing is loaded
+                  ? <span className="flex h-full w-full flex-col items-center justify-center gap-1 text-muted-foreground" data-tile-wait><Glyph className="h-6 w-6" strokeWidth={1.6} aria-hidden /><span className="text-[11px]">Preview being made</span></span>
+                  : <HoverClip src={tileSrc(t)} className="h-full w-full object-cover" poster={pickPoster(previewOf(t), null)} duration={previewOf(t)?.duration_sec ?? null}
+                      frames={previewOf(t) ? (s => streamThumbnailUrl(previewOf(t), { time: `${s}s`, height: TILE_STILL_HEIGHT }) as string) : null} />)
               : <span className="flex h-full w-full items-center justify-center text-muted-foreground"><Glyph className="h-6 w-6" strokeWidth={1.6} aria-hidden /></span>}
           {approvedIds?.includes(t.id) && (
             <span className="absolute left-1.5 top-1.5 z-10 inline-flex items-center gap-1 rounded-full bg-accent-green px-2 py-0.5 text-[11px] font-semibold text-ink shadow" title="Approved by the client">

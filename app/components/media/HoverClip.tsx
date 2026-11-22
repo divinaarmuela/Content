@@ -20,7 +20,15 @@ import { formatStamp } from '../../lib/video-review-core'
 const SEEK_EVERY_MS = 220
 const FRAME_EVERY_MS = 90
 
-export default function HoverClip({ src, className = '', at = 0.5, poster, duration, frames }: {
+export default function HoverClip({ src, className = '', at = 0.5, poster, duration, frames, scrub }: {
+  /**
+   * EVERY FRAME UNDER THE POINTER (the owner, 22 Nov 2026: "I need exact frames, so when it is hovered it is the
+   * actual hover process"): our encoder's scrub copy of the clip, a small silent .mp4 with a keyframe every six
+   * frames. Given it (with `poster` and `duration`), the tile is the poster at rest; the first time the pointer
+   * arrives the scrub copy is loaded, and from then on the tile shows the clip at the exact moment under the
+   * pointer, jumping about 6 ms at a time. Nothing is loaded for a tile nobody points at.
+   */
+  scrub?: string | null
   src: string
   className?: string
   /** the second shown at rest */
@@ -43,6 +51,21 @@ export default function HoverClip({ src, className = '', at = 0.5, poster, durat
   useEffect(() => () => { if (frameTimer.current !== null) clearTimeout(frameTimer.current); if (timer.current !== null) clearTimeout(timer.current) }, [])
 
   const stills = !!frames && !!poster && typeof duration === 'number' && duration > 0
+  const scrubbing = !!scrub && !!poster && typeof duration === 'number' && duration > 0
+  const scrubRef = useRef<HTMLVideoElement>(null)
+  /** the scrub copy is asked for on the first hover, and kept */
+  const [armed, setArmed] = useState(false)
+  /** it can show a frame */
+  const [drawn, setDrawn] = useState(false)
+  const scrubWant = useRef<number | null>(null)
+  /** one jump at a time: the next is taken the moment this one lands, and it is always the latest asked for */
+  const scrubSeek = () => {
+    const v = scrubRef.current
+    const t = scrubWant.current
+    if (!v || t === null || v.seeking || v.readyState < 1) return
+    scrubWant.current = null
+    v.currentTime = t
+  }
 
   const showFrame = () => {
     frameTimer.current = null
@@ -66,6 +89,13 @@ export default function HoverClip({ src, className = '', at = 0.5, poster, durat
   }
 
   const moveTo = (fraction: number) => {
+    if (scrubbing) {
+      const t = Math.max(0, Math.min(duration - 0.04, fraction * duration))
+      setHover({ x: fraction, t })
+      scrubWant.current = t
+      scrubSeek()
+      return
+    }
     if (stills) {
       const t = Math.max(0, Math.min(duration - 0.05, fraction * duration))
       setHover({ x: fraction, t })
@@ -84,6 +114,7 @@ export default function HoverClip({ src, className = '', at = 0.5, poster, durat
   return (
     <span className="relative block h-full w-full"
       onMouseEnter={() => {
+        if (scrubbing) { setArmed(true); return }
         if (!stills) { void ref.current?.play().catch(() => undefined); return }
         // warm every still of this clip the moment the pointer arrives, so
         // each swap after that is from the browser's cache — instant
@@ -95,6 +126,7 @@ export default function HoverClip({ src, className = '', at = 0.5, poster, durat
       }}
       onMouseLeave={() => {
         setHover(null)
+        scrubWant.current = null
         wanted.current = null
         wantedFrame.current = null
         setFrame(null)
@@ -105,7 +137,20 @@ export default function HoverClip({ src, className = '', at = 0.5, poster, durat
         v.pause()
         v.currentTime = at
       }}>
-      {stills
+      {scrubbing
+        ? (
+          <>
+            {/* eslint-disable-next-line @next/next/no-img-element -- our encoder's poster of the clip */}
+            <img src={poster} alt="" draggable={false} className={`${className} pointer-events-none select-none`} />
+            {armed && (
+              <video ref={scrubRef} src={scrub} muted playsInline preload="auto" aria-hidden tabIndex={-1} data-scrub
+                onLoadedData={() => { setDrawn(true); scrubSeek() }}
+                onSeeked={scrubSeek}
+                className={`${className} pointer-events-none absolute inset-0 ${hover && drawn ? 'opacity-100' : 'opacity-0'}`} />
+            )}
+          </>
+        )
+        : stills
         // eslint-disable-next-line @next/next/no-img-element -- the preview's stills
         ? <img src={frame ?? poster} alt="" draggable={false} className={`${className} pointer-events-none select-none`} />
         : <video ref={ref} src={`${src}#t=${at}`} muted playsInline loop preload="metadata" aria-hidden tabIndex={-1}

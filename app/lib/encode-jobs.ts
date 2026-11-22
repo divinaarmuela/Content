@@ -179,6 +179,7 @@ export async function claimEncodeJob(input: {
       target_source: input.targetSource,
       output_key: input.outputKey,
       bytes: null,
+      stills: null,
       width: null,
       height: null,
       // what the bitrate was budgeted FOR, so a retry budgets for it again
@@ -317,6 +318,16 @@ export async function returnBusyAttempt(id: string): Promise<void> {
       : null).catch(() => null)
 }
 
+/**
+ * The pictures of a finished copy have been made (or could not be). Only ever written onto a `done` row: pictures of
+ * a copy that is not there mean nothing. 0 is kept, so a copy whose pictures cannot be cut is asked about once.
+ */
+export async function recordStills(id: string, stills: number): Promise<boolean> {
+  const moved = await table<EncodeJob>('encode_jobs').claim(id, cur =>
+    cur && cur.status === 'done' ? { ...cur, stills, updated_at: new Date().toISOString() } : null)
+  return moved.claimed
+}
+
 /** The encoder took the job. queued → running, and only from queued. */
 export async function markEncodeRunning(id: string): Promise<boolean> {
   const moved = await table<EncodeJob>('encode_jobs').claim(id, cur =>
@@ -360,6 +371,8 @@ export async function settleEncodeJob(input: {
   durationSec?: number | null
   videoKbps?: number | null
   error?: string | null
+  /** 1 when the encoder stored a poster and a scrub copy beside the copy, 0 when it could not; null when it said nothing */
+  stills?: number | null
   /** override the sentence-based judgement, when the caller knows better */
   permanent?: boolean
 }): Promise<{ settled: boolean; row: EncodeJob | null; retrying: boolean }> {
@@ -404,6 +417,7 @@ export async function settleEncodeJob(input: {
         status: 'done',
         output_key: input.outputKey ?? cur.output_key,
         error: null,
+        ...(input.stills !== undefined && input.stills !== null ? { stills: input.stills } : {}),
         // the machine sizes the copy from the length it PROBED, so a report
         // that carries a duration is the honest answer to "what was this
         // budgeted for?" — whatever the app had to guess when it asked

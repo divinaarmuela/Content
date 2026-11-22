@@ -28,6 +28,11 @@ type Task = () => Promise<void>
 export class JobQueue {
   private runningId: string | null = null
   private waiting: { id: string; task: Task }[] = []
+  private readonly maxWaiting: number
+
+  /** `maxWaiting` is the line behind the running job: two for encodes, longer for the pictures-only jobs, which
+   *  take seconds each and would otherwise be turned away three at a time (22 Nov 2026). */
+  constructor(maxWaiting: number = MAX_WAITING) { this.maxWaiting = maxWaiting }
 
   /** How many jobs this machine is holding, running one included. */
   get depth(): number {
@@ -40,7 +45,7 @@ export class JobQueue {
   }
 
   get busy(): boolean {
-    return this.waiting.length >= MAX_WAITING
+    return this.waiting.length >= this.maxWaiting
   }
 
   /** Is this job already here — running, or waiting to run? */

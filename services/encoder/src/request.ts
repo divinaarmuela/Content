@@ -1,5 +1,6 @@
 import { targetProblem, type EncodeTarget } from './ladder.js'
-import type { EncodeRequest } from './encode.js'
+import type { EncodeRequest, StillsRequest } from './encode.js'
+import { parseStills } from './stills.js'
 
 /**
  * Reading one job description, and refusing every shape of it that is not one.
@@ -56,7 +57,7 @@ function usableUrl(value: unknown): string | null {
   return url.toString()
 }
 
-type ParsedJob = { job: EncodeRequest } | { problem: string }
+type ParsedJob = { job: EncodeRequest } | { stillsJob: StillsRequest } | { problem: string }
 
 export function parseJob(raw: unknown, hosts: string[] = []): ParsedJob {
   const body = (raw ?? {}) as Record<string, unknown>
@@ -67,13 +68,23 @@ export function parseJob(raw: unknown, hosts: string[] = []): ParsedJob {
   if (sourceProblem) return { problem: sourceProblem }
   const sourceUrl = String(body.sourceUrl)
 
+  const callbackUrl = usableUrl(body.callbackUrl)
+  const stills = parseStills(body.stills)
+  if (stills && 'problem' in stills) return { problem: stills.problem }
+
+  // PICTURES ONLY (22 Nov 2026): no copy is made, so there is no target and nowhere to put one
+  if (body.only === 'stills') {
+    if (!callbackUrl) return { problem: 'callbackUrl must be an https URL' }
+    if (!stills) return { problem: 'a pictures-only job needs stills' }
+    return { stillsJob: { jobId, sourceUrl, callbackUrl, stills } }
+  }
+
   const uploadUrl = usableUrl(body.uploadUrl)
   if (!uploadUrl) return { problem: 'uploadUrl must be an https URL' }
-  const callbackUrl = usableUrl(body.callbackUrl)
   if (!callbackUrl) return { problem: 'callbackUrl must be an https URL' }
 
   const problem = targetProblem(body.target as Partial<EncodeTarget>)
   if (problem) return { problem }
 
-  return { job: { jobId, sourceUrl, uploadUrl, callbackUrl, target: body.target as EncodeTarget } }
+  return { job: { jobId, sourceUrl, uploadUrl, callbackUrl, target: body.target as EncodeTarget, ...(stills ? { stills } : {}) } }
 }

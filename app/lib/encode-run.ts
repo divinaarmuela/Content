@@ -4,10 +4,11 @@ import {
   GAVE_UP_MESSAGE, MAX_ENCODE_ATTEMPTS, claimEncodeJob, markEncodeRunning,
   reclaimEncodeJob, reopenEncodeJob, returnBusyAttempt, settleEncodeJob, staleEncodeJobs,
 } from './encode-jobs'
-import { callbackUrl, requestEncode } from './encoder'
+import { callbackUrl, requestEncode, requestStills } from './encoder'
 import { encodeTargetFor, type EncodeTarget } from './media-fit-core'
 import { isPlatform, type Platform, type PostKind } from './publish-core'
 import { objectKey, signUploadForKey } from './storage'
+import { stillKeys } from './playable-core'
 
 /**
  * Ask the encoder for one copy, and leave the row saying so.
@@ -80,6 +81,36 @@ export type EncodeRunResult =
   | { at: 'existing'; jobId: string; status: string }
   | { at: 'refused'; reason: string }
 
+/**
+ * Where the copy's poster and scrub copy are to be put (22 Nov 2026). Signing is arithmetic on keys worked out
+ * from the copy's own key, so it costs nothing; if it cannot be done the copy is still made, without them.
+ */
+export async function signStills(outputKey: string): Promise<{ posterUrl: string; scrubUrl: string } | null> {
+  try {
+    const keys = stillKeys(outputKey)
+    const sign = async (k: string, type: string) => (await signUploadForKey(k, type, { expiresIn: UPLOAD_URL_SECONDS })).signedUrl
+    return { posterUrl: await sign(keys.poster, 'image/jpeg'), scrubUrl: await sign(keys.scrub, 'video/mp4') }
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Ask for the pictures of a copy that is already made (the owner, 22 Nov 2026: "make sure other videos are also
+ * re run"). The encoder downloads the small copy, not the master, so this is seconds. True when it took the job;
+ * the count arrives on the callback (`recordStills`).
+ */
+export async function askForStills(row: Pick<EncodeJob, 'id' | 'source_url' | 'output_key'>): Promise<boolean> {
+  const key = String(row.output_key ?? '').replace(/^\/+/, '')
+  if (!key) return false
+  let copyUrl: string
+  try { copyUrl = `${new URL(row.source_url).origin}/${key}` } catch { return false }
+  const stills = await signStills(key)
+  if (!stills) return false
+  const out = await requestStills({ jobId: row.id, copyUrl, callbackUrl: callbackUrl(), stills })
+  return out.accepted
+}
+
 /** Hand one job to the encoder, on a row that already exists and is ours. */
 async function askEncoder(
   row: EncodeJob, target: EncodeTarget,
@@ -107,6 +138,7 @@ async function askEncoder(
 
   const asked = await requestEncode({
     jobId, sourceUrl: row.source_url, target, uploadUrl, callbackUrl: callbackUrl(),
+    stills: await signStills(key),
   })
 
   if (!asked.accepted) {
