@@ -9,7 +9,7 @@ import { encodeTargetFor, PLATFORM_MEDIA } from './media-fit-core'
 import { cleanCopyWords, copyDuration, type CopyState } from './shrink-core'
 import type { Platform, PostKind } from './publish-core'
 import {
-  POLL_AFTER_MS, PREVIEW_MAX_BYTES, isVideoUrl, missingPreviewSources, pollablePreviews, refusedWithoutCopy,
+  POLL_AFTER_MS, PREVIEW_MAX_BYTES, coldQueuedJobs, isVideoUrl, missingPreviewSources, pollablePreviews, refusedWithoutCopy,
   previewPatchFrom, parseWebhookSignature, webhookSignatureSource,
   webhookTimestampFresh,
   askCloudflareOnLookup, type PreviewPatch, type PreviewRow,
@@ -570,6 +570,7 @@ export async function sweepMissingPreviews(): Promise<PreviewSweep> {
   const heavies = [...new Set(heavy)]
   let missing: string[] = []
   let refused: string[] = []
+  let cold: EncodeJob[] = []
   if (videos.length > 0 || heavies.length > 0) {
     // ask only about the URLs we are considering — a bounded set, never a
     // walk of every file ever uploaded
@@ -583,9 +584,13 @@ export async function sweepMissingPreviews(): Promise<PreviewSweep> {
     // …and so do the heavy masters that were never sent to Cloudflare, unless it has since made a preview of one
     const known = new Set(have.map(r => r.source_url))
     const unsent = heavies.filter(u => !known.has(u)).map(u => ({ source_url: u, state: 'error' }))
-    if (encoderConfigured() && (unsent.length > 0 || have.some(r => r.state === 'error'))) {
+    if (encoderConfigured()) {
       const jobs = await table<EncodeJob>('encode_jobs').list({ where: r => asked.has(r.source_url) }).catch(() => null)
-      if (jobs) refused = refusedWithoutCopy([...heavies, ...videos.filter(isOwnStorageUrl)], [...have, ...unsent], jobs.map(j => j.source_url))
+      if (jobs) {
+        refused = refusedWithoutCopy([...heavies, ...videos.filter(isOwnStorageUrl)], [...have, ...unsent], jobs.map(j => j.source_url))
+        // asked for, then left: the encoder was full and every retry ran out
+        cold = coldQueuedJobs(jobs, Date.now())
+      }
     }
   }
 
@@ -596,7 +601,21 @@ export async function sweepMissingPreviews(): Promise<PreviewSweep> {
   }
 
   let handed = 0
-  for (const url of refused) {
+  // the left-behind ones first: they have waited longest
+  if (cold.length > 0) {
+    try {
+      const { inngest } = await import('../inngest/client')
+      await inngest.send(cold.map(j => ({
+        name: 'media/encode' as const,
+        data: { sourceUrl: j.source_url, platform: j.platform, kind: j.kind ?? null, seconds: j.duration_sec ?? null },
+      })))
+      handed += cold.length
+    } catch (e) {
+      console.error('[stream] could not ask again for queued copies:', e instanceof Error ? e.message : e)
+    }
+  }
+  // the encoder does one at a time: with a queue already waiting, new ones wait for the next sweep
+  for (const url of cold.length > 0 ? [] : refused) {
     const out = await smallerCopyOf(url, 'instagram').catch(() => null)
     if (out?.status === 'encoding') handed++
   }

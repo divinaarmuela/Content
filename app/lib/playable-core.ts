@@ -67,6 +67,41 @@ export function needsPreviewCopy(url: string): boolean {
 
 export const MOV_PREVIEW_WAIT = 'Preview being made — the original is a .mov'
 
+/**
+ * WHAT THE CLIP PAGE HANDS ITS PLAYER (the owner, 22 Nov 2026: "videos are still loading very slow, why can't it be
+ * instant"). Read in the owner's own browser that day: for the first seconds the page pointed the player at the
+ * 1.67 GB master, a file the browser cannot draw, and four requests pulled about 20 MB of it before the 8 MB copy
+ * was even asked for. Alone, that copy starts in under a second.
+ *
+ * So a heavy master is never the player's source. While the page is still finding out whether a copy exists it
+ * waits ('checking'); with none yet it says one is being made. A light master is played as before: a small .mov
+ * very often plays, and waiting on a copy of it would be slower, not faster.
+ */
+export const HEAVY_MASTER_BYTES = 300 * 1024 * 1024
+export type ClipPick = { src: string | null; state: 'play' | 'checking' | 'making' | 'failed' }
+export function clipSource(input: {
+  /** our stored copy of the file, the master */
+  master: string | null
+  masterBytes: number | null | undefined
+  /** Cloudflare's stream of it, when ready */
+  hls: string | null
+  /** our encoder's .mp4 of it, when done */
+  encoded: string | null
+  /** have the copy jobs been read yet */
+  jobsLoaded: boolean
+  copyFailed: boolean
+  /** where the file plays from when we hold no copy at all (straight from Drive) */
+  fallback: string
+}): ClipPick {
+  if (input.hls) return { src: input.hls, state: 'play' }
+  if (input.encoded) return { src: input.encoded, state: 'play' }
+  if (!input.master) return { src: input.fallback, state: 'play' }
+  const heavy = needsPreviewCopy(input.master) && Number(input.masterBytes ?? 0) > HEAVY_MASTER_BYTES
+  if (!heavy) return { src: input.master, state: 'play' }
+  if (!input.jobsLoaded) return { src: null, state: 'checking' }
+  return { src: null, state: input.copyFailed ? 'failed' : 'making' }
+}
+
 /** A Cloudflare Stream preview row, as much of it as this needs (stream-core PreviewRow). */
 export type StreamRowLike = {
   state?: string | null

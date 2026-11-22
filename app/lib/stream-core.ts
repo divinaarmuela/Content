@@ -374,6 +374,19 @@ export function refusedWithoutCopy(
   return out
 }
 
+/**
+ * Copy jobs that were asked for and then left: still `queued`, no reason on the row, and untouched for five minutes
+ * (live, 22 Nov 2026: fourteen sat like that until a 90-minute sweep). The half-hourly sweep asks for these again,
+ * a few at a time, so the longest a queued copy waits on a full encoder is half an hour.
+ */
+export const QUEUED_COLD_MS = 5 * 60 * 1000
+export function coldQueuedJobs<T extends { status?: string | null; error?: string | null; updated_at?: string | null }>(
+  jobs: readonly T[], now: number, cap = 10,
+): T[] {
+  const before = new Date(now - QUEUED_COLD_MS).toISOString()
+  return jobs.filter(j => j.status === 'queued' && !j.error && String(j.updated_at ?? '') <= before).slice(0, cap)
+}
+
 /** How long a `processing` row may sit before a PLAYER asking about it asks Cloudflare too. */
 export const ASK_ON_LOOKUP_AFTER_MS = 20 * 1000
 

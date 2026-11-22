@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   POLL_AFTER_MS, PREPARING_CLIENT, PREPARING_TEAM,
-  isVideoUrl, mapStreamState, missingPreviewSources, parseWebhookSignature, refusedWithoutCopy,
+  coldQueuedJobs, QUEUED_COLD_MS, isVideoUrl, mapStreamState, missingPreviewSources, parseWebhookSignature, refusedWithoutCopy,
   pickPoster, pollablePreviews, previewCountsLine, previewPatchFrom,
   previewStateFor, streamBaseUrl, streamEmbedUrl, streamThumbnailUrl,
   webhookSignatureSource, webhookTimestampFresh,
@@ -222,6 +222,25 @@ describe('a file Cloudflare refused goes to our encoder without being opened (22
     const pull = require('node:fs').readFileSync('app/lib/drive-pull.ts', 'utf8') as string
     expect(pull).toMatch(/copyHeavyVideos\(files\.filter/)
     expect(sweep).toMatch(/refusedWithoutCopy\(/)
+  })
+})
+
+describe('a copy that was asked for and then left is asked for again (22 Nov 2026)', () => {
+  const now = Date.parse('2026-11-22T08:10:00Z')
+  const at = (msAgo: number) => new Date(now - msAgo).toISOString()
+  it('picks queued jobs untouched for five minutes, and nothing else', () => {
+    const jobs = [
+      { id: 'a', status: 'queued', error: null, updated_at: at(QUEUED_COLD_MS + 1000) },
+      { id: 'b', status: 'queued', error: null, updated_at: at(60_000) },
+      { id: 'c', status: 'running', error: null, updated_at: at(QUEUED_COLD_MS * 3) },
+      { id: 'd', status: 'done', error: null, updated_at: at(QUEUED_COLD_MS * 3) },
+      { id: 'e', status: 'queued', error: 'the file has no video', updated_at: at(QUEUED_COLD_MS * 3) },
+    ]
+    expect(coldQueuedJobs(jobs, now).map(j => j.id)).toEqual(['a'])
+  })
+  it('a few at a time', () => {
+    const many = Array.from({ length: 30 }, (_, i) => ({ id: String(i), status: 'queued', error: null, updated_at: at(QUEUED_COLD_MS * 2) }))
+    expect(coldQueuedJobs(many, now)).toHaveLength(10)
   })
 })
 

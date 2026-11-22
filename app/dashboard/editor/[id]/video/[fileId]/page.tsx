@@ -16,7 +16,7 @@ import { finalFilesAsPulls } from '../../../../../lib/final-files-core'
 import { usePreviewRows } from '../../../../../components/media/usePreviewRows'
 import { hlsManifestUrl, useHlsSource } from '../../../../../components/media/useHlsSource'
 import { pickPoster, streamBaseUrl } from '../../../../../lib/stream-core'
-import { needsPreviewCopy, playableUrl } from '../../../../../lib/playable-core'
+import { clipSource, needsPreviewCopy, playableUrl } from '../../../../../lib/playable-core'
 import { DEFAULT_TZ, formatInZone } from '../../../../../lib/timezone-core'
 import PageTitle from '../../../../ui/PageTitle'
 import { personLabel } from '../../../../../lib/identity-core'
@@ -82,7 +82,7 @@ export default function VideoReviewPage() {
   // version 1's copy was no longer looked for and the page fell back to a
   // private Drive file)
   const { row: shootRow } = useRow<Batch>('batches', item?.batch_id ?? null)
-  const { rows: cardPulls } = useTable<DrivePull>('drive_pulls', { by: { scope_id: id } as never })
+  const { rows: cardPulls, loading: pullsLoading } = useTable<DrivePull>('drive_pulls', { by: { scope_id: id } as never })
   const footageId = driveTargetOf(shootRow?.footage_url)?.id ?? null
   const { row: footagePull } = useRow<DrivePull>('drive_pulls', footageId ? pullId(footageId) : null)
   const copy = [...[...cardPulls, footagePull].flatMap(p => filesOf(p)), ...finalFilesAsPulls(item ?? {})].find(f => f.id === fileId && f.status === 'done' && f.url) ?? null
@@ -143,12 +143,25 @@ export default function VideoReviewPage() {
   // A MASTER CLOUDFLARE REFUSED PLAYS FROM OUR ENCODER'S COPY (the owner, 17 Nov 2026): the same .mp4 Post approval
   // plays. While that copy is being made the master is not loaded at all — a browser cannot draw a ProRes .mov, and
   // fetching two gigabytes to show a black box was the eleven-second wait — and the stage says what is happening.
-  const { rows: encodeRows } = useTable<EncodeJob>('encode_jobs', { enabled: !!copyUrl && !isImage })
+  const { rows: encodeRows, loading: encodeLoading } = useTable<EncodeJob>('encode_jobs', { enabled: !!copyUrl && !isImage })
   const encoded = copyUrl ? playableUrl(copyUrl, encodeRows) : null
   const encodedCopy = encoded && encoded !== copyUrl ? encoded : null
-  const refused = !isImage && !!copyUrl && !streamBase && !encodedCopy && preview?.state === 'error' && needsPreviewCopy(copyUrl)
-  const copyFailed = refused && encodeRows.some(r => r.source_url === copyUrl && r.status === 'failed')
-  useHlsSource(video, isImage || refused ? null : streamBase ? hlsManifestUrl(streamBase) : (encodedCopy ?? copyUrl ?? `/api/drive/stream?id=${encodeURIComponent(fileId)}&name=${encodeURIComponent(name)}`))
+  // A HEAVY MASTER IS NEVER LOADED INTO THE PLAYER (the owner, 22 Nov 2026: "why can't it be instant"): the page used
+  // to point the player at the 1.67 GB original while it found out whether a copy existed, and the browser pulled
+  // about 20 MB of a file it cannot draw before the 8 MB copy was asked for. clipSource (playable-core) decides.
+  const pick = clipSource({
+    master: copyUrl, masterBytes: copy?.size ?? null,
+    hls: streamBase ? hlsManifestUrl(streamBase) : null, encoded: encodedCopy,
+    jobsLoaded: !encodeLoading,
+    copyFailed: !!copyUrl && encodeRows.some(r => r.source_url === copyUrl && r.status === 'failed'),
+    fallback: `/api/drive/stream?id=${encodeURIComponent(fileId)}&name=${encodeURIComponent(name)}`,
+  })
+  const refused = !isImage && (pick.state === 'making' || pick.state === 'failed'
+    || (!!copyUrl && !streamBase && !encodedCopy && preview?.state === 'error' && needsPreviewCopy(copyUrl)))
+  const copyFailed = pick.state === 'failed' || (refused && encodeRows.some(r => r.source_url === copyUrl && r.status === 'failed'))
+  // …and nothing at all until the card and its copies have been read: before that the page does not know it holds a
+  // copy, and would ask Drive for the file
+  useHlsSource(video, isImage || refused || loading || pullsLoading ? null : pick.src)
   const [now, setNow] = useState(0)
   const [duration, setDuration] = useState(0)
   const [text, setText] = useState('')
@@ -266,7 +279,7 @@ export default function VideoReviewPage() {
               <img key={fileId} src={fileSrc} alt={name} onLoad={() => setReady(true)}
                 className={`absolute inset-0 h-full w-full object-contain transition-opacity duration-300 ${ready ? 'opacity-100' : 'opacity-0'}`} />
             ) : (
-              <video key={fileId} ref={video} controls playsInline preload="metadata" poster={poster ?? undefined}
+              <video key={fileId} ref={video} controls playsInline preload="auto" poster={poster ?? undefined}
                 className={`absolute inset-0 h-full w-full object-contain transition-opacity duration-300 ${ready ? 'opacity-100' : 'opacity-0'}`}
                 onLoadedData={() => setReady(true)}
                 onCanPlay={() => setReady(true)}
