@@ -333,6 +333,39 @@ export function missingPreviewSources(
   return out
 }
 
+/**
+ * A master past this size is not sent to Cloudflare by the app itself (Stream is billed by the minute stored, and a
+ * heavy camera master is the one it refuses anyway). Our own encoder makes its playable copy instead.
+ */
+export const PREVIEW_MAX_BYTES = 800 * 1024 * 1024
+
+/**
+ * Refused files nobody has made a playable copy of yet (the owner, 22 Nov 2026: "why does it need to be opened to
+ * have a copy, why can't it be automated"). Cloudflare turns away a heavy camera master; our own encoder has no such
+ * limit, and until now it was only asked when a person opened the clip. The sweep asks for these itself: a video
+ * whose preview row says "error" and which has no encoder job of any kind. One with a job, finished or failed, is
+ * left alone, so a file the encoder cannot do is tried once and not every half hour.
+ */
+export function refusedWithoutCopy(
+  candidates: readonly (string | null | undefined)[],
+  previews: readonly { source_url?: string | null; state?: string | null }[],
+  encoded: readonly string[],
+  cap = 10,
+): string[] {
+  const refused = new Set(previews.filter(p => p?.state === 'error').map(p => String(p.source_url ?? '')))
+  const have = new Set(encoded.map(String))
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const raw of candidates) {
+    const url = String(raw ?? '').trim()
+    if (!url || !isVideoUrl(url) || !refused.has(url) || have.has(url) || seen.has(url)) continue
+    seen.add(url)
+    out.push(url)
+    if (out.length >= cap) break
+  }
+  return out
+}
+
 /** How long a `processing` row may sit before a PLAYER asking about it asks Cloudflare too. */
 export const ASK_ON_LOOKUP_AFTER_MS = 20 * 1000
 

@@ -105,7 +105,9 @@ describe('the job, the triggers and the pages (source pins)', () => {
     expect(s).toContain("if (!same) files.push({ id: f.id, name: f.name, mime: f.mime, size: f.size, done: 0, url: null, status: 'waiting', upload_id: null, parts: [], version: round, modified: f.modified, ")
     // a finished pull asks for a preview of each video copy up to 800 MB (16 Sep 2026)
     expect(s).toContain("previewVideos(files.filter(f => f.status === 'done' && !!f.url && fileKindOf(f.mime, f.name) === 'video' && (f.size ?? 0) <= PREVIEW_MAX_BYTES).map(f => f.url))")
-    expect(s).toContain('const PREVIEW_MAX_BYTES = 800 * 1024 * 1024')
+    // the size line lives in stream-core now (22 Nov 2026), so the sweep and the pull read one number
+    expect(readFileSync('app/lib/stream-core.ts', 'utf8')).toContain('export const PREVIEW_MAX_BYTES = 800 * 1024 * 1024')
+    expect(s).toContain("copyHeavyVideos(files.filter(f => f.status === 'done' && !!f.url && fileKindOf(f.mime, f.name) === 'video' && (f.size ?? 0) > PREVIEW_MAX_BYTES).map(f => f.url))")
     expect(s).toContain('const round = version ?? null')
     const st = src('app/lib/storage.ts')
     for (const fn of ['openMultipart', 'putMultipartPart', 'closeMultipart', 'abortMultipart']) expect(st).toContain(`export async function ${fn}(`)

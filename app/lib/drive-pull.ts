@@ -13,7 +13,8 @@ import { driveTargetOf } from './card-link-core'
 import { sameDriveCut } from './drive-handin-core'
 import { afterResponse } from './after-response'
 import { fileRound } from './edit-round-core'
-import { previewVideos } from './stream'
+import { copyHeavyVideos, previewVideos } from './stream'
+import { PREVIEW_MAX_BYTES } from './stream-core'
 import { kindOf as fileKindOf } from './files-core'
 
 /**
@@ -38,7 +39,6 @@ export const PULL_EVENT = 'drive/pull.folder'
 const MAX_FILES = 400
 // six levels below the link (19 Oct 2026: "anything that was there its shown" — sub, sub-sub and on down)
 const MAX_DEPTH = 6
-const PREVIEW_MAX_BYTES = 800 * 1024 * 1024
 
 type Kind = 'batch' | 'item'
 /** what the link is: a folder to work from, or an edit handed in (16 Sep 2026) */
@@ -418,6 +418,8 @@ export async function finishPull(id: string): Promise<'done' | 'failed'> {
   // Only clips a person will scrub: a camera master past 800 MB is left as
   // the copy alone (Stream is billed by the minute stored).
   previewVideos(files.filter(f => f.status === 'done' && !!f.url && fileKindOf(f.mime, f.name) === 'video' && (f.size ?? 0) <= PREVIEW_MAX_BYTES).map(f => f.url))
+  // …and the heavy ones get their playable copy from our own encoder, now, not when somebody opens one (22 Nov 2026)
+  copyHeavyVideos(files.filter(f => f.status === 'done' && !!f.url && fileKindOf(f.mime, f.name) === 'video' && (f.size ?? 0) > PREVIEW_MAX_BYTES).map(f => f.url))
   await pulls.update(id, {
     status, finished_at: new Date().toISOString(), updated_at: new Date().toISOString(),
     error: failed.length ? `${failed.length} ${failed.length === 1 ? 'file' : 'files'} could not be copied (${failed[0].name}${failed[0].error ? `: ${failed[0].error}` : ''})` : null,

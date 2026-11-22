@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   POLL_AFTER_MS, PREPARING_CLIENT, PREPARING_TEAM,
-  isVideoUrl, mapStreamState, missingPreviewSources, parseWebhookSignature,
+  isVideoUrl, mapStreamState, missingPreviewSources, parseWebhookSignature, refusedWithoutCopy,
   pickPoster, pollablePreviews, previewCountsLine, previewPatchFrom,
   previewStateFor, streamBaseUrl, streamEmbedUrl, streamThumbnailUrl,
   webhookSignatureSource, webhookTimestampFresh,
@@ -192,6 +192,36 @@ describe('webhook signature parsing', () => {
     expect(webhookTimestampFresh('1700000000', now)).toBe(true)
     expect(webhookTimestampFresh('1699999000', now)).toBe(false)
     expect(webhookTimestampFresh('not-a-time', now)).toBe(false)
+  })
+})
+
+describe('a file Cloudflare refused goes to our encoder without being opened (22 Nov 2026)', () => {
+  const rows = [
+    { source_url: 'https://x/a.mov', state: 'error' },
+    { source_url: 'https://x/b.mov', state: 'error' },
+    { source_url: 'https://x/c.mov', state: 'ready' },
+    { source_url: 'https://x/d.mov', state: 'processing' },
+  ]
+  it('picks the refused ones that have no encoder job, once each', () => {
+    expect(refusedWithoutCopy(['https://x/a.mov', 'https://x/a.mov', 'https://x/b.mov', 'https://x/c.mov', 'https://x/d.mov', 'https://x/e.mov'], rows, []))
+      .toEqual(['https://x/a.mov', 'https://x/b.mov'])
+  })
+  it('leaves alone one that already has a job, finished or failed', () => {
+    expect(refusedWithoutCopy(['https://x/a.mov', 'https://x/b.mov'], rows, ['https://x/a.mov'])).toEqual(['https://x/b.mov'])
+  })
+  it('hands over a few at a time', () => {
+    const many = Array.from({ length: 40 }, (_, i) => `https://x/${i}.mov`)
+    expect(refusedWithoutCopy(many, many.map(u => ({ source_url: u, state: 'error' })), [])).toHaveLength(10)
+  })
+  it('the sweep reads the files a card carries, and only from our own storage', () => {
+    const src = require('node:fs').readFileSync('app/lib/stream.ts', 'utf8') as string
+    const sweep = src.slice(src.indexOf('export async function sweepMissingPreviews'))
+    expect(sweep).toMatch(/row\.final_files/)
+    expect(sweep).toMatch(/PREVIEW_MAX_BYTES\) heavy\.push\(url\)/)
+    expect(sweep).toMatch(/!isOwnStorageUrl\(url\)/)
+    const pull = require('node:fs').readFileSync('app/lib/drive-pull.ts', 'utf8') as string
+    expect(pull).toMatch(/copyHeavyVideos\(files\.filter/)
+    expect(sweep).toMatch(/refusedWithoutCopy\(/)
   })
 })
 

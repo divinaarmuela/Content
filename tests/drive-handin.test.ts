@@ -49,7 +49,7 @@ vi.mock('../app/lib/workflow', () => ({ logActivity: vi.fn(async (a: Record<stri
 vi.mock('../app/lib/production-live', () => ({ announceItemChange: vi.fn() }))
 // a card video's pictures (video/frames, card-frames.ts) are asked for after a hand-in lands — not this file's job, so not queued here
 vi.mock('../app/inngest/client', () => ({ inngest: { send: vi.fn(async (e: { name: string; data: Record<string, unknown> } | { name: string; data: Record<string, unknown> }[]) => { for (const x of [e].flat()) if (x.name !== 'video/frames') h.events.push(x); return {} }) } }))
-vi.mock('../app/lib/stream', () => ({ previewVideos: vi.fn() }))
+vi.mock('../app/lib/stream', () => ({ previewVideos: vi.fn(), copyHeavyVideos: vi.fn() }))
 // GOOGLE DRIVE — only the read surface exists; each call is recorded by name
 vi.mock('../app/lib/drive-folder-list', () => ({
   listFolder: async (folderId: string) => {

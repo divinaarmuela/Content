@@ -9,7 +9,7 @@ import { encodeTargetFor, PLATFORM_MEDIA } from './media-fit-core'
 import { cleanCopyWords, copyDuration, type CopyState } from './shrink-core'
 import type { Platform, PostKind } from './publish-core'
 import {
-  POLL_AFTER_MS, isVideoUrl, missingPreviewSources, pollablePreviews,
+  POLL_AFTER_MS, PREVIEW_MAX_BYTES, isVideoUrl, missingPreviewSources, pollablePreviews, refusedWithoutCopy,
   previewPatchFrom, parseWebhookSignature, webhookSignatureSource,
   webhookTimestampFresh,
   askCloudflareOnLookup, type PreviewPatch, type PreviewRow,
@@ -315,6 +315,27 @@ export function previewVideos(urls: readonly (string | null | undefined)[]): voi
 }
 
 /**
+ * A PLAYABLE COPY OF A HEAVY MASTER, THE MOMENT IT LANDS (the owner, 22 Nov 2026: "it needs to run when it's
+ * uploaded or in background"). A master past 800 MB was left with no copy at all until somebody opened it, then
+ * waited on Cloudflare to refuse it. These go straight to our own encoder, which made an 8 MB .mp4 of a 1.67 GB
+ * ProRes file in about a minute. Same shape as `previewVideos`: never awaited, never fatal, the sweep is the backstop.
+ */
+export function copyHeavyVideos(urls: readonly (string | null | undefined)[]): void {
+  const wanted = [...new Set(urls.map(u => String(u ?? '')).filter(u => isVideoUrl(u) && isOwnStorageUrl(u)))]
+  if (wanted.length === 0 || !encoderConfigured()) return
+  const job = async () => {
+    for (const url of wanted) {
+      await smallerCopyOf(url, 'instagram').catch(e => console.error('[stream] heavy copy request:', e))
+    }
+  }
+  try {
+    after(job)
+  } catch {
+    void job().catch(e => console.error('[stream] heavy copy request:', e))
+  }
+}
+
+/**
  * Is this URL one of OUR stored files?
  *
  * The guard on the player's lookup endpoint, which is public — it has to be,
@@ -347,11 +368,14 @@ export async function lookupPreview(
 ): Promise<{ configured: boolean; row: PreviewRow | null }> {
   if (!streamConfigured()) return { configured: false, row: null }
   const url = String(sourceUrl ?? '').trim()
-  const row = await previewFor(url)
+  let row = await previewFor(url)
   // still "processing" here though Cloudflare may long be done: ask it, rather than wait on the webhook or the sweep
   if (row && askCloudflareOnLookup(row as PreviewRow & { updated_at?: string | null }, Date.now())) {
     const fresh = await refreshPreview(row.stream_uid!).catch(() => null)
-    if (fresh) return { configured: true, row: { ...row, ...fresh } as PreviewRow }
+    // NOT RETURNED FROM HERE (live, 22 Nov 2026): the lookup that LEARNS of the refusal is the last one a player
+    // sends, since it stops asking once the answer is "error". Returning early left a 1.67 GB .mov with no copy
+    // being made and a page that waited for ever. The fresh answer goes on to the hand-over below.
+    if (fresh) row = { ...row, ...fresh } as PreviewRow
   }
   // CLOUDFLARE SAID NO — OUR OWN ENCODER MAKES THE COPY (the owner, 17 Nov 2026: "mov should be allowed… this needs
   // working"). Five ProRes 4444 masters (340–890 Mbps) were refused with "The video bitrate exceeded the maximum
@@ -471,7 +495,7 @@ export async function handleStreamWebhook(
 
 // ── the sweep, and what the settings card counts ──────────────────────────
 
-export type PreviewSweep = { missing: number; claimed: number; polled: number; retaken: number }
+export type PreviewSweep = { missing: number; claimed: number; polled: number; retaken: number; handed?: number }
 
 const SWEEP_DAYS = 14
 const SWEEP_ITEM_LIMIT = 200
@@ -516,10 +540,22 @@ export async function sweepMissingPreviews(): Promise<PreviewSweep> {
   const versions = versionsRes.status === 'fulfilled' ? versionsRes.value : []
 
   const candidates: string[] = []
+  /** card files too heavy for Cloudflare: straight to our encoder */
+  const heavy: string[] = []
   for (const row of items) {
     for (const a of Array.isArray(row.raw_assets) ? row.raw_assets : []) {
       const url = (a as { url?: unknown })?.url
       if (typeof url === 'string') candidates.push(url)
+    }
+    // THE FILES A CARD CARRIES, TOO (the owner, 22 Nov 2026): a finished edit pulled from Drive or uploaded to the
+    // card sits in `final_files`, which this never read, so 23 of one card's 27 masters had no copy until somebody
+    // opened each one. Our own storage only: a link to somewhere else is not ours to copy.
+    const finals = row.final_files
+    for (const f of Array.isArray(finals) ? finals : Object.values((finals ?? {}) as Record<string, unknown>)) {
+      const url = (f as { url?: unknown })?.url
+      if (typeof url !== 'string' || !isOwnStorageUrl(url) || !isVideoUrl(url)) continue
+      if (Number((f as { size?: unknown })?.size) > PREVIEW_MAX_BYTES) heavy.push(url)
+      else candidates.push(url)
     }
   }
   for (const v of versions) {
@@ -531,15 +567,26 @@ export async function sweepMissingPreviews(): Promise<PreviewSweep> {
   }
 
   const videos = [...new Set(candidates.filter(isVideoUrl))]
+  const heavies = [...new Set(heavy)]
   let missing: string[] = []
-  if (videos.length > 0) {
+  let refused: string[] = []
+  if (videos.length > 0 || heavies.length > 0) {
     // ask only about the URLs we are considering — a bounded set, never a
     // walk of every file ever uploaded
-    const asked = new Set(videos.slice(0, 200))
+    // every one of them (22 Nov 2026): asking about the first 200 only made the 201st look missing for ever
+    const asked = new Set([...videos, ...heavies])
     const have = await table<VideoPreview>('video_previews').list({
       where: r => asked.has(r.source_url),
     })
     missing = missingPreviewSources(videos, have.map(r => r.source_url))
+    // the ones Cloudflare turned away go to our encoder without waiting for somebody to open them
+    // …and so do the heavy masters that were never sent to Cloudflare, unless it has since made a preview of one
+    const known = new Set(have.map(r => r.source_url))
+    const unsent = heavies.filter(u => !known.has(u)).map(u => ({ source_url: u, state: 'error' }))
+    if (encoderConfigured() && (unsent.length > 0 || have.some(r => r.state === 'error'))) {
+      const jobs = await table<EncodeJob>('encode_jobs').list({ where: r => asked.has(r.source_url) }).catch(() => null)
+      if (jobs) refused = refusedWithoutCopy([...heavies, ...videos.filter(isOwnStorageUrl)], [...have, ...unsent], jobs.map(j => j.source_url))
+    }
   }
 
   let claimed = 0
@@ -548,13 +595,19 @@ export async function sweepMissingPreviews(): Promise<PreviewSweep> {
     if (out.at === 'claimed') claimed++
   }
 
+  let handed = 0
+  for (const url of refused) {
+    const out = await smallerCopyOf(url, 'instagram').catch(() => null)
+    if (out?.status === 'encoding') handed++
+  }
+
   const polled = await pollStalePreviews()
   const retaken = await retakeStalledClaims()
 
-  if (missing.length || polled || retaken) {
-    console.log(`[stream] sweep: ${missing.length} missing (claimed ${claimed}), polled ${polled}, retook ${retaken}`)
+  if (missing.length || polled || retaken || handed) {
+    console.log(`[stream] sweep: ${missing.length} missing (claimed ${claimed}), polled ${polled}, retook ${retaken}, to the encoder ${handed}`)
   }
-  return { missing: missing.length, claimed, polled, retaken }
+  return { missing: missing.length, claimed, polled, retaken, handed }
 }
 
 /** The backstop for a webhook that never arrived. */

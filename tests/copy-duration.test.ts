@@ -47,3 +47,17 @@ describe('a player asking Cloudflare itself', () => {
     expect(askCloudflareOnLookup({ state: 'processing', stream_uid: null, updated_at: at }, now + 60_000)).toBe(false)
   })
 })
+
+import { readFileSync } from 'node:fs'
+
+describe('the lookup that learns Cloudflare refused a file', () => {
+  // live, 22 Nov 2026: a player stops asking once the answer is "error", so the lookup that finds the refusal
+  // must itself hand the file to our encoder. Returning from the refresh skipped that and the page waited for ever.
+  const src = readFileSync('app/lib/stream.ts', 'utf8')
+  const body = src.slice(src.indexOf('export async function lookupPreview'), src.indexOf('// ── keeping rows honest'))
+  it('carries the fresh answer on to the encoder hand-over instead of returning it', () => {
+    expect(body).not.toMatch(/if \(fresh\) return/)
+    expect(body).toMatch(/if \(fresh\) row = /)
+    expect(body.indexOf('if (fresh) row = ')).toBeLessThan(body.indexOf("row?.state === 'error' && claim"))
+  })
+})
