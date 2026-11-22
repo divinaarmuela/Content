@@ -40,6 +40,9 @@ export type OnboardingDraft = {
   signature: string
 }
 
+/** what the set-up call paragraph said while it was on by default; the page offers it as the empty box's hint */
+export const ONBOARDING_CALL_HINT = 'Prefer to talk it through first? We are happy to set up a short call.'
+
 /** the shared inbox a new client is given for their account manager */
 export const ONBOARDING_INBOX = 'info@mdmmarketing.com.au'
 
@@ -114,7 +117,10 @@ export function defaultOnboarding(input: {
     needBody: 'Your logo files, brand colours and fonts, logins for your social accounts, and any dates we should plan around.\n\nAdd your brand files in your portal, and reply to this email with the rest, whenever suits.',
     needButton: 'Add your brand files',
     callTitle: 'A set-up call',
-    callBody: 'Prefer to talk it through first? We are happy to set up a short call.',
+    // OFF UNTIL THERE IS A BOOKING LINK (the owner, 22 Nov 2026: "turn off booking paragraph by default because we don't
+    // have booking link yet"): with no paragraph and no link the whole part is left out of the email. The sentence is
+    // kept as the box's hint on the page, ONBOARDING_CALL_HINT.
+    callBody: '',
     callButton: 'Book a call',
     callUrl: '',
     nextTitle: 'What happens next',
@@ -168,7 +174,8 @@ export function onboardingProblems(d: OnboardingDraft, opts: { portalUrl: string
   if (!d.subject.trim()) out.push('The email needs a subject.')
   if (!d.greeting.trim()) out.push('The email needs a greeting.')
   if (!opts.portalUrl) out.push('This client has no portal link yet, so the "Open your portal" button is left out.')
-  if (d.callButton.trim() && !d.callUrl) out.push('The call button has no link, so it is left out. Paste your booking link to show it.')
+  // only when the part is in the email at all: by default it is off, and an off part has nothing missing
+  if (d.callBody.trim() && d.callButton.trim() && !d.callUrl) out.push('The call button has no link, so it is left out. Paste your booking link to show it.')
   return out
 }
 

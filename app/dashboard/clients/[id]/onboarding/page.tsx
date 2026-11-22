@@ -11,7 +11,7 @@ import { Copy, Monitor, Plus, Smartphone, Trash2 } from 'lucide-react'
 import { render } from '@react-email/components'
 import OnboardingEmail from '../../../../emails/OnboardingEmail'
 import {
-  ONBOARDING_LIMITS, applyTemplate, onboardingProblems,
+  ONBOARDING_CALL_HINT, ONBOARDING_LIMITS, applyTemplate, onboardingProblems,
   type OnboardingDraft, type OnboardingRow, type OnboardingStep,
 } from '../../../../lib/onboarding-email-core'
 
@@ -340,9 +340,9 @@ export default function OnboardingPage({ params }: { params: Promise<{ id: strin
             <Field label="Button (opens the Brand assets tab on their portal; leave empty for no button)"><Input value={draft.needButton} onChange={e => patch({ needButton: e.target.value })} /></Field>
           </Part>
 
-          <Part title="A set-up call" hint="Paste your booking link to show the button. Leave the link empty for no button.">
+          <Part title="A set-up call" hint="Off by default. Write a paragraph or paste your booking link to put it in the email; the button needs the link.">
             <Field label="Heading"><Input value={draft.callTitle} onChange={e => patch({ callTitle: e.target.value })} /></Field>
-            <Field label="Paragraph"><Textarea rows={2} value={draft.callBody} onChange={e => patch({ callBody: e.target.value })} /></Field>
+            <Field label="Paragraph"><Textarea rows={2} placeholder={ONBOARDING_CALL_HINT} value={draft.callBody} onChange={e => patch({ callBody: e.target.value })} /></Field>
             <Field label="Button"><Input value={draft.callButton} onChange={e => patch({ callButton: e.target.value })} /></Field>
             <Field label="Booking link"><Input type="url" inputMode="url" placeholder="https://" value={draft.callUrl} onChange={e => patch({ callUrl: e.target.value.trim() })} /></Field>
           </Part>

@@ -127,7 +127,8 @@ export default function OnboardingEmail({ draft: d, portalUrl, assetBase, brandT
             <Heading as="h1" className="hero" style={{ ...display, fontSize: 40, lineHeight: '44px' }}>{d.greeting.trim() || 'Welcome'}</Heading>
             {d.intro.trim() && <Text style={{ ...body, margin: '18px 0 0', maxWidth: 480 }}>{lines(d.intro)}</Text>}
           </Section>
-          <Img src={asset('hero.jpg')} alt="The people at MD Media" width="640" style={{ display: 'block', width: '100%', height: 'auto', border: 0 }} />
+          {/* the team as it is now (the owner, 22 Nov 2026); a new file name, so no mail app shows the old picture from its cache */}
+          <Img src={asset('team.jpg')} alt="The people at MD Media" width="640" style={{ display: 'block', width: '100%', height: 'auto', border: 0 }} />
 
           {/* ── what we agreed ── */}
           {agreed.length > 0 && (

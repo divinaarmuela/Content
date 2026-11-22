@@ -75,7 +75,7 @@ describe('the email (the React Email template)', () => {
     expect([...at].sort((x, y) => x - y)).toEqual(at)
     expect(out).toContain(`href="${portalUrl}"`)
     expect(out).toContain('href="https://calendly.com/x"')
-    expect(out).toContain('https://app.example.test/email/onboarding/hero.jpg')
+    expect(out).toContain('https://app.example.test/email/onboarding/team.jpg')
     expect(out).toContain('https://app.example.test/email/onboarding/logo-chip.png')
     expect(out).toContain('max-width:640px')
     // the footer: three links, and none of them a path on the app (the owner: "why is pointing to /website")
@@ -87,8 +87,19 @@ describe('the email (the React Email template)', () => {
     expect(out).toContain('JetBrains Mono')
     expect(out).not.toMatch(/Instrument Serif|Georgia/)
   })
+  it('the set-up call is off by default: no paragraph, no link, so no part and nothing said to be missing (22 Nov 2026)', async () => {
+    expect(base().callBody).toBe('')
+    expect(base().callUrl).toBe('')
+    const out = await html(base(), portalUrl)
+    expect(out).not.toContain('A set-up call')
+    expect(out).not.toContain('Book a call')
+    expect(onboardingProblems(base(), { portalUrl })).toEqual([])
+    // a paragraph or a link puts it back
+    expect(await html({ ...base(), callBody: 'Call us.' }, portalUrl)).toContain('A set-up call')
+    expect(await html({ ...base(), callUrl: 'https://calendly.com/x' }, portalUrl)).toContain('Book a call')
+  })
   it('leaves out the portal part with no link, the call button with no link, and any emptied part', async () => {
-    const d = { ...base(), needBody: '', see: [], callUrl: '' }
+    const d = { ...base(), callBody: 'Happy to set up a short call.', needBody: '', see: [], callUrl: '' }
     const out = await html(d, null)
     expect(out).not.toContain('Your portal')
     expect(out).not.toContain('Book a call')
@@ -105,7 +116,7 @@ describe('the email (the React Email template)', () => {
     expect(out).toContain('&lt;b&gt;b&lt;/b&gt;')
   })
   it('every picture the template names is in public/email/onboarding', () => {
-    for (const f of ['hero.jpg', 'logo-chip.png', 'shoot-brief.png', 'editing.png', 'designing.png', 'scheduling.png']) expect(existsSync(`public/email/onboarding/${f}`)).toBe(true)
+    for (const f of ['team.jpg', 'logo-chip.png', 'shoot-brief.png', 'editing.png', 'designing.png', 'scheduling.png']) expect(existsSync(`public/email/onboarding/${f}`)).toBe(true)
   })
 })
 
