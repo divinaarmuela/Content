@@ -20,6 +20,28 @@ import { formatStamp } from '../../lib/video-review-core'
 const SEEK_EVERY_MS = 220
 const FRAME_EVERY_MS = 90
 
+/**
+ * THE SCRUB COPY IS FETCHED BEFORE THE POINTER ARRIVES (the owner, 23 Nov 2026: "it is quite slow to pick up and then
+ * it picks up"). It was asked for on the first hover, and on the owner's line (about 800 KB a second, measured that
+ * day) a 3 to 7 MB scrub copy is three to nine seconds of an empty hover. So a tile that is on screen fetches its
+ * scrub copy by itself, ahead of the pointer.
+ *
+ * TWO AT A TIME, for the whole page: the storage address gives a browser six connections in all, and the posters
+ * need theirs. A tile waits its turn; one that has scrolled away by the time its turn comes gives the turn up. A
+ * tile the pointer is actually on never waits.
+ */
+const SCRUB_AHEAD = 2
+let scrubBusy = 0
+const scrubLine: (() => void)[] = []
+function scrubTurn(go: () => void): void {
+  if (scrubBusy < SCRUB_AHEAD) { scrubBusy++; go() } else scrubLine.push(go)
+}
+function scrubDone(): void {
+  scrubBusy = Math.max(0, scrubBusy - 1)
+  const next = scrubLine.shift()
+  if (next) { scrubBusy++; next() }
+}
+
 export default function HoverClip({ src, className = '', at = 0.5, poster, duration, frames, scrub }: {
   /**
    * EVERY FRAME UNDER THE POINTER (the owner, 22 Nov 2026: "I need exact frames, so when it is hovered it is the
@@ -55,6 +77,30 @@ export default function HoverClip({ src, className = '', at = 0.5, poster, durat
   const scrubRef = useRef<HTMLVideoElement>(null)
   /** the scrub copy is asked for on the first hover, and kept */
   const [armed, setArmed] = useState(false)
+  const root = useRef<HTMLSpanElement>(null)
+  /** this tile holds one of the two turns, until its scrub copy has arrived (or failed, or the tile has gone) */
+  const holding = useRef(false)
+  const release = () => { if (holding.current) { holding.current = false; scrubDone() } }
+  useEffect(() => {
+    const el = root.current
+    if (!scrubbing || !el || typeof IntersectionObserver === 'undefined') return
+    let onScreen = false
+    let asked = false
+    const io = new IntersectionObserver(entries => {
+      onScreen = entries.some(e => e.isIntersecting)
+      if (!onScreen || asked) return
+      asked = true
+      scrubTurn(() => {
+        // its turn has come: still on screen, it fetches; scrolled away, the turn goes to the next tile
+        if (!onScreen) { asked = false; scrubDone(); return }
+        holding.current = true
+        setArmed(true)
+      })
+    }, { threshold: 0.35 })
+    io.observe(el)
+    return () => { io.disconnect(); release() }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one observer per tile and scrub copy
+  }, [scrubbing, scrub])
   /** it can show a frame */
   const [drawn, setDrawn] = useState(false)
   const scrubWant = useRef<number | null>(null)
@@ -112,7 +158,7 @@ export default function HoverClip({ src, className = '', at = 0.5, poster, durat
   }
 
   return (
-    <span className="relative block h-full w-full"
+    <span ref={root} className="relative block h-full w-full"
       onMouseEnter={() => {
         if (scrubbing) { setArmed(true); return }
         if (!stills) { void ref.current?.play().catch(() => undefined); return }
@@ -145,6 +191,7 @@ export default function HoverClip({ src, className = '', at = 0.5, poster, durat
             {armed && (
               <video ref={scrubRef} src={scrub} muted playsInline preload="auto" aria-hidden tabIndex={-1} data-scrub
                 onLoadedData={() => { setDrawn(true); scrubSeek() }}
+                onCanPlayThrough={release} onError={release} onStalled={release}
                 onSeeked={scrubSeek}
                 className={`${className} pointer-events-none absolute inset-0 ${hover && drawn ? 'opacity-100' : 'opacity-0'}`} />
             )}
