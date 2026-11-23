@@ -8,7 +8,7 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useRow, useTable } from '@/lib/db-client'
-import type { Batch, ContentItem, DrivePull, ItemComment, TeamUser } from '@/lib/db-types'
+import type { Batch, ContentItem, DrivePull, EncodeJob, ItemComment, TeamUser } from '@/lib/db-types'
 import { driveTargetOf } from '../../../../lib/card-link-core'
 import { filesOf, pullId, type PullFile } from '../../../../lib/drive-pull-core'
 import { fileRound, roundLabel, versionLabel } from '../../../../lib/edit-round-core'
@@ -17,6 +17,7 @@ import { finalFilesAsPulls } from '../../../../lib/final-files-core'
 import { usePreviewRows } from '../../../../components/media/usePreviewRows'
 import { hlsManifestUrl, useHlsSource } from '../../../../components/media/useHlsSource'
 import { streamBaseUrl } from '../../../../lib/stream-core'
+import { clipSource, encoderStills, playableUrl, type ClipPick } from '../../../../lib/playable-core'
 import PageTitle from '../../../ui/PageTitle'
 import { personLabel } from '../../../../lib/identity-core'
 import { commentsOnClip, formatStamp, reviewPath } from '../../../../lib/video-review-core'
@@ -47,7 +48,11 @@ export function parsePicks(f: string | null): { id: string; round: number | null
   })
 }
 
-function ClipPanel({ itemId, file, src, streamBase, comments, nameOf, fromClient, one, fromFolder = false, labelOf = roundLabel }: {
+function ClipPanel({ itemId, file, src, streamBase, comments, nameOf, fromClient, one, fromFolder = false, labelOf = roundLabel, state = 'play', poster = null }: {
+  /** what the player has to play: a copy, or none yet (playable-core clipSource) */
+  state?: ClipPick['state']
+  /** our encoder's still of the clip, shown until it plays */
+  poster?: string | null
   /** the card's client-numbered version (edit-round-core.versionLabel, 30 Sep 2026) */
   labelOf?: (round: number) => string
   itemId: string
@@ -101,9 +106,25 @@ function ClipPanel({ itemId, file, src, streamBase, comments, nameOf, fromClient
             // eslint-disable-next-line @next/next/no-img-element -- the file itself
             <img src={src ?? ''} alt={file.name} className={`w-full rounded-tile bg-foreground/[0.06] object-contain ${one ? 'max-h-[72vh]' : 'max-h-[52vh]'}`} />
           ) : (
-            <video ref={video} controls playsInline preload="metadata"
-              className={`w-full rounded-tile bg-black ${one ? 'max-h-[72vh]' : 'max-h-[52vh]'}`}
-              onTimeUpdate={e => setNow(e.currentTarget.currentTime)} />
+            // THE STAGE KEEPS ITS SHAPE (the owner, 23 Nov 2026: "something weird happens when we compare it"): each
+            // player was handed the camera master, a browser took only the sound from it, and with no picture the
+            // player fell to a thin black bar. It plays our encoder's copy now, in a 16:9 stage that holds its size
+            // whatever is in it, and says so when the copy is still being made.
+            <div className={`relative w-full overflow-hidden rounded-tile bg-black ${one ? 'max-h-[72vh]' : 'max-h-[52vh]'}`} style={{ aspectRatio: '16 / 9' }} data-compare-stage>
+              <video ref={video} controls playsInline preload="metadata" poster={poster ?? undefined}
+                className="absolute inset-0 h-full w-full object-contain"
+                onTimeUpdate={e => setNow(e.currentTarget.currentTime)} />
+              {(state === 'making' || state === 'failed') && (
+                <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-1.5 bg-black px-6 text-center text-white" role="status" data-clip-copy={state}>
+                  <p className="text-[15px] font-semibold">{state === 'failed' ? 'This file could not be made playable' : 'Making a copy that plays here'}</p>
+                  <p className="max-w-md text-[13px] leading-snug text-white/75">
+                    {state === 'failed'
+                      ? 'It is a very heavy master export. Export it again as H.264 (.mp4) and upload that, and it will play.'
+                      : 'This is a very heavy master export, too big to play as it is. A lighter copy is being made and will start here by itself in a few minutes.'}
+                  </p>
+                </div>
+              )}
+            </div>
           )}
         </div>
         <div className={`flex min-w-0 flex-col rounded-inner border border-border bg-surface ${one ? 'lg:max-h-[72vh]' : ''}`}>
@@ -174,6 +195,8 @@ export default function ComparePage() {
     return file ? { file, fromFolder: p.round === 0 } : null
   }).filter((x): x is { file: PullFile & { _folder: boolean }; fromFolder: boolean } => x !== null), [picks, files])
   const previews = usePreviewRows(chosen.map(c => c.file.url as string))
+  // our encoder's copies: what a heavy master plays from here, and the still shown until it does (23 Nov 2026)
+  const { rows: encodeRows, loading: encodeLoading } = useTable<EncodeJob>('encode_jobs')
   const byItem = useMemo(() => ({ item_id: id }), [id])
   const { rows: allComments } = useTable<ItemComment>('item_comments', { by: byItem })
   const { rows: team } = useTable<TeamUser>('team_users')
@@ -199,7 +222,14 @@ export default function ComparePage() {
         {chosen.map(({ file: f, fromFolder }) => {
           const p = previews.get(f.url as string)
           const base = p && p.state === 'ready' ? streamBaseUrl(p) : null
-          return <ClipPanel key={`${f.id}@${fromFolder ? 'folder' : fileRound(f)}`} itemId={id} file={f} src={f.url} streamBase={base} comments={commentsOnClip(visible as never, f.id) as ItemComment[]} nameOf={nameOf} fromClient={fromClient} one={one} fromFolder={fromFolder} labelOf={r => versionLabel(item as never, r)} />
+          const master = f.url as string
+          const isImage = kindOf(f.mime, f.name) === 'image'
+          const copy = playableUrl(master, encodeRows)
+          const pick = clipSource({
+            master, masterBytes: f.size ?? null, hls: null, encoded: copy !== master ? copy : null,
+            jobsLoaded: !encodeLoading, copyFailed: encodeRows.some(r => r.source_url === master && r.status === 'failed'), fallback: master,
+          })
+          return <ClipPanel key={`${f.id}@${fromFolder ? 'folder' : fileRound(f)}`} itemId={id} file={f} src={isImage ? master : pick.src} state={isImage || base ? 'play' : pick.state} poster={isImage ? null : encoderStills(master, encodeRows)?.poster ?? null} streamBase={base} comments={commentsOnClip(visible as never, f.id) as ItemComment[]} nameOf={nameOf} fromClient={fromClient} one={one} fromFolder={fromFolder} labelOf={r => versionLabel(item as never, r)} />
         })}
       </div>
     </div>
