@@ -828,6 +828,7 @@ async function afterLanded(
 
   let final: PostState = landed
   let createdId: string | null = null
+  const createdIds: string[] = []
   let bookingProblem: string | null = null
 
   for (const effect of done.effects) {
@@ -838,7 +839,8 @@ async function afterLanded(
       final = booked.post ?? final
       bookingProblem = booked.problem
     } else if (effect.when === 'after' && effect.kind === 'create_post') {
-      createdId = await createFollowUp(landed, effect, actor, loaded, at)
+      const made = await createFollowUp(landed, effect, actor, loaded, at)
+      if (made) { createdIds.push(made); createdId = createdId ?? made }
     }
   }
   // a new time on a booked post: the old jobs were pulled above; the post is booked again at the new time
@@ -861,10 +863,15 @@ async function afterLanded(
   deps.announce(landed, done.to === 'deleted' ? 'deleted' : done.action)
 
   if (bookingProblem) return refusal('jobs', bookingProblem, final)
-  const answer = { ok: true as const, post: final, stage: done.to === 'deleted' ? 'deleted' as const : final.stage, words: done.words }
+  // a Duplicate says how many it made and where they are, not just "Duplicated"
+  const copyWords = done.action === 'duplicate' && createdIds.length > 0
+    ? `${createdIds.length === 1 ? '1 copy' : `${createdIds.length} copies`} made${input.keep_approval === true ? ', approved and booked in where the channel took them' : ', as drafts'}`
+    : null
+  const answer = { ok: true as const, post: final, stage: done.to === 'deleted' ? 'deleted' as const : final.stage, words: copyWords ?? done.words }
   return {
     ...answer,
     ...(createdId ? { created_post_id: createdId } : {}),
+    ...(createdIds.length > 1 ? { created_post_ids: createdIds } : {}),
     ...(link ? { link } : {}),
   }
 }
@@ -1056,12 +1063,15 @@ async function safeCancel(jobId: string): Promise<{ ok: true } | { ok: false; er
  */
 async function createFollowUp(
   source: PostState,
-  effect: { stage: 'ready' | 'draft'; platforms: string[] | null; carry_approval: boolean },
+  effect: { stage: 'ready' | 'draft'; platforms: string[] | null; carry_approval: boolean; scheduled_for?: string | null; copy?: boolean },
   actor: EngineActor,
   loaded: Loaded,
   at: string,
 ): Promise<string | null> {
-  const frozen = copyOfVersion(await loadFrozenVersion(source.id, source.sent_version)) ?? copyOfPost(source)
+  // A DUPLICATE'S COPY (the owner, 23 Nov 2026): the post as it stands NOW, a draft's working copy included, at the
+  // time picked for it. Post the missing networks copies the version that went out, as it always did.
+  const when = effect.copy ? (effect.scheduled_for ?? null) : null
+  const frozen = (effect.copy && !effect.carry_approval ? null : copyOfVersion(await loadFrozenVersion(source.id, source.sent_version))) ?? copyOfPost(source)
   const byId = new Map(loaded.accounts.map(a => [a.id, a]))
   const channels = effect.platforms
     ? frozen.channels.filter(id => effect.platforms!.includes(String(byId.get(id)?.platform ?? '')))
@@ -1077,7 +1087,7 @@ async function createFollowUp(
     caption: frozen.caption,
     channels,
     per_channel: perChannel,
-    scheduled_for: null,
+    scheduled_for: when,
     timezone: frozen.timezone ?? source.timezone ?? 'Australia/Melbourne',
     // the automation travels with the words it was written for
     ...(frozen.automation ? { automation: frozen.automation } : {}),
@@ -1087,15 +1097,23 @@ async function createFollowUp(
     rev: 0,
     stage_at: at,
   }
-  if (effect.stage === 'draft' || !effect.carry_approval || !source.approval) {
+  const approved = effect.copy ? (!!source.approval || !!source.qc_pass) : !!source.approval
+  if (effect.stage === 'draft' || !effect.carry_approval || !approved) {
     await posts().insert({ ...base, stage: 'draft', draft_version: 1 } as unknown as SocialPost)
+    if (effect.copy) {
+      await writeEvent({
+        id: `${id}_r0`, post_id: id, client_id: source.client_id, rev: 0, from: 'draft', to: 'draft',
+        action: 'duplicate', actor_id: actor.id, hat: (actor.hats[0] ?? 'system') as PostHat,
+        on_behalf_of_client: false, version: null, note: `Copied from post ${source.id}`, at,
+      }).catch(() => {})
+    }
     return id
   }
   // born Ready to post: version 1 is the posted version, minus the networks that went out
   const v1: PostVersion = {
     id: postVersionId(id, 1), post_id: id, client_id: source.client_id, n: 1,
     slides: frozen.slides, per_channel: perChannel, channels, caption: frozen.caption,
-    scheduled_for: null, timezone: String(base.timezone), frozen_for: 'retime', frozen_by: actor.id,
+    scheduled_for: when, timezone: String(base.timezone), frozen_for: 'retime', frozen_by: actor.id,
     frozen_at: at, from_migration: false, automation: frozen.automation ?? null,
   }
   await versionsT().claim(v1.id, cur => (cur ? null : v1))
@@ -1104,15 +1122,22 @@ async function createFollowUp(
     stage: 'ready',
     sent_version: 1,
     draft_version: 2,
-    approval: { ...source.approval, version: 1 },
+    ...(source.approval ? { approval: { ...source.approval, version: 1 } } : {}),
     ...(source.qc_pass ? { qc_pass: { ...source.qc_pass, version: 1 } } : {}),
-    problem: 'These networks did not go out last time.',
+    ...(effect.copy ? {} : { problem: 'These networks did not go out last time.' }),
   } as unknown as SocialPost)
   await writeEvent({
-    id: `${id}_r0`, post_id: id, client_id: source.client_id, rev: 0, from: 'posted', to: 'ready',
-    action: 'missing_networks', actor_id: actor.id, hat: (actor.hats[0] ?? 'system') as PostHat,
-    on_behalf_of_client: false, version: 1, note: `From post ${source.id}: ${failedNetworks(source).join(', ')}`, at,
+    id: `${id}_r0`, post_id: id, client_id: source.client_id, rev: 0, from: effect.copy ? 'ready' : 'posted', to: 'ready',
+    action: effect.copy ? 'duplicate' : 'missing_networks', actor_id: actor.id, hat: (actor.hats[0] ?? 'system') as PostHat,
+    on_behalf_of_client: false, version: 1,
+    note: effect.copy ? `Copied from post ${source.id}, with its approval` : `From post ${source.id}: ${failedNetworks(source).join(', ')}`, at,
   })
+  // A COPY THAT KEPT ITS APPROVAL IS BOOKED IN, by the same move Book in makes, so every rule a booking has still
+  // applies to it. One the channel will not take stays on Ready to post with the reason on it, for a person to book.
+  if (effect.copy && when) {
+    const booked = await performPostTransition(id, 'book', actor, { expect_rev: 0, version: 1, quiet: true }).catch(e => ({ ok: false as const, reason: e instanceof Error ? e.message : 'could not be booked' }))
+    if (!booked.ok) console.warn('[duplicate] copy', id, 'stays on Ready to post:', (booked as { reason?: string }).reason)
+  }
   return id
 }
 
@@ -1205,6 +1230,8 @@ export async function actOnPost(user: TeamUser, postId: string, request: PostAct
     reason: request.reason ?? null,
     send_to: request.send_to ?? null,
     ...(request.if_no_answer ? { if_no_answer: request.if_no_answer } : {}),
+    ...(request.copies ? { copies: request.copies } : {}),
+    ...(request.keep_approval ? { keep_approval: true } : {}),
   })
 }
 

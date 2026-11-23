@@ -52,6 +52,7 @@ import { instagramProfileGrid } from '@/app/lib/portal-core'
 import type { LiveTile } from '@/app/lib/feed-preview-core'
 import type { ChannelOptions } from '@/app/lib/publisher'
 import { formatInZone, safeZone } from '@/app/lib/timezone-core'
+import CopyDays from './CopyDays'
 import type { Slide } from '@/app/lib/version-files-core'
 import Chip from '../../ui/Chip'
 import PlatformIcon from '../PlatformIcon'
@@ -1840,6 +1841,11 @@ export default function PostWindow({
               <QuestionPanel
                 asking={asking}
                 busy={busy}
+                copy={{
+                  at: post?.scheduled_for ?? null,
+                  nowMs,
+                  mayKeep: !!post && ['ready', 'booked', 'posted'].includes(post.stage) && (!!post.approval || !!post.qc_pass),
+                }}
                 tz={tz}
                 recipients={recipients}
                 team={team}
@@ -1922,9 +1928,11 @@ export default function PostWindow({
 
 /* ── the question a button asks, drawn right above the buttons ────────── */
 
-function QuestionPanel({ asking, busy, tz, recipients, team, makerId, now, onNow, onChange, onGo, onStay }: {
+function QuestionPanel({ asking, busy, tz, recipients, team, makerId, now, onNow, onChange, onGo, onStay, copy }: {
   asking: { q: Question; answers: Answers; problem: string | null }
   busy: boolean
+  /** Duplicate: the original's time, the clock, and whether its approval may be kept */
+  copy?: { at: string | null; nowMs: number; mayKeep: boolean }
   tz: string
   recipients: { email: string; name: string }[]
   team: { id: string; name: string }[]
@@ -1945,6 +1953,8 @@ function QuestionPanel({ asking, busy, tz, recipients, team, makerId, now, onNow
   return (
     <div role="group" aria-label={q.label} data-question={q.action} className="flex flex-col gap-2 rounded-inner border border-accent-blue/50 bg-tint-blue/40 p-3">
       <p className="text-[13px] font-semibold">{q.prompt}</p>
+
+      {q.needs.includes('copies') && copy && <CopyDays tz={tz} copy={copy} keep={a.keep_approval === true} onChange={patch => set(patch)} />}
 
       {q.needs.includes('time') && (
         <div className="flex flex-wrap items-center gap-2">

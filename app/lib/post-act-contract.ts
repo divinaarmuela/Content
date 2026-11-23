@@ -89,6 +89,10 @@ export type PostActRequest = {
   /** client sends: 'link' when the person copies the link instead of emailing */
   via?: 'email' | 'link' | null
   reason?: string | null
+  /** Duplicate: the posting time of each copy (ISO instants), one copy each */
+  copies?: string[] | null
+  /** Duplicate: the copies keep the original's approval and are booked in */
+  keep_approval?: boolean | null
 }
 
 /** The body of the portal's post decision (`api/portal/act`, P6). */
@@ -108,6 +112,8 @@ export type PostActOk = {
   words: string
   /** the post a move made (Post the missing networks, Duplicate) — the page can open it */
   created_post_id?: string
+  /** every post a Duplicate made, in time order */
+  created_post_ids?: string[]
   /** a client send by copied link: the client's page, for the person to paste */
   link?: string
 }
@@ -196,6 +202,16 @@ export function parsePostActRequest(body: unknown): { ok: true; request: PostAct
   if (body.send_to !== undefined && body.send_to !== null) {
     if (!Array.isArray(body.send_to) || !body.send_to.every(x => typeof x === 'string')) return { ok: false, reason: '"send_to" has to be a list of addresses.' }
     request.send_to = [...new Set((body.send_to as string[]).map(x => x.trim()).filter(Boolean))].slice(0, 20)
+  }
+  if (body.copies !== undefined && body.copies !== null) {
+    if (!Array.isArray(body.copies) || body.copies.length > 31 || !body.copies.every(x => typeof x === 'string' && isIsoTime(x))) {
+      return { ok: false, reason: 'Those days could not be read — pick them again.' }
+    }
+    request.copies = [...new Set((body.copies as string[]).map(x => new Date(x).toISOString()))]
+  }
+  if (body.keep_approval !== undefined && body.keep_approval !== null) {
+    if (typeof body.keep_approval !== 'boolean') return { ok: false, reason: '"keep_approval" has to be yes or no.' }
+    request.keep_approval = body.keep_approval
   }
   return { ok: true, request }
 }

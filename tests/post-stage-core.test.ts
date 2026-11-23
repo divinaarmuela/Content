@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   POST_ACTIONS, POST_APPROVAL_LANES, POST_HATS, POST_STAGES, POST_TRANSITIONS, ROW_OF, SCHEDULE_LANES,
   STAGE_LABEL, STAGE_MEANING, STAGE_TONE, MISSED_LABEL, INSTAGRAM_MAX,
-  approvalLine, approvalReminderTimes, approvalStepsOf, approveByOf, changesAskedLine, checkPostTransition,
+  KEEP_NEEDS_APPROVAL, MAX_COPIES, duplicateProblem, approvalLine, approvalReminderTimes, approvalStepsOf, approveByOf, changesAskedLine, checkPostTransition,
   clientSendLine, commentVisibleTo, compositionProblems, defaultApproveBy, failedNetworks, hatsFor,
   instagramOverflow, laneOf, notesForFile, outcomeAction, outcomeVerdict, pageLaneOf, planPostTransition,
   postActions, postTone, postedWords, readPostState, slotMissed, waitingOn, waitingOnViewer,
@@ -530,7 +530,49 @@ describe('outcomes, per network', () => {
     expect(checkPostTransition(post('posted'), 'missing_networks', actorFor('scheduler'), {}, CTX)).toMatchObject({ ok: false, code: 'nothing_missing' })
     const dup = planPostTransition(post('cancelled'), 'duplicate', actorFor('scheduler'), {}, CTX)
     if (!dup.ok) throw new Error(dup.reason)
-    expect(dup.effects).toEqual([{ when: 'after', kind: 'create_post', stage: 'draft', platforms: null, carry_approval: false }])
+    // no days picked: the one draft with no time it always made
+    expect(dup.effects).toEqual([{ when: 'after', kind: 'create_post', stage: 'draft', platforms: null, carry_approval: false, scheduled_for: null, copy: true }])
+  })
+})
+
+describe('Duplicate onto the days picked (the owner, 23 Nov 2026; Renee: the same story every day)', () => {
+  const day = (n: number) => new Date(new Date(NOW).getTime() + n * 86_400_000).toISOString()
+  it('is offered on every stage, to the people who build posts', () => {
+    for (const stage of ['draft', 'quality_check', 'with_client', 'ready', 'booked', 'posted', 'cancelled'] as const) {
+      expect(checkPostTransition(post(stage), 'duplicate', actorFor('scheduler'), { copies: [day(1)] }, CTX)).toMatchObject({ ok: true })
+    }
+  })
+  it('one copy for each day, in time order, each a draft by default', () => {
+    const plan = planPostTransition(post('booked'), 'duplicate', actorFor('scheduler'), { copies: [day(3), day(1), day(2)] }, CTX)
+    if (!plan.ok) throw new Error(plan.reason)
+    expect(plan.to).toBe('booked')
+    expect(plan.effects.filter(e => e.kind === 'create_post')).toEqual([day(1), day(2), day(3)].map(t => (
+      { when: 'after', kind: 'create_post', stage: 'draft', platforms: null, carry_approval: false, scheduled_for: t, copy: true })))
+  })
+  it('refuses a day that has passed, one that cannot be read, the same day twice, and more than a month of them', () => {
+    const p = post('booked')
+    expect(duplicateProblem(p, [new Date(new Date(NOW).getTime() - 60_000).toISOString()], false, NOW)?.code).toBe('time')
+    expect(duplicateProblem(p, ['not a time'], false, NOW)?.code).toBe('time')
+    expect(duplicateProblem(p, [day(1), day(1)], false, NOW)?.code).toBe('invalid')
+    expect(duplicateProblem(p, Array.from({ length: MAX_COPIES + 1 }, (_, i) => day(i + 1)), false, NOW)?.code).toBe('invalid')
+    expect(duplicateProblem(p, Array.from({ length: MAX_COPIES }, (_, i) => day(i + 1)), false, NOW)).toBeNull()
+  })
+  it('keeping the approval is only for a post that has been through its checks, and needs days', () => {
+    const passed = { stage: 'booked' as const, approval: null, qc_pass: { by: 'u', at: NOW, version: 1 } }
+    expect(duplicateProblem(passed, [day(1)], true, NOW)).toBeNull()
+    expect(duplicateProblem({ ...passed, stage: 'posted' }, [day(1)], true, NOW)).toBeNull()
+    expect(duplicateProblem(passed, [], true, NOW)?.code).toBe('time')
+    expect(duplicateProblem({ stage: 'draft', approval: null, qc_pass: null }, [day(1)], true, NOW)).toEqual({ code: 'unapproved', reason: KEEP_NEEDS_APPROVAL })
+    expect(duplicateProblem({ stage: 'booked', approval: null, qc_pass: null }, [day(1)], true, NOW)?.code).toBe('unapproved')
+    // a draft, or a post still being checked, is never booked in by a copy
+    expect(duplicateProblem({ stage: 'quality_check', approval: null, qc_pass: null }, [day(1)], true, NOW)?.code).toBe('unapproved')
+  })
+  it('kept: the copies are born Ready to post with the approval carried, which is what Book in takes', () => {
+    const src = post('booked', { qc_pass: { by: 'u', at: NOW, version: 1 } } as never)
+    const plan = planPostTransition(src, 'duplicate', actorFor('scheduler'), { copies: [day(1), day(2)], keep_approval: true }, CTX)
+    if (!plan.ok) throw new Error(plan.reason)
+    expect(plan.effects.filter(e => e.kind === 'create_post')).toEqual([day(1), day(2)].map(t => (
+      { when: 'after', kind: 'create_post', stage: 'ready', platforms: null, carry_approval: true, scheduled_for: t, copy: true })))
   })
 })
 
@@ -746,7 +788,7 @@ describe('postActions', () => {
   it('with the client, a manager never gets Approve as the main button (audit B7)', () => {
     const list = postActions(post('with_client'), viewerHats('account_manager'), NOW, CTX)
     expect(list.primary).toBeNull()
-    expect(list.secondary.map(a => a.action)).toEqual(['remind_client', 'resend_new_time', 'approve_for_client', 'team_decides', 'take_back'])
+    expect(list.secondary.map(a => a.action)).toEqual(['remind_client', 'resend_new_time', 'approve_for_client', 'team_decides', 'take_back', 'duplicate'])
     expect(list.secondary.find(a => a.action === 'approve_for_client')?.needs).toEqual(['agreed_via', 'note'])
     expect(list.danger?.action).toBe('cancel')
   })

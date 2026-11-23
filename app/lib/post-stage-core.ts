@@ -799,7 +799,7 @@ export function isPostAction(v: unknown): v is PostAction {
 }
 
 /** What a person has to give with the press, so the window asks for it next to the button. */
-export type InputNeed = 'note' | 'time' | 'agreed_via' | 'assign_to' | 'confirm' | 'recipients' | 'steps' | 'if_no_answer'
+export type InputNeed = 'note' | 'time' | 'agreed_via' | 'assign_to' | 'confirm' | 'recipients' | 'steps' | 'if_no_answer' | 'copies'
 
 export type TransitionRow = {
   action: PostAction
@@ -873,7 +873,10 @@ export const POST_TRANSITIONS: readonly TransitionRow[] = [
   { action: 'cancel', spec: 'T20', from: PRE_POST, to: 'cancelled', who: TEAM_BUILD, label: 'Cancel the post', needs: ['confirm'], confirm: 'Cancel the whole post? It will not go out at all.' },
   { action: 'rebook', spec: 'T22', from: ['cancelled'], to: 'draft', who: TEAM_BUILD, label: 'Re-book' },
   { action: 'missing_networks', spec: 'T21', from: ['posted'], to: 'same', who: BOOKERS, label: 'Post the missing networks' },
-  { action: 'duplicate', spec: 'T21', from: ['posted', 'cancelled'], to: 'same', who: TEAM_BUILD, label: 'Duplicate' },
+  // DUPLICATE, FROM ANY STAGE, ONTO THE DAYS PICKED (the owner, 23 Nov 2026; Renee: "for basfoods we do weekly specials
+  // same story daily, now I need to manually make them each day"). It was offered on a posted or cancelled post only and
+  // made one draft with no time. Now: any post, one copy for each day ticked, each a post of its own that can be changed.
+  { action: 'duplicate', spec: 'T21', from: [...PRE_POST, 'posted', 'cancelled'], to: 'same', who: TEAM_BUILD, label: 'Duplicate', needs: ['copies'] },
   { action: 'delete_draft', spec: 'T23', from: ['draft'], to: 'deleted', who: ['creator', 'am', 'sa'], label: 'Delete draft', needs: ['confirm'], confirm: 'Delete this draft? It has never been sent, so nothing else changes.' },
   { action: 'set_steps', spec: 'decision 13', from: ['draft', 'quality_check', 'ready'], to: 'same', who: MANAGERS, label: 'Change approval steps', needs: ['steps'] },
   { action: 'booking_done', spec: '§3.1', from: ['booked'], to: 'same', who: ['system'], label: 'Booked in' },
@@ -948,6 +951,44 @@ export type TransitionInput = {
   /** the networks the booking targeted, by platform */
   platforms?: readonly string[] | null
   reason?: string | null
+  /** Duplicate: the posting time of each copy, one copy each; none = one copy with no time */
+  copies?: readonly string[] | null
+  /** Duplicate: the copies keep the original's approval and are booked in, instead of starting as drafts */
+  keep_approval?: boolean | null
+}
+
+/** the most copies one press of Duplicate makes: a month of daily posts */
+export const MAX_COPIES = 31
+export const KEEP_NEEDS_APPROVAL = 'This post has not been approved, so its copies start as drafts.'
+
+/**
+ * What stops a Duplicate, or null. Every copy has a time that can be read, is still ahead, and is its own; and
+ * "keep the approval" is only for a post that has been through its checks (Ready to post, Booked in or Posted, with
+ * the quality check or the client's yes on it) and only onto times far enough ahead to book.
+ */
+export function duplicateProblem(
+  post: Pick<PostState, 'stage'> & { approval?: unknown; qc_pass?: unknown },
+  copies: readonly string[] | null | undefined,
+  keep: boolean,
+  now: NowLike,
+): { code: 'invalid' | 'time' | 'unapproved'; reason: string } | null {
+  const times = copies ?? []
+  if (times.length > MAX_COPIES) return { code: 'invalid', reason: `That is more than ${MAX_COPIES} copies. Make them a month at a time.` }
+  const seen = new Set<number>()
+  for (const t of times) {
+    const at = ms(t)
+    if (!Number.isFinite(at)) return { code: 'time', reason: 'One of those days could not be read. Pick the days again.' }
+    if (at <= ms(now)) return { code: 'time', reason: 'One of those times has already passed. Pick a later time or other days.' }
+    if (seen.has(at)) return { code: 'invalid', reason: 'The same day was picked twice.' }
+    seen.add(at)
+    if (keep && at - ms(now) < MIN_LEAD_MS) return { code: 'time', reason: TIME_TOO_SOON }
+  }
+  if (keep) {
+    if (times.length === 0) return { code: 'time', reason: 'Tick the days the copies go out on.' }
+    const passed = (['ready', 'booked', 'posted'] as PostStage[]).includes(post.stage) && (!!post.approval || !!post.qc_pass)
+    if (!passed) return { code: 'unapproved', reason: KEEP_NEEDS_APPROVAL }
+  }
+  return null
 }
 
 export type TransitionContext = {
@@ -1116,10 +1157,15 @@ export function checkPostTransition(
       if (input.if_no_answer !== 'post' && input.if_no_answer !== 'wait') return refuse('invalid', 'Choose "Post anyway" or "Wait for the client".')
       break
 
+    case 'duplicate': {
+      const p = duplicateProblem(post, input.copies, input.keep_approval === true, now)
+      if (p) return refuse(p.code, p.reason)
+      break
+    }
+
     case 'save':
     case 'take_back':
     case 'rebook':
-    case 'duplicate':
     case 'edit':
       break
 
@@ -1306,7 +1352,8 @@ export type PostEffect =
   | { when: 'before'; kind: 'reschedule_jobs'; job_ids: string[]; for_time: string }
   | { when: 'after'; kind: 'queue_publish'; for_time: string; now: boolean }
   | { when: 'after'; kind: 'notify'; to: NotifyTarget; action: PostAction; person_id?: string | null }
-  | { when: 'after'; kind: 'create_post'; stage: 'ready' | 'draft'; platforms: string[] | null; carry_approval: boolean }
+  /** `scheduled_for` and `copy`: a Duplicate's copy, at its own time (23 Nov 2026); without them, Post the missing networks */
+  | { when: 'after'; kind: 'create_post'; stage: 'ready' | 'draft'; platforms: string[] | null; carry_approval: boolean; scheduled_for?: string | null; copy?: boolean }
   | { when: 'instead'; kind: 'delete_post' }
 
 /** Why a version was frozen. 'schedule': a super admin's Schedule it froze a Draft's working copy. */
@@ -1656,9 +1703,15 @@ export function planPostTransition(
     case 'missing_networks':
       effects.push({ when: 'after', kind: 'create_post', stage: 'ready', platforms: failedNetworks(post), carry_approval: true })
       break
-    case 'duplicate':
-      effects.push({ when: 'after', kind: 'create_post', stage: 'draft', platforms: null, carry_approval: false })
+    case 'duplicate': {
+      // one copy for each day picked; none picked is the one draft with no time it always made
+      const keep = input.keep_approval === true
+      const times: (string | null)[] = (input.copies ?? []).length > 0 ? [...input.copies!].sort((a, b) => ms(a) - ms(b)) : [null]
+      for (const t of times) {
+        effects.push({ when: 'after', kind: 'create_post', stage: keep ? 'ready' : 'draft', platforms: null, carry_approval: keep, scheduled_for: t, copy: true })
+      }
       break
+    }
     case 'delete_draft':
       effects.push({ when: 'instead', kind: 'delete_post' })
       break
@@ -1736,11 +1789,11 @@ const DANGER: readonly PostAction[] = ['cancel', 'delete_draft']
 
 /** The order a stage's buttons are listed in; the first unblocked entry of `PRIMARY` is the main button. */
 const ORDER: Record<PostStage, readonly PostAction[]> = {
-  draft: ['send_to_qc', 'schedule_direct', 'save', 'set_steps', 'delete_draft', 'cancel'],
-  quality_check: ['pass', 'pass_send_client', 'schedule_direct', 'ask_change', 'change_time', 'edit', 'set_steps', 'cancel'],
-  with_client: ['client_approve', 'client_ask_change', 'remind_client', 'resend_new_time', 'approve_for_client', 'team_decides', 'take_back', 'cancel'],
-  ready: ['book', 'change_time', 'post_now', 'send_to_client', 'edit', 'set_steps', 'cancel'],
-  booked: ['change_time', 'unbook', 'edit_booked', 'cancel'],
+  draft: ['send_to_qc', 'schedule_direct', 'save', 'set_steps', 'duplicate', 'delete_draft', 'cancel'],
+  quality_check: ['pass', 'pass_send_client', 'schedule_direct', 'ask_change', 'change_time', 'edit', 'set_steps', 'duplicate', 'cancel'],
+  with_client: ['client_approve', 'client_ask_change', 'remind_client', 'resend_new_time', 'approve_for_client', 'team_decides', 'take_back', 'duplicate', 'cancel'],
+  ready: ['book', 'change_time', 'post_now', 'send_to_client', 'edit', 'set_steps', 'duplicate', 'cancel'],
+  booked: ['change_time', 'unbook', 'edit_booked', 'duplicate', 'cancel'],
   posted: ['missing_networks', 'duplicate'],
   cancelled: ['rebook', 'duplicate'],
 }

@@ -299,6 +299,10 @@ export type Answers = {
   via?: 'email' | 'link' | null
   /** when the client's answer closes — shown with its default, and changeable (decision 11) */
   approve_by?: string | null
+  /** Duplicate: the posting time of each copy */
+  copies?: string[] | null
+  /** Duplicate: keep the original's approval and book the copies in */
+  keep_approval?: boolean | null
 }
 
 export type Question = {
@@ -331,6 +335,7 @@ const PROMPT: Partial<Record<PostAction, { prompt: string; go: string; stay?: st
   cancel: { prompt: 'Cancel the WHOLE post? It will not go out at all. To stop editing instead, just close this window — your changes are kept as a draft.', go: 'Yes, cancel the post', stay: 'Keep the post' },
   delete_draft: { prompt: 'Delete this draft? It has never been sent, so nothing else changes.', go: 'Delete draft', stay: 'Keep it' },
   set_steps: { prompt: 'Who approves this post?', go: 'Save' },
+  duplicate: { prompt: 'Which days should the copies go out? Each copy is a post of its own: you can change its picture, caption, time and channels.', go: 'Make the copies' },
 }
 
 /**
@@ -393,6 +398,9 @@ export function answerProblem(
         break
       case 'assign_to':
         break
+      case 'copies':
+        if (!(a.copies ?? []).length) return 'Tick at least one day.'
+        break
     }
   }
   return null
@@ -415,6 +423,10 @@ export function buildActRequest(post: Pick<PostState, 'rev' | 'sent_version' | '
   if (needs.includes('assign_to')) req.assign_to = a.assign_to || post.created_by || null
   if (needs.includes('confirm')) req.confirm = true
   if (needs.includes('steps') && a.steps) req.steps = a.steps
+  if (needs.includes('copies')) {
+    req.copies = [...(a.copies ?? [])]
+    if (a.keep_approval) req.keep_approval = true
+  }
   if (needs.includes('recipients')) {
     // a reminder is an email of the same send: never a copied link, never a new answer-by time
     const reminder = isReminderSend(action)
@@ -423,6 +435,26 @@ export function buildActRequest(post: Pick<PostState, 'rev' | 'sent_version' | '
     if (a.approve_by && !reminder) req.approve_by = a.approve_by
   }
   return req
+}
+
+/* ── Duplicate: the days to tick (the owner, 23 Nov 2026: "please make it easy") ──
+ * The window shows the next fourteen days as buttons and one time of day, the original's own. Ticking days is all a
+ * person does; the times are worked out here. */
+export const COPY_DAYS = 14
+
+/** the fourteen days after today, as the client's own calendar days */
+export function copyDayChoices(now: NowLike, tz: string, dayKey: (ms: number, tz: string) => string | null): string[] {
+  const out: string[] = []
+  for (let i = 1; out.length < COPY_DAYS && i <= COPY_DAYS + 2; i++) {
+    const key = dayKey(ms(now) + i * 86_400_000, tz)
+    if (key && !out.includes(key)) out.push(key)
+  }
+  return out
+}
+
+/** the posting times for the days ticked, at one time of day, in day order; a day whose time cannot be made is left out */
+export function copyTimes(days: readonly string[], minutes: number, tz: string, toInstant: (day: string, minutes: number, tz: string) => Date | null): string[] {
+  return [...days].sort().map(d => toInstant(d, minutes, tz)).filter((d): d is Date => !!d && Number.isFinite(d.getTime())).map(d => d.toISOString())
 }
 
 /** The label beside "how the client agreed". */
