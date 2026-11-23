@@ -637,7 +637,7 @@ export function approvalReminderTimes(approveBy: string | null | undefined): { k
 export type AccountRef = { id: string; platform: string; live?: boolean | null; name?: string | null }
 
 
-/** Instagram's ceiling through the API (publish-core: 28 Sep 2026, fifteen sent, ten went out). */
+/** Instagram's ceiling through the API: twenty since 23 Nov 2026, counted on a real post (publish-core has the history). */
 export const INSTAGRAM_MAX = PLATFORM_RULES.instagram.carousel
 
 export const CHANNEL_NOT_FOUND = 'One of this post\'s channels is not connected any more — choose its channels again'
@@ -696,7 +696,13 @@ export function instagramOverflow(
   const own = post.per_channel[ig]?.slides
   const count = (own && own.length > 0 ? own : post.slides).length
   if (count <= INSTAGRAM_MAX) return null
-  const others = post.channels.some(id => id !== ig && byId.get(id)?.platform !== 'instagram')
+  // "the other networks keep all N" is only offered when one of them takes N (23 Nov 2026: Instagram and LinkedIn
+  // both stop at twenty now, so the old offer would have handed LinkedIn a twenty-first it refuses)
+  const takes = (platform: string | undefined) => {
+    const r = platform ? PLATFORM_RULES[platform as keyof typeof PLATFORM_RULES] : undefined
+    return r ? (r.carousel > 0 ? r.carousel : r.images) : 0
+  }
+  const others = post.channels.some(id => id !== ig && byId.get(id)?.platform !== 'instagram' && takes(byId.get(id)?.platform) >= count)
   const choices: InstagramChoice[] = [
     { key: 'drop', label: `Keep ${INSTAGRAM_MAX} — take ${count - INSTAGRAM_MAX} out` },
     { key: 'split', label: 'Split it into two posts' },

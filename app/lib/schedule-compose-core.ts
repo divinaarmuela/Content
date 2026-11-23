@@ -602,7 +602,10 @@ export function limitsLine(
     }
     const max = rules.carousel > 0 ? rules.carousel : rules.images
     const word = max > 1 ? (MULTI_WORD[platform as Platform] ?? 'post') : 'post'
-    parts.push(`${name} ${word}: up to ${max}`)
+    // SAY WHETHER PHOTOS AND VIDEOS GO TOGETHER (the owner, 23 Nov 2026: "make sure we are clear … 20 can be mixed for
+    // instagram but not fb"). The number alone read as if every network took the same mix.
+    const mix = max > 1 ? (rules.mixedCarousel ? ', photos and videos together' : rules.videos > 0 ? ' photos, or one video (not both)' : ' photos') : ''
+    parts.push(`${name} ${word}: up to ${max}${mix}`)
   }
   return parts.join(' · ')
 }

@@ -26,6 +26,7 @@ const slides = (n: number) => Array.from({ length: n }, (_, i) => img(i + 1))
 const ACCOUNTS: AccountRef[] = [
   { id: 'acc-ig', platform: 'instagram', live: true },
   { id: 'acc-li', platform: 'linkedin', live: true },
+  { id: 'acc-tt', platform: 'tiktok', live: true },
 ]
 const CTX: TransitionContext = { now: NOW, accounts: ACCOUNTS, clientHasContact: true }
 
@@ -664,11 +665,13 @@ describe('composition (decision 10)', () => {
   const creator = actorFor('creator')
 
   it('Instagram with 11 is refused, and says how many to take out', () => {
-    const p = post('draft', { slides: slides(11) })
+    const p = post('draft', { slides: slides(21), channels: ['acc-ig'] })
     const r = checkPostTransition(p, 'send_to_qc', creator, {}, CTX)
     expect(r).toMatchObject({ ok: false, code: 'invalid' })
-    if (!r.ok) expect(r.problems).toContain('Instagram takes 10 media files — take 1 out')
-    expect(INSTAGRAM_MAX).toBe(10)
+    if (!r.ok) expect(r.problems).toContain('Instagram takes 20 media files — take 1 out')
+    // twenty since 23 Nov 2026: counted on a real post of 17 pictures and 3 videos
+    expect(INSTAGRAM_MAX).toBe(20)
+    expect(checkPostTransition(post('draft', { slides: slides(20), channels: ['acc-ig'] }), 'send_to_qc', creator, {}, CTX)).toMatchObject({ ok: true })
   })
 
   it('LinkedIn with its own 11 is allowed beside Instagram\'s shared 10', () => {
@@ -688,12 +691,14 @@ describe('composition (decision 10)', () => {
   })
 
   it('offers drop, split, or Instagram\'s own ten instead of the eleventh', () => {
-    const over = instagramOverflow(post('draft', { slides: slides(11) }), ACCOUNTS)
-    expect(over).toMatchObject({ count: 11, max: 10, over: 1 })
+    const over = instagramOverflow(post('draft', { slides: slides(21), channels: ['acc-ig', 'acc-tt'] }), ACCOUNTS)
+    expect(over).toMatchObject({ count: 21, max: 20, over: 1 })
     expect(over?.choices.map(c => c.key)).toEqual(['drop', 'split', 'own'])
-    expect(instagramOverflow(post('draft', { slides: slides(11), channels: ['acc-ig'] }), ACCOUNTS)?.choices.map(c => c.key)).toEqual(['drop', 'split'])
-    expect(instagramOverflow(post('draft', { slides: slides(10) }), ACCOUNTS)).toBeNull()
-    expect(instagramOverflow(post('draft', { slides: slides(11), channels: ['acc-li'] }), ACCOUNTS)).toBeNull()
+    expect(instagramOverflow(post('draft', { slides: slides(21), channels: ['acc-ig'] }), ACCOUNTS)?.choices.map(c => c.key)).toEqual(['drop', 'split'])
+    // LinkedIn stops at twenty too, so it is not a network that "keeps all 21"
+    expect(instagramOverflow(post('draft', { slides: slides(21), channels: ['acc-ig', 'acc-li'] }), ACCOUNTS)?.choices.map(c => c.key)).toEqual(['drop', 'split'])
+    expect(instagramOverflow(post('draft', { slides: slides(20) }), ACCOUNTS)).toBeNull()
+    expect(instagramOverflow(post('draft', { slides: slides(21), channels: ['acc-li'] }), ACCOUNTS)).toBeNull()
   })
 
   it('a send needs a time ahead; saving a draft never asks for one', () => {
@@ -794,10 +799,10 @@ describe('postActions', () => {
   })
 
   it('a guard that stops a button shows its reason instead of hiding it', () => {
-    const list = postActions(post('draft', { slides: slides(11) }), viewerHats('scheduler'), NOW, { accounts: ACCOUNTS })
+    const list = postActions(post('draft', { slides: slides(21), channels: ['acc-ig'] }), viewerHats('scheduler'), NOW, { accounts: ACCOUNTS })
     expect(list.primary).toBeNull()
     const send = list.secondary.find(a => a.action === 'send_to_qc')
-    expect(send?.blocked).toBe('Instagram takes 10 media files — take 1 out')
+    expect(send?.blocked).toBe('Instagram takes 20 media files — take 1 out')
   })
 
   it('the Edit label names the version it makes', () => {
@@ -1151,7 +1156,7 @@ describe('Schedule it — a super admin books a Draft or a post at the quality c
     expect(none).toMatchObject({ ok: false, code: 'invalid' })
     const sendNone = checkPostTransition(post('draft', { channels: [] }), 'send_to_qc', { id: 'u-maker', hats: ['creator'] }, {}, CTX)
     if (!none.ok && !sendNone.ok) expect(none.reason).toBe(sendNone.reason)
-    const eleven = checkPostTransition(post('draft', { slides: slides(11) }), 'schedule_direct', sa, {}, CTX)
+    const eleven = checkPostTransition(post('draft', { slides: slides(21) }), 'schedule_direct', sa, {}, CTX)
     expect(eleven).toMatchObject({ ok: false, code: 'invalid' })
     if (!eleven.ok) expect(eleven.problems?.join(' ')).toMatch(/Instagram/)
     expect(checkPostTransition(post('draft', { slides: slides(10) }), 'schedule_direct', sa, {}, CTX)).toMatchObject({ ok: true })

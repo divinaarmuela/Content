@@ -33,6 +33,7 @@ const slides = (n: number) => Array.from({ length: n }, (_, i) => slide(i + 1))
 const ACCOUNTS: AccountRef[] = [
   { id: 'ig', platform: 'instagram', live: true, name: 'cafe' },
   { id: 'li', platform: 'linkedin', live: true, name: 'Cafe Co' },
+  { id: 'tt', platform: 'tiktok', live: true, name: 'cafe' },
 ]
 
 const working = (over: Partial<WorkingCopy> = {}): WorkingCopy => ({
@@ -216,35 +217,36 @@ describe('the clock (audit W3, W9)', () => {
 
 describe('Instagram takes ten (decision 10)', () => {
   it('the eleventh is refused by the same rule the server runs', () => {
-    const p = post({ slides: slides(11), channels: ['ig'] })
-    expect(compositionProblems(p, ACCOUNTS, NOW).join(' ')).toMatch(/Instagram takes 10/)
-    expect(instagramCounter(workingCopyOf(p), ACCOUNTS)).toMatchObject({ count: 11, max: 10, over: true, line: 'Instagram 11 of 10' })
+    const p = post({ slides: slides(21), channels: ['ig'] })
+    expect(compositionProblems(p, ACCOUNTS, NOW).join(' ')).toMatch(/Instagram takes 20/)
+    expect(instagramCounter(workingCopyOf(p), ACCOUNTS)).toMatchObject({ count: 21, max: 20, over: true, line: 'Instagram 21 of 20' })
   })
 
   it('offers drop and split; and "its own ten" only when another network keeps them all', () => {
-    expect(instagramChoices(working({ slides: slides(11), channels: ['ig'] }), ACCOUNTS)!.choices.map(c => c.key)).toEqual(['drop', 'split'])
-    expect(instagramChoices(working({ slides: slides(11), channels: ['ig', 'li'] }), ACCOUNTS)!.choices.map(c => c.key)).toEqual(['drop', 'split', 'own'])
-    expect(instagramChoices(working({ slides: slides(10), channels: ['ig'] }), ACCOUNTS)).toBeNull()
+    expect(instagramChoices(working({ slides: slides(21), channels: ['ig'] }), ACCOUNTS)!.choices.map(c => c.key)).toEqual(['drop', 'split'])
+    expect(instagramChoices(working({ slides: slides(21), channels: ['ig', 'tt'] }), ACCOUNTS)!.choices.map(c => c.key)).toEqual(['drop', 'split', 'own'])
+    expect(instagramChoices(working({ slides: slides(21), channels: ['ig', 'li'] }), ACCOUNTS)!.choices.map(c => c.key)).toEqual(['drop', 'split'])
+    expect(instagramChoices(working({ slides: slides(20), channels: ['ig'] }), ACCOUNTS)).toBeNull()
   })
 
   it('drop keeps the first ten; split hands the rest to a second post; own gives Instagram its ten', () => {
-    const w = working({ slides: slides(12), channels: ['ig', 'li'] })
+    const w = working({ slides: slides(22), channels: ['ig', 'tt'] })
     const drop = applyInstagramChoice(w, 'drop', ACCOUNTS)
-    expect(drop.working.slides).toHaveLength(10)
+    expect(drop.working.slides).toHaveLength(20)
     expect(drop.splitOff).toBeNull()
     expect(drop.words).toMatch(/last 2 files were taken out/)
 
     const split = applyInstagramChoice(w, 'split', ACCOUNTS)
-    expect(split.working.slides.map(s => s.name)).toEqual(slides(10).map(s => s.name))
-    expect(split.splitOff!.map(s => s.name)).toEqual(['11.jpg', '12.jpg'])
+    expect(split.working.slides.map(s => s.name)).toEqual(slides(20).map(s => s.name))
+    expect(split.splitOff!.map(s => s.name)).toEqual(['21.jpg', '22.jpg'])
 
     const own = applyInstagramChoice(w, 'own', ACCOUNTS)
-    expect(own.working.slides).toHaveLength(12)
-    expect(own.working.perChannel.ig.slides).toHaveLength(10)
-    expect(own.working.perChannel.li).toBeUndefined()
+    expect(own.working.slides).toHaveLength(22)
+    expect(own.working.perChannel.ig.slides).toHaveLength(20)
+    expect(own.working.perChannel.tt).toBeUndefined()
     // …and the post then passes: LinkedIn keeps its 12 beside Instagram's own 10
-    const after = post({ slides: own.working.slides, channels: ['ig', 'li'], per_channel: own.working.perChannel })
-    expect(compositionProblems(after, ACCOUNTS, NOW).join(' ')).not.toMatch(/Instagram takes 10/)
+    const after = post({ slides: own.working.slides, channels: ['ig', 'tt'], per_channel: own.working.perChannel })
+    expect(compositionProblems(after, ACCOUNTS, NOW).join(' ')).not.toMatch(/Instagram takes 20/)
   })
 })
 

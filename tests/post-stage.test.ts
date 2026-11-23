@@ -805,7 +805,7 @@ describe('Schedule it — the one writer', () => {
     expect(r1b).toMatchObject({ ok: false, code: 'time' })
     const none = await newDraft({ id: 'p-none', channels: [] })
     expect(await performPostTransition(none, 'schedule_direct', await as(SA, none), { expect_rev: 0 })).toMatchObject({ ok: false, code: 'invalid' })
-    const many = Array.from({ length: 11 }, (_, i) => ({ url: `https://media.mdmmarketing.com.au/${i}.jpg`, name: `${i}.jpg`, type: 'image' }))
+    const many = Array.from({ length: 21 }, (_, i) => ({ url: `https://media.mdmmarketing.com.au/${i}.jpg`, name: `${i}.jpg`, type: 'image' }))
     const eleven = await newDraft({ id: 'p-eleven', slides: many })
     const r3 = await performPostTransition(eleven, 'schedule_direct', await as(SA, eleven), { expect_rev: 0 })
     expect(r3).toMatchObject({ ok: false, code: 'invalid' })

@@ -385,14 +385,14 @@ describe('suggestedTimes', () => {
 describe('slideLimits', () => {
   it('reads the per-kind ceilings off the platform rules', () => {
     expect(slideLimits(['instagram', 'youtube', 'linkedin'])).toEqual({
-      instagram: { images: 10, videos: 1, carousel: 10, mixedCarousel: true },
+      instagram: { images: 20, videos: 1, carousel: 20, mixedCarousel: true },
       youtube: { images: 0, videos: 1, carousel: 0, mixedCarousel: false },
       linkedin: { images: 20, videos: 1, carousel: 20, mixedCarousel: false },
     })
   })
   it('skips a platform it has no rules for', () => {
     expect(slideLimits(['instagram', 'myspace'])).toEqual({
-      instagram: { images: 10, videos: 1, carousel: 10, mixedCarousel: true },
+      instagram: { images: 20, videos: 1, carousel: 20, mixedCarousel: true },
     })
   })
 })
@@ -402,7 +402,7 @@ describe('applySlideLimit', () => {
   const many = Array.from({ length: 22 }, (_, i) => img(i))
 
   it('trims to what the platform will take', () => {
-    expect(applySlideLimit(many, 'instagram')).toHaveLength(10)
+    expect(applySlideLimit(many, 'instagram')).toHaveLength(20)
     expect(applySlideLimit(many, 'youtube')).toHaveLength(0)
     expect(applySlideLimit([vid(1), ...many], 'youtube')).toEqual([vid(1)])
   })
@@ -514,8 +514,8 @@ describe('validateComposition', () => {
       channels: [{ id: 'a1', platform: 'instagram' }],
     })
     expect(r.ok).toBe(false)
-    // ten through the API (28 Sep 2026): Justin's fifteen went out as ten, in silence
-    expect(r.problems).toContain('Instagram takes 10 media files — take 12 out')
+    // twenty through the API since 23 Nov 2026 (it was ten: Justin's fifteen went out as ten, in silence)
+    expect(r.problems).toContain('Instagram takes 20 media files — take 2 out')
     expect(validateComposition({
       ...good,
       slides: Array.from({ length: 10 }, (_, i) => img(i)),

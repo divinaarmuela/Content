@@ -353,10 +353,10 @@ describe('it invents no rules — every refusal is the publisher\'s own', () => 
     }).networks[0].problems).toEqual([])
     const p = buildPostPreview({
       caption: 'x',
-      media: Array.from({ length: 11 }, (_, i) => image(`s${i}`)),
+      media: Array.from({ length: 21 }, (_, i) => image(`s${i}`)),
       channels: [channel('instagram')],
     })
-    expect(p.networks[0].problems.join(' ')).toMatch(/11 .*(images|slides)/)
+    expect(p.networks[0].problems.join(' ')).toMatch(/21 .*(images|slides)/)
   })
 
   it('a Reel made of photographs is refused', () => {

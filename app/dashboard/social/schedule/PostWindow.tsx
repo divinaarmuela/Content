@@ -1782,7 +1782,7 @@ export default function PostWindow({
             {/* SEVERAL VIDEOS IN ONE POST: who takes them, said before anyone presses anything (the owner, 2 Nov 2026) */}
             {beforeBooking && !storyPlan?.ok && shown.slides.filter(s => s.type === 'video').length > 1 && (
               <p className="rounded-inner border border-border bg-muted/40 px-3 py-1.5 text-[12px] leading-snug" data-many-videos>
-                <strong>{shown.slides.filter(s => s.type === 'video').length} videos in one post:</strong> Instagram posts them as a carousel (up to 10, photos and videos mixed).
+                <strong>{shown.slides.filter(s => s.type === 'video').length} videos in one post:</strong> Instagram posts them as a carousel (up to 20, photos and videos mixed).
                 Facebook, TikTok, LinkedIn, X and YouTube take one video per post — make a post for each video there.
               </p>
             )}

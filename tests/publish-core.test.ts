@@ -94,12 +94,12 @@ describe('post kinds — reels, stories, carousels', () => {
       caption: 'a', media: img(9), platforms: ['instagram'], kinds: { instagram: 'carousel' },
     })).toEqual([])
     expect(validatePost({
-      caption: 'a', media: img(10), platforms: ['instagram'], kinds: { instagram: 'carousel' },
+      caption: 'a', media: img(20), platforms: ['instagram'], kinds: { instagram: 'carousel' },
     })).toEqual([])
     const issues = validatePost({
-      caption: 'a', media: img(11), platforms: ['instagram'], kinds: { instagram: 'carousel' },
+      caption: 'a', media: img(21), platforms: ['instagram'], kinds: { instagram: 'carousel' },
     })
-    expect(issues.some(i => /11 slides; instagram allows 10/.test(i.problem))).toBe(true)
+    expect(issues.some(i => /21 slides; instagram allows 20/.test(i.problem))).toBe(true)
   })
 
   it('lets an Instagram carousel mix images and video', () => {

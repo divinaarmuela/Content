@@ -74,7 +74,11 @@ export const PLATFORM_RULES: Record<Platform, {
   // publishing API the provider uses takes 10 — its docs: "Carousel: up to 10 items" — and its log for that post read
   // `media_count: 10`, status success: the extra five were dropped with no error. So the composer refuses the eleventh
   // (24 Sep's twenty was right about the app and wrong about posting through it).
-  instagram: { captionMax: 2200,  images: 10, videos: 1, documents: 0, mixed: false, requiresMedia: true,  carousel: 10, mixedCarousel: true,  stories: true,  shortForm: true  },
+  // TWENTY SINCE 23 NOV 2026 (the owner: "i recently found out that u can post 20 from zernio docs"). The provider's docs now
+  // read "Carousel: Up to 20 items, images and videos mixed", its dry run warns only at the 21st ("Instagram will receive
+  // the first 20 of your 21"), and a real post of 17 pictures and 3 videos to @mdmediatestaut was counted on Instagram
+  // itself: 20 slides (instagram.com/p/DgEXo_DCQLH). The history above is why this was 10 until that count was made.
+  instagram: { captionMax: 2200,  images: 20, videos: 1, documents: 0, mixed: false, requiresMedia: true,  carousel: 20, mixedCarousel: true,  stories: true,  shortForm: true  },
   tiktok:    { captionMax: 2200,  images: 35, videos: 1, documents: 0, mixed: false, requiresMedia: true,  carousel: 35, mixedCarousel: false, stories: false, shortForm: true  },
   twitter:   { captionMax: 280,   images: 4,  videos: 1, documents: 0, mixed: false, requiresMedia: false, carousel: 4,  mixedCarousel: false, stories: false, shortForm: false },
   linkedin:  { captionMax: 3000,  images: 20, videos: 1, documents: 1, mixed: false, requiresMedia: false, carousel: 20, mixedCarousel: false, stories: false, shortForm: false },

@@ -188,20 +188,21 @@ describe('the top says the post\'s own stage and who has it', () => {
 
 describe('Instagram takes ten (decision 10)', () => {
   it('eleven files on Instagram and LinkedIn: the counter, the refusal, and the three choices', () => {
-    const html = draw(row({ slides: imgs(11), channels: ['ig', 'li'] }), SCHEDULER)
-    expect(html).toMatch(/data-instagram-counter="true"[^>]*>Instagram 11 of 10</)
+    const html = draw(row({ slides: imgs(21), channels: ['ig', 'li'] }), SCHEDULER)
+    expect(html).toMatch(/data-instagram-counter="true"[^>]*>Instagram 21 of 20</)
     expect(html).toMatch(/data-composition-problems/)
-    expect(html).toMatch(/Instagram takes 10/)
-    expect(html).toContain('Keep 10 — take 1 out')
+    expect(html).toMatch(/Instagram takes 20/)
+    expect(html).toContain('Keep 20 — take 1 out')
     expect(html).toContain('Split it into two posts')
-    expect(html).toContain('Give Instagram its own 10 — the other networks keep all 11')
+    // LinkedIn stops at twenty too (23 Nov 2026), so "the other networks keep all 21" is not offered beside it
+    expect(html).not.toContain('Give Instagram its own')
     // the send is still drawn, stopped, with its reason beside it
     expect(html).toMatch(/data-action="send_to_qc"[^>]*disabled=""/)
   })
 
   it('ten is fine and asks nothing', () => {
-    const html = draw(row({ slides: imgs(10), channels: ['ig'] }), SCHEDULER)
-    expect(html).toMatch(/Instagram 10 of 10/)
+    const html = draw(row({ slides: imgs(20), channels: ['ig'] }), SCHEDULER)
+    expect(html).toMatch(/Instagram 20 of 20/)
     expect(html).not.toContain('Split it into two posts')
   })
 })
