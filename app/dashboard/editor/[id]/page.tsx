@@ -10,6 +10,9 @@ import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useRow, useTable } from '@/lib/db-client'
+import type { EncodeJob } from '@/lib/db-types'
+import HoverClip from '../../../components/media/HoverClip'
+import { encoderStills, playableUrl } from '../../../lib/playable-core'
 import type { Batch, Client, ContentItem, DriveSeen, DriveSource, TeamUser, WorkKind } from '@/lib/db-types'
 import { STEPS, agoWords, initialsOfName, isEditorCard, stepOf, videoNext, type NextTone } from '../../../lib/editor-preview-core'
 import { KIND_WORDS, OPEN_STATES, STATE_WORDS, gradeStanding, isFootage, isVideo, stageRule, type CutKind, type SeenState } from '../../../lib/drive-scan-core'
@@ -264,6 +267,8 @@ const TONES: Record<NextTone, string> = {
  * and its next step. A new cut in Drive is one line on the row: Confirm or Not this.
  */
 function Workspace({ item, rows, needsGrade, gradeSince, sourceCreated, framesOf, holder = null, posts = [] }: { item: ContentItem; rows: DriveSeen[]; needsGrade: boolean; gradeSince: string | null; sourceCreated: Map<string, string>; framesOf: FramesMap; holder?: string | null; posts?: PostLike[] }) {
+  // our encoder's copies of this card's videos, and whether each has its poster and scrub copy (22 Nov 2026)
+  const encodes = useTable<EncodeJob>('encode_jobs')
   const all = useMemo(() => stackVersions(stackFilesOf(item, rows, framesOf)), [item, rows, framesOf])
   const rowById = useMemo(() => new Map(rows.map(r => [r.id, r])), [rows])
   const { me } = useRole()
@@ -479,8 +484,25 @@ function Workspace({ item, rows, needsGrade, gradeSince, sourceCreated, framesOf
                           : pageOf(s) ? router.push(pageOf(s)!) : setPick({ stack: s.key, entry: s.latest.key })} aria-pressed={on}
                         className={`flex w-full flex-col overflow-hidden rounded-inner border bg-background text-left transition hover:shadow-md ${on ? 'border-foreground ring-2 ring-foreground/20' : pending.length ? 'border-accent-amber' : 'border-border'}`}>
                         <span className="relative block aspect-[9/12] w-full bg-muted">
-                          <HoverFrames frames={s.latest.frames ?? []} thumb={s.latest.thumb} board={s.latest.board ?? null} src={info(s).file?.url ?? s.entries.find(e => e.file)?.file?.url ?? null}
-                            driveId={info(s).file?.drive_file_id ?? s.entries.map(e => (e.source === 'drive' ? rowById.get(e.key.slice(2))?.drive_file_id : undefined)).find(Boolean) ?? null} />
+                          {(() => {
+                            // EVERY FRAME UNDER THE POINTER (the owner, 22 Nov 2026: "I need exact frames, so when it is hovered
+                            // it is the actual hover process"; 23 Nov: "I still see my dashboard the old frame"). This page drew
+                            // its tiles from the old storyboard, a picture a second, and was left behind when the board's tiles
+                            // moved to our encoder's scrub copy. A video our encoder has copied shows its sharp poster at rest
+                            // and the clip itself under the pointer; one it has not keeps the storyboard, and plays the small
+                            // copy, never a heavy master.
+                            const fileUrl = info(s).file?.url ?? s.entries.find(e => e.file)?.file?.url ?? null
+                            const own = fileUrl ? encoderStills(fileUrl, encodes.rows) : null
+                            if (own && fileUrl) return (
+                              <span className="absolute inset-0 block" data-tile-scrub>
+                                <HoverClip src={playableUrl(fileUrl, encodes.rows)} className="h-full w-full object-cover" poster={own.poster} duration={own.duration} scrub={own.scrub} />
+                              </span>
+                            )
+                            return (
+                              <HoverFrames frames={s.latest.frames ?? []} thumb={s.latest.thumb} board={s.latest.board ?? null} src={fileUrl ? playableUrl(fileUrl, encodes.rows) : null}
+                                driveId={info(s).file?.drive_file_id ?? s.entries.map(e => (e.source === 'drive' ? rowById.get(e.key.slice(2))?.drive_file_id : undefined)).find(Boolean) ?? null} />
+                            )
+                          })()}
                           <span className="absolute left-1.5 top-1.5 flex gap-1">
                             {s.versions.map(v => <span key={v} className={`rounded-full px-1.5 text-[10px] font-bold ${v === s.latest.label ? 'bg-foreground text-background' : 'bg-background/80 text-foreground'}`}>{v}</span>)}
                           </span>
