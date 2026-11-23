@@ -237,14 +237,15 @@ function TeamLinkRow({ batchId, has }: { batchId: string; has: boolean }) {
   }
   return (
     <div className="flex flex-col gap-2 border-b border-border py-2" data-team-link>
-      <div className="flex min-h-12 items-center gap-3">
-        <span className="w-[84px] shrink-0 text-[13px] font-semibold">Link for editors</span>
-        <span className="min-w-0 flex-1 text-[13px] text-muted-foreground">The shoot plan, the board and the comments, with no sign-in. Not for the client.</span>
+      {/* the name and the button on one line, what it is underneath: three across squeezed the words into a ribbon */}
+      <div className="flex min-h-12 items-center justify-between gap-3">
+        <span className="text-[13px] font-semibold">Link for editors</span>
         <Button type="button" variant="outline" disabled={busy} onClick={() => void copy()}
           className="h-11 shrink-0 rounded-full px-4 text-[13px] font-semibold">
           {copied ? <Check className="h-4 w-4" aria-hidden /> : <Link2 className="h-4 w-4" aria-hidden />} {copied ? 'Copied' : 'Copy link'}
         </Button>
       </div>
+      <p className="text-[13px] text-muted-foreground">The shoot plan, the board and the comments, with no sign-in. Not for the client.</p>
       {shown && (
         <input readOnly value={shown} aria-label="The link, to copy" onFocus={e => e.currentTarget.select()} autoFocus
           className="h-11 w-full rounded-inner border border-border bg-background px-3 text-[13px]" />
