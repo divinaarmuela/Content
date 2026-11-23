@@ -96,6 +96,10 @@ describe('wired through (source pins)', () => {
     expect(view).not.toMatch(/<(input|textarea|form|section)\b/)
     expect(view).not.toContain('/dashboard')
     expect(view).toContain('Please do not forward it to the client.')
+    // every address in the plan, the scripts and the comments opens in a new tab (23 Nov 2026), built as elements
+    expect(view).toContain('target="_blank" rel="noopener noreferrer"')
+    expect(view.match(/<Linked text=/g)).toHaveLength(5)
+    expect(view).not.toContain('dangerouslySetInnerHTML')
   })
   it('the shoot page has the button, where the editor’s card is', () => {
     const now = read('app/dashboard/production/shoots/[id]/ShootNow.tsx')

@@ -2,6 +2,22 @@ import { archivo, sometype } from '../../components/lama/fonts'
 import type { SharedComment, SharedShoot } from '../../lib/shoot-share-core'
 import type { ReferenceMedia } from '../../lib/batch-brief-core'
 import SharedBoard from './SharedBoard'
+import { linkParts } from '../../lib/todo-core'
+
+/**
+ * EVERY ADDRESS IS A LINK (the owner, 23 Nov 2026: "make sure links are hyperlinked in there"): in the plan, the
+ * scripts and the comments, a web address opens in a new tab. Built as elements, never as HTML, so nothing typed into
+ * a plan can run on this page.
+ */
+function Linked({ text }: { text: string }) {
+  return (
+    <>
+      {linkParts(String(text ?? '')).map((p, i) => p.href
+        ? <a key={i} href={p.href} target="_blank" rel="noopener noreferrer" className="break-all text-accent-blue-deep underline underline-offset-2 hover:text-accent-blue">{p.text}</a>
+        : <span key={i}>{p.text}</span>)}
+    </>
+  )
+}
 
 /**
  * WHAT THE TEAM LINK DRAWS (shoot-share-core). Its own file so the page is only the lookup, and so the look can be
@@ -25,7 +41,7 @@ function Comment({ c, on }: { c: SharedComment; on?: string }) {
         <span className="text-muted-foreground">{when(c.at)}</span>
         {c.resolved && <span className="text-[12px] text-muted-foreground">· resolved</span>}
       </p>
-      <p className="whitespace-pre-wrap break-words">{c.body}</p>
+      <p className="whitespace-pre-wrap break-words"><Linked text={c.body} /></p>
       {c.replies.map(r => (
         <div key={r.id} className="ml-3 flex flex-col gap-0.5 border-0 border-l-2 border-solid border-border pl-3">
           <p className="flex flex-wrap items-baseline gap-x-2 text-[13px]">
@@ -33,7 +49,7 @@ function Comment({ c, on }: { c: SharedComment; on?: string }) {
             {r.fromClient && <span className="rounded px-1.5 py-px text-[10px] font-semibold uppercase tracking-wider bg-tint-blue">Client</span>}
             <span className="text-muted-foreground">{when(r.at)}</span>
           </p>
-          <p className="whitespace-pre-wrap break-words">{r.body}</p>
+          <p className="whitespace-pre-wrap break-words"><Linked text={r.body} /></p>
         </div>
       ))}
     </div>
@@ -65,14 +81,14 @@ export default function SharedShootView({ shoot }: { shoot: (SharedShoot & { ref
                   {shoot.parts.map(p => (
                     <div key={p.label} className="flex min-w-0 flex-col gap-0.5">
                       <dt className="text-[12px] font-semibold">{p.label}</dt>
-                      <dd className="whitespace-pre-wrap break-words text-[15px]">{p.value}</dd>
+                      <dd className="whitespace-pre-wrap break-words text-[15px]"><Linked text={p.value} /></dd>
                     </div>
                   ))}
                 </dl>
                 {shoot.notes && (
                   <div className="flex flex-col gap-0.5 border-0 border-t border-solid border-border pt-3">
                     <p className="text-[12px] font-semibold">Notes for the team</p>
-                    <p className="whitespace-pre-wrap break-words text-[15px]">{shoot.notes}</p>
+                    <p className="whitespace-pre-wrap break-words text-[15px]"><Linked text={shoot.notes} /></p>
                   </div>
                 )}
                 {shoot.onThePlan.length > 0 && (
@@ -89,7 +105,7 @@ export default function SharedShootView({ shoot }: { shoot: (SharedShoot & { ref
                   {shoot.scripts.map(s => (
                     <div key={s.key} className="flex flex-col gap-3 rounded-[16px] border border-solid border-border bg-card p-4 sm:p-5" data-shared-script>
                       <h2 className="text-[18px] font-semibold leading-snug">{s.heading}</h2>
-                      <p className="whitespace-pre-wrap break-words text-[15px] leading-relaxed">{s.lines.join('\n')}</p>
+                      <p className="whitespace-pre-wrap break-words text-[15px] leading-relaxed"><Linked text={s.lines.join('\n')} /></p>
                       {s.comments.length > 0 && (
                         <div className="flex flex-col gap-2 border-0 border-t border-solid border-border pt-3">
                           <p className="text-[12px] font-semibold">{s.comments.length === 1 ? '1 comment on this script' : `${s.comments.length} comments on this script`}</p>
