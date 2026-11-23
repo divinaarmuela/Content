@@ -2,7 +2,8 @@
 
 import { useState, type ComponentProps, type ReactNode } from 'react'
 import Link from 'next/link'
-import { ChevronRight } from 'lucide-react'
+import { Check, ChevronRight, Link2 } from 'lucide-react'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -134,6 +135,7 @@ export default function ShootNow(props: Omit<WhereProps, 'part'> & {
               <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
             </Link>
           )}
+          <TeamLinkRow batchId={batch.id} has={!!(batch as { team_share_token?: string | null }).team_share_token} />
           <Row label="More" line="PDF · delivery only · what happened · manager options" last onClick={() => setOpen('more')} />
         </div>
       </CardContent>
@@ -191,6 +193,72 @@ export default function ShootNow(props: Omit<WhereProps, 'part'> & {
 }
 
 /** one quiet row: a name, a line of what is so, and it opens */
+/**
+ * A LINK FOR EDITORS, NO SIGN-IN (the owner, 23 Nov 2026: "How to copy this as a link and send to someone? Manal wants
+ * this to send to editors as she has made notes on it … we need a public available link … this is not a client
+ * portal"). One press copies a link to a read-only page with the shoot brief, the board when there is one, and every
+ * comment. It is the team's own plan, so the row says who it is for; "Switch off" makes the page go dark.
+ */
+function TeamLinkRow({ batchId, has }: { batchId: string; has: boolean }) {
+  const [on, setOn] = useState(has)
+  const [busy, setBusy] = useState(false)
+  const [copied, setCopied] = useState(false)
+  /** the link, shown to be copied by hand when the browser would not copy it */
+  const [shown, setShown] = useState<string | null>(null)
+  const copy = async () => {
+    if (busy) return
+    setBusy(true)
+    try {
+      const res = await fetch(`/api/production/batches/${batchId}/team-link`, { method: 'POST' })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok || !json.url) throw new Error(json.error ?? 'The link could not be made')
+      setOn(true)
+      try {
+        await navigator.clipboard.writeText(String(json.url))
+        setCopied(true)
+        setShown(null)
+        toast.success('Link copied. Anyone with it can read the shoot plan, the board and the comments.')
+        window.setTimeout(() => setCopied(false), 2500)
+      } catch {
+        setShown(String(json.url))
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'The link could not be made')
+    }
+    setBusy(false)
+  }
+  const stop = async () => {
+    if (busy) return
+    setBusy(true)
+    const res = await fetch(`/api/production/batches/${batchId}/team-link`, { method: 'DELETE' }).catch(() => null)
+    if (res?.ok) { setOn(false); setShown(null); toast.success('Link switched off. It no longer opens.') }
+    else toast.error('That did not go through. Try again.')
+    setBusy(false)
+  }
+  return (
+    <div className="flex flex-col gap-2 border-b border-border py-2" data-team-link>
+      <div className="flex min-h-12 items-center gap-3">
+        <span className="w-[84px] shrink-0 text-[13px] font-semibold">Link for editors</span>
+        <span className="min-w-0 flex-1 text-[13px] text-muted-foreground">The shoot plan, the board and the comments, with no sign-in. Not for the client.</span>
+        <Button type="button" variant="outline" disabled={busy} onClick={() => void copy()}
+          className="h-11 shrink-0 rounded-full px-4 text-[13px] font-semibold">
+          {copied ? <Check className="h-4 w-4" aria-hidden /> : <Link2 className="h-4 w-4" aria-hidden />} {copied ? 'Copied' : 'Copy link'}
+        </Button>
+      </div>
+      {shown && (
+        <input readOnly value={shown} aria-label="The link, to copy" onFocus={e => e.currentTarget.select()} autoFocus
+          className="h-11 w-full rounded-inner border border-border bg-background px-3 text-[13px]" />
+      )}
+      {on && (
+        <button type="button" disabled={busy} onClick={() => void stop()}
+          className="-my-1 inline-flex min-h-11 w-fit items-center text-[12px] font-semibold text-muted-foreground underline underline-offset-4 hover:text-foreground">
+          Switch the link off
+        </button>
+      )}
+    </div>
+  )
+}
+
 function Row({ label, line, onClick, alert = false, last = false }: { label: string; line: string; onClick: () => void; alert?: boolean; last?: boolean }) {
   return (
     <button type="button" onClick={onClick}
