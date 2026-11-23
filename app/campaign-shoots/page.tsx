@@ -5,6 +5,7 @@ import MdFooter from '../components/md-footer/MdFooter'
 import MdNav from '../components/md-nav/MdNav'
 import './campaign.css'
 import LazyLoop from '../components/lazy-loop/LazyLoop'
+import ProductSlider, { type ProductShot } from '../components/product-slider/ProductSlider'
 
 export const metadata: Metadata = {
   title: 'Campaign Shoots for Ecommerce Brands — MD Media, Melbourne',
@@ -51,20 +52,31 @@ const deliverables = [
   { n: '01', tag: 'Included', title: 'Content plan', desc: 'What goes out when, so it lasts the whole drop', media: 'get-04' },
 ]
 
-// PRODUCT SHOTS (the owner, 23 Nov 2026: "I wanna show we can do product shots too"), from three brands' shoots, mixed
-// rather than grouped so it reads as one body of work. `wide` is a landscape frame: it takes two columns.
+// PRODUCT SHOTS (the owner, 23 Nov 2026: "I wanna show we can do product shots too … use a combo, make it nice"),
+// from three brands' shoots, mixed rather than grouped so it reads as one body of work. Shown in the drag-and-drift
+// slider the owner sent a sample of (app/components/product-slider).
 const PRODUCT_DIR = '/images/campaign-shoots/products'
-const productShots: { file: string; brand: string; alt: string; wide?: boolean }[] = [
-  { file: 'alia-amber', brand: 'Alia Fragrance', alt: 'Alia perfume bottle held up against a glowing amber backdrop' },
-  { file: 'anagen-serums', brand: 'Anagen Beauty', alt: 'Two Anagen Beauty serum bottles in hard light and shadow' },
-  { file: 'luxe-iron', brand: 'Luxurious Beauty', alt: 'Luxurious Beauty hair straightener, close on the plates', wide: true },
-  { file: 'alia-gift-box', brand: 'Alia Fragrance', alt: 'Alia perfume bottles in a red satin gift box' },
-  { file: 'luxe-packaging', brand: 'Luxurious Beauty', alt: 'Luxurious Beauty packaging, open box', wide: true },
-  { file: 'anagen-kakadu', brand: 'Anagen Beauty', alt: 'Close-up of Kakadu plum in oil, an Anagen Beauty ingredient shot' },
-  { file: 'alia-red-cap', brand: 'Alia Fragrance', alt: 'Alia perfume bottle with a deep red cap' },
-  { file: 'anagen-box', brand: 'Anagen Beauty', alt: 'Anagen Beauty Kakadu Plum serum beside its box' },
-  { file: 'alia-satin', brand: 'Alia Fragrance', alt: 'Alia perfume bottles on gold satin' },
-  { file: 'alia-pair', brand: 'Alia Fragrance', alt: 'Two Alia perfume bottles laid on the diagonal' },
+const shot = (file: string, caption: string, alt: string, wide = false): ProductShot => ({ src: `${PRODUCT_DIR}/${file}.jpg`, caption, alt, ...(wide ? { wide } : {}) })
+const productShots: ProductShot[] = [
+  shot('alia-amber', 'Alia Fragrance', 'Alia perfume bottle held up against a glowing amber backdrop'),
+  shot('anagen-serums', 'Anagen Beauty', 'Two Anagen Beauty serum bottles in hard light and shadow'),
+  shot('luxe-logo', 'Luxurious Beauty', 'Luxurious Beauty hair straightener, close on the logo'),
+  shot('alia-gift-box', 'Alia Fragrance', 'Alia perfume bottles in a red satin gift box'),
+  shot('anagen-kakadu', 'Anagen Beauty', 'Close-up of Kakadu plum in oil, an Anagen Beauty ingredient shot'),
+  shot('alia-cream', 'Alia Fragrance', 'Alia perfume bottle with a cream stone cap'),
+  shot('luxe-packaging', 'Luxurious Beauty', 'Luxurious Beauty packaging, open box', true),
+  shot('anagen-box', 'Anagen Beauty', 'Anagen Beauty Kakadu Plum serum beside its box'),
+  shot('alia-glow', 'Alia Fragrance', 'Alia perfume bottle lit from behind in the dark'),
+  shot('luxe-pair', 'Luxurious Beauty', 'Two Luxurious Beauty hair straighteners side by side'),
+  shot('alia-satin', 'Alia Fragrance', 'Alia perfume bottles on gold satin'),
+  shot('anagen-water', 'Anagen Beauty', 'Anagen Beauty serum lying in rippled water'),
+  shot('alia-red-cap', 'Alia Fragrance', 'Alia perfume bottle with a deep red cap'),
+  shot('luxe-open', 'Luxurious Beauty', 'Luxurious Beauty hair straightener with the plates open'),
+  shot('alia-set', 'Alia Fragrance', 'Three Alia products together'),
+  shot('anagen-shadow', 'Anagen Beauty', 'Anagen Beauty serum on its boxes in a block of light'),
+  shot('alia-pair', 'Alia Fragrance', 'Two Alia perfume bottles laid on the diagonal'),
+  shot('luxe-iron', 'Luxurious Beauty', 'Luxurious Beauty hair straightener, close on the plates', true),
+  shot('alia-hand', 'Alia Fragrance', 'A hand holding an Alia perfume bottle'),
 ]
 
 const crew = [
@@ -193,21 +205,19 @@ export default function CampaignShootsPage() {
         </section>
 
         {/* 5b — product shots */}
-        <section className="cs-wrap cs-sec">
-          <Label><span>05 — Product shots</span><span>Alia Fragrance</span><span>Anagen Beauty</span><span>Luxurious Beauty</span></Label>
-          <h2 className="cs-h2">Product shots too.</h2>
-          <div className="cs-copy cs-copy-light">
-            <p>The same team shoots the product on its own: the hero bottle, the texture, the packaging, the clean shot for your store. Shot in the same session as the campaign, so it all matches.</p>
+        <section className="cs-sec cs-prodsec">
+          <div className="cs-wrap">
+            <Label><span>05 — Product shots</span><span>Alia Fragrance</span><span>Anagen Beauty</span><span>Luxurious Beauty</span></Label>
+            <h2 className="cs-h2">Product shots too.</h2>
+            <div className="cs-copy cs-copy-light">
+              <p>The same team shoots the product on its own: the hero bottle, the texture, the packaging, the clean shot for your store. Shot in the same session as the campaign, so it all matches.</p>
+            </div>
           </div>
-          <div className="cs-prod">
-            {productShots.map(s => (
-              <figure key={s.file} className={s.wide ? 'cs-prod-wide' : undefined}>
-                <img src={`${PRODUCT_DIR}/${s.file}.jpg`} alt={s.alt} loading="lazy" decoding="async" />
-                <figcaption>{s.brand}</figcaption>
-              </figure>
-            ))}
+          <ProductSlider shots={productShots} label="Product shots by MD Media. Drag, swipe or use the arrow keys." />
+          <div className="cs-wrap">
+            <p className="cs-prod-hint" aria-hidden="true">Drag to look through ↔</p>
+            <BookButton dark />
           </div>
-          <BookButton dark />
         </section>
 
         {/* 6 — proof */}
