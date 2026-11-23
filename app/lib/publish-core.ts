@@ -38,6 +38,16 @@ export type MediaItem = {
   thumbnail?: string
 }
 
+/**
+ * THE LONGEST VIDEO INSTAGRAM TAKES INSIDE A CAROUSEL, in seconds (the owner, 23 Nov 2026: "for now put 90 seconds to
+ * let them know"). Neither Meta's pages nor the provider's give a number: both list a Reel (15 minutes) and a Story
+ * (60 seconds) and nothing for a carousel's video. It was found by posting: 55 s and 90 s went out, 2 min 50 s was
+ * refused three times (from our storage, from the provider's, and as a smaller file), each time with the misleading
+ * "Instagram couldn't download your video from the media URL … will retry automatically". A video on its own is a
+ * Reel and is not held to this.
+ */
+export const INSTAGRAM_CAROUSEL_VIDEO_SECONDS = 90
+
 /** Per-platform limits.
  *
  *  `images` / `videos` / `documents` are maxima for that kind. `mixed: false`

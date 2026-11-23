@@ -22,4 +22,30 @@ describe('per-network slides', () => {
     const r = validateComposition({ ...base, slides: fourteen, channels: [{ platform: 'tiktok' }] } as never)
     expect(r.problems.filter(p => /media files/.test(p))).toEqual([])
   })
+
+  // 23 Nov 2026: found by posting. 90 s went out; 2 min 50 s was refused with "couldn't download your video".
+  const vid = (seconds?: number) => ({ url: `https://media.mdmmarketing.com.au/v${seconds}.mp4`, name: 'Script 2.mp4', type: 'video' as const, ...(seconds ? { seconds } : {}) })
+  const LONG = 'Instagram takes videos up to 90 seconds inside a carousel — "Script 2.mp4" is 2 min 50 s. Post that video on its own (it goes out as a Reel), or trim it.'
+  it('a long video inside an Instagram carousel is stopped, with what to do', () => {
+    const r = validateComposition({ ...base, slides: [vid(170), img(1)], channels: [{ platform: 'instagram' }] } as never)
+    expect(r.problems).toContain(LONG)
+  })
+  it('ninety seconds is fine; a video of unknown length is not guessed at', () => {
+    for (const v of [vid(90), vid(45), vid()]) {
+      const r = validateComposition({ ...base, slides: [v, img(1)], channels: [{ platform: 'instagram' }] } as never)
+      expect(r.problems.filter(p => /inside a carousel/.test(p))).toEqual([])
+    }
+  })
+  it('the same long video on its own is a Reel, and as Stories goes out one by one: neither is stopped', () => {
+    const alone = validateComposition({ ...base, slides: [vid(170)], channels: [{ platform: 'instagram' }] } as never)
+    expect(alone.problems.filter(p => /inside a carousel/.test(p))).toEqual([])
+    const story = validateComposition({ ...base, slides: [vid(170), img(1)], channels: [{ platform: 'instagram', kind: 'story' }] } as never)
+    expect(story.problems.filter(p => /inside a carousel/.test(p))).toEqual([])
+  })
+  it('it is the Instagram rule only, and reads the files Instagram is actually given', () => {
+    const tt = validateComposition({ ...base, slides: [vid(170)], channels: [{ platform: 'tiktok' }] } as never)
+    expect(tt.problems.filter(p => /inside a carousel/.test(p))).toEqual([])
+    const own = validateComposition({ ...base, slides: [vid(170), img(1)], channels: [{ platform: 'instagram', slides: [img(1), img(2)] }] } as never)
+    expect(own.problems.filter(p => /inside a carousel/.test(p))).toEqual([])
+  })
 })

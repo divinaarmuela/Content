@@ -29,9 +29,17 @@
  */
 
 import {
-  NETWORK_LABEL, optionProblems, PLATFORM_RULES,
+  INSTAGRAM_CAROUSEL_VIDEO_SECONDS, NETWORK_LABEL, optionProblems, PLATFORM_RULES,
   type Platform, type PostKind, type PostOptions,
 } from './publish-core'
+
+/** a video's length the way a person says it: "45 seconds", "2 min 50 s" */
+function clipLength(seconds: number): string {
+  const whole = Math.round(seconds)
+  if (whole < 60) return `${whole} seconds`
+  const m = Math.floor(whole / 60), r = whole % 60
+  return r === 0 ? `${m} min` : `${m} min ${r} s`
+}
 import { dayKeyInZone, formatInZone, fromZonedInput, safeZone, wallTimeIn } from './timezone-core'
 import { postSlides, slidesOf, type Slide, type VersionLike } from './version-files-core'
 import { finalFilesOf, versionSnapshot, type FinalFile } from './final-files-core'
@@ -1308,6 +1316,18 @@ export function validateComposition(input: CompositionInput): { ok: boolean; pro
           const over = theirs.length - max
           problems.push(
             `${name} takes ${max} ${max === 1 ? 'media file' : 'media files'} — take ${over} out`,
+          )
+        }
+      }
+    }
+    // A LONG VIDEO INSIDE AN INSTAGRAM CAROUSEL (23 Nov 2026): Instagram refuses it and says the download failed, so
+    // the post would sit there retrying. Said here, before it is sent, with what to do. Stories go out one by one.
+    const asStory = channels.some(c => String(c.platform) === platform && (c as { kind?: string | null }).kind === 'story')
+    if (platform === 'instagram' && theirs.length > 1 && !asStory) {
+      for (const s of theirs) {
+        if (s.type === 'video' && typeof s.seconds === 'number' && s.seconds > INSTAGRAM_CAROUSEL_VIDEO_SECONDS) {
+          problems.push(
+            `Instagram takes videos up to ${INSTAGRAM_CAROUSEL_VIDEO_SECONDS} seconds inside a carousel — ${s.name ? `"${s.name}"` : 'one video'} is ${clipLength(s.seconds)}. Post that video on its own (it goes out as a Reel), or trim it.`,
           )
         }
       }
