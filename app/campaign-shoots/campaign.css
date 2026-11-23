@@ -63,6 +63,19 @@
 .cs-stills img, .cs-stills video { display: block; width: 100%; aspect-ratio: 1; object-fit: cover; }
 .cs-stills figcaption { font-family: var(--cs-mono); font-size: 11px; color: var(--cs-dim-l); padding-top: 10px; }
 
+/* product shots: portrait frames in four columns, a landscape frame takes two and matches the row's height */
+.cs-prod { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-bottom: 48px; }
+.cs-prod figure { margin: 0; display: flex; flex-direction: column; min-width: 0; }
+.cs-prod img { display: block; width: 100%; aspect-ratio: 2 / 3; object-fit: cover; background: rgba(11, 11, 11, 0.07); }
+.cs-prod-wide { grid-column: span 2; }
+.cs-prod-wide img { aspect-ratio: auto; flex: 1 1 0; height: 0; min-height: 0; }
+.cs-prod figcaption { font-family: var(--cs-mono); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--cs-dim-d); padding-top: 10px; }
+@media (max-width: 760px) {
+  /* dense: the portrait frames pair up, so a wide frame never leaves one alone beside a gap */
+  .cs-prod { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-flow: dense; }
+  .cs-prod-wide img { aspect-ratio: 3 / 2; flex: none; height: auto; }
+}
+
 /* how it works */
 .cs-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 40px 32px; margin-bottom: 48px; }
 .cs-steps li { border-top: 2px solid var(--cs-ink); padding-top: 16px; }

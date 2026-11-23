@@ -51,6 +51,22 @@ const deliverables = [
   { n: '01', tag: 'Included', title: 'Content plan', desc: 'What goes out when, so it lasts the whole drop', media: 'get-04' },
 ]
 
+// PRODUCT SHOTS (the owner, 23 Nov 2026: "I wanna show we can do product shots too"), from three brands' shoots, mixed
+// rather than grouped so it reads as one body of work. `wide` is a landscape frame: it takes two columns.
+const PRODUCT_DIR = '/images/campaign-shoots/products'
+const productShots: { file: string; brand: string; alt: string; wide?: boolean }[] = [
+  { file: 'alia-amber', brand: 'Alia Fragrance', alt: 'Alia perfume bottle held up against a glowing amber backdrop' },
+  { file: 'anagen-serums', brand: 'Anagen Beauty', alt: 'Two Anagen Beauty serum bottles in hard light and shadow' },
+  { file: 'luxe-iron', brand: 'Luxurious Beauty', alt: 'Luxurious Beauty hair straightener, close on the plates', wide: true },
+  { file: 'alia-gift-box', brand: 'Alia Fragrance', alt: 'Alia perfume bottles in a red satin gift box' },
+  { file: 'luxe-packaging', brand: 'Luxurious Beauty', alt: 'Luxurious Beauty packaging, open box', wide: true },
+  { file: 'anagen-kakadu', brand: 'Anagen Beauty', alt: 'Close-up of Kakadu plum in oil, an Anagen Beauty ingredient shot' },
+  { file: 'alia-red-cap', brand: 'Alia Fragrance', alt: 'Alia perfume bottle with a deep red cap' },
+  { file: 'anagen-box', brand: 'Anagen Beauty', alt: 'Anagen Beauty Kakadu Plum serum beside its box' },
+  { file: 'alia-satin', brand: 'Alia Fragrance', alt: 'Alia perfume bottles on gold satin' },
+  { file: 'alia-pair', brand: 'Alia Fragrance', alt: 'Two Alia perfume bottles laid on the diagonal' },
+]
+
 const crew = [
   'Creative Director — Martin', 'Strategist — Divina', 'Producer', 'Photographer', 'Cinematographer', 'Lighting & Grip',
   'Stylist', 'Hair & Makeup Artist', 'Casting Director', 'Set Designer', 'Production Assistant', 'Video Editor',
@@ -113,7 +129,7 @@ export default function CampaignShootsPage() {
             <div className="cs-dim">
               <h2 className="cs-h3">It’s not for you if</h2>
               <ul className="cs-list">
-                <li><span>✕</span>You want a few product shots on a white background</li>
+                <li><span>✕</span>You only need one or two quick photos</li>
                 <li><span>✕</span>You need it all by Friday</li>
               </ul>
             </div>
@@ -176,9 +192,27 @@ export default function CampaignShootsPage() {
           </div>
         </section>
 
+        {/* 5b — product shots */}
+        <section className="cs-wrap cs-sec">
+          <Label><span>05 — Product shots</span><span>Alia Fragrance</span><span>Anagen Beauty</span><span>Luxurious Beauty</span></Label>
+          <h2 className="cs-h2">Product shots too.</h2>
+          <div className="cs-copy cs-copy-light">
+            <p>The same team shoots the product on its own: the hero bottle, the texture, the packaging, the clean shot for your store. Shot in the same session as the campaign, so it all matches.</p>
+          </div>
+          <div className="cs-prod">
+            {productShots.map(s => (
+              <figure key={s.file} className={s.wide ? 'cs-prod-wide' : undefined}>
+                <img src={`${PRODUCT_DIR}/${s.file}.jpg`} alt={s.alt} loading="lazy" decoding="async" />
+                <figcaption>{s.brand}</figcaption>
+              </figure>
+            ))}
+          </div>
+          <BookButton dark />
+        </section>
+
         {/* 6 — proof */}
         <section className="cs-wrap cs-sec">
-          <Label>05 — Proof</Label>
+          <Label>06 — Proof</Label>
           <h2 className="cs-h2">Shot by the team behind</h2>
           <LogoWall tone="light" hideTitle title="Shot by the team behind" brands={PROOF_BRANDS} textOnly={['Layer & Loom']} />
           <BookButton dark />
@@ -188,7 +222,7 @@ export default function CampaignShootsPage() {
         <section className="cs-wrap cs-sec cs-about">
           <LazyLoop className="cs-about-media" src="/videos/campaign-shoots/bts" label="Behind the scenes and the result, Releeph campaign shoot" />
           <div>
-            <Label><span>06 — About</span><span>Martin &amp; Divina</span></Label>
+            <Label><span>07 — About</span><span>Martin &amp; Divina</span></Label>
             <h2 className="cs-h2">Who’s running<br />your shoot</h2>
             <div className="cs-copy cs-copy-light">
               <p>MD Media is Martin and Divina, with a production team of 14. Martin runs production: the crew, the casting and the set. Divina runs the strategy, so every shot has a job once it’s live.</p>
@@ -207,7 +241,7 @@ export default function CampaignShootsPage() {
         <section className="cs-dark">
           <div className="cs-wrap cs-sec cs-two">
             <div>
-              <Label>07 — The call</Label>
+              <Label>08 — The call</Label>
               <h2 className="cs-h3 cs-h3-big">What happens on the call</h2>
               <ol className="cs-list">
                 <li><span>01</span>You book a 15-minute intro call.</li>
@@ -216,7 +250,7 @@ export default function CampaignShootsPage() {
               </ol>
             </div>
             <div>
-              <Label>08 — FAQ</Label>
+              <Label>09 — FAQ</Label>
               <div className="cs-faq">
                 {faqs.map(([q, a], i) => (
                   <details key={q} open={i === 0}>
