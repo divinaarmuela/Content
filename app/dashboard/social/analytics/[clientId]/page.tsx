@@ -32,7 +32,7 @@ export default function ClientAnalyticsPage() {
 
 function ClientAnalytics() {
   const { clientId } = useParams<{ clientId: string }>()
-  const { period, range, setPeriod, setCustom, query } = usePeriod('this_week')
+  const { period, range, setPeriod, setCustom, query } = usePeriod('last_7')
   const [data, setData] = useState<ClientData | null>(null)
   const [failed, setFailed] = useState<string | null>(null)
   const [attempt, setAttempt] = useState(0)

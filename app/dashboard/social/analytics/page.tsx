@@ -34,7 +34,7 @@ export default function AnalyticsPage() {
 }
 
 function Clients() {
-  const { period, range, setPeriod, setCustom, query } = usePeriod('this_week')
+  const { period, range, setPeriod, setCustom, query } = usePeriod('last_7')
   const [data, setData] = useState<Overview | null>(null)
   const [failed, setFailed] = useState<string | null>(null)
   const [find, setFind] = useState('')

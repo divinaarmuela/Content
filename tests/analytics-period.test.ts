@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { customRange, inRange, periodRange, rangeWords } from '../app/lib/analytics-period-core'
+import { ANALYTICS_PERIODS, customRange, inRange, periodRange, rangeWords } from '../app/lib/analytics-period-core'
 
 describe('the analytics page’s weeks (2 Nov 2026)', () => {
   it('this week runs Monday to today; last week the Monday to Sunday before', () => {
@@ -9,6 +9,9 @@ describe('the analytics page’s weeks (2 Nov 2026)', () => {
     // Sun 8 Nov 2026 is still the same week
     expect(periodRange('this_week', '2026-11-08')).toEqual({ from: '2026-11-02', to: '2026-11-08' })
     expect(periodRange('this_week', 'not a day')).toBeNull()
+    // the page opens on the last seven days, so a Monday is never one day of numbers (23 Nov 2026)
+    expect(periodRange('last_7', '2026-11-23')).toEqual({ from: '2026-11-17', to: '2026-11-23' })
+    expect(ANALYTICS_PERIODS[0]).toEqual({ key: 'last_7', label: 'Last 7 days' })
   })
   it('months, 90 days and twelve months', () => {
     expect(periodRange('this_month', '2026-11-02')).toEqual({ from: '2026-11-01', to: '2026-11-02' })

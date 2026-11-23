@@ -3,10 +3,13 @@
  * Sunday where the audience is (Melbourne), as the posting calendar counts it. Pure: today's day key in, days out.
  */
 
-export type AnalyticsPeriod = 'this_week' | 'last_week' | 'this_month' | 'last_month' | 'last_90' | 'last_365'
+export type AnalyticsPeriod = 'last_7' | 'this_week' | 'last_week' | 'this_month' | 'last_month' | 'last_90' | 'last_365'
 
 // no "all time": Zernio reads at most 366 days at once, so the longest is the last twelve months (2 Nov 2026)
 export const ANALYTICS_PERIODS: readonly { key: AnalyticsPeriod; label: string }[] = [
+  // FIRST, AND WHAT THE PAGE OPENS ON (the owner, 23 Nov 2026, a Monday: "a lot of them are zeros"). "This week" on a
+  // Monday is one day, so every client but the one that had posted that morning read 0.
+  { key: 'last_7', label: 'Last 7 days' },
   { key: 'this_week', label: 'This week' },
   { key: 'last_week', label: 'Last week' },
   { key: 'this_month', label: 'This month' },
@@ -30,6 +33,7 @@ export function periodRange(period: AnalyticsPeriod, today: string): { from: str
   const monday = shift(today, -((dow + 6) % 7))
   const firstOfMonth = `${today.slice(0, 7)}-01`
   switch (period) {
+    case 'last_7': return { from: shift(today, -6), to: today }
     case 'this_week': return { from: monday, to: today }
     case 'last_week': return { from: shift(monday, -7), to: shift(monday, -1) }
     case 'this_month': return { from: firstOfMonth, to: today }
