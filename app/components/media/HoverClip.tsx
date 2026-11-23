@@ -101,6 +101,28 @@ export default function HoverClip({ src, className = '', at = 0.5, poster, durat
     return () => { io.disconnect(); release() }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- one observer per tile and scrub copy
   }, [scrubbing, scrub])
+  /**
+   * THE SCRUB COPY IS READ WHOLE, THEN PLAYED FROM MEMORY (the owner, 23 Nov 2026: "only one vid is scrubbing smoothly,
+   * when I move to another it stops"). Handed the address, a browser's player reads part of a file and then HOLDS its
+   * connection open for the rest; the storage address allows six connections, so the seventh tile got none and never
+   * loaded. Read with fetch the file arrives complete and the connection is given back, and a player on the bytes in
+   * memory jumps about with no network at all. Should storage refuse the read, the player is handed the address as
+   * before.
+   */
+  const [scrubSrc, setScrubSrc] = useState<string | null>(null)
+  useEffect(() => {
+    if (!armed || !scrub) return
+    let live = true
+    let made: string | null = null
+    const stop = new AbortController()
+    fetch(scrub, { signal: stop.signal })
+      .then(r => (r.ok ? r.blob() : Promise.reject(new Error(String(r.status)))))
+      .then(b => { if (!live) return; made = URL.createObjectURL(b); setScrubSrc(made) })
+      .catch(() => { if (live) setScrubSrc(scrub) })
+      .finally(() => release())
+    return () => { live = false; stop.abort(); if (made) URL.revokeObjectURL(made) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one read per tile and scrub copy
+  }, [armed, scrub])
   /** it can show a frame */
   const [drawn, setDrawn] = useState(false)
   const scrubWant = useRef<number | null>(null)
@@ -188,10 +210,9 @@ export default function HoverClip({ src, className = '', at = 0.5, poster, durat
           <>
             {/* eslint-disable-next-line @next/next/no-img-element -- our encoder's poster of the clip */}
             <img src={poster} alt="" draggable={false} className={`${className} pointer-events-none select-none`} />
-            {armed && (
-              <video ref={scrubRef} src={scrub} muted playsInline preload="auto" aria-hidden tabIndex={-1} data-scrub
+            {scrubSrc && (
+              <video ref={scrubRef} src={scrubSrc} muted playsInline preload="auto" aria-hidden tabIndex={-1} data-scrub
                 onLoadedData={() => { setDrawn(true); scrubSeek() }}
-                onCanPlayThrough={release} onError={release} onStalled={release}
                 onSeeked={scrubSeek}
                 className={`${className} pointer-events-none absolute inset-0 ${hover && drawn ? 'opacity-100' : 'opacity-0'}`} />
             )}

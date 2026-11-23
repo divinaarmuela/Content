@@ -91,8 +91,13 @@ describe('wired through (source pins)', () => {
     const clip = read('app/components/media/HoverClip.tsx')
     // loaded on the first hover and not before; jumps to the exact moment, one jump at a time, always the latest
     expect(clip).toContain('if (scrubbing) { setArmed(true); return }')
-    expect(clip).toContain('{armed && (')
-    expect(clip).toContain('<video ref={scrubRef} src={scrub} muted playsInline preload="auto"')
+    // read whole with fetch and played from memory, so no tile ever holds one of storage's six connections
+    expect(clip).toContain('fetch(scrub, { signal: stop.signal })')
+    expect(clip).toContain('made = URL.createObjectURL(b); setScrubSrc(made)')
+    expect(clip).toContain('if (made) URL.revokeObjectURL(made)')
+    expect(clip).toContain('{scrubSrc && (')
+    expect(clip).toContain('<video ref={scrubRef} src={scrubSrc} muted playsInline preload="auto"')
+    expect(clip).not.toContain('src={scrub} muted')
     expect(clip).toContain('v.currentTime = t')
     expect(clip).toContain('onSeeked={scrubSeek}')
   })
