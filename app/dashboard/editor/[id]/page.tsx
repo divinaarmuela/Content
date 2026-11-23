@@ -12,7 +12,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { useRow, useTable } from '@/lib/db-client'
 import type { EncodeJob } from '@/lib/db-types'
 import HoverClip from '../../../components/media/HoverClip'
-import { encoderStills, playableUrl } from '../../../lib/playable-core'
+import { encoderStills, needsPreviewCopy, playableUrl } from '../../../lib/playable-core'
 import type { Batch, Client, ContentItem, DriveSeen, DriveSource, TeamUser, WorkKind } from '@/lib/db-types'
 import { STEPS, agoWords, initialsOfName, isEditorCard, stepOf, videoNext, type NextTone } from '../../../lib/editor-preview-core'
 import { KIND_WORDS, OPEN_STATES, STATE_WORDS, gradeStanding, isFootage, isVideo, stageRule, type CutKind, type SeenState } from '../../../lib/drive-scan-core'
@@ -492,6 +492,11 @@ function Workspace({ item, rows, needsGrade, gradeSince, sourceCreated, framesOf
                             // and the clip itself under the pointer; one it has not keeps the storyboard, and plays the small
                             // copy, never a heavy master.
                             const fileUrl = info(s).file?.url ?? s.entries.find(e => e.file)?.file?.url ?? null
+                            // NOTHING IS ASKED FOR UNTIL THE COPIES ARE KNOWN (read in the owner's browser, 23 Nov 2026): in the
+                            // first moment, before the copy jobs had been read, every tile was a <video> pointed at its 1.7 GB
+                            // master. Dozens sat "pending" and held all six of the connections a browser gives the storage
+                            // address, so the posters and scrub copies queued behind them: 3 of 27 pictures after 29 seconds.
+                            if (encodes.loading) return <span className="absolute inset-0 block" data-tile-wait />
                             const own = fileUrl ? encoderStills(fileUrl, encodes.rows) : null
                             if (own && fileUrl) return (
                               <span className="absolute inset-0 block" data-tile-scrub>
@@ -499,7 +504,10 @@ function Workspace({ item, rows, needsGrade, gradeSince, sourceCreated, framesOf
                               </span>
                             )
                             return (
-                              <HoverFrames frames={s.latest.frames ?? []} thumb={s.latest.thumb} board={s.latest.board ?? null} src={fileUrl ? playableUrl(fileUrl, encodes.rows) : null}
+                              // …and a master our encoder has no copy of is never a tile's video: a browser cannot draw a camera
+                              // .mov, and asking for one is what jammed the page
+                              <HoverFrames frames={s.latest.frames ?? []} thumb={s.latest.thumb} board={s.latest.board ?? null}
+                                src={fileUrl && !(playableUrl(fileUrl, encodes.rows) === fileUrl && needsPreviewCopy(fileUrl)) ? playableUrl(fileUrl, encodes.rows) : null}
                                 driveId={info(s).file?.drive_file_id ?? s.entries.map(e => (e.source === 'drive' ? rowById.get(e.key.slice(2))?.drive_file_id : undefined)).find(Boolean) ?? null} />
                             )
                           })()}
@@ -796,6 +804,8 @@ function Player({ item, s, entry, info, rowById, beforeGrade, onEntry }: {
 }) {
   const [busy, setBusy] = useState<string | null>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
+  // the player plays our encoder's small copy when there is one, never the master beside it (23 Nov 2026)
+  const copies = useTable<EncodeJob>('encode_jobs')
   const distinct = [...s.entries].filter(e => !e.sameAsEarlier)
   const row = entry.source === 'drive' ? rowById.get(entry.key.slice(2)) ?? null : null
   // the version chosen plays its own file; the newest is the card's current one
@@ -819,7 +829,7 @@ function Player({ item, s, entry, info, rowById, beforeGrade, onEntry }: {
       <div className="flex flex-col gap-2">
       <div className="overflow-hidden rounded-inner bg-black">
         {cardFile?.url
-          ? <video ref={videoRef} key={cardFile.url} src={cardFile.url} controls playsInline preload="metadata" className="aspect-[9/16] w-full bg-black object-contain" />
+          ? <video ref={videoRef} key={cardFile.url} src={copies.loading ? undefined : playableUrl(cardFile.url, copies.rows)} controls playsInline preload="metadata" className="aspect-[9/16] w-full bg-black object-contain" />
           : row
             ? <iframe key={row.drive_file_id} src={`https://drive.google.com/file/d/${row.drive_file_id}/preview`} title={entry.name} allow="fullscreen" allowFullScreen className="aspect-[9/16] w-full border-0" />
             : <div className="flex aspect-[9/16] items-center justify-center p-6 text-center text-[13px] text-white/70">{entry.source === 'other' ? `This version is on “${entry.otherCard}”` : 'No preview'}</div>}
