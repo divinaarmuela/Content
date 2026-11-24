@@ -223,3 +223,17 @@ export function upcomingDues(repeat: TodoRepeat | null | undefined, due: string 
   }
   return out
 }
+
+/**
+ * TAKING A TICK BACK TAKES ITS NEXT COPY BACK (the owner, 25 Nov 2026: "if I marked it as not completed, for a
+ * repeated one, please remove the other one"). Only the copy THIS to-do made, and only while nobody has touched it:
+ * still open, no comment on it, no subtask under it. A copy somebody has completed or worked on is theirs and stays.
+ */
+export function mayRemoveNextCopy(
+  copy: { id?: string | null; repeat_of?: string | null; status?: string | null } | null | undefined, parentId: string,
+  on: { comments: number; subtasks: number },
+): boolean {
+  if (!copy || copy.repeat_of !== parentId) return false
+  if (copy.status === 'done') return false
+  return on.comments === 0 && on.subtasks === 0
+}

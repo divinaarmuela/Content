@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { nextDue, nextTodoId, normaliseRepeat, repeatWords } from '../app/lib/todo-repeat-core'
+import { mayRemoveNextCopy, nextDue, nextTodoId, normaliseRepeat, repeatWords } from '../app/lib/todo-repeat-core'
 
 /**
  * REPEATING TO-DOS (Manal, 20 Oct 2026). The weekly cases are Asana's own record of her "Releeph UGC Creators":
@@ -73,5 +73,29 @@ describe('the rule, made safe', () => {
     for (let i = 0; i < 400; i++) id = nextTodoId(id)
     expect(id.length).toBeLessThanOrEqual(17)
     expect(id).toMatch(/^rp_[0-9a-z]+$/)
+  })
+})
+
+/**
+ * TAKING A TICK BACK TAKES ITS NEXT COPY BACK (the owner, 25 Nov 2026: "if I marked it as not completed, for a
+ * repeated one, please remove the other one"). Ticking a repeating to-do makes the next one; un-ticking it used to
+ * leave that copy behind, so the list held two of the same to-do.
+ */
+describe('un-ticking a repeating to-do removes the copy the tick made', () => {
+  const copy = { id: 'rp_x', repeat_of: 'a', status: 'open' }
+  it('removes the untouched open copy this to-do made', () => {
+    expect(mayRemoveNextCopy(copy, 'a', { comments: 0, subtasks: 0 })).toBe(true)
+  })
+  it('leaves a copy somebody has already completed', () => {
+    expect(mayRemoveNextCopy({ ...copy, status: 'done' }, 'a', { comments: 0, subtasks: 0 })).toBe(false)
+  })
+  it('leaves a copy somebody has worked on — a comment or a subtask', () => {
+    expect(mayRemoveNextCopy(copy, 'a', { comments: 1, subtasks: 0 })).toBe(false)
+    expect(mayRemoveNextCopy(copy, 'a', { comments: 0, subtasks: 2 })).toBe(false)
+  })
+  it('never removes a to-do that is not this one\'s copy, or nothing at all', () => {
+    expect(mayRemoveNextCopy({ ...copy, repeat_of: 'other' }, 'a', { comments: 0, subtasks: 0 })).toBe(false)
+    expect(mayRemoveNextCopy({ id: 'rp_x', status: 'open' }, 'a', { comments: 0, subtasks: 0 })).toBe(false)
+    expect(mayRemoveNextCopy(null, 'a', { comments: 0, subtasks: 0 })).toBe(false)
   })
 })

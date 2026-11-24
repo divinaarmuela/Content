@@ -7,7 +7,7 @@ import { authzErrorResponse, requireRole } from '../../../lib/authz'
 import { logActivity } from '../../../lib/workflow'
 import { idsOf, mayDeleteTodo, mayDependOn, mayEditTodo, sanitiseTodoPatch, todoAudience, todoChanges, todoFilesOf, toggleId } from '../../../lib/todo-core'
 import { notifyTodo } from '../../../lib/todo-notify'
-import { nextDue, nextTodoId, normaliseRepeat } from '../../../lib/todo-repeat-core'
+import { mayRemoveNextCopy, nextDue, nextTodoId, normaliseRepeat } from '../../../lib/todo-repeat-core'
 import { dayKeyInZone } from '../../../lib/timezone-core'
 
 /** One to-do: PATCH what changed (title, note, status, date, who, client, files), DELETE it. */
@@ -65,6 +65,24 @@ export async function PATCH(req: Request, ctx: Ctx) {
         await logActivity({ entityType: 'todo', entityId: nextId, action: 'todo_repeated', actor: user, newValue: (made.row as TodoRow).due_date ?? undefined, detail: String(row.title ?? '').slice(0, 200) })
       }
     }
+    // TAKING THE TICK BACK takes back the copy it made (the owner, 25 Nov 2026) — only while that copy is untouched:
+    // still open, nothing said on it, nothing under it. The check is made again inside the removal, on the row as
+    // it is read at that moment. (There is no conditional delete in lib/db.ts, so a copy completed in the few
+    // milliseconds between that read and the delete could still go — on a to-do nobody had touched a moment before.)
+    let removedNext = false
+    if (rule && checked.patch.status === 'open' && row.status === 'done') {
+      const nextId = nextTodoId(id)
+      const [comments, subtasks] = await Promise.all([
+        table<TodoComment>('todo_comments').list({ where: c => String(c.todo_id) === nextId }),
+        table<TodoRow>('todos').list({ where: t => t.parent_id === nextId }),
+      ])
+      const on = { comments: comments.length, subtasks: subtasks.length }
+      if (mayRemoveNextCopy(await table<TodoRow>('todos').get(nextId), id, on)) {
+        await table<TodoRow>('todos').removeWhere(t => t.id === nextId && mayRemoveNextCopy(t, id, on))
+        removedNext = !(await table<TodoRow>('todos').get(nextId))
+        if (removedNext) await logActivity({ entityType: 'todo', entityId: nextId, action: 'todo_deleted', actor: user, detail: `${String(row.title ?? '').slice(0, 170)} (the next copy, taken back)` })
+      }
+    }
     if (checked.patch.status && checked.patch.status !== row.status) {
       await logActivity({ entityType: 'todo', entityId: id, action: checked.patch.status === 'done' ? 'todo_done' : 'todo_reopened', actor: user, detail: String(row.title ?? '').slice(0, 200) })
       if (checked.patch.status === 'done') {
@@ -106,7 +124,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
         await logActivity({ entityType: 'todo', entityId: id, action: 'todo_attached', actor: user, detail: f.name.slice(0, 200) })
       }
     }
-    return NextResponse.json(updated)
+    return NextResponse.json({ ...updated, removed_next: removedNext })
   } catch (e) {
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })

@@ -241,15 +241,16 @@ export default function TodosPage() {
     return () => window.removeEventListener('mdm:todos-link', picked)
   }, [])
 
-  const send = useCallback(async (path: string, init: RequestInit, said?: string) => {
+  const send = useCallback(async (path: string, init: RequestInit, said?: string | ((answer: Record<string, unknown>) => string)) => {
     try {
       const res = await fetch(path, { headers: { 'Content-Type': 'application/json' }, ...init })
       if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.error ?? 'Could not save that')
-      if (said) toast.success(said)
+      if (typeof said === 'function') toast.success(said((await res.json().catch(() => ({}))) as Record<string, unknown>))
+      else if (said) toast.success(said)
       return true
     } catch (e) { toast.error(e instanceof Error ? e.message : 'Could not save that'); return false }
   }, [])
-  const patchTodo = useCallback((id: string, body: Record<string, unknown>, said?: string) => send(`/api/todos/${id}`, { method: 'PATCH', body: JSON.stringify(body) }, said), [send])
+  const patchTodo = useCallback((id: string, body: Record<string, unknown>, said?: string | ((answer: Record<string, unknown>) => string)) => send(`/api/todos/${id}`, { method: 'PATCH', body: JSON.stringify(body) }, said), [send])
   const tick = useCallback(async (t: TodoRow, done: boolean) => {
     // DEPENDENCIES: Asana warns, it does not stop you
     if (done && openBlockers(t, visibleAll).length > 0) toast.warning(`This one was waiting on ${openBlockers(t, visibleAll).length} open task${openBlockers(t, visibleAll).length === 1 ? '' : 's'}`)
@@ -259,7 +260,9 @@ export default function TodosPage() {
     const rule = done ? normaliseRepeat((t as { repeat?: unknown }).repeat) : null
     const next = rule && today ? nextDue(rule, t.due_date, today) : null
     const ok = await patchTodo(t.id, { status: done ? 'done' : 'open' },
-      done ? (next ? `Marked complete — it repeats, the next one is due ${shortDue(next, today!).replace(/^(Today|Tomorrow|Yesterday)$/, w => w.toLowerCase())}` : 'Marked complete') : 'Marked incomplete')
+      done ? (next ? `Marked complete — it repeats, the next one is due ${shortDue(next, today!).replace(/^(Today|Tomorrow|Yesterday)$/, w => w.toLowerCase())}` : 'Marked complete')
+        // un-ticking a repeating to-do takes back the copy the tick made (the owner, 25 Nov 2026)
+        : answer => (answer.removed_next ? 'Marked incomplete — its next copy was removed' : 'Marked incomplete'))
     if (!ok && done) holdDone([t.id], false)
     // CELEBRATIONS: now and then, like Asana's creatures — off in Options, never with reduced motion
     if (ok && done && celebrate && Math.random() < 0.34) setParty(p => p + 1)
