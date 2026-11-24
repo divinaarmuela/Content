@@ -34,7 +34,7 @@ import {
 import { FONT_CLASS, fontVars } from './canvasFont'
 import { arrowHeadsOf, bendLine, lineMiddle, linePath, moveLineEnd, moveWholeLine, newFreeLine, straightenLine, withArrowHeads, type ArrowHeads, type LinePoint } from '../../../../lib/board-canvas-core'
 import { linkFromClipboard, pastedTableWidth, tableFromClipboard } from '../../../../lib/canvas-paste-core'
-import { groupBoxOf, groupScaleRange, scaleGroup, type CardBox, type GroupBox } from '../../../../lib/canvas-group-resize-core'
+import { groupBoxOf, groupScaleRange, groupStepFactor, scaleGroup, type CardBox, type GroupBox } from '../../../../lib/canvas-group-resize-core'
 import { COPY_MIME, cardsToCopy, copiedCorner, copiedWords, pasteCards, pasteFits, readCopied, writeCopied, type CopiedCards } from '../../../../lib/canvas-copy-core'
 import { applyBold } from './BoldBox'
 import { holdPageScroll } from '../../../../lib/hold-page-scroll'
@@ -1184,6 +1184,12 @@ export default function BriefCanvas({
     const f = Math.max((g.box.w + (e.clientX - g.startX) / s) / g.box.w, (g.box.h + (e.clientY - g.startY) / s) / g.box.h)
     g.factor = Math.min(g.max, Math.max(g.min, f))
     if (!g.raf) g.raf = requestAnimationFrame(() => { const cur = groupResize.current; if (cur) { cur.raf = 0; paintGroup() } })
+  }
+  /** the toolbar's − and +: the same resize, one step at a time — no small corner to find (the owner, 25 Nov 2026) */
+  const stepGroupSize = (dir: 1 | -1) => {
+    const changed = scaleGroup(pickedCards, drawnSizes(pickedCards), groupStepFactor(dir))
+    if (changed.length === 0) { if (dir === -1) toast('That is as small as these go together', { description: 'One of the picked cards is at its smallest size.' }); return }
+    applyGroup(changed)
   }
   const endGroupResize = () => {
     const g = groupResize.current
@@ -2433,7 +2439,7 @@ export default function BriefCanvas({
             style={{ fontFamily: FONT_STACK.sans }}
             onPointerDown={e => e.stopPropagation()} onDoubleClick={e => e.stopPropagation()}>
             <span className="px-2 text-[13px] font-semibold text-foreground">{picked.size} cards picked</span>
-            <span className="hidden px-1 text-[12px] text-muted-foreground sm:inline">drag one to move them all · drag the corner to resize them all</span>
+            <span className="hidden px-1 text-[12px] text-muted-foreground sm:inline">drag one to move them all</span>
             {(() => {
               const offers = groupOffers(pickedCards)
               const sep = <span className="mx-0.5 h-5 w-px bg-foreground/[0.08]" />
@@ -2493,6 +2499,12 @@ export default function BriefCanvas({
                       </div>
                     </>
                   )}
+                  {sep}
+                  <div role="group" aria-label="Size of the picked cards" className="flex items-center gap-0.5">
+                    <span className="px-1 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Size</span>
+                    <Button size="sm" variant="ghost" className="h-8 w-8 p-0 [@media(pointer:coarse)]:h-11 [@media(pointer:coarse)]:w-11" aria-label="Make the picked cards smaller" title="Smaller" onClick={() => stepGroupSize(-1)}><Minus className="h-4 w-4" /></Button>
+                    <Button size="sm" variant="ghost" className="h-8 w-8 p-0 [@media(pointer:coarse)]:h-11 [@media(pointer:coarse)]:w-11" aria-label="Make the picked cards bigger" title="Bigger" onClick={() => stepGroupSize(1)}><Plus className="h-4 w-4" /></Button>
+                  </div>
                   {sep}
                   <Button size="sm" variant="ghost" className="h-8 gap-1.5 px-2 text-secondary-13" onClick={copyPicked} title={`Copy, to paste on this board or another (${MAC ? '⌘C' : 'Ctrl+C'})`}>
                     <ClipboardCopy className="h-3.5 w-3.5" /> Copy

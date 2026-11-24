@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { groupBoxOf, groupScaleRange, scaleGroup } from '../app/lib/canvas-group-resize-core'
+import { groupBoxOf, groupScaleRange, groupStepFactor, scaleGroup } from '../app/lib/canvas-group-resize-core'
 import type { CanvasCard } from '../app/lib/batch-brief-core'
 
 /**
@@ -73,5 +73,20 @@ describe('how far the group may go', () => {
     const out = scaleGroup(cards, sizes(cards), 0.1)
     expect(out.find(c => c.id === 'a')).toMatchObject({ w: 120, h: 120 })
     expect(out.find(c => c.id === 'b')).toMatchObject({ x: 180, w: 288, h: 288 })
+  })
+})
+
+/** PLUS AND MINUS ON THE PICKED CARDS (the owner, 25 Nov 2026: "when selecting all should just be plus or minus so
+ *  it resizes") — one press is one step, and a step down undoes a step up. */
+describe('the plus and minus steps', () => {
+  it('plus makes the group a quarter bigger, minus takes it back', () => {
+    expect(groupStepFactor(1)).toBe(1.25)
+    expect(groupStepFactor(1) * groupStepFactor(-1)).toBeCloseTo(1)
+  })
+  it('a step up then a step down leaves the cards where they were', () => {
+    const cards = [img('a', 96, 96, 240, 160), img('b', 400, 320, 160, 160)]
+    const up = scaleGroup(cards, sizes(cards), groupStepFactor(1))
+    const back = scaleGroup(up, sizes(up), groupStepFactor(-1))
+    expect(back.map(c => [c.id, c.x, c.y, c.w, c.h])).toEqual(cards.map(c => [c.id, c.x, c.y, c.w, c.h]))
   })
 })

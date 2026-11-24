@@ -86,3 +86,9 @@ export function scaleGroup(cards: readonly CanvasCard[], drawn: ReadonlyMap<stri
   }
   return out
 }
+
+/** PLUS AND MINUS (the owner, 25 Nov 2026: "when selecting all should just be plus or minus so it resizes"): one
+ *  press of the toolbar's + makes the picked cards a quarter bigger; − is its exact undo. */
+export function groupStepFactor(dir: 1 | -1): number {
+  return dir === 1 ? 1.25 : 0.8
+}
