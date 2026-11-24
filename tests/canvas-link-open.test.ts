@@ -13,11 +13,18 @@ describe('a link on the board opens its page (Manal, 20 Oct 2026)', () => {
     expect(cardLinkOf({ kind: 'link', url: 'javascript:alert(1)' })).toBeUndefined()
   })
 
-  it('a plain click opens it; the play button, a drag and an edit do not', () => {
-    expect(opensOnClick(el(false), { dragged: false, editing: false })).toBe(true)
-    expect(opensOnClick(el(true), { dragged: false, editing: false })).toBe(false)
-    expect(opensOnClick(el(false), { dragged: true, editing: false })).toBe(false)
-    expect(opensOnClick(el(false), { dragged: false, editing: true })).toBe(false)
+  it('for someone only looking (a client), a plain click opens it; the play button, a drag and an edit do not', () => {
+    expect(opensOnClick(el(false), { dragged: false, editing: false, viewOnly: true })).toBe(true)
+    expect(opensOnClick(el(true), { dragged: false, editing: false, viewOnly: true })).toBe(false)
+    expect(opensOnClick(el(false), { dragged: true, editing: false, viewOnly: true })).toBe(false)
+    expect(opensOnClick(el(false), { dragged: false, editing: true, viewOnly: true })).toBe(false)
+  })
+
+  // THE OWNER, 25 Nov 2026: "when I click it accidentally it opens, why — it's a bad user experience"
+  it('for someone who can edit the board, a click only selects the card — the link under it and Open link open it', () => {
+    expect(opensOnClick(el(false), { dragged: false, editing: false, viewOnly: false })).toBe(false)
+    const canvas = readFileSync('app/dashboard/production/shoots/[id]/BriefCanvas.tsx', 'utf8')
+    expect(canvas).toMatch(/<ExternalLink className="h-3\.5 w-3\.5" \/> Open link/)
   })
 
   it('opens in a new tab, called off by a double-click, and shows the link under the post as Milanote does', () => {

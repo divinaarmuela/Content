@@ -33,7 +33,7 @@ import {
   CANVAS_FONTS, CANVAS_FONTS_HREF, FONT_LABEL, FONT_STACK, fontOf, hasFontChoice, type CanvasFont } from '../../../../lib/batch-brief-core'
 import { FONT_CLASS, fontVars } from './canvasFont'
 import { arrowHeadsOf, bendLine, lineMiddle, linePath, moveLineEnd, moveWholeLine, newFreeLine, straightenLine, withArrowHeads, type ArrowHeads, type LinePoint } from '../../../../lib/board-canvas-core'
-import { linkFromClipboard, pastedTableWidth, tableFromClipboard } from '../../../../lib/canvas-paste-core'
+import { linkFromClipboard, pastedTableWidth, savable, tableFromClipboard } from '../../../../lib/canvas-paste-core'
 import { groupBoxOf, groupScaleRange, groupStepFactor, scaleGroup, type CardBox, type GroupBox } from '../../../../lib/canvas-group-resize-core'
 import { COPY_MIME, cardsToCopy, copiedCorner, copiedWords, pasteCards, pasteFits, readCopied, writeCopied, type CopiedCards } from '../../../../lib/canvas-copy-core'
 import { applyBold } from './BoldBox'
@@ -282,7 +282,10 @@ export default function BriefCanvas({
   const historyRef = useRef<CanvasOp[]>([])
 
   /** Persist one changed card (plus the whole seed set the first time). */
-  const persist = useCallback((changed: CanvasCard[], removed: string[] = [], record = true) => {
+  const persist = useCallback((changedAll: CanvasCard[], removed: string[] = [], record = true) => {
+    // a picture still uploading shows from this tab only — it is saved when it has an address others can reach
+    const changed = savable(changedAll)
+    if (changed.length === 0 && removed.length === 0) return
     if (record && !seedPendingRef.current) {
       const before = cardsRef.current
       const restore = new Map<string, CanvasCard>()
@@ -1264,7 +1267,7 @@ export default function BriefCanvas({
     const el = viewportRef.current?.querySelector(`[data-cid="${c.id}"]`) as HTMLElement | null
     return { x: c.x, y: c.y, w: el?.offsetWidth || c.w, h: el?.offsetHeight || guessHeight(c.kind, c.w, c.platform) }
   })
-  const addCard = (partial: Omit<CanvasCard, 'id' | 'x' | 'y' | 'z' | 'w'> & { w?: number }) => {
+  const addCard = (partial: Omit<CanvasCard, 'id' | 'x' | 'y' | 'z' | 'w'> & { w?: number }, nudge = 0) => {
     const w = partial.w ?? (partial.kind === 'note' ? 208 : partial.kind === 'board' ? 176 : 240)
     const h = guessHeight(partial.kind, w, partial.platform)
     // in free space near the middle of the screen: on it if nothing is
@@ -1273,7 +1276,8 @@ export default function BriefCanvas({
     const mid = centerWorld()
     const at = freeSpot({ x: mid.x - w / 2, y: mid.y - h / 2 }, { w, h }, takenBoxes())
     const card: CanvasCard = {
-      id: mint(), x: at.x, y: at.y,
+      // `nudge`: several cards made in one go step aside from each other instead of landing as one pile
+      id: mint(), x: at.x + nudge, y: at.y + nudge,
       z: Math.max(0, ...cards.map(c => c.z)) + 1,
       w,
       ...partial,
@@ -1514,16 +1518,38 @@ export default function BriefCanvas({
         return
       }
     }
-    try {
-      for (const file of Array.from(files)) {
+    // ON THE BOARD AT ONCE (the owner, 25 Nov 2026: "copying an image online and pasting it to the board is slow,
+    // why"). The card was made only after the upload had finished — and a picture copied off a web page arrives as
+    // a PNG of several megabytes — so the board showed nothing for seconds. Now each picture is a card straight
+    // away, drawn from the person's own machine, and all of them upload together; a card takes its stored address
+    // when its upload lands and is saved then (persist never sends one that has not: see `savable`).
+    const list = Array.from(files)
+    if (fileRef.current) fileRef.current.value = ''
+    if (list.length === 0) return
+    const wait = toast.loading(list.length === 1 ? 'Saving the picture…' : `Saving ${list.length} pictures…`)
+    // nothing from the server replaces the board while a card on it exists only here
+    pendingOpsRef.current += 1
+    let failed = 0
+    await Promise.all(list.map(async (file, i) => {
+      const local = URL.createObjectURL(file)
+      const card = addCard({ kind: 'image', url: local, name: file.name }, i * 24)
+      try {
         const { url } = await uploadMedia(file, { purpose: 'production' })
-        addCard({ kind: 'image', url, name: file.name })
+        // moved, resized or deleted while it uploaded: whatever it is now is what gets the address
+        const live = cardsRef.current.find(c => c.id === card.id)
+        if (live) { const next = { ...live, url }; upsertLocal(next); persist([next]) }
+      } catch (e) {
+        failed++
+        setCards(prev => prev.filter(c => c.id !== card.id))
+        toast.error(e instanceof Error ? e.message : 'Upload failed')
+      } finally {
+        // after the stored picture has had time to take the card's face
+        window.setTimeout(() => URL.revokeObjectURL(local), 30000)
       }
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Upload failed')
-    } finally {
-      if (fileRef.current) fileRef.current.value = ''
-    }
+    }))
+    pendingOpsRef.current = Math.max(0, pendingOpsRef.current - 1)
+    if (failed < list.length) toast.success(list.length - failed === 1 ? 'Picture saved' : `${list.length - failed} pictures saved`, { id: wait })
+    else toast.dismiss(wait)
   }
 
   /** Delete a card. A board tile with anything inside it asks first. */
@@ -2595,7 +2621,7 @@ export default function BriefCanvas({
                 const childId = columnChildAt(e)
                 const pressed = childId ? cards.find(c => c.id === childId) ?? card : card
                 const link = cardLinkOf(pressed)
-                if (link && connectFrom === null && opensOnClick(e.target as HTMLElement, { dragged: draggedRef.current, editing: editing === pressed.id })) openLinkSoon(link)
+                if (link && connectFrom === null && opensOnClick(e.target as HTMLElement, { dragged: draggedRef.current, editing: editing === pressed.id, viewOnly })) openLinkSoon(link)
                 if (viewOnly) {
                   if (card.kind === 'board') openBoard(card.id)
                   // a client's click on a post or a link opens the post itself, not the card's sheet

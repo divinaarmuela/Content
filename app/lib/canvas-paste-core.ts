@@ -95,3 +95,19 @@ export function pastedTableWidth(t: PastedTable): number {
   const cols = t.rows[0]?.length ?? 1
   return Math.min(1400, Math.max(320, cols * 170))
 }
+
+/**
+ * A PASTED PICTURE SHOWS AT ONCE (the owner, 25 Nov 2026: "copying an image online and pasting it to the board is
+ * slow, why"). The card used to be made only when the upload had finished, so for the seconds a big copied picture
+ * takes to send, the board showed nothing. Now the card is there straight away, showing the picture from the
+ * person's own machine (a `blob:` address), and takes its stored address when the upload lands. A `blob:` address
+ * exists only in that one browser tab, so a card still wearing one is never saved.
+ */
+export function isLocalOnly(card: { url?: string | null }): boolean {
+  return typeof card.url === 'string' && card.url.startsWith('blob:')
+}
+
+/** the cards a save may send: every one whose picture is somewhere other people can reach */
+export function savable<T extends { url?: string | null }>(cards: readonly T[]): T[] {
+  return cards.filter(c => !isLocalOnly(c))
+}
