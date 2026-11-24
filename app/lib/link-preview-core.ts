@@ -610,6 +610,17 @@ export function fromPinterestPageHtml(html: string): LinkPreview | null {
   }
 }
 
+/**
+ * A link straight to a picture file ("Copy image address" — Renee, 25 Nov 2026). There is no page and there are no
+ * tags: the picture is the preview. Decided by what the server SAID it sent, not by the URL's ending. An SVG is
+ * left out — it is a document, and one that can carry script.
+ */
+export function imagePreview(url: string, contentType: string | null | undefined): LinkPreview | null {
+  const type = (contentType ?? '').toLowerCase()
+  if (!/^image\/(jpeg|png|webp|gif|avif)(;|$)/.test(type) || !isSafePreviewUrl(url)) return null
+  return { thumb: url.slice(0, 2000), media: 'image' }
+}
+
 /** …and the same shape from a page's meta tags. */
 export function fromMetaTags(tags: Record<string, string>, url: string): LinkPreview {
   const provider = providerFor(url)

@@ -33,7 +33,7 @@ import {
   CANVAS_FONTS, CANVAS_FONTS_HREF, FONT_LABEL, FONT_STACK, fontOf, hasFontChoice, type CanvasFont } from '../../../../lib/batch-brief-core'
 import { FONT_CLASS, fontVars } from './canvasFont'
 import { arrowHeadsOf, bendLine, lineMiddle, linePath, moveLineEnd, moveWholeLine, newFreeLine, straightenLine, withArrowHeads, type ArrowHeads, type LinePoint } from '../../../../lib/board-canvas-core'
-import { pastedTableWidth, tableFromClipboard } from '../../../../lib/canvas-paste-core'
+import { linkFromClipboard, pastedTableWidth, tableFromClipboard } from '../../../../lib/canvas-paste-core'
 import { COPY_MIME, cardsToCopy, copiedCorner, copiedWords, pasteCards, pasteFits, readCopied, writeCopied, type CopiedCards } from '../../../../lib/canvas-copy-core'
 import { applyBold } from './BoldBox'
 import { holdPageScroll } from '../../../../lib/hold-page-scroll'
@@ -1242,6 +1242,8 @@ export default function BriefCanvas({
     const w = MOCKUP_MENU.flatMap(g => g.items).find(i => i.pf === platform)?.w ?? 280
     addCard({ kind: 'mockup', platform, w, link_url: url })
   }
+  const addFromLinkRef = useRef(addFromLink)
+  addFromLinkRef.current = addFromLink
   /** A link card that is a post, shown as a post instead — the same card,
    *  the same id, so its arrows and comments stay. */
   const showLinkAsPost = (card: CanvasCard) => {
@@ -1362,16 +1364,30 @@ export default function BriefCanvas({
    * for a cover. Never blocks, never throws, never leaves a spinner behind.
    */
   const resolveLink = async (id: string, url: string) => {
+    // SAY IT IS COMING (Renee, 25 Nov 2026: a Pinterest link "takes at least 4 times before the image appears").
+    // The picture takes a few seconds to arrive and the card said nothing meanwhile, so a card that was working
+    // looked like one that had failed, and the link was pasted again. Now the wait is named, and a link that
+    // really did come back empty says so and offers the one thing that helps.
+    const wait = toast.loading('Getting the picture for that link…')
+    const failed = () => toast('No picture came back for that link', {
+      id: wait, duration: 8000,
+      description: 'The link is on the card and still opens. You can try once more, or drop a picture on the card.',
+      action: { label: 'Try again', onClick: () => { if (cardsRef.current.some(c => c.id === id)) void resolveLinkRef.current(id, url) } },
+    })
     try {
       const res = await fetch('/api/link-preview', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url }),
       })
-      if (!res.ok) return
+      if (!res.ok) { failed(); return }
       const { preview, provider } = await res.json() as {
         preview: Partial<CanvasCard> | null; provider?: string | null
       }
+      // Instagram and Facebook tell a server nothing and the card wears their own frame instead — not a failure
+      if (!preview?.thumb && !preview?.video && provider !== 'Instagram' && provider !== 'Facebook'
+        && preview?.provider !== 'Instagram' && preview?.provider !== 'Facebook' && !preview?.title) failed()
+      else toast.dismiss(wait)
       // a provider with no preview is still worth knowing — it is what turns
       // the chip's second line into an instruction instead of a hostname
       const patch = preview ?? (provider ? { provider } : null)
@@ -1390,8 +1406,10 @@ export default function BriefCanvas({
       if (merged === live) return
       upsertLocal(merged)
       persist([merged])
-    } catch { /* a preview is a bonus; its failure is not the user's problem */ }
+    } catch { failed() }
   }
+  const resolveLinkRef = useRef(resolveLink)
+  resolveLinkRef.current = resolveLink
 
   const addImages = async (files: FileList | File[]) => {
     // an upload aimed at a mockup frame fills THAT frame, not the canvas
@@ -1765,10 +1783,18 @@ export default function BriefCanvas({
         return
       }
       const table = tableFromClipboard(e.clipboardData.getData('text/html'), e.clipboardData.getData('text/plain'))
-      if (!table) return
+      if (table) {
+        e.preventDefault()
+        addCardRef.current({ kind: 'table', rows: table.rows, header: table.header, w: pastedTableWidth(table) })
+        toast.success(`Table pasted — ${table.rows.length} rows`)
+        return
+      }
+      // A LINK ON ITS OWN (Renee, 25 Nov 2026): pasted straight on the board it used to do nothing at all — the
+      // link had to be typed into the Link box. It goes the same one way in as that box (addFromLink).
+      const link = linkFromClipboard(e.clipboardData.getData('text/plain'))
+      if (!link) return
       e.preventDefault()
-      addCardRef.current({ kind: 'table', rows: table.rows, header: table.header, w: pastedTableWidth(table) })
-      toast.success(`Table pasted — ${table.rows.length} rows`)
+      addFromLinkRef.current(link)
     }
     window.addEventListener('paste', onPaste)
     return () => window.removeEventListener('paste', onPaste)

@@ -8,6 +8,7 @@
  * Nothing that is not plainly a table (two rows, or two columns) is taken: a pasted sentence stays a sentence.
  * Cells come out as HTML; the canvas sanitiser (sanitiseCanvasHtml) is what makes them safe, as for every card.
  */
+import { isSafePreviewUrl } from './link-preview-core'
 export type PastedTable = { rows: string[][]; header: boolean }
 
 const MAX_ROWS = 200
@@ -76,6 +77,17 @@ export function tableFromTabs(text: string | null | undefined): PastedTable | nu
 /** the table a paste holds, if it holds one — HTML first, because it keeps bold and links */
 export function tableFromClipboard(html: string | null | undefined, text: string | null | undefined): PastedTable | null {
   return tableFromHtml(html) ?? tableFromMarkdown(text) ?? tableFromTabs(text)
+}
+
+/**
+ * A LINK PASTED STRAIGHT ONTO A BOARD (Renee, 25 Nov 2026). The one https link the clipboard holds, or null when it
+ * holds anything else — words, words around a link, two links. Only a clipboard that is nothing BUT a link becomes a
+ * card; a sentence that happens to mention one stays a sentence.
+ */
+export function linkFromClipboard(text: string | null | undefined): string | null {
+  const t = (text ?? '').trim()
+  if (!t || /\s/.test(t) || !isSafePreviewUrl(t)) return null
+  return t.slice(0, 2000)
 }
 
 /** how wide the new card should be: room for each column, within reason */

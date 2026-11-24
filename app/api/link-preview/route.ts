@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { requireRole, authzErrorResponse } from '../../lib/authz'
 import {
-  fromInstagramEmbedHtml, fromMetaTags, fromOembed, fromPinterestPageHtml, instagramEmbedPageUrl, isPinterestHost,
+  fromInstagramEmbedHtml, fromMetaTags, fromOembed, fromPinterestPageHtml, imagePreview, instagramEmbedPageUrl, isPinterestHost,
   isPinterestShortLink, isSafePreviewUrl, isTikTokHost, isTikTokShortLink, mergePreview, oembedUrlFor, offlinePreview,
   parseMetaTags, pinterestCanonicalUrl, pinterestPinId, providerFor, tiktokCanonicalUrl, tiktokVideoId,
 } from '../../lib/link-preview-core'
@@ -174,25 +174,29 @@ export async function POST(req: Request) {
     // Pinterest do with no key; Meta's endpoints only with
     // `META_OEMBED_TOKEN`, and without one `oembedUrlFor` says not to bother
     // asking. Pinterest's 302s to a country host: followed, on their hosts.
-    let oembed = null
     const oembedUrl = pinterest && !pinId ? null : oembedUrlFor(askUrl, process.env.META_OEMBED_TOKEN ?? null)
-    if (oembedUrl) {
+    const askOembed = async () => {
+      if (!oembedUrl) return null
       const res = await get(oembedUrl, 'application/json', pinterest ? isPinterestHost : undefined)
-      if (res) {
-        const json = await res.json().catch(() => null)
-        if (json) oembed = fromOembed(json, askUrl)
-      }
+      if (!res) return null
+      const json = await res.json().catch(() => null)
+      return json ? fromOembed(json, askUrl) : null
     }
 
     // The pin page: the only source that says whether a pin is a VIDEO and
     // where its mp4 is, and the one with the full-size picture. Read
     // whole (it is big — PINTEREST_MAX_BYTES) because Pinterest puts the
     // tags at the end; read once, because the answer is stored on the card.
-    let pinPage = null
-    if (pinId) {
+    const askPinPage = async () => {
+      if (!pinId) return null
       const res = await get(askUrl, 'text/html,application/xhtml+xml', isPinterestHost)
-      if (res) pinPage = fromPinterestPageHtml(await readCapped(res, PINTEREST_MAX_BYTES))
+      return res ? fromPinterestPageHtml(await readCapped(res, PINTEREST_MAX_BYTES)) : null
     }
+
+    // BOTH AT ONCE (25 Nov 2026 — Renee: a pin "takes at least 4 times before the image appears"). One after the
+    // other, the short link, oEmbed and the page took 4–6 s measured from Melbourne, with nothing on the card to
+    // say it was coming. Neither answer depends on the other, so neither waits for the other.
+    const [oembed, pinPage] = await Promise.all([askOembed().catch(() => null), askPinPage().catch(() => null)])
 
     // Instagram's public embed page: the picture, the caption, and — the
     // thing no other source can tell us — whether Instagram itself says the
@@ -208,10 +212,14 @@ export async function POST(req: Request) {
     // not fetched again)
     let tags = null
     if (!oembed?.thumb && !embedPage?.thumb && !pinId) {
-      const res = await get(url, 'text/html,application/xhtml+xml')
+      const res = await get(url, 'text/html,application/xhtml+xml,image/*;q=0.9')
       const type = res?.headers.get('content-type') ?? ''
-      if (res && /html|xml/i.test(type)) {
+      if (res && /html|xml/i.test(type) && !/^image\//i.test(type)) {
         tags = fromMetaTags(parseMetaTags(await readCapped(res)), url)
+      } else if (res) {
+        // a link straight to a picture file: the picture is the preview, and its bytes are not ours to read
+        void res.body?.cancel().catch(() => {})
+        tags = imagePreview(url, type)
       }
     }
 

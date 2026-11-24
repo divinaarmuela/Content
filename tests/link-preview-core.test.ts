@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
-  displayHost, embedUrlFor, fromInstagramEmbedHtml, fromMetaTags, fromOembed, instagramEmbedPageUrl,
+  displayHost, embedUrlFor, imagePreview, fromInstagramEmbedHtml, fromMetaTags, fromOembed, instagramEmbedPageUrl,
   instagramShortcode, isInstagramCdnUrl, isPlayableFile, isSafePreviewUrl, isTikTokShortLink, mergePreview,
   oembedUrlFor, offlinePreview, parseMetaTags, providerFor, tiktokCanonicalUrl, tiktokVideoId, youtubeId,
 } from '../app/lib/link-preview-core'
@@ -370,5 +370,22 @@ describe('playing the thing in place', () => {
     expect(isPlayableFile('https://cdn.example.com/a.MOV?v=2')).toBe(true)
     expect(isPlayableFile('https://cdn.example.com/a.webm')).toBe(true)
     expect(isPlayableFile('https://cdn.example.com/a.jpg')).toBe(false)
+  })
+})
+
+/** A LINK STRAIGHT TO A PICTURE (Renee, 25 Nov 2026: "copy an image link from pinterest") — "Copy image address"
+ *  gives the file's own URL, which has no page and no tags; the picture itself is the preview. */
+describe('a link to a picture file', () => {
+  it('is its own picture when the server says it is an image', () => {
+    expect(imagePreview('https://i.pinimg.com/736x/aa/bb/cc/pic.jpg', 'image/jpeg'))
+      .toEqual({ thumb: 'https://i.pinimg.com/736x/aa/bb/cc/pic.jpg', media: 'image' })
+  })
+  it('is nothing for a page, a missing type, or an address we would not fetch', () => {
+    expect(imagePreview('https://example.com/a', 'text/html; charset=utf-8')).toBeNull()
+    expect(imagePreview('https://example.com/a.jpg', null)).toBeNull()
+    expect(imagePreview('http://example.com/a.jpg', 'image/jpeg')).toBeNull()
+  })
+  it('is nothing for an SVG, which is a document that can carry script', () => {
+    expect(imagePreview('https://example.com/a.svg', 'image/svg+xml')).toBeNull()
   })
 })

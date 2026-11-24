@@ -193,16 +193,19 @@ describe('link-preview route (replayed providers)', () => {
       throw new Error(`unexpected fetch ${url}`)
     }
 
-  it('a video pin: oEmbed then the page, each followed to the country host, and the card gets the mp4, the picture, the words and the pinner', async () => {
+  // oEmbed and the page are asked AT THE SAME TIME (25 Nov 2026 — Renee: a pin "takes at least 4 times before the
+  // image appears"; one after the other they took 4–6 s measured, long enough to look like nothing happened)
+  it('a video pin: oEmbed and the page, each followed to the country host, and the card gets the mp4, the picture, the words and the pinner', async () => {
     answer = pinterestAnswers(PIN_VIDEO)
     const { status, body } = await call(PIN)
     expect(status).toBe(200)
-    expect(calls).toEqual([
+    expect(calls).toHaveLength(4)
+    expect(calls).toEqual(expect.arrayContaining([
       expect.stringContaining('https://www.pinterest.com/oembed.json?format=json&url='),
       expect.stringContaining('https://au.pinterest.com/oembed.json?format=json&url='),
       PIN,
       'https://au.pinterest.com/pin/424605071145308382/',
-    ])
+    ]))
     expect(body.preview).toMatchObject({
       provider: 'Pinterest',
       media: 'video',
@@ -274,6 +277,29 @@ describe('link-preview route (replayed providers)', () => {
     expect(body.preview).toBeNull()
     expect(body.provider).toBe('Pinterest')
     expect(body.reason).toBe('no_preview')
+  })
+
+  it('oEmbed and the pin page are asked together, not one after the other', async () => {
+    const base = pinterestAnswers(PIN_IMAGE)
+    let open = 0; let most = 0
+    answer = async url => {
+      open++; most = Math.max(most, open)
+      await new Promise(r => setTimeout(r, 5))
+      open--
+      return base(url)
+    }
+    await call(PIN)
+    expect(most).toBe(2)
+  })
+
+  it('a link straight to a picture file shows that picture', async () => {
+    const pic = 'https://i.pinimg.com/736x/94/cc/c9/94ccc9ea5a579a414c731ca63c4dabfe.jpg'
+    answer = url => {
+      if (url === pic) return new Response('JPEGBYTES', { status: 200, headers: { 'content-type': 'image/jpeg' } })
+      throw new Error(`unexpected fetch ${url}`)
+    }
+    const { body } = await call(pic)
+    expect(body.preview).toMatchObject({ thumb: pic, media: 'image' })
   })
 })
 
