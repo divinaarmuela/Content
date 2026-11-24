@@ -34,6 +34,7 @@ import {
 import { FONT_CLASS, fontVars } from './canvasFont'
 import { arrowHeadsOf, bendLine, lineMiddle, linePath, moveLineEnd, moveWholeLine, newFreeLine, straightenLine, withArrowHeads, type ArrowHeads, type LinePoint } from '../../../../lib/board-canvas-core'
 import { linkFromClipboard, pastedTableWidth, tableFromClipboard } from '../../../../lib/canvas-paste-core'
+import { groupBoxOf, groupScaleRange, scaleGroup, type CardBox, type GroupBox } from '../../../../lib/canvas-group-resize-core'
 import { COPY_MIME, cardsToCopy, copiedCorner, copiedWords, pasteCards, pasteFits, readCopied, writeCopied, type CopiedCards } from '../../../../lib/canvas-copy-core'
 import { applyBold } from './BoldBox'
 import { holdPageScroll } from '../../../../lib/hold-page-scroll'
@@ -1130,6 +1131,71 @@ export default function BriefCanvas({
     if (changed.length === 0) return
     for (const c of changed) upsertLocal(c)
     persist(changed)
+  }
+  /* ── RESIZE THE PICKED CARDS TOGETHER (Renee, 24 Nov 2026: "an option to select a bunch of items and resize, now
+   *    we can select all to move but not resize"; rules in canvas-group-resize-core). One handle on the corner of
+   *    the box around the selection: pull it and every picked card grows or shrinks by the same amount, gaps and
+   *    all, from the selection's top-left. Painted straight to the page while it is pulled, saved once on release. */
+  const drawnSizes = (list: readonly CanvasCard[]): Map<string, CardBox> => new Map(list.map(c => {
+    const el = viewportRef.current?.querySelector<HTMLElement>(`[data-cid="${c.id}"]`)?.firstElementChild as HTMLElement | null
+    return [c.id, { w: el?.offsetWidth || c.w, h: el?.offsetHeight || c.h || guessHeight(c.kind, c.w, c.platform) }]
+  }))
+  const [groupBox, setGroupBox] = useState<GroupBox | null>(null)
+  const pickedKey = pickedCards.map(c => `${c.id}:${c.x}:${c.y}:${c.w}:${c.h ?? ''}`).join('|')
+  useLayoutEffect(() => {
+    if (groupResize.current) return
+    const next = pickedCards.length > 1 ? groupBoxOf(pickedCards, drawnSizes(pickedCards)) : null
+    setGroupBox(cur => (cur && next && cur.x === next.x && cur.y === next.y && cur.w === next.w && cur.h === next.h ? cur : next))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pickedKey])
+  const groupOutlineRef = useRef<HTMLDivElement>(null)
+  const groupHandleRef = useRef<HTMLDivElement>(null)
+  const groupResize = useRef<{
+    startX: number; startY: number; cards: CanvasCard[]; drawn: Map<string, CardBox>; box: GroupBox
+    min: number; max: number; factor: number; raf: number
+  } | null>(null)
+  const paintGroup = () => {
+    const g = groupResize.current
+    if (!g) return
+    const changed = new Map(scaleGroup(g.cards, g.drawn, g.factor).map(c => [c.id, c]))
+    for (const orig of g.cards) {
+      if (orig.kind === 'arrow' || orig.col) continue
+      const c = changed.get(orig.id) ?? orig
+      const wrap = viewportRef.current?.querySelector<HTMLElement>(`[data-cid="${orig.id}"]`) ?? null
+      paintResize((wrap?.firstElementChild ?? null) as HTMLElement | null, c.w, c.h, wrap, c.x, c.y)
+    }
+    const w = Math.round(g.box.w * g.factor), h = Math.round(g.box.h * g.factor)
+    if (groupOutlineRef.current) { groupOutlineRef.current.style.width = `${w}px`; groupOutlineRef.current.style.height = `${h}px` }
+    if (groupHandleRef.current) groupHandleRef.current.style.transform = `translate(${g.box.x + w - 22}px, ${g.box.y + h - 22}px)`
+  }
+  const startGroupResize = (e: React.PointerEvent) => {
+    if (!groupBox || groupBox.w <= 0 || groupBox.h <= 0) return
+    e.stopPropagation(); e.preventDefault()
+    interactingRef.current = true
+    try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId) } catch { /* no capture, still a drag */ }
+    const drawn = drawnSizes(pickedCards)
+    groupResize.current = { startX: e.clientX, startY: e.clientY, cards: pickedCards, drawn, box: groupBox, ...groupScaleRange(pickedCards, drawn), factor: 1, raf: 0 }
+  }
+  const moveGroupResize = (e: React.PointerEvent) => {
+    const g = groupResize.current
+    if (!g) return
+    const s = camRef.current.s
+    // whichever way the corner is pulled further, in proportion — so a sideways pull and a downward pull both work
+    const f = Math.max((g.box.w + (e.clientX - g.startX) / s) / g.box.w, (g.box.h + (e.clientY - g.startY) / s) / g.box.h)
+    g.factor = Math.min(g.max, Math.max(g.min, f))
+    if (!g.raf) g.raf = requestAnimationFrame(() => { const cur = groupResize.current; if (cur) { cur.raf = 0; paintGroup() } })
+  }
+  const endGroupResize = () => {
+    const g = groupResize.current
+    if (!g) return
+    if (g.raf) cancelAnimationFrame(g.raf)
+    paintGroup()
+    groupResize.current = null
+    interactingRef.current = false
+    const changed = scaleGroup(g.cards, g.drawn, g.factor)
+    applyGroup(changed)
+    if (changed.length === 0) setGroupBox(groupBoxOf(g.cards, g.drawn))
+    else if (g.factor === g.min && g.min > 0.05 && g.factor < 1) toast('That is as small as these go together', { description: 'One of the picked cards is at its smallest size.' })
   }
   /**
    * EVERY PICKED CARD GOES, with one Undo (the owner, 14 Nov 2026: "when you highlight and delete, why does it delete
@@ -2367,7 +2433,7 @@ export default function BriefCanvas({
             style={{ fontFamily: FONT_STACK.sans }}
             onPointerDown={e => e.stopPropagation()} onDoubleClick={e => e.stopPropagation()}>
             <span className="px-2 text-[13px] font-semibold text-foreground">{picked.size} cards picked</span>
-            <span className="hidden px-1 text-[12px] text-muted-foreground sm:inline">drag one to move them all</span>
+            <span className="hidden px-1 text-[12px] text-muted-foreground sm:inline">drag one to move them all · drag the corner to resize them all</span>
             {(() => {
               const offers = groupOffers(pickedCards)
               const sep = <span className="mx-0.5 h-5 w-px bg-foreground/[0.08]" />
@@ -2477,6 +2543,22 @@ export default function BriefCanvas({
             style={{ overflow: 'visible', maxWidth: 'none', zIndex: 6000, position: 'absolute', pointerEvents: 'none' }} aria-hidden>
             {ordered.filter(c => c.kind === 'arrow' && c.id === selected).map(drawArrow)}
           </svg>
+          {/* THE BOX AROUND THE PICKED CARDS, and the one handle that resizes them all (Renee, 24 Nov 2026) */}
+          {groupBox && picked.size > 1 && !viewOnly && !editing && !marquee && (
+            <>
+              <div ref={groupOutlineRef} aria-hidden data-group-box
+                className="pointer-events-none absolute left-0 top-0 rounded-[3px] border border-dashed border-accent-blue/70"
+                style={{ transform: `translate(${groupBox.x}px, ${groupBox.y}px)`, width: groupBox.w, height: groupBox.h, zIndex: 5999 }} />
+              <div ref={groupHandleRef} data-card="" data-group-resize role="presentation" aria-label="Resize the picked cards together"
+                title="Drag to resize the picked cards together"
+                className="absolute left-0 top-0 flex h-11 w-11 touch-none cursor-nwse-resize items-center justify-center"
+                style={{ transform: `translate(${groupBox.x + groupBox.w - 22}px, ${groupBox.y + groupBox.h - 22}px)`, zIndex: 6001 }}
+                onPointerDown={startGroupResize} onPointerMove={moveGroupResize} onPointerUp={endGroupResize} onPointerCancel={endGroupResize}
+                onClick={e => e.stopPropagation()} onDoubleClick={e => e.stopPropagation()}>
+                <span aria-hidden className="block h-3 w-3 rounded-[2px] border-[1.5px] border-white bg-accent-blue shadow dark:border-background" />
+              </div>
+            </>
+          )}
           {ordered.filter(c => c.kind !== 'arrow').map(card => (
             <div
               key={card.id}
