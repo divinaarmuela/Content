@@ -291,7 +291,7 @@ const CANVAS_BOUND = 20_000
  *  one array, so the cap is the shoot's, not one board's */
 // …raised for the Milanote merge (20 Oct 2026): a client's whole Milanote tree is one board here, and the largest
 // (Chantal Cutter) holds 621 items
-const CANVAS_MAX_CARDS = 1500
+export const CANVAS_MAX_CARDS = 1500
 
 export type CanvasCard = {
   id: string

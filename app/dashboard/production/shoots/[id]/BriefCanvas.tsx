@@ -14,7 +14,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import {
-  AlignCenter, AlignLeft, AlignRight, Bold, ChevronRight, Columns3, Copy, Highlighter, List, ExternalLink, FolderOpen, Folder as BoardIcon, HardDrive, ImagePlus, Link2, ListTodo, Maximize2,
+  AlignCenter, AlignLeft, AlignRight, Bold, ChevronRight, ClipboardCopy, Columns3, Copy, Highlighter, List, ExternalLink, FolderOpen, Folder as BoardIcon, HardDrive, ImagePlus, Link2, ListTodo, Maximize2,
   Minimize2, Minus, MoveUpRight, Pencil, Plus, Scan, Smartphone, StickyNote, Trash2, Type, Undo2, X,
 } from 'lucide-react'
 import { uploadMedia } from '../../../uploadMedia'
@@ -27,13 +27,14 @@ import NewBoardDialog from '../../../boards/NewBoardDialog'
 import { CanvasCardView, NOTE_COLORS, TEXT_COLOR_SWATCH } from './CanvasCard'
 import {
   CANVAS_NOTE_COLORS, TEXT_SIZE_LABEL, cardTakesHeight, minCardWidth, mockupPlatformFor, resizeCard,
-  seedCardsFromReferences, stepTextSize, textSizeOf,
+  seedCardsFromReferences, stepTextSize, textSizeOf, CANVAS_MAX_CARDS,
   type CanvasCard, type CanvasTextSize, type ReferenceMedia, CANVAS_TEXT_COLORS, textColorOf, CANVAS_TEXT_ALIGNS, textAlignOf,
   hasTextStyle, defaultAlignOf, textBoldOf, boldWordsIn, inBoldRun,
   CANVAS_FONTS, CANVAS_FONTS_HREF, FONT_LABEL, FONT_STACK, fontOf, hasFontChoice, type CanvasFont } from '../../../../lib/batch-brief-core'
 import { FONT_CLASS, fontVars } from './canvasFont'
 import { arrowHeadsOf, bendLine, lineMiddle, linePath, moveLineEnd, moveWholeLine, newFreeLine, straightenLine, withArrowHeads, type ArrowHeads, type LinePoint } from '../../../../lib/board-canvas-core'
 import { pastedTableWidth, tableFromClipboard } from '../../../../lib/canvas-paste-core'
+import { COPY_MIME, cardsToCopy, copiedCorner, copiedWords, pasteCards, pasteFits, readCopied, writeCopied, type CopiedCards } from '../../../../lib/canvas-copy-core'
 import { applyBold } from './BoldBox'
 import { holdPageScroll } from '../../../../lib/hold-page-scroll'
 import { cardLinkOf, opensOnClick } from '../../../../lib/canvas-link-open-core'
@@ -47,6 +48,8 @@ type Camera = { x: number; y: number; s: number }
 export type CanvasOp = { upsert?: CanvasCard[]; remove?: string[] }
 
 const mint = () => Math.random().toString(36).slice(2, 10)
+/** ⌘ on a Mac, Ctrl everywhere else — what the copy and paste hints say */
+const MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform ?? '')
 const clampScale = (s: number) => Math.min(2, Math.max(0.25, s))
 /** cards settle onto an 8px grid on drop, so layouts line up without effort */
 const snap = (n: number) => Math.round(n / 8) * 8
@@ -1657,6 +1660,87 @@ export default function BriefCanvas({
    *    note being typed, and only when what was copied is plainly a table. */
   const addCardRef = useRef(addCard)
   addCardRef.current = addCard
+
+  /* ── COPY AND PASTE CARDS (Renee, 24 Nov 2026: "would be good to select and copy then paste"; rules in
+   *    canvas-copy-core). Ctrl+C takes the picked cards — a board with everything inside it — onto the clipboard;
+   *    Ctrl+V puts a copy on whichever board is open, here or on another shoot's brief or a team board. */
+  const pasteKey = MAC ? '⌘V' : 'Ctrl+V'
+  /** where a copy was made: this page, this board — a paste back in the same place steps aside instead of covering */
+  const whereNow = () => `${typeof window !== 'undefined' ? window.location.pathname : ''}#${board ?? ''}`
+  /** the cards Ctrl+C would take right now */
+  const copyIds = (): string[] => (picked.size > 1 ? visible.filter(c => picked.has(c.id)).map(c => c.id) : selected ? [selected] : [...picked])
+  const onCopyEvent = (e: ClipboardEvent) => {
+    const ids = copyIds()
+    if (ids.length === 0 || !e.clipboardData) return
+    const copied = cardsToCopy(cards, ids)
+    if (copied.length === 0) { toast('A line is copied with the cards it joins — pick those too'); return }
+    e.preventDefault()
+    e.clipboardData.setData(COPY_MIME, writeCopied(copied, whereNow()))
+    e.clipboardData.setData('text/plain', copiedWords(copied))
+    const n = ids.filter(id => copied.some(c => c.id === id && c.kind !== 'arrow')).length
+    const inside = copied.filter(c => c.kind !== 'arrow').length - n
+    toast.success(`${n === 1 ? '1 card' : `${n} cards`} copied${inside > 0 ? `, with the ${inside === 1 ? '1 card' : `${inside} cards`} inside` : ''}`, {
+      description: `Press ${pasteKey} to paste — here, or on any other board.`,
+    })
+  }
+  const onCopyRef = useRef(onCopyEvent)
+  onCopyRef.current = onCopyEvent
+  /** the toolbar's Copy: the same road as Ctrl+C, so there is one clipboard and one rule */
+  const copyPicked = () => {
+    let ok = false
+    try { ok = document.execCommand('copy') } catch { ok = false }
+    if (!ok) toast.error(`Could not copy from the button — press ${MAC ? '⌘C' : 'Ctrl+C'} instead`)
+  }
+  /** the same copy pasted again steps aside each time, so two pastes are never one pile */
+  const pasteRun = useRef<{ key: string; n: number }>({ key: '', n: 0 })
+  const pasteCopied = (copied: CopiedCards, raw: string) => {
+    if (!pasteFits(cards.length, copied.cards.length)) {
+      toast.error(`Not enough room to paste ${copied.cards.length} cards`, { description: `A brief holds ${CANVAS_MAX_CARDS} cards at most, boards inside it included. Delete some first, or paste fewer.` })
+      return
+    }
+    const key = `${raw.length}:${whereNow()}:${raw.slice(0, 200)}`
+    pasteRun.current = pasteRun.current.key === key ? { key, n: pasteRun.current.n + 1 } : { key, n: 0 }
+    const step = pasteRun.current.n * 24
+    const ids = new Set(copied.cards.map(c => c.id))
+    const loose = copied.cards.filter(c => c.kind !== 'arrow' && (!c.parent || !ids.has(c.parent)) && !(c.col && ids.has(c.col)))
+    const corner = copiedCorner(copied.cards)
+    const right = Math.max(corner.x, ...loose.map(c => c.x + c.w))
+    const bottom = Math.max(corner.y, ...loose.map(c => c.y + (c.h ?? guessHeight(c.kind, c.w, c.platform))))
+    const rect = viewportRef.current?.getBoundingClientRect()
+    const cam = camRef.current
+    const inView = !!rect && corner.x * cam.s + cam.x >= 0 && corner.x * cam.s + cam.x <= rect.width - 80
+      && corner.y * cam.s + cam.y >= 0 && corner.y * cam.s + cam.y <= rect.height - 80
+    const mid = centerWorld()
+    // beside the original when it is in sight on this same board; otherwise in the middle of what is being looked at
+    const at = copied.from === whereNow() && inView
+      ? { x: snap(corner.x + 24 + step), y: snap(corner.y + 24 + step) }
+      : { x: snap(mid.x - (right - corner.x) / 2 + step), y: snap(mid.y - (bottom - corner.y) / 2 + step) }
+    const out = pasteCards(copied.cards, { parent: board, at, z: Math.max(0, ...cards.map(c => c.z)), mint })
+    const top = new Set(out.top)
+    // the cards on the open board first: undoing a paste removes those, and what is inside a board goes with it
+    const ordered = [...out.cards.filter(c => top.has(c.id)), ...out.cards.filter(c => !top.has(c.id))]
+    for (const c of ordered) upsertLocal(c)
+    persist(ordered)
+    if (out.top.length === 1) { setSelected(out.top[0]); setPicked(new Set()) }
+    else { setSelected(null); setPicked(top) }
+    toast.success(`${out.top.length === 1 ? '1 card' : `${out.top.length} cards`} pasted`)
+  }
+  const pasteCopiedRef = useRef(pasteCopied)
+  pasteCopiedRef.current = pasteCopied
+  useEffect(() => {
+    if (viewOnly) return
+    const onCopy = (e: ClipboardEvent) => {
+      const t = e.target as HTMLElement | null
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
+      if (t && t !== document.body && !viewportRef.current?.contains(t)) return
+      // words highlighted on the page are what Ctrl+C means — the browser's own copy, untouched
+      const sel = window.getSelection()
+      if (sel && !sel.isCollapsed && sel.toString().trim()) return
+      onCopyRef.current(e)
+    }
+    window.addEventListener('copy', onCopy)
+    return () => window.removeEventListener('copy', onCopy)
+  }, [viewOnly])
   const addImagesRef = useRef(addImages)
   addImagesRef.current = addImages
   useEffect(() => {
@@ -1666,6 +1750,10 @@ export default function BriefCanvas({
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
       const onBoard = !t || t === document.body || !!viewportRef.current?.contains(t)
       if (!onBoard || !e.clipboardData) return
+      // CARDS COPIED FROM A BOARD (24 Nov 2026) come first: they are ours, and they say so
+      const raw = e.clipboardData.getData(COPY_MIME)
+      const copied = readCopied(raw)
+      if (copied) { e.preventDefault(); pasteCopiedRef.current(copied, raw); return }
       // A COPIED PICTURE (13 Nov 2026): a screenshot, or "Copy image" from a web page or a chat, lands on the board
       // as a picture, the same way a dropped file does
       const pictures = Array.from(e.clipboardData.items ?? []).filter(i => i.kind === 'file' && i.type.startsWith('image/'))
@@ -2039,6 +2127,9 @@ export default function BriefCanvas({
           </>
         )}
         <span className="mx-0.5 h-5 w-px bg-foreground/[0.08]" />
+        <Button size="sm" variant="ghost" className={tb} onClick={copyPicked} title={`Copy, to paste on this board or another (${MAC ? '⌘C' : 'Ctrl+C'})`}>
+          <ClipboardCopy className="h-3.5 w-3.5" /> Copy
+        </Button>
         {card.kind !== 'board' && (
           <Button size="sm" variant="ghost" className={tb} onClick={() => duplicateCard(card)} title="Duplicate (Ctrl+D)">
             <Copy className="h-3.5 w-3.5" /> Duplicate
@@ -2311,6 +2402,9 @@ export default function BriefCanvas({
                     </>
                   )}
                   {sep}
+                  <Button size="sm" variant="ghost" className="h-8 gap-1.5 px-2 text-secondary-13" onClick={copyPicked} title={`Copy, to paste on this board or another (${MAC ? '⌘C' : 'Ctrl+C'})`}>
+                    <ClipboardCopy className="h-3.5 w-3.5" /> Copy
+                  </Button>
                   <Button size="sm" variant="ghost" className="h-8 gap-1.5 px-2 text-accent-red hover:text-accent-red" onClick={() => removePicked()}>
                     <Trash2 className="h-3.5 w-3.5" /> Delete
                   </Button>
