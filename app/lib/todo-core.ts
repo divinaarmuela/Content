@@ -204,6 +204,33 @@ export function groupTodos<T extends { status?: string | null; due_date?: string
   return TODO_GROUPS.map(g => ({ ...g, rows: sorted.filter(r => todoGroupOf(r, today) === g.key) }))
 }
 
+/**
+ * A TO-DO JUST MARKED COMPLETE STAYS WHERE IT IS, as in Asana (the owner, 25 Nov 2026: "under my tasks when I mark
+ * complete it shouldn't disappear"). The Incomplete list used to drop a to-do the instant it was ticked, so the tick
+ * looked like it had not taken; on a repeating to-do the next copy slid into the same place and was ticked again.
+ * `justDone` is the ids ticked on this visit to this list — they stay, ticked, until the person goes elsewhere.
+ */
+export function showsInStatus(
+  todo: { id?: string | null; status?: string | null }, status: 'open' | 'done' | 'all', justDone: ReadonlySet<string>,
+): boolean {
+  if (status === 'all') return true
+  const done = todo.status === 'done'
+  if (status === 'done') return done
+  return !done || justDone.has(String(todo.id))
+}
+
+/** Group (and sort) rows with the just-ticked ones placed as if still open — in their own section, in their own
+ *  place, not moved down to Done — and hand back the real rows, so each still draws as the done to-do it is. */
+export function groupInPlace<T extends { id?: string | null; status?: string | null }, G extends { rows: T[] }>(
+  rows: readonly T[], justDone: ReadonlySet<string>, group: (rows: T[]) => G[],
+): G[] {
+  const held = rows.filter(r => r.status === 'done' && justDone.has(String(r.id)))
+  if (held.length === 0) return group([...rows])
+  const real = new Map(held.map(r => [String(r.id), r]))
+  const groups = group(rows.map(r => (real.has(String(r.id)) ? { ...r, status: 'open' } : r)))
+  return groups.map(g => ({ ...g, rows: g.rows.map(r => real.get(String(r.id)) ?? r) }))
+}
+
 /** the due chip's words */
 export function dueWords(due: string | null | undefined, today: string): string | null {
   if (!due) return null

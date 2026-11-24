@@ -15,7 +15,7 @@ import { todayKey } from '../ui/tone'
 import { useRole } from '../useRole'
 import { personLabel } from '../../lib/identity-core'
 import {
-  TODO_GROUP_BYS, TODO_SORTS, dueForGroup, groupTodos, groupTodosBy, idsOf, mayEditTodo, mayFilterByPerson, openBlockers, positionBetween,
+  TODO_GROUP_BYS, TODO_SORTS, dueForGroup, groupInPlace, groupTodos, groupTodosBy, showsInStatus, idsOf, mayEditTodo, mayFilterByPerson, openBlockers, positionBetween,
   todoFilesOf, todosEmptyWords, visibleWithFollowers, hiddenProjectsFor,
   type TodoGroup, type TodoGroupBy, type TodoGroupKey, type TodoSort,
 } from '../../lib/todo-core'
@@ -23,7 +23,7 @@ import TodoPanel, { Avatar, CheckCircle } from './TodoPanel'
 import Celebration from './Celebration'
 import { ProjectIcon, TodoInbox, TodoSidebar, useTodoInbox, type Place, type Project } from './TodoNav'
 import { MONTH_NAMES, dueTone, monthGrid, shortDue } from './todo-words'
-import { normaliseRepeat, repeatWords, upcomingDues } from '../../lib/todo-repeat-core'
+import { nextDue, normaliseRepeat, repeatWords, upcomingDues } from '../../lib/todo-repeat-core'
 
 /**
  * THE TO-DOS PAGE, AS ASANA'S MY TASKS (the owner, 18 Oct 2026: "create
@@ -146,6 +146,14 @@ export default function TodosPage() {
   const [groupBy, setGroupBy] = useState<TodoGroupBy>('date')
   const [celebrate, setCelebrate] = useState(true)
   const [status, setStatus] = useState<'open' | 'done' | 'all'>('open')
+  // TICKED ON THIS VISIT (the owner, 25 Nov 2026: "under my tasks when I mark complete it shouldn't disappear" —
+  // as Asana's does): a to-do marked complete stays in the Incomplete list, ticked and in its place, until the
+  // person goes to another list or tab. See showsInStatus / groupInPlace.
+  const [justDone, setJustDone] = useState<ReadonlySet<string>>(new Set())
+  const holdDone = useCallback((ids: readonly string[], on: boolean) => setJustDone(cur => {
+    const n = new Set(cur); for (const id of ids) { if (on) n.add(id); else n.delete(id) }
+    return n
+  }), [])
   const [person, setPerson] = useState<string>('')
   const [client, setClient] = useState<string>('')
   const [filtersOpen, setFiltersOpen] = useState(false)
@@ -169,7 +177,7 @@ export default function TodosPage() {
   const pickGroup = (v: TodoGroupBy) => { setGroupBy(v); store.set('mdm.todos.group', v) }
   /** go somewhere in the sidebar; a project opens grouped by who is doing what, as Manal asked */
   const goPlace = (p: Place) => {
-    setPlace(p); store.set('mdm.todos.place', p); setSelected(new Set())
+    setPlace(p); store.set('mdm.todos.place', p); setSelected(new Set()); setJustDone(new Set())
     if (p.startsWith('project:')) setGroupBy('project')
     else { const g = store.get('mdm.todos.group'); setGroupBy(TODO_GROUP_BYS.some(x => x.key === g) ? (g as TodoGroupBy) : 'date') }
     if (p !== 'all' && !p.startsWith('project:')) setPerson('')
@@ -180,21 +188,23 @@ export default function TodosPage() {
   // page every member of the team sees all of that person's tasks, not only the ones they are on
   const pool = useMemo(() => (personId && viewer ? raw as TodoRow[] : visibleAll), [personId, viewer, raw, visibleAll])
   const shown = useMemo(() => pool.filter(t => !t.parent_id
-    && (status === 'all' || (status === 'done' ? t.status === 'done' : t.status !== 'done'))
+    && showsInStatus(t, status, justDone)
     // MY TASKS is mine alone; a project is that client's, everyone's on it; Everyone's tasks is a super admin's all
     && (place === 'mine' ? t.owner_id === me?.id : personId ? t.owner_id === personId : projectId ? t.client_id === projectId : true)
     && (!person || place === 'mine' || (!canFilterPeople && !projectId) || t.owner_id === person)
-    && (!client || !!projectId || t.client_id === client)), [pool, status, person, client, canFilterPeople, place, projectId, personId, me?.id])
+    && (!client || !!projectId || t.client_id === client)), [pool, status, justDone, person, client, canFilterPeople, place, projectId, personId, me?.id])
   const nameOf = useCallback((id: string | null) => (id ? names.get(id) ?? 'Someone' : ''), [names])
   const clientOf = useCallback((id: string | null) => (id ? clientNames.get(id) ?? 'A client' : ''), [clientNames])
   const listGroups = useMemo(() => {
     if (!today) return []
     const by = groupBy === 'project' && !projectId ? 'date' : groupBy
-    const all = groupTodosBy(shown as never[], by, { today, sort, sections, nameOf, clientOf, projectSections }) as TodoGroup<TodoRow>[]
+    // on the Incomplete tab a to-do ticked just now keeps its section and its place (groupInPlace)
+    const held = status === 'open' ? justDone : new Set<string>()
+    const all = groupInPlace(shown, held, rows => groupTodosBy(rows as never[], by, { today, sort, sections, nameOf, clientOf, projectSections }) as TodoGroup<TodoRow>[])
     // the date sections stay even when empty (somewhere to add into), Overdue and Done only when they hold something
     return by === 'date' ? all.filter(g => g.rows.length > 0 || (g.key !== 'done' && g.key !== 'overdue' && status !== 'done')) : all.filter(g => g.rows.length > 0 || by === 'sections' || by === 'project' || by === 'none')
-  }, [shown, groupBy, today, sort, sections, nameOf, clientOf, status, projectId, projectSections])
-  const boardGroups = useMemo(() => (today ? groupTodos(shown, today).filter(g => g.rows.length > 0 || (g.key !== 'done' && g.key !== 'overdue' && status !== 'done')) : []), [shown, today, status])
+  }, [shown, groupBy, today, sort, sections, nameOf, clientOf, status, justDone, projectId, projectSections])
+  const boardGroups = useMemo(() => (today ? groupInPlace(shown, status === 'open' ? justDone : new Set<string>(), rows => groupTodos(rows, today)).filter(g => g.rows.length > 0 || (g.key !== 'done' && g.key !== 'overdue' && status !== 'done')) : []), [shown, today, status, justDone])
   const flat = useMemo(() => listGroups.flatMap(g => g.rows), [listGroups])
 
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
@@ -243,10 +253,17 @@ export default function TodosPage() {
   const tick = useCallback(async (t: TodoRow, done: boolean) => {
     // DEPENDENCIES: Asana warns, it does not stop you
     if (done && openBlockers(t, visibleAll).length > 0) toast.warning(`This one was waiting on ${openBlockers(t, visibleAll).length} open task${openBlockers(t, visibleAll).length === 1 ? '' : 's'}`)
-    const ok = await patchTodo(t.id, { status: done ? 'done' : 'open' }, done ? 'Marked complete' : 'Marked incomplete')
+    // held before the save comes back, so the row never blinks out of the list in between
+    holdDone([t.id], done)
+    // A REPEATING TO-DO says its next one is coming, so the copy that appears is not taken for a tick that failed
+    const rule = done ? normaliseRepeat((t as { repeat?: unknown }).repeat) : null
+    const next = rule && today ? nextDue(rule, t.due_date, today) : null
+    const ok = await patchTodo(t.id, { status: done ? 'done' : 'open' },
+      done ? (next ? `Marked complete — it repeats, the next one is due ${shortDue(next, today!).replace(/^(Today|Tomorrow|Yesterday)$/, w => w.toLowerCase())}` : 'Marked complete') : 'Marked incomplete')
+    if (!ok && done) holdDone([t.id], false)
     // CELEBRATIONS: now and then, like Asana's creatures — off in Options, never with reduced motion
     if (ok && done && celebrate && Math.random() < 0.34) setParty(p => p + 1)
-  }, [patchTodo, visibleAll, celebrate])
+  }, [patchTodo, visibleAll, celebrate, holdDone, today])
   const create = (title: string, g: TodoGroup<TodoRow> | null, due?: string | null) => {
     const body: Record<string, unknown> = { title, owner_id: personId || person || me?.id || null, client_id: projectId || client || null, files: [] }
     body.due_date = due !== undefined ? due : g?.dateKey ? dueForGroup(g.dateKey, today!) : null
@@ -333,6 +350,7 @@ export default function TodosPage() {
   const chosen = useMemo(() => visibleAll.filter(t => selected.has(t.id)), [visibleAll, selected])
   const bulk = async (body: Record<string, unknown>, said: string) => {
     const mine = chosen.filter(t => mayEditTodo(viewer, t as never))
+    if (body.status === 'done') holdDone(mine.map(t => t.id), true)
     const results = await Promise.all(mine.map(t => fetch(`/api/todos/${t.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(r => r.ok).catch(() => false)))
     const ok = results.filter(Boolean).length
     const skipped = chosen.length - mine.length
@@ -454,7 +472,7 @@ export default function TodosPage() {
         <div className="flex flex-wrap items-center gap-1" role="group" aria-label="Filters">
           <div className="inline-flex items-center" role="tablist" aria-label="Incomplete or completed">
             {(['open', 'done', 'all'] as const).map(s => (
-              <button key={s} type="button" role="tab" aria-selected={status === s} onClick={() => setStatus(s)}
+              <button key={s} type="button" role="tab" aria-selected={status === s} onClick={() => { setStatus(s); setJustDone(new Set()) }}
                 className={`${tool} ${status === s ? 'bg-foreground/[0.08] text-foreground' : 'text-muted-foreground hover:bg-muted'}`}>
                 {s === 'open' ? 'Incomplete' : s === 'done' ? 'Completed' : 'All tasks'}
               </button>

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import {
-  dueWords, groupTodos, mayDeleteTodo, mayEditTodo, mayFilterByPerson, sanitiseTodoPatch, sortTodos, todoFilesOf, todoGroupOf, todosEmptyWords, visibleTodos,
+  dueWords, groupInPlace, groupTodos, showsInStatus, mayDeleteTodo, mayEditTodo, mayFilterByPerson, sanitiseTodoPatch, sortTodos, todoFilesOf, todoGroupOf, todosEmptyWords, visibleTodos,
 } from '../app/lib/todo-core'
 
 const rows = [
@@ -80,5 +80,42 @@ describe('todo-core — who sees and changes what (17 Sep 2026)', () => {
     expect(access).toContain("'/dashboard/todos'")
     const shell = readFileSync('app/dashboard/ui/Shell.tsx', 'utf8')
     expect(shell).toContain("{ href: '/dashboard/todos',")
+  })
+})
+
+/**
+ * A TO-DO JUST MARKED COMPLETE STAYS WHERE IT IS (the owner, 25 Nov 2026: "under my tasks when I mark complete it
+ * shouldn't disappear"). The Incomplete list dropped it the instant it was ticked, so the tick looked like it had
+ * not taken — and on a repeating to-do the next copy slid into its place and was ticked again, four times over.
+ */
+describe('a to-do just marked complete stays in the Incomplete list', () => {
+  const just = new Set(['b'])
+  it('the Incomplete list keeps the ones ticked on this visit, and no other done ones', () => {
+    expect(showsInStatus({ id: 'a', status: 'open' }, 'open', just)).toBe(true)
+    expect(showsInStatus({ id: 'b', status: 'done' }, 'open', just)).toBe(true)
+    expect(showsInStatus({ id: 'c', status: 'done' }, 'open', just)).toBe(false)
+  })
+  it('Completed and All tasks are as they were', () => {
+    expect(showsInStatus({ id: 'a', status: 'open' }, 'done', just)).toBe(false)
+    expect(showsInStatus({ id: 'c', status: 'done' }, 'done', just)).toBe(true)
+    expect(showsInStatus({ id: 'a', status: 'open' }, 'all', just)).toBe(true)
+    expect(showsInStatus({ id: 'c', status: 'done' }, 'all', just)).toBe(true)
+  })
+  it('it stays in its own date section, in its own place — not moved down to Done', () => {
+    const rows = [
+      { id: 'a', status: 'open', due_date: '2026-11-25', created_at: '2026-11-01T00:00:00Z' },
+      { id: 'b', status: 'done', due_date: '2026-11-25', created_at: '2026-11-02T00:00:00Z', done_at: '2026-11-25T01:00:00Z' },
+      { id: 'd', status: 'open', due_date: '2026-11-25', created_at: '2026-11-03T00:00:00Z' },
+    ]
+    const groups = groupInPlace(rows, just, r => groupTodos(r, '2026-11-25'))
+    const today = groups.find(g => g.key === 'today')!
+    expect(today.rows.map(r => r.id)).toEqual(['a', 'b', 'd'])
+    expect(groups.find(g => g.key === 'done')!.rows).toEqual([])
+    // and it is still the done to-do it was: the row draws ticked
+    expect(today.rows[1]).toBe(rows[1])
+  })
+  it('with nothing just ticked the groups are exactly the usual ones', () => {
+    const rows = [{ id: 'c', status: 'done', due_date: '2026-11-25', done_at: '2026-11-25T01:00:00Z' }]
+    expect(groupInPlace(rows, new Set(), r => groupTodos(r, '2026-11-25'))).toEqual(groupTodos(rows, '2026-11-25'))
   })
 })
