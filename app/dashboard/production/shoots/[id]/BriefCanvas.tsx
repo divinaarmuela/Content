@@ -26,7 +26,7 @@ import {
 import NewBoardDialog from '../../../boards/NewBoardDialog'
 import { CanvasCardView, NOTE_COLORS, TEXT_COLOR_SWATCH } from './CanvasCard'
 import {
-  CANVAS_NOTE_COLORS, TEXT_SIZE_LABEL, cardTakesHeight, minCardWidth, mockupPlatformFor, resizeCard,
+  CANVAS_NOTE_COLORS, TEXT_SIZE_LABEL, hasTextSize, cardTakesHeight, minCardWidth, mockupPlatformFor, resizeCard,
   seedCardsFromReferences, stepTextSize, textSizeOf, CANVAS_MAX_CARDS,
   type CanvasCard, type CanvasTextSize, type ReferenceMedia, CANVAS_TEXT_COLORS, textColorOf, CANVAS_TEXT_ALIGNS, textAlignOf,
   hasTextStyle, defaultAlignOf, textBoldOf, boldWordsIn, inBoldRun,
@@ -1123,7 +1123,8 @@ export default function BriefCanvas({
    *  its widest word at the new size rather than cutting it. */
   const setTextSize = (card: CanvasCard, size: CanvasTextSize) => {
     if (size === textSizeOf(card)) return
-    const w = Math.max(card.w, minCardWidth(card.kind, card.kind === 'todo' || card.kind === 'board' ? card.name : card.text, size))
+    // a column keeps its width: its title wraps, and widening it would widen every card inside it
+    const w = card.kind === 'column' ? card.w : Math.max(card.w, minCardWidth(card.kind, card.kind === 'todo' || card.kind === 'board' ? card.name : card.text, size))
     const next: CanvasCard = { ...card, size, w }
     upsertLocal(next); persist([next])
   }
@@ -1971,7 +1972,7 @@ export default function BriefCanvas({
             </div>
           </>
         )}
-        {hasText && (
+        {hasTextSize(card.kind) && (
           <>
             <span className="mx-0.5 h-5 w-px bg-foreground/[0.08]" />
             <div role="group" aria-label="Text size" className="flex items-center">
@@ -1981,6 +1982,10 @@ export default function BriefCanvas({
               <Button size="sm" variant="ghost" className="h-8 w-8 p-0 font-semibold" aria-label="Bigger text" title="Bigger text"
                 disabled={size === 'xl'} onClick={() => setTextSize(card, stepTextSize(size, 1))}>A+</Button>
             </div>
+          </>
+        )}
+        {hasText && (
+          <>
             <span className="mx-0.5 h-5 w-px bg-foreground/[0.08]" />
             {/* the words' own colour — separate from the box (13 Sep 2026) */}
             <div role="group" aria-label="Text colour" className="flex items-center gap-1">

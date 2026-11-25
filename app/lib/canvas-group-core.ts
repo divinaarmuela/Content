@@ -9,7 +9,7 @@
  */
 
 import {
-  defaultAlignOf, hasFontChoice, hasTextStyle, minCardWidth, stepTextSize, textAlignOf, textColorOf, textSizeOf,
+  defaultAlignOf, hasFontChoice, hasTextSize, hasTextStyle, minCardWidth, stepTextSize, textAlignOf, textColorOf, textSizeOf,
   type CanvasCard, type CanvasFont, fontOf,
 } from './batch-brief-core'
 
@@ -32,10 +32,11 @@ export function groupColour(cards: readonly CanvasCard[], colour: NoteColour): C
 
 /** one step bigger or smaller, each card from its own size; a card widens when its words need the room */
 export function groupTextSize(cards: readonly CanvasCard[], dir: 1 | -1): CanvasCard[] {
-  return cards.filter(c => hasTextStyle(c.kind)).flatMap(c => {
+  return cards.filter(c => hasTextSize(c.kind)).flatMap(c => {
     const size = stepTextSize(textSizeOf(c), dir)
     if (size === textSizeOf(c)) return []
-    return [{ ...c, size, w: Math.max(c.w, minCardWidth(c.kind, wordsOf(c) ?? undefined, size)) }]
+    // a column keeps its width: its title wraps, and widening it would widen every card inside it
+    return [{ ...c, size, w: c.kind === 'column' ? c.w : Math.max(c.w, minCardWidth(c.kind, wordsOf(c) ?? undefined, size)) }]
   })
 }
 

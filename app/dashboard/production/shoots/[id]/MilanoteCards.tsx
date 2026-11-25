@@ -2,7 +2,7 @@
 
 import React from 'react'
 import { Check, ExternalLink, FileText, LayoutGrid, Paperclip } from 'lucide-react'
-import { type CanvasCard as Card, fontOf } from '../../../../lib/batch-brief-core'
+import { type CanvasCard as Card, COLUMN_TITLE_PX, fontOf, textSizeOf } from '../../../../lib/batch-brief-core'
 import { FONT_CLASS, fontVars } from './canvasFont'
 import { isGlyphIcon } from '../../../../lib/board-icons-core'
 import { isBoardIcon } from '../../../../lib/board-canvas-core'
@@ -232,11 +232,11 @@ export function MilanoteCard({ card, editing, onUpdate, onCommitText, onOpen, in
                 if (e.key === 'Escape') { e.currentTarget.value = card.name ?? ''; e.currentTarget.blur() }
               }}
               onBlur={e => onCommitText(e.currentTarget.value)}
-              className="w-full select-text rounded-[3px] border border-black/20 bg-white/80 px-1 text-center text-[17px] font-semibold leading-tight text-[#222] outline-none focus:border-[#1838E0]"
-              style={{ fontFamily: MN_SERIF }}
+              className="w-full select-text rounded-[3px] border border-black/20 bg-white/80 px-1 text-center font-semibold leading-tight text-[#222] outline-none focus:border-[#1838E0]"
+              style={{ fontFamily: MN_SERIF, fontSize: COLUMN_TITLE_PX[textSizeOf(card)] }}
             />
           ) : (
-            <p className="text-[17px] font-semibold leading-tight" style={{ fontFamily: MN_SERIF }} title={onUpdate ? 'Double-click to rename' : undefined}>{card.name || 'Untitled'}</p>
+            <p className="break-words font-semibold leading-tight" style={{ fontFamily: MN_SERIF, fontSize: COLUMN_TITLE_PX[textSizeOf(card)] }} title={onUpdate ? 'Double-click to rename' : undefined}>{card.name || 'Untitled'}</p>
           )}
           <p className={`mt-1 text-[12px] ${card.hex ? 'opacity-70' : 'text-[#8a8a8a]'}`}>{columnCountWords(kids)}</p>
         </div>

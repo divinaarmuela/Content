@@ -277,6 +277,14 @@ export const TEXT_SIZE_LABEL: Record<CanvasTextSize, string> = { sm: 'Small', md
 export const NOTE_FONT_PX: Record<CanvasTextSize, number> = { sm: 12, md: 13, lg: 17, xl: 22 }
 /** a section heading's words, in px — md is today's 15px */
 export const LABEL_FONT_PX: Record<CanvasTextSize, number> = { sm: 12, md: 15, lg: 19, xl: 24 }
+/** a column's title, in px — md is the 17px it has always been, so no existing column changes */
+export const COLUMN_TITLE_PX: Record<CanvasTextSize, number> = { sm: 14, md: 17, lg: 21, xl: 26 }
+/** WHICH KINDS HAVE A− / A+ (the owner, 25 Nov 2026: "when clicking a column it doesn't allow me to change the text
+ *  size"): the kinds with words of their own, and a column, for its title. A column still has no text colour or
+ *  alignment of its own — its title's colour follows the column's. */
+export function hasTextSize(kind: string | null | undefined): boolean {
+  return hasTextStyle(kind) || kind === 'column'
+}
 export function textSizeOf(card: { size?: string | null } | null | undefined): CanvasTextSize {
   const v = card?.size
   return (CANVAS_TEXT_SIZES as readonly string[]).includes(String(v)) ? (v as CanvasTextSize) : 'md'
@@ -687,7 +695,7 @@ export function sanitiseCanvasCards(raw: unknown): CanvasCard[] {
         : {}),
       // text size on the kinds that carry words of their own (TEXT_STYLED_KINDS);
       // anything else, or an unknown value, is simply 'md' by absence
-      ...(hasTextStyle(kind) && (CANVAS_TEXT_SIZES as readonly string[]).includes(String(r.size ?? ''))
+      ...(hasTextSize(kind) && (CANVAS_TEXT_SIZES as readonly string[]).includes(String(r.size ?? ''))
         ? { size: String(r.size) as CanvasTextSize }
         : {}),
       ...(hasTextStyle(kind) && (CANVAS_TEXT_COLORS as readonly string[]).includes(String(r.text_color ?? ''))
