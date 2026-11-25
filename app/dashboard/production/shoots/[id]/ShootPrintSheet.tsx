@@ -11,7 +11,7 @@ import { printSections, type PrintBlock } from '../../../../lib/shoot-print-core
  * `shoot-print-core` — each column a section, its reference pictures in a grid under its words.
  *
  * No hooks and no Tailwind: the sheet is drawn straight under <body> for the print window (PrintBrief), where the
- * dashboard's scoped styles do not reach, so its look is `SHOOT_PRINT_CSS` and nothing else.
+ * dashboard's scoped styles do not reach, so its look is `shootPrintCss` and nothing else.
  */
 
 export type PrintShoot = SopShoot & {
@@ -43,13 +43,14 @@ function Block({ b }: { b: PrintBlock }) {
     case 'table':
       return (
         <table className="sp-table">
+          {b.header && b.rows.length > 1 && (
+            <thead>
+              <tr>{b.rows[0].map((cell, c) => <th key={c} dangerouslySetInnerHTML={{ __html: sanitiseCanvasHtml(cell) }} />)}</tr>
+            </thead>
+          )}
           <tbody>
-            {b.rows.map((row, r) => (
-              <tr key={r}>
-                {row.map((cell, c) => (b.header && r === 0
-                  ? <th key={c} dangerouslySetInnerHTML={{ __html: sanitiseCanvasHtml(cell) }} />
-                  : <td key={c} dangerouslySetInnerHTML={{ __html: sanitiseCanvasHtml(cell) }} />))}
-              </tr>
+            {(b.header && b.rows.length > 1 ? b.rows.slice(1) : b.rows).map((row, r) => (
+              <tr key={r}>{row.map((cell, c) => <td key={c} dangerouslySetInnerHTML={{ __html: sanitiseCanvasHtml(cell) }} />)}</tr>
             ))}
           </tbody>
         </table>
@@ -127,6 +128,7 @@ export default function ShootPrintSheet({ shoot, cards, crew = [] }: {
         </div>
       )}
 
+      <div className="sp-body">
       {sections.map(s => (
         <section key={s.id} className={`sp-sec${s.depth > 0 ? ' sp-sub' : ''}`}>
           <h2>{s.title}</h2>
@@ -136,12 +138,33 @@ export default function ShootPrintSheet({ shoot, cards, crew = [] }: {
           )}
         </section>
       ))}
+      </div>
     </div>
   )
 }
 
-/** The sheet's whole look. `#shoot-print` is the node PrintBrief puts straight under <body>. */
-export const SHOOT_PRINT_CSS = `
+export type PrintPaper = 'A3' | 'A4'
+export const PRINT_PAPERS: readonly PrintPaper[] = ['A3', 'A4']
+
+/**
+ * The sheet's whole look, for one paper size. `#shoot-print` is the node PrintBrief puts straight under <body>.
+ * A3 (the owner, 25 Nov 2026: "print can u make it a3") is the same sheet on the bigger page, in two columns.
+ *
+ * NO WASTED PAGES (the owner, 25 Nov 2026, Renee's 18-page PDF: "each page is kinda wasted with a single photo
+ * suddenly on one page"): words may run on to the next page instead of jumping to it whole, and pictures are one
+ * height in packed rows — as many as fit across — instead of a grid of tall boxes with one left over.
+ */
+export function shootPrintCss(paper: PrintPaper): string {
+  return SHEET_CSS.replace('size:A4', `size:${paper}`) + (paper === 'A3' ? A3_CSS : '')
+}
+
+/** A3 is twice the page: the board runs down two columns, so a line of words stays a readable length. */
+const A3_CSS = `
+.sp-body{column-count:2;column-gap:12mm;column-rule:1px solid #ddd}
+.sp-body > .sp-sec:first-child{margin-top:0}
+`
+
+const SHEET_CSS = `
 .sp{color:#111;background:#fff;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;font-size:11pt;line-height:1.45}
 .sp *{box-sizing:border-box}
 .sp-head{border-bottom:2px solid #111;padding-bottom:8px;margin-bottom:12px}
@@ -154,11 +177,11 @@ export const SHOOT_PRINT_CSS = `
 .sp-notes{margin:0 0 10px;break-inside:avoid}
 .sp-notes p{margin:0;white-space:pre-wrap}
 .sp-notes .sp-notes-h{font-size:8.5pt;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#555;margin-bottom:1px}
-.sp-sec{margin-top:16px;padding-top:8px;border-top:1px solid #bbb}
+.sp-sec{margin-top:12px;padding-top:6px;border-top:1px solid #bbb}
 .sp-sec h2{margin:0 0 6px;font-size:14pt;font-weight:800;break-after:avoid}
 .sp-sub{margin-left:14px}
 .sp-sub h2{font-size:12pt}
-.sp-words{margin:0 0 8px;white-space:pre-wrap;overflow-wrap:anywhere;break-inside:avoid-page}
+.sp-words{margin:0 0 8px;white-space:pre-wrap;overflow-wrap:anywhere;orphans:3;widows:3}
 .sp-rich{white-space:normal}
 .sp-rich p{margin:0 0 4px}
 .sp-rich ul,.sp-rich ol{margin:0 0 4px;padding-left:18px}
@@ -174,11 +197,12 @@ export const SHOOT_PRINT_CSS = `
 .sp-todo ul{list-style:none;margin:0;padding:0}
 .sp-link{margin:0 0 6px;font-size:9.5pt;overflow-wrap:anywhere}
 .sp-link span{color:#444}
-.sp-pics{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:8px;align-items:start}
-.sp-pic{margin:0;break-inside:avoid}
-.sp-pic img{display:block;max-width:100%;max-height:70mm;width:auto;height:auto;border:1px solid #ddd}
-.sp-pic figcaption{margin-top:2px;font-size:8pt;line-height:1.3;color:#333;overflow-wrap:anywhere}
-.sp-post-words{display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
+.sp-pics{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;align-items:flex-start}
+.sp-pic{margin:0;break-inside:avoid;display:flex;flex-direction:column;max-width:100%}
+.sp-pic img{display:block;height:44mm;width:auto;max-width:100%;object-fit:contain;object-position:left top;border:1px solid #ddd}
+.sp-pic figcaption{margin-top:2px;font-size:7.5pt;line-height:1.25;color:#333;overflow-wrap:anywhere;width:0;min-width:100%}
+.sp-post figcaption{min-width:max(100%,30mm)}
+.sp-post-words{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
 .sp-post-link{display:block;color:#666}
 #shoot-print{display:none}
 @media print{
