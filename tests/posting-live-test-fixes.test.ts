@@ -411,7 +411,9 @@ describe('moving a booked post books it again (live test, 29 Sep 2026)', () => {
     const { readFileSync } = await import('node:fs')
     const src = readFileSync('app/lib/publish.ts', 'utf8')
     expect(src).toContain("const held = await table<PublishJobRow>('publish_jobs').get(holder, { fresh: true })")
-    expect(src).toMatch(/limit: 1,[\s\S]{0,400}fresh: true,/)
+    // (the guard reads EVERY live job of these files now, not the first — 25 Nov 2026, a duplicate is another post —
+    // and still reads them fresh)
+    expect(src).toMatch(/jobMediaUrls\(j\)\.some\(u => mine\.has\(u\)\)\),[\s\S]{0,400}fresh: true,/)
   })
 })
 

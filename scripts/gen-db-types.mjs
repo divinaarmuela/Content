@@ -1536,6 +1536,10 @@ const GHOST_COLUMNS = {
     //     `late_slot` (app/lib/publish-core.ts lateSplitPlan, post-outcome-core.ts providerTiming).
     ['waiting_on_copy', col('boolean', true)],
     ['late_slot', col('string', true)],
+    //   publish_jobs.post_id — WHICH POST THE JOB BOOKS (25 Nov 2026). `social_posts.id`. What lets a duplicate of a
+    //     post — the same card, the same file, another day — book in beside it: the one-live-job lock is per post
+    //     (app/lib/publish.ts postSuffix). Null on a job queued before this, which keeps the lock it always had.
+    ['post_id', col('string', true)],
     // STORIES IN ORDER (story-chain-core, 5 Nov 2026): the story job this one waited for, on the same account
     ['chained_after', col('string', true)],
     //   publish_jobs.provider / meta_ig — INSTAGRAM THROUGH OUR OWN META APP (1 Oct 2026, branch meta-publish).

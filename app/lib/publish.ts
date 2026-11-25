@@ -87,8 +87,19 @@ export function mediaKeyOf(urls: readonly string[]): string {
  *  the SAME files on the OTHER networks is not a second post of it (meta-route-core.ts). */
 export const laneSuffix = (provider: unknown) => provider === META_PROVIDER || provider === META_FB_PROVIDER ? `__${provider}` : ''
 
-export const jobLockKey = (job: { content_item_id?: unknown; media?: unknown; targets?: unknown; provider?: unknown }) =>
-  publishLockKey(String(job.content_item_id), mediaKeyOf(jobMediaUrls(job)) + laneSuffix(job.provider))
+/**
+ * …AND ONE PER POST (Renee, 25 Nov 2026: duplicated stories "don't go through or show on the scheduled section"; the
+ * owner: "make sure duplicates and schedules"). Duplicate makes one post for each day picked — the same card, the
+ * same file — and the lock above saw every copy after the first as the first going out again: of four copies of a
+ * Basfoods story, one was booked. A job that names its post holds the lock for THAT post, so another post of the
+ * same file books in beside it, and the same post still cannot be queued twice. A job with no post on it (queued
+ * before this, or from a road with no post) keeps the key it always had.
+ */
+export const postSuffix = (postId: unknown) =>
+  typeof postId === 'string' && postId ? `__p_${postId.replace(/[.#$[\]/]/g, '_')}` : ''
+
+export const jobLockKey = (job: { content_item_id?: unknown; media?: unknown; targets?: unknown; provider?: unknown; post_id?: unknown }) =>
+  publishLockKey(String(job.content_item_id), mediaKeyOf(jobMediaUrls(job)) + laneSuffix(job.provider) + postSuffix(job.post_id))
 
 /** The platform names off a job's stored targets, however loosely typed. */
 function platformsOf(targets: unknown): string[] {
@@ -196,16 +207,36 @@ export async function queuePublishJob(input: {
         // a job with no files on record (text, or from before files were
         // recorded) still holds the whole card
         && (mine.size === 0 || jobMediaUrls(j).length === 0 || jobMediaUrls(j).some(u => mine.has(u))),
-      limit: 1,
       // FRESH, NOT THE REQUEST CACHE (live test, 29 Sep 2026; CLAUDE.md trap 11): moving a booked post pulls its
       // old job and books the new one in ONE request, and the cached read still saw the pulled job as live —
       // "This content item is already queued to publish", and the moved post fell back to Ready unbooked
       fresh: true,
     })
-    if (live.length > 0) return { error: 'These files are already queued to publish on this card' }
+    // ANOTHER POST'S JOB IS NOT THIS POST GOING TWICE (25 Nov 2026, see postSuffix): a duplicate is a post of its
+    // own. A live job counts against this booking when it is this post's, or when nobody can say whose it is. A job
+    // queued before jobs named their post is asked of the posts: the one whose booking lists it owns it.
+    let rivals = live as (PublishJobRow & { post_id?: string | null })[]
+    if (input.postId && rivals.length > 0) {
+      const unnamed = rivals.filter(j => !j.post_id).map(j => j.id)
+      const owners = new Map<string, string>()
+      if (unnamed.length > 0) {
+        const holders = await table<SocialPost>('social_posts').list({
+          where: p => unnamed.some(id => ((p as unknown as { booking?: { job_ids?: unknown } }).booking?.job_ids as unknown[] | undefined)?.includes?.(id)),
+          fresh: true,
+        }).catch(() => [])
+        for (const p of holders) {
+          for (const id of ((p as unknown as { booking?: { job_ids?: string[] } }).booking?.job_ids ?? [])) owners.set(id, p.id)
+        }
+      }
+      rivals = rivals.filter(j => {
+        const owner = j.post_id || owners.get(j.id) || null
+        return owner === null || owner === input.postId
+      })
+    }
+    if (rivals.length > 0) return { error: 'These files are already queued to publish on this card' }
 
     const gate = await takeClaimLock(
-      publishLockKey(input.contentItemId, mediaKeyOf([...mine]) + laneSuffix(provider)), jobId,
+      publishLockKey(input.contentItemId, mediaKeyOf([...mine]) + laneSuffix(provider) + postSuffix(input.postId)), jobId,
       async holder => {
         const held = await table<PublishJobRow>('publish_jobs').get(holder, { fresh: true })
         // A HOLDER THAT IS READ AND FINISHED FREES THE LOCK AT ANY AGE (live test, 29 Sep 2026): Change time on a
@@ -225,6 +256,8 @@ export async function queuePublishJob(input: {
       id: jobId,
       client_id: input.clientId ?? null,
       content_item_id: input.contentItemId ?? null,
+      // which post this job books — what lets a duplicate of it book in beside it (postSuffix)
+      post_id: input.postId ?? null,
       schedule_entry_id: input.scheduleEntryId ?? null,
       caption: input.caption,
       media: input.media,
@@ -243,7 +276,7 @@ export async function queuePublishJob(input: {
     return { id: row.id }
   } catch (e) {
     // the lock is only worth holding while there is a job behind it
-    if (input.contentItemId) await releaseClaimLock(publishLockKey(input.contentItemId, mediaKeyOf(jobMediaUrls({ media: input.media, targets: input.targets })) + laneSuffix(provider)), jobId).catch(() => {})
+    if (input.contentItemId) await releaseClaimLock(publishLockKey(input.contentItemId, mediaKeyOf(jobMediaUrls({ media: input.media, targets: input.targets })) + laneSuffix(provider) + postSuffix(input.postId)), jobId).catch(() => {})
     return { error: e instanceof Error ? e.message : 'Could not queue this post' }
   }
 }

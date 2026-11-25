@@ -142,3 +142,62 @@ describe('one live publish job per content item, under a race', () => {
     expect(fake.rows('publish_jobs')).toHaveLength(2)
   })
 })
+
+/**
+ * A DUPLICATE IS ANOTHER POST, NOT THE SAME POST TWICE (Renee, 25 Nov 2026: duplicated stories "don't go through or
+ * show on the scheduled section"; the owner: "make sure duplicates and schedules"). Duplicate makes one post for
+ * each day picked, all of the same card and the same file. The rule above saw the second, third and fourth as the
+ * first going out again and refused them: of four copies of a Basfoods story only one was booked. The rule is one
+ * live job per POST now: a different post of the same file books in; the same post still cannot go twice.
+ */
+describe('a duplicated post books in beside the one it was copied from', () => {
+  const copyPost = (id: string): Row => ({ ...(bookedPost() as unknown as Record<string, unknown>), id }) as unknown as Row
+  const copy = (id: string) => ({ ...validPost, postId: id })
+
+  it('two posts of the same card and the same file are both queued', async () => {
+    fake = seedDb({ social_posts: [bookedPost(), copyPost('post-2'), copyPost('post-3')] })
+    const results = [await queuePublishJob(validPost), await queuePublishJob(copy('post-2')), await queuePublishJob(copy('post-3'))]
+    expect(results.every(r => 'id' in r)).toBe(true)
+    expect(fake.rows('publish_jobs')).toHaveLength(3)
+  })
+
+  it('each job says which post it books', async () => {
+    fake = seedDb({ social_posts: [bookedPost(), copyPost('post-2')] })
+    await queuePublishJob(validPost); await queuePublishJob(copy('post-2'))
+    expect((fake.rows('publish_jobs') as unknown as { post_id: string }[]).map(j => j.post_id).sort()).toEqual(['post-1', 'post-2'])
+  })
+
+  it('the same post still cannot be queued twice — one after the other, or at the same moment', async () => {
+    fake = seedDb({ social_posts: [bookedPost(), copyPost('post-2')] })
+    expect(await queuePublishJob(copy('post-2'))).toHaveProperty('id')
+    expect(await queuePublishJob(copy('post-2'))).toHaveProperty('error')
+    const [a, b] = await Promise.all([queuePublishJob(validPost), queuePublishJob(validPost)])
+    expect([a, b].filter(r => 'id' in r)).toHaveLength(1)
+    expect(fake.rows('publish_jobs')).toHaveLength(2)
+  })
+
+  it('a job queued before jobs named their post does not block a copy, when the post that booked it is known', async () => {
+    // the original's job, queued before this change: no post_id on it, but post-1's booking lists it
+    const older = { ...(job('old-1', 'scheduled') as unknown as Record<string, unknown>), content_item_id: ITEM } as unknown as Row
+    const owner = { ...(bookedPost() as unknown as Record<string, unknown>), booking: { job_ids: ['old-1'], pending: false, at: '2026-09-01T00:00:00.000Z', for_time: null } } as unknown as Row
+    fake = seedDb({ social_posts: [owner, copyPost('post-2')], publish_jobs: [older] })
+    expect(await queuePublishJob(copy('post-2'))).toHaveProperty('id')
+    // …and the post that owns that older job still cannot go out a second time
+    expect(await queuePublishJob(validPost)).toEqual({ error: 'These files are already queued to publish on this card' })
+  })
+
+  it('a job with no post behind it at all still holds the card, as it always did', async () => {
+    const orphan = { ...(job('old-2', 'scheduled') as unknown as Record<string, unknown>), content_item_id: ITEM } as unknown as Row
+    fake = seedDb({ social_posts: [bookedPost(), copyPost('post-2')], publish_jobs: [orphan] })
+    expect(await queuePublishJob(copy('post-2'))).toEqual({ error: 'These files are already queued to publish on this card' })
+  })
+
+  it('a copy is queueable again once its own job settles, and that frees nobody else\'s', async () => {
+    fake = seedDb({ social_posts: [bookedPost(), copyPost('post-2')] })
+    const first = await queuePublishJob(copy('post-2')) as { id: string }
+    await queuePublishJob(validPost)
+    await runPublishJob(first.id)
+    expect(await queuePublishJob(copy('post-2'))).toHaveProperty('id')
+    expect(await queuePublishJob(validPost)).toHaveProperty('error')
+  })
+})
