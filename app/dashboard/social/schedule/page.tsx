@@ -526,7 +526,11 @@ export default function SchedulePage() {
 
   /** a story is set per NETWORK on the post (`per_channel[…].kind`), not on the
    *  edit card — the old filter read the card and found none (audit S3) */
-  const stories = useMemo(() => inWeek.filter(p => p.facts.story), [inWeek])
+  // THE WEEK'S STORIES, WHICHEVER TAB IS OPEN (25 Nov 2026): the Stories view and the strip above the week read every
+  // post of the channel — on the Posts tab `inWeek` has no Stories in it, and both came up empty
+  const stories = useMemo(
+    () => channelPostsAll.filter(p => showsOnSchedule(p.stage) && p.facts.story && onOneOfDays(p.scheduled_for, tz, weekKeys)),
+    [channelPostsAll, tz, weekKeys])
 
   /** a slot is a hint about an EMPTY time — one within the hour of a post
    *  already there is noise */

@@ -33,3 +33,13 @@ describe('drafts in the feed preview', () => {
     expect(views).not.toContain('live_status')
   })
 })
+
+/* The Posts / Stories tabs (25 Nov 2026) narrow the calendar and its counts. The Stories VIEW and the strip above the
+ * week are the week's Stories whatever tab is open: read off the tab's own posts they were empty on Posts. */
+describe('the week\'s Stories do not depend on the open tab', () => {
+  it('the Stories view and the strip read every post of the channel', () => {
+    const page = readFileSync('app/dashboard/social/schedule/page.tsx', 'utf8')
+    expect(page).toContain('() => channelPostsAll.filter(p => showsOnSchedule(p.stage) && p.facts.story && onOneOfDays(p.scheduled_for, tz, weekKeys))')
+    expect(page).not.toContain('const stories = useMemo(() => inWeek.filter(p => p.facts.story), [inWeek])')
+  })
+})

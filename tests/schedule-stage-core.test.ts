@@ -272,7 +272,8 @@ describe('the Schedule page reads the stage and approves nothing', () => {
 
   it('finds stories per network, not by the edit card’s type (audit S3)', () => {
     const page = code(`${DIR}page.tsx`)
-    expect(page).toContain('inWeek.filter(p => p.facts.story)')
+    // …and off every post of the channel, whichever of the Posts / Stories tabs is open (25 Nov 2026)
+    expect(page).toContain('p.facts.story && onOneOfDays(p.scheduled_for, tz, weekKeys)')
     expect(page).not.toContain("item_type ?? '').toLowerCase() === 'story'")
   })
 
