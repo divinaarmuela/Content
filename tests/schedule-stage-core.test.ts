@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import {
   BEING_APPROVED, SCHEDULE_STAGES, binAction, isStory, matchesListFilter, moveBlockReason, networkLines,
   previewPosts, scheduleCounts, scheduleFacts, showsOnSchedule,
+  deliverableKind, kindTabCounts, kindTabOf, onKindTab, postedMix, postedMixWords,
 } from '@/app/lib/schedule-stage-core'
 import {
   MISSED_LABEL, STAGE_LABEL, STAGE_TONE, readPostState, type AccountRef, type PostState,
@@ -285,5 +286,57 @@ describe('the Schedule page reads the stage and approves nothing', () => {
     const rail = code(`${DIR}MediaRail.tsx`)
     expect(rail).not.toContain('disabled={!m.ok}')
     expect(rail).toContain('Take its posts off the schedule first')
+  })
+})
+
+/**
+ * STORIES ARE NOT A DELIVERABLE (the team, via the owner, 25 Nov 2026: "to make sure we count deliverables can we
+ * not include stories as posted … have 2 tabs, filter out stories as that is not a deliverable merged with posting,
+ * it's separate. Another tab for posts, then in there total of how many graphics vs reels posted"). The Schedule
+ * has two tabs, Posts and Stories; every count above the calendar is the tab's own; and Posts says how many Reels
+ * and how many graphics went out in the month on screen.
+ */
+describe('posts and stories are counted apart', () => {
+  const img = { type: 'image' as const, url: 'a', name: 'a' }
+  const vid = { type: 'video' as const, url: 'v', name: 'v' }
+  const row = (stage: 'ready' | 'booked' | 'posted' | 'draft' | 'cancelled', story: boolean, slides: { type: 'image' | 'video' }[] = [img], missed = false) =>
+    ({ stage, slides, facts: { story, missed } })
+  const rows = [
+    row('posted', false, [vid]), row('posted', false, [vid]), row('posted', false, [img]), row('posted', false, [img, img, img]),
+    row('posted', false, [img, vid]), row('posted', true, [img]), row('posted', true, [vid]),
+    row('booked', false, [img]), row('booked', true, [img], true), row('ready', true, [img]), row('draft', true, [img]), row('cancelled', false, [vid]),
+  ]
+
+  it('a post is on one tab: Stories if any network posts it as a Story, else Posts', () => {
+    expect(kindTabOf(row('posted', true))).toBe('stories')
+    expect(kindTabOf(row('posted', false))).toBe('posts')
+    expect(rows.filter(r => onKindTab(r, 'posts'))).toHaveLength(7)
+    expect(rows.filter(r => onKindTab(r, 'stories'))).toHaveLength(5)
+  })
+  it('each tab says how many are on the schedule, and how many of those missed their time', () => {
+    // on the schedule = Ready to post, Booked in, Posted — a draft and a cancelled post are lists of their own
+    expect(kindTabCounts(rows)).toEqual({ posts: { onSchedule: 6, missed: 0 }, stories: { onSchedule: 4, missed: 1 } })
+  })
+  it('the Posted number no longer has Stories in it', () => {
+    expect(scheduleCounts(rows).posted).toBe(7)
+    expect(scheduleCounts(rows.filter(r => onKindTab(r, 'posts'))).posted).toBe(5)
+    expect(scheduleCounts(rows.filter(r => onKindTab(r, 'stories'))).posted).toBe(2)
+  })
+  it('a post with a video in it is a Reel; pictures only, one or a carousel, is a graphic', () => {
+    expect(deliverableKind([vid])).toBe('reel')
+    expect(deliverableKind([img, vid])).toBe('reel')
+    expect(deliverableKind([img])).toBe('graphic')
+    expect(deliverableKind([img, img])).toBe('graphic')
+    expect(deliverableKind([])).toBe('graphic')
+  })
+  it('Reels and graphics posted: only what went out, and never a Story', () => {
+    expect(postedMix(rows)).toEqual({ reels: 3, graphics: 2 })
+    expect(postedMix([])).toEqual({ reels: 0, graphics: 0 })
+  })
+  it('says it in a line, for the month on screen', () => {
+    expect(postedMixWords({ reels: 3, graphics: 2 }, 'November 2026')).toBe('Posted in November 2026: 3 Reels · 2 graphics')
+    expect(postedMixWords({ reels: 1, graphics: 1 }, 'November 2026')).toBe('Posted in November 2026: 1 Reel · 1 graphic')
+    expect(postedMixWords({ reels: 0, graphics: 4 }, 'November 2026')).toBe('Posted in November 2026: 0 Reels · 4 graphics')
+    expect(postedMixWords({ reels: 0, graphics: 0 }, 'November 2026')).toBe('Nothing posted in November 2026 yet')
   })
 })

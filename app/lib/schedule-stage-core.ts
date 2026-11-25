@@ -222,6 +222,66 @@ export function scheduleCounts(rows: readonly Counted[]): ScheduleCounts {
   return out
 }
 
+/* ── posts and stories, counted apart ───────────────────────────────────── */
+
+/**
+ * STORIES ARE NOT A DELIVERABLE (the team, via the owner, 25 Nov 2026: "to make sure we count deliverables can we
+ * not include stories as posted … have 2 tabs, filter out stories … Another tab for posts, then in there total of
+ * how many graphics vs reels posted"). The Schedule has two tabs. A post is on Stories when any network posts it as
+ * a Story (`isStory`, already on every tile's facts); everything else is on Posts. The calendar, the list and every
+ * number above them are the open tab's own, so "Posted" on Posts is what counts towards the month.
+ */
+export const KIND_TABS = ['posts', 'stories'] as const
+export type KindTab = (typeof KIND_TABS)[number]
+export const KIND_TAB_LABEL: Record<KindTab, string> = { posts: 'Posts', stories: 'Stories' }
+
+type Kinded = { facts: Pick<ScheduleFacts, 'story'> }
+
+export function kindTabOf(row: Kinded): KindTab {
+  return row.facts.story ? 'stories' : 'posts'
+}
+export function onKindTab(row: Kinded, tab: KindTab): boolean {
+  return kindTabOf(row) === tab
+}
+
+export type KindTabCounts = Record<KindTab, { onSchedule: number; missed: number }>
+
+/** What each tab holds on the schedule, and how many of those missed their time — a missed Story must not hide
+ *  behind the Posts tab. */
+export function kindTabCounts(rows: readonly (Kinded & Counted)[]): KindTabCounts {
+  const out: KindTabCounts = { posts: { onSchedule: 0, missed: 0 }, stories: { onSchedule: 0, missed: 0 } }
+  for (const r of rows) {
+    if (!showsOnSchedule(r.stage)) continue
+    const t = out[kindTabOf(r)]
+    t.onSchedule++
+    if (r.facts.missed) t.missed++
+  }
+  return out
+}
+
+/** How a post counts towards the month: a video in it makes it a Reel; pictures only — one or a carousel — a graphic. */
+export function deliverableKind(slides: readonly { type?: string | null }[]): 'reel' | 'graphic' {
+  return slides.some(sl => sl.type === 'video') ? 'reel' : 'graphic'
+}
+
+export type PostedMix = { reels: number; graphics: number }
+
+/** Reels and graphics that WENT OUT among these rows. Never a Story. The page hands in the month on screen. */
+export function postedMix(rows: readonly (Kinded & { stage: PostStage; slides: readonly { type?: string | null }[] })[]): PostedMix {
+  const out: PostedMix = { reels: 0, graphics: 0 }
+  for (const r of rows) {
+    if (r.stage !== 'posted' || r.facts.story) continue
+    if (deliverableKind(r.slides) === 'reel') out.reels++
+    else out.graphics++
+  }
+  return out
+}
+
+export function postedMixWords(mix: PostedMix, month: string): string {
+  if (mix.reels + mix.graphics === 0) return `Nothing posted in ${month} yet`
+  return `Posted in ${month}: ${mix.reels} ${mix.reels === 1 ? 'Reel' : 'Reels'} · ${mix.graphics} ${mix.graphics === 1 ? 'graphic' : 'graphics'}`
+}
+
 /** The List's filters. The first four are the calendar; the last two are lists no grid draws. */
 export const LIST_FILTERS = ['all', 'ready', 'booked', 'posted', 'missed', 'drafts', 'cancelled'] as const
 export type ListFilter = (typeof LIST_FILTERS)[number]

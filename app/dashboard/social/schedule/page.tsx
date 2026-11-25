@@ -13,6 +13,7 @@ import {
 } from '@/app/lib/social-schedule-core'
 import {
   LIST_FILTER_LABEL, matchesListFilter, scheduleCounts, showsOnSchedule, type ListFilter,
+  KIND_TABS, KIND_TAB_LABEL, kindTabCounts, onKindTab, postedMix, postedMixWords, type KindTab,
 } from '@/app/lib/schedule-stage-core'
 import { MISSED_LABEL, STAGE_LABEL, STAGE_TONE, MISSED_TONE, type StageTone } from '@/app/lib/post-stage-core'
 import { POST_APPROVAL_BOARD } from '@/app/lib/overview-links-core'
@@ -443,11 +444,20 @@ export default function SchedulePage() {
   }, [data.posts, drag.settle])
 
   /** every post for this client on the selected channel */
-  const channelPosts = useMemo(
+  const channelPostsAll = useMemo(
     () => livePosts.filter(p => matchesChannel(p.channels, selected) && (owner === 'all' || p.channels.some(id => ownerAccountIds.has(id)))),
     // `owner` and its accounts are read, so they are listened to: picking a
     // person used to leave the calendar on the last one's posts (audit S4)
     [livePosts, selected, owner, ownerAccountIds])
+
+  /**
+   * POSTS OR STORIES (the team, 25 Nov 2026: "can we not include stories as posted … have 2 tabs"). A Story is not a
+   * deliverable, so it is not counted with the posts: the calendar, the list and every number above them are the
+   * open tab's. The other tab says what it holds — and if one of its times was missed — so nothing hides behind it.
+   */
+  const [kindTab, setKindTab] = useState<KindTab>('posts')
+  const kindCounts = useMemo(() => kindTabCounts(channelPostsAll), [channelPostsAll])
+  const channelPosts = useMemo(() => channelPostsAll.filter(p => onKindTab(p, kindTab)), [channelPostsAll, kindTab])
 
   const weekKeys = useMemo(() => new Set(grid.days.map(d => d.iso)), [grid.days])
 
@@ -459,6 +469,10 @@ export default function SchedulePage() {
 
   /** the numbers above the calendar, each counted off the stage (audit B12) */
   const counts = useMemo(() => scheduleCounts(channelPosts), [channelPosts])
+  /** Reels and graphics that went out in the month on screen: what counts towards the month's deliverables */
+  const monthMix = useMemo(
+    () => postedMix(channelPostsAll.filter(p => (dayKeyInZone(p.scheduled_for, tz) ?? '').slice(0, 7) === monthKey)),
+    [channelPostsAll, tz, monthKey])
 
   /**
    * THE BIN, from a List row: whatever `postActions` put there. "Delete draft"
@@ -835,6 +849,30 @@ export default function SchedulePage() {
           {/* WHERE THINGS STAND, counted off the stage. Each count opens the
               List on just those posts. Nothing here approves anything. */}
           {!data.loading && !data.error && (
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 pb-2" data-kind-tabs>
+              <div role="tablist" aria-label="Posts or Stories" className="inline-flex rounded-full border border-border bg-surface p-1">
+                {KIND_TABS.map(tab => {
+                  const n = kindCounts[tab]
+                  return (
+                    <button key={tab} type="button" role="tab" aria-selected={kindTab === tab} data-kind-tab={tab}
+                      onClick={() => setKindTab(tab)}
+                      className={cn('flex min-h-11 items-center gap-2 rounded-full px-4 text-[13px] font-semibold',
+                        kindTab === tab ? 'bg-foreground text-background' : 'hover:bg-muted')}>
+                      {KIND_TAB_LABEL[tab]}
+                      <span className="tabular-nums">{n.onSchedule}</span>
+                      {n.missed > 0 && kindTab !== tab && <span className="rounded-full bg-tint-red px-2 py-0.5 text-[11px] font-semibold text-foreground">{n.missed} missed</span>}
+                    </button>
+                  )
+                })}
+              </div>
+              <p className="text-[13px] text-muted-foreground" data-posted-mix>
+                {kindTab === 'posts'
+                  ? <><span className="font-semibold text-foreground">{postedMixWords(monthMix, monthLabel(monthKey ? `${monthKey}-01` : ''))}</span>. Stories are counted on their own tab.</>
+                  : 'Stories are not counted with the posts.'}
+              </p>
+            </div>
+          )}
+          {!data.loading && !data.error && (
             <div role="group" aria-label="Where the posts stand" className="flex flex-wrap items-center gap-1.5 pb-2">
               {SUMMARY.map(({ key, tone }) => {
                 const n = counts[key]
@@ -950,7 +988,7 @@ export default function SchedulePage() {
             <div className="min-h-0 flex-1 overflow-y-auto">
               {/* THE FEED AS IT WILL LOOK: `PreviewGrid` keeps only Instagram posts that are going out — Ready
                   to post and Booked in — and draws what already went out once, from the feed (audit S8) */}
-              <PreviewGrid posts={channelPosts} tz={tz} onOpen={openPost}
+              <PreviewGrid posts={channelPostsAll} tz={tz} onOpen={openPost}
                 instagramIds={instagramIds}
                 accountId={(selected?.platform === 'instagram' ? selected.id : data.accounts.find(a => a.platform === 'instagram')?.id) ?? null}
                 handle={(selected?.platform === 'instagram' ? selected.username : data.accounts.find(a => a.platform === 'instagram')?.username) ?? null} />
