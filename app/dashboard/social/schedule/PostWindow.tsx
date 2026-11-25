@@ -1774,8 +1774,9 @@ export default function PostWindow({
              asks and any refusal sit right here, above the buttons, in the
              sticky footer — never below the fold, never hidden by a question
              (decision 2; audit W8). ── */}
-        <div className="sticky bottom-0 z-20 mt-auto flex flex-col gap-2 border-t border-border bg-popover p-3.5 lg:flex-row lg:items-center lg:gap-4 lg:px-4 lg:py-2">
-          <div ref={messagesRef} className="flex flex-col gap-2 scroll-mt-4 lg:min-w-0 lg:max-w-[560px] lg:flex-1 lg:gap-1.5">
+        <div className="sticky bottom-0 z-20 mt-auto flex flex-col gap-2 border-t border-border bg-popover p-3.5 lg:flex-row lg:flex-wrap lg:items-center lg:gap-4 lg:px-4 lg:py-2">
+          {/* what is said above the buttons never gets less than 20rem: when the buttons leave less, they take the next line */}
+          <div ref={messagesRef} className="flex flex-col gap-2 scroll-mt-4 lg:min-w-[20rem] lg:max-w-[560px] lg:flex-1 lg:gap-1.5">
             {/* WHAT CAN CHANGE ON A BOOKED POST, AND UNTIL WHEN (the owner, 2 Nov 2026) */}
             {saved?.stage === 'booked' && editsUntil && (
               <p className={cn('rounded-inner border px-3 py-1.5 text-[12px] leading-snug', lockedSoon ? 'border-accent-amber/50 bg-tint-amber' : 'border-border bg-muted/40')} data-booked-edits>
@@ -1787,7 +1788,9 @@ export default function PostWindow({
             {/* TAKEN OFF THE SCHEDULE, NOT BOOKED BACK (2 Nov 2026, Manal's two posts): one press restores it */}
             {wasBooked && (
               <div className="flex flex-wrap items-center gap-2 rounded-inner border border-accent-amber/50 bg-tint-amber px-3 py-2 text-[12px]" data-was-booked>
-                <span className="min-w-0 flex-1"><strong>Version {wasBooked.n} was booked for {melb(wasBooked.at)}</strong>{wasBooked.offBy ? ` — ${wasBooked.offBy} took it off the schedule` : ''}. It will not go out unless it is booked again.</span>
+                {/* THE WORDS KEEP A READABLE WIDTH (the owner's screenshot, 25 Nov 2026: beside eight footer buttons the
+                    words were squeezed to one per line next to the button). Under 14rem the button goes below them. */}
+                <span className="min-w-[14rem] flex-1"><strong>Version {wasBooked.n} was booked for {melb(wasBooked.at)}</strong>{wasBooked.offBy ? ` — ${wasBooked.offBy} took it off the schedule` : ''}. It will not go out unless it is booked again.</span>
                 <button type="button" disabled={busy} onClick={() => void bringBack(wasBooked.version, true)}
                   className="min-h-9 shrink-0 rounded-full bg-foreground px-3 text-[12px] font-semibold text-background disabled:opacity-60">
                   Book it back for {melb(wasBooked.at)}
@@ -1874,7 +1877,7 @@ export default function PostWindow({
             )}
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 lg:ml-auto lg:shrink-0" data-footer-buttons>
+          <div className="flex flex-wrap items-center gap-2 lg:ml-auto lg:max-w-full lg:shrink-0" data-footer-buttons>
             {changed && <span className="text-[12px] font-medium text-muted-foreground">Not saved yet</span>}
             {!me && <span className="text-[12px] text-muted-foreground">Checking who you are…</span>}
             {me && post && buttons.length === 0 && (
