@@ -287,9 +287,9 @@ export function mayMarkPaid(v: UpsellViewer): boolean {
   return v.seesAll
 }
 
-/** Log an upsell under somebody else's name: only a keeper. */
+/** Log an upsell under somebody else's name: a keeper or any super admin (who then sees the row they logged). */
 export function mayLogForOthers(v: UpsellViewer): boolean {
-  return v.seesAll
+  return v.seesAll || v.role === 'super_admin'
 }
 
 export function mayDeleteUpsell(v: UpsellViewer, u: Pick<Upsell, 'pitched_by' | 'created_by' | 'stage'>): boolean {

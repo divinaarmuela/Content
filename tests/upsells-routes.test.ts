@@ -102,9 +102,17 @@ describe('logging an upsell', () => {
     as('hello', 'super_admin', 'MD Media')
     expect((await log({ ...VIDEO, pitched_by: 'karly' })).body.row).toMatchObject({ pitched_by: 'karly', pitched_by_name: 'Karly', created_by: 'hello' })
     expect((await log({ ...VIDEO, pitched_by: 'james' })).body.error).toBe('That person is not on the upsell tracker')
-    // another super admin is one of the people here, not the tracker's keeper
+    // the owner, 25 Nov 2026 ("now i cant log as someone else? im akmal"): any super admin logs one for somebody on
+    // the tracker. They see the row they logged; that person's OWN rows stay hidden from them.
     as('yusuf', 'super_admin', 'Yusuf')
-    expect((await log({ ...VIDEO, pitched_by: 'karly' })).status).toBe(403)
+    const forKarly = await log({ ...VIDEO, pitched_by: 'karly' })
+    expect(forKarly.body.row).toMatchObject({ pitched_by: 'karly', created_by: 'yusuf' })
+    const mine = await (await GET()).json()
+    expect(mine.rows.map((r: { id: string }) => r.id)).toEqual([forKarly.body.row.id])
+    expect(mine.people.map((p: { name: string }) => p.name).sort()).toEqual(['Karly', 'MD Media', 'Manal', 'Yusuf'])
+    expect(mine.me).toMatchObject({ seesAll: false, mayMarkPaid: false, mayLogForOthers: true })
+    as('manal', 'account_manager', 'Manal')
+    expect((await (await GET()).json()).me.mayLogForOthers).toBe(false)
   })
 })
 

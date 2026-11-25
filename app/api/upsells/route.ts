@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { withRequestCache } from '@/lib/db'
 import { authzErrorResponse, requireSignedIn } from '../../lib/authz'
 import { createUpsell, listUpsells, requireUpsells, upsellClients, upsellPeople, upsellViewer } from '../../lib/upsells'
-import { mayMarkPaid } from '../../lib/upsell-core'
+import { mayLogForOthers, mayMarkPaid } from '../../lib/upsell-core'
 
 /**
  * THE UPSELL TRACKER (Divina, 25 Nov 2026). GET: every row, the clients this person may log for, and who is on the
@@ -18,11 +18,11 @@ export async function GET() {
       await requireUpsells(user)
       const viewer = upsellViewer(user)
       const [rows, clients, everyone] = await Promise.all([listUpsells(user), upsellClients(user), upsellPeople()])
-      // who else is on the tracker is the keepers' to know; anybody else is given only themselves
-      const people = viewer.seesAll ? everyone : [{ id: user.id, name: user.name }]
+      // who else is on the tracker is for those who may log for them; anybody else is given only themselves
+      const people = mayLogForOthers(viewer) ? everyone : [{ id: user.id, name: user.name }]
       return NextResponse.json({
         rows, clients, people,
-        me: { id: user.id, name: user.name, role: user.role, seesAll: viewer.seesAll, mayMarkPaid: mayMarkPaid(viewer) },
+        me: { id: user.id, name: user.name, role: user.role, seesAll: viewer.seesAll, mayLogForOthers: mayLogForOthers(viewer), mayMarkPaid: mayMarkPaid(viewer) },
       })
     } catch (e) {
       const { error, status } = authzErrorResponse(e)

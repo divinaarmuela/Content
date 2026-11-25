@@ -24,7 +24,7 @@ import {
  * refuse everyone else. Rules, the price list and the commission sums are upsell-core's — this page only draws.
  */
 
-type Me = { id: string; name: string; role: string; seesAll: boolean; mayMarkPaid: boolean }
+type Me = { id: string; name: string; role: string; seesAll: boolean; mayLogForOthers: boolean; mayMarkPaid: boolean }
 type Named = { id: string; name: string }
 type Loaded = { rows: Upsell[]; clients: Named[]; people: Named[]; me: Me }
 
@@ -396,7 +396,7 @@ function UpsellForm({ row, me, clients, people, onClose, onSaved, change }: {
                 {UPSELL_STAGES.map(s => <option key={s} value={s}>{STAGE_WORDS[s]}</option>)}
               </select>
             </label>
-            {!row && me.seesAll && (
+            {!row && me.mayLogForOthers && (
               <label className="flex flex-col gap-1">
                 <span className={LABEL}>Whose upsell</span>
                 <select className={FIELD} value={pitchedBy} onChange={e => setPitchedBy(e.target.value)}>
