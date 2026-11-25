@@ -287,16 +287,18 @@ describe('the columns say the status words, and the claim says one thing', () =>
     expect(DRAFTING_LANE).toBe('Draft')
   })
 
-  it('every work page and the item page carry a Getting started panel', () => {
+  // The owner, 25 Nov 2026: "there is a blue banner on post approval … can u remove that and other banners on other
+  // pages … it's the tutorial". The panel showed for each person until THEY pressed Got it, so teammates still saw it.
+  it('no work page carries the blue Getting started panel any more', () => {
     for (const rel of [
+      'app/dashboard/page.tsx',
       'app/dashboard/editor/page.tsx',
       'app/dashboard/scheduler/page.tsx',
       'app/dashboard/production/page.tsx',
-      // the card page's body — the route is a thin wrapper around it
       'app/dashboard/production/[id]/CardDetail.tsx',
     ]) {
       const src = readFileSync(join(process.cwd(), rel), 'utf8')
-      expect(src, `${rel} has no Getting started panel`).toMatch(/<GettingStarted /)
+      expect(src, `${rel} still draws the Getting started panel`).not.toMatch(/GettingStarted/)
     }
   })
 

@@ -11,7 +11,6 @@ import {
   ArrowRight, CalendarClock, CheckCircle2, ClipboardList, Clock,
   ChevronLeft, ChevronRight, Hand,
 } from 'lucide-react'
-import GettingStarted from './GettingStarted'
 import { LoadFailed } from './NotSetUp'
 import type { Role } from '../lib/identity-core'
 import TeamLoadCard from './TeamLoadCard'
@@ -982,7 +981,6 @@ export default function OverviewPage() {
 
       {/* the only onboarding in the product — three steps for this role, each
           a real link, dismissed per person and per role */}
-      {!loading && !live.error && <GettingStarted role={(role ?? null) as Role | null} />}
       {/* nobody flagged as the quality reviewer: every check comes to the
           super admins until one is set (11 Sep 2026) */}
       {!loading && <NoReviewerBanner me={me} />}

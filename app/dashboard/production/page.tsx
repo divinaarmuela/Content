@@ -27,7 +27,6 @@ import { ShootStageBoard, type StageShoot } from './ShootStageBoard'
 import { STAGE_LABEL as SOP_STAGE_LABEL, type ShootStage } from '../../lib/shoot-sop-core'
 import PageTitle from '../ui/PageTitle'
 import { todayKey } from '../ui/tone'
-import GettingStarted from '../GettingStarted'
 
 /**
  * SHOOTS — one page, one kind of card.
@@ -206,7 +205,6 @@ export default function ProductionPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      {viewer && shoots !== null && <GettingStarted role={role} page="production" />}
 
       <PageTitle
         title="Shoots"

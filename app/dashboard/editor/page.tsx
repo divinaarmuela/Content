@@ -16,7 +16,6 @@ import PageTitle from '../ui/PageTitle'
 import { todayKey } from '../ui/tone'
 import { AccountUnavailable } from '../production/shoot-ui'
 import { useTeamMembers } from '../production/workHooks'
-import GettingStarted from '../GettingStarted'
 import { Board, useBoardParams, type BoardCardRow } from '../board/Board'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { readCardParam } from '../../lib/card-sheet-core'
@@ -200,7 +199,6 @@ export default function EditorPage() {
         )}
       />
 
-      {ready && <GettingStarted role={viewer.role} page="editor" />}
 
       {!ready ? (
         <div className="grid gap-2.5 md:grid-cols-4">

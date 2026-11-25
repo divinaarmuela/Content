@@ -43,7 +43,6 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
   DropdownMenuSeparator, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import GettingStarted from '../../GettingStarted'
 import HelpHint from '../../HelpHint'
 import CollapsibleCard from '../../CollapsibleCard'
 import ItemBoard from '../../boards/ItemBoard'
@@ -1633,7 +1632,6 @@ export default function CardDetail({ id, layout = 'page', onClose }: {
         </>}
       />
 
-      {isTeam && <GettingStarted role={role} page="item" />}
 
       {/* 2 — WHAT TO DO NOW. One sentence, one button in the board's words,
           the reason it is grey if it is grey. */}

@@ -9,7 +9,6 @@ import type { ScopeViewer } from '../../lib/production-access-core'
 import { addressWithClient, clientDropdownChoices, clientFromAddress, laneFromAddress } from '../../lib/post-board-core'
 import { useRole } from '../useRole'
 import { AccountUnavailable } from '../production/shoot-ui'
-import GettingStarted from '../GettingStarted'
 import NoReviewerBanner from '../ui/NoReviewerBanner'
 import PostWindowFromAddress from './PostWindowFromAddress'
 import ClientRound from './board/ClientRound'
@@ -115,7 +114,6 @@ export default function PostApprovalPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      {ready && <GettingStarted role={viewer.role} page="scheduler" />}
       {ready && <NoReviewerBanner me={me} />}
 
       {ready && data.unstaged > 0 && (
