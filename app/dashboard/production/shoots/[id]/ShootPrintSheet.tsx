@@ -89,6 +89,9 @@ function Block({ b }: { b: PrintBlock }) {
   }
 }
 
+/** a section with this many pictures or fewer gives its words most of the sheet, the pictures a strip on the right */
+const FEW_PICTURES = 3
+
 export default function ShootPrintSheet({ shoot, cards, crew = [] }: {
   shoot: PrintShoot
   cards: readonly CanvasCard[]
@@ -130,9 +133,9 @@ export default function ShootPrintSheet({ shoot, cards, crew = [] }: {
 
       <div className="sp-body">
       {sections.map(s => (
-        <section key={s.id} className={`sp-sec${s.depth > 0 ? ' sp-sub' : ''}`}>
+        <section key={s.id} className={`sp-sec${s.depth > 0 ? ' sp-sub' : ''}${s.blocks.length > 0 && s.pictures.length > 0 ? (s.pictures.length <= FEW_PICTURES ? ' sp-both sp-few' : ' sp-both') : ''}`}>
           <h2>{s.title}</h2>
-          {s.blocks.map(b => <Block key={b.id} b={b} />)}
+          {s.blocks.length > 0 && <div className="sp-text">{s.blocks.map(b => <Block key={b.id} b={b} />)}</div>}
           {s.pictures.length > 0 && (
             <div className="sp-pics">{s.pictures.map(b => <Block key={b.id} b={b} />)}</div>
           )}
@@ -160,11 +163,25 @@ export function shootPrintCss(paper: PrintPaper): string {
 
 /**
  * A3 is twice the page, and ON ITS SIDE (Renee, 25 Nov 2026, after printing it: "just tested the A3, we need it to be
- * landscape"): the board runs down three columns across the wide sheet, so a line of words stays a readable length.
+ * landscape").
+ *
+ * A SECTION STAYS TOGETHER, LAID OUT AS ON THE BOARD (Renee, on that first landscape print: "organised abit weird …
+ * would be great if it's shown photos all together, vid 1 all together" — three columns down the sheet ran VID 1
+ * from one column into the next and split a section's pictures over two pages). So each section is one block across
+ * the wide sheet: its words down the left, its pictures beside them. A section of words alone reads in three columns
+ * of its own; a section is not broken over two pages unless it is taller than one.
  */
 const A3_CSS = `
-.sp-body{column-count:3;column-gap:10mm;column-rule:1px solid #ddd}
-.sp-body > .sp-sec:first-child{margin-top:0}
+.sp-sec{break-inside:avoid}
+.sp-both{display:grid;grid-template-columns:120mm 1fr;column-gap:10mm;align-items:start}
+.sp-both > h2{grid-column:1 / -1}
+.sp-both > .sp-text{grid-column:1}
+.sp-both > .sp-pics{grid-column:2;margin-top:0}
+.sp-few{grid-template-columns:1fr 100mm}
+.sp-few > .sp-text{column-count:2;column-gap:10mm}
+.sp-sec:not(.sp-both) > .sp-text{column-count:3;column-gap:10mm}
+.sp-sec:not(.sp-both) > .sp-text .sp-table{column-span:all}
+.sp-pic img{height:50mm}
 `
 
 const SHEET_CSS = `
