@@ -1104,6 +1104,9 @@ export default function BriefCanvas({
     resizeState.current = null
     interactingRef.current = false
     paintResize(r.el, r.live, r.liveH, r.wrap, r.liveX, r.oy)
+    // a card that grows with its caption (CanvasCard `data-grows`) is sized by its own style once the drag is over;
+    // the fixed height painted during the drag would cut the caption off
+    if (r.el?.hasAttribute('data-grows')) r.el.style.height = ''
     if (r.live !== r.ow || r.liveH !== card.h || r.liveX !== r.ox) {
       const { h: _drop, ...rest } = card
       void _drop

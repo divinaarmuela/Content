@@ -564,6 +564,18 @@ export function cardTakesHeight(kind: CanvasCard['kind']): boolean {
   return CANVAS_SIZE_LIMITS[kind].minH !== null
 }
 
+/**
+ * THE WHOLE CAPTION SHOWS (Manal, 25 Nov 2026: "they're going to think that's where the caption ends"). A picture
+ * card somebody gave a height of its own used to keep that height whatever the caption: the caption took 128px of
+ * it at most and scrolled inside itself. Now the caption is shown in full, and a card that is not tall enough for it
+ * grows — so the picture needs a floor of its own, or a long caption would squeeze it to nothing. The floor is the
+ * room the picture always had: the card's height less those 128px, and never under 90.
+ */
+export function pictureFloorUnderCaption(h: number | null | undefined): number | undefined {
+  if (typeof h !== 'number' || !Number.isFinite(h) || h <= 0) return undefined
+  return Math.max(90, Math.round(h) - 128)
+}
+
 /** Clamp a size into its kind's box. A height on a width-only kind, or a
  *  height that is not a number, comes back as `undefined` (= follow content). */
 export function clampCardSize(

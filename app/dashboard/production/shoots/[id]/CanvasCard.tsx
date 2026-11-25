@@ -7,7 +7,7 @@ import {
 } from 'lucide-react'
 import { postMediaOf, type PostMedia, DRIVE_PICTURE_SIZE, portalDriveStreamUrl, portalDriveThumbnailUrl } from '../../../../lib/canvas-drive-core'
 import { Link2 } from 'lucide-react'
-import { LABEL_FONT_PX, NOTE_FONT_PX, textSizeOf, type CanvasCard as Card, textColorOf, textAlignOf, textBoldOf, boldRuns } from '../../../../lib/batch-brief-core'
+import { LABEL_FONT_PX, NOTE_FONT_PX, pictureFloorUnderCaption, textSizeOf, type CanvasCard as Card, textColorOf, textAlignOf, textBoldOf, boldRuns } from '../../../../lib/batch-brief-core'
 
 /** A note's words with their bold runs (**like this**) drawn bold and their highlights (==like this==) on a
  *  highlighter colour (Manal, 20 Oct 2026 — note-format-core). */
@@ -302,21 +302,26 @@ function CaptionField({ value, onSave }: { value: string; onSave?: (v: string) =
       ? <p className="whitespace-pre-wrap break-words text-[12px] leading-snug text-foreground">{value}</p>
       : null
   }
+  // AS TALL AS ITS WORDS, FROM THE MOMENT IT IS DRAWN (Manal, 25 Nov 2026: a pasted caption "shows like that … they
+  // are going to think that's where the caption ends"). The box counted line breaks, so a pasted paragraph opened one
+  // line tall, and it stopped growing at 128px; the rest was there but out of sight.
+  const fit = (t: HTMLTextAreaElement | null) => {
+    if (!t) return
+    t.style.height = 'auto'
+    t.style.height = `${t.scrollHeight}px`
+  }
   return (
     <textarea
       key={value}
+      ref={fit}
       defaultValue={value}
-      rows={Math.min(5, Math.max(1, value.split('\n').length))}
+      rows={Math.max(1, value.split('\n').length)}
       placeholder="Write a caption…"
       aria-label="Caption"
-      className="block w-full resize-none bg-transparent text-[12px] leading-snug text-foreground outline-none placeholder:text-muted-foreground"
+      className="block w-full resize-none overflow-hidden bg-transparent text-[12px] leading-snug text-foreground outline-none placeholder:text-muted-foreground"
       onPointerDown={e => e.stopPropagation()}
-      onInput={e => {
-        // grow with the words, up to the strip's own ceiling
-        const t = e.currentTarget
-        t.style.height = 'auto'
-        t.style.height = `${Math.min(t.scrollHeight, 128)}px`
-      }}
+      // grow with the words, all of them
+      onInput={e => fit(e.currentTarget)}
       onKeyDown={e => { if (e.key === 'Escape') { e.stopPropagation(); (e.target as HTMLTextAreaElement).blur() } }}
       onBlur={e => {
         const v = e.target.value.trim().slice(0, 1000)
@@ -1041,7 +1046,8 @@ function CanvasCardInner({
       }
     : undefined
   const captionStrip = (saveCaption || card.caption) && (
-    <div data-scroll className="max-h-32 shrink-0 overflow-y-auto border-t border-border/60 px-2 py-1.5">
+    // the whole caption, never a strip that scrolls inside itself (Manal, 25 Nov 2026) — the client sees all of it
+    <div className="shrink-0 border-t border-border/60 px-2 py-1.5">
       <CaptionField value={card.caption ?? ''} onSave={saveCaption} />
     </div>
   )
@@ -1057,9 +1063,12 @@ function CanvasCardInner({
     // board full of clips still opens for free.
     const isFilm = isPlayableFile(card.url ?? '')
     return (
-      <div className={`overflow-hidden rounded-inner border border-border bg-surface shadow-sm ${BOX}`} style={boxStyle(card)}>
+      // a card with a height of its own is AT LEAST that tall: a caption that needs more room makes it taller,
+      // and the picture keeps the room it always had (pictureFloorUnderCaption)
+      <div data-grows={card.h && captionStrip ? '' : undefined} className={`overflow-hidden rounded-inner border border-border bg-surface shadow-sm ${BOX}`}
+        style={card.h && captionStrip ? { width: card.w, minHeight: card.h } : boxStyle(card)}>
         {isFilm ? (
-          <div className="relative min-h-0 flex-1 shrink" ref={frameRef}>
+          <div className="relative min-h-0 flex-1 shrink" style={captionStrip ? { minHeight: pictureFloorUnderCaption(card.h) } : undefined} ref={frameRef}>
             <video
               ref={videoRef}
               src={playing || auto.load ? card.url : undefined}
@@ -1083,7 +1092,8 @@ function CanvasCardInner({
         ) : (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={card.url} alt={card.name ?? 'reference'} loading="lazy" decoding="async"
-            draggable={false} className={`w-full min-h-0 shrink select-none ${card.h ? 'flex-1 object-cover' : ''}`} />
+            draggable={false} className={`w-full min-h-0 shrink select-none ${card.h ? 'flex-1 object-cover' : ''}`}
+            style={captionStrip ? { minHeight: pictureFloorUnderCaption(card.h) } : undefined} />
         )}
         {card.name && (
           <p className="shrink-0 truncate px-2 py-1 text-[12px] text-muted-foreground">{card.name}</p>
