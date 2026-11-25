@@ -11,7 +11,8 @@ describe('the paper the shoot plan prints on', () => {
   it('on A3 a section is kept together: its words on the left, its pictures beside them, as on the board', () => {
     const css = shootPrintCss('A3')
     expect(css).not.toContain('.sp-body{column-count')
-    expect(css).toContain('.sp-sec{break-inside:avoid}')
+    // …but never by leaving the rest of a sheet blank (Renee, on the next print: "the part where it waste 1 sheet of paper")
+    expect(css).not.toContain('.sp-sec{break-inside:avoid}')
     expect(css).toContain('.sp-both{display:grid;grid-template-columns:120mm 1fr;')
     expect(css).toContain('.sp-both > .sp-pics{grid-column:2')
     // one or two pictures do not take two thirds of the sheet from a long script
@@ -21,6 +22,28 @@ describe('the paper the shoot plan prints on', () => {
     const css = shootPrintCss('A4')
     expect(css).toContain('@page{size:A4;margin:14mm}')
     expect(css).not.toContain('column-count')
+  })
+})
+
+import { sectionShape } from '../app/dashboard/production/shoots/[id]/ShootPrintSheet'
+
+describe('how a section sits on the wide sheet', () => {
+  const words = (text: string) => ({ kind: 'words' as const, id: 'w', text })
+  const pics = (n: number) => Array.from({ length: n }, (_, i) => ({ kind: 'picture' as const, id: `p${i}`, url: 'https://x/p.jpg' }))
+  const sec = (blocks: ReturnType<typeof words>[], n: number) => ({ id: 's', title: 'S', depth: 0, blocks, pictures: pics(n) })
+  it('a script with a wall of pictures: words on the left, pictures beside them', () => {
+    expect(sectionShape(sec([words('x'.repeat(400))], 12))).toBe('both')
+  })
+  it('a script with a picture or two keeps most of the sheet for the words', () => {
+    expect(sectionShape(sec([words('x'.repeat(400))], 2))).toBe('few')
+  })
+  // Renee's print, 25 Nov 2026: PHOTOS had one line of words, which took a whole column and pushed 4 pictures to the next page
+  it('a line or two of words over a wall of pictures does not take a column from them', () => {
+    expect(sectionShape(sec([words("ALIA at teta's table photo inspo")], 25))).toBe('stack')
+  })
+  it('words alone, or pictures alone, are simply stacked', () => {
+    expect(sectionShape(sec([words('x'.repeat(400))], 0))).toBe('stack')
+    expect(sectionShape(sec([], 9))).toBe('stack')
   })
 })
 

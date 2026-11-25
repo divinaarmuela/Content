@@ -3,7 +3,7 @@ import { boldRuns, type CanvasCard } from '../../../../lib/batch-brief-core'
 import { markRuns } from '../../../../lib/note-format-core'
 import { sanitiseCanvasHtml } from '../../../../lib/canvas-rich-core'
 import { planAsText, type SopShoot } from '../../../../lib/shoot-sop-core'
-import { printSections, type PrintBlock } from '../../../../lib/shoot-print-core'
+import { printSections, type PrintBlock, type PrintSection } from '../../../../lib/shoot-print-core'
 
 /**
  * THE SHOOT BRIEF AS A SHEET OF PAPER (Renee, 25 Nov 2026: "the shoot brief needs to be printable"). The plan's nine
@@ -91,6 +91,22 @@ function Block({ b }: { b: PrintBlock }) {
 
 /** a section with this many pictures or fewer gives its words most of the sheet, the pictures a strip on the right */
 const FEW_PICTURES = 3
+/** words shorter than this are a caption over the pictures, not a script to read beside them */
+const SHORT_WORDS = 200
+
+/**
+ * HOW A SECTION SITS ON THE WIDE SHEET. `both`: a script down the left, its wall of pictures beside it. `few`: the
+ * script across most of the sheet, a picture or two in a strip on the right. `stack`: one thing under the other —
+ * words alone, pictures alone, or a line or two of words over a wall of pictures (Renee's print, 25 Nov 2026: the
+ * one line under PHOTOS took a whole column, and four of its pictures went over to the next page).
+ */
+export function sectionShape(s: Pick<PrintSection, 'blocks' | 'pictures'>): 'both' | 'few' | 'stack' {
+  if (s.blocks.length === 0 || s.pictures.length === 0) return 'stack'
+  if (s.pictures.length <= FEW_PICTURES) return 'few'
+  const words = s.blocks.reduce((n, b) => n + (b.kind === 'words' ? b.text.length : SHORT_WORDS), 0)
+  return words < SHORT_WORDS ? 'stack' : 'both'
+}
+const SHAPE_CLASS = { both: ' sp-both', few: ' sp-both sp-few', stack: '' } as const
 
 export default function ShootPrintSheet({ shoot, cards, crew = [] }: {
   shoot: PrintShoot
@@ -133,7 +149,7 @@ export default function ShootPrintSheet({ shoot, cards, crew = [] }: {
 
       <div className="sp-body">
       {sections.map(s => (
-        <section key={s.id} className={`sp-sec${s.depth > 0 ? ' sp-sub' : ''}${s.blocks.length > 0 && s.pictures.length > 0 ? (s.pictures.length <= FEW_PICTURES ? ' sp-both sp-few' : ' sp-both') : ''}`}>
+        <section key={s.id} className={`sp-sec${s.depth > 0 ? ' sp-sub' : ''}${SHAPE_CLASS[sectionShape(s)]}`}>
           <h2>{s.title}</h2>
           {s.blocks.length > 0 && <div className="sp-text">{s.blocks.map(b => <Block key={b.id} b={b} />)}</div>}
           {s.pictures.length > 0 && (
@@ -169,10 +185,10 @@ export function shootPrintCss(paper: PrintPaper): string {
  * would be great if it's shown photos all together, vid 1 all together" — three columns down the sheet ran VID 1
  * from one column into the next and split a section's pictures over two pages). So each section is one block across
  * the wide sheet: its words down the left, its pictures beside them. A section of words alone reads in three columns
- * of its own; a section is not broken over two pages unless it is taller than one.
+ * of its own. A section may run on to the next page — holding each one whole left most of a sheet blank (Renee, on
+ * the next print: "the part where it waste 1 sheet of paper") — but its heading never sits alone at the foot of one.
  */
 const A3_CSS = `
-.sp-sec{break-inside:avoid}
 .sp-both{display:grid;grid-template-columns:120mm 1fr;column-gap:10mm;align-items:start}
 .sp-both > h2{grid-column:1 / -1}
 .sp-both > .sp-text{grid-column:1}
@@ -181,7 +197,7 @@ const A3_CSS = `
 .sp-few > .sp-text{column-count:2;column-gap:10mm}
 .sp-sec:not(.sp-both) > .sp-text{column-count:3;column-gap:10mm}
 .sp-sec:not(.sp-both) > .sp-text .sp-table{column-span:all}
-.sp-pic img{height:50mm}
+.sp-pic img{height:46mm}
 `
 
 const SHEET_CSS = `
