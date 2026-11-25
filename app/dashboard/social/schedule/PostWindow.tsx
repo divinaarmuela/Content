@@ -1954,7 +1954,7 @@ function QuestionPanel({ asking, busy, tz, recipients, team, makerId, now, onNow
     <div role="group" aria-label={q.label} data-question={q.action} className="flex flex-col gap-2 rounded-inner border border-accent-blue/50 bg-tint-blue/40 p-3">
       <p className="text-[13px] font-semibold">{q.prompt}</p>
 
-      {q.needs.includes('copies') && copy && <CopyDays tz={tz} copy={copy} keep={a.keep_approval === true} onChange={patch => set(patch)} />}
+      {q.needs.includes('copies') && copy && <CopyDays tz={tz} copy={copy} chosen={a.keep_approval ?? undefined} onChange={patch => set(patch)} />}
 
       {q.needs.includes('time') && (
         <div className="flex flex-wrap items-center gap-2">

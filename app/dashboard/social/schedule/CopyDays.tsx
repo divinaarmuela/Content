@@ -3,25 +3,29 @@
 import { useEffect, useMemo, useState } from 'react'
 import { dayKeyInZone, formatInZone } from '@/app/lib/timezone-core'
 import { utcToZoned, zonedToUtc } from '@/app/lib/booking-core'
-import { copyDayChoices, copyTimes, type Answers } from '@/app/lib/post-window-core'
+import { copiesKeepApproval, copyDayChoices, copyTimes, type Answers } from '@/app/lib/post-window-core'
 
 /**
  * DUPLICATE: TICK THE DAYS (the owner, 23 Nov 2026: "please make it easy"; Renee: the same story every day for a week).
  * Fourteen day buttons with tomorrow already ticked, one time of day (the original's own, changeable), and, when the
  * original has been approved, one choice: the copies start as drafts, or they keep the approval and are booked in.
  */
-export default function CopyDays({ tz, copy, keep, onChange }: {
+export default function CopyDays({ tz, copy, chosen, onChange }: {
   tz: string
   copy: { at: string | null; nowMs: number; mayKeep: boolean }
-  keep: boolean
+  /** what somebody picked for the copies; undefined until they pick */
+  chosen: boolean | undefined
   onChange: (patch: Partial<Answers>) => void
 }) {
+  // BOOKED IN UNLESS TOLD OTHERWISE (the owner, 25 Nov 2026 — see copiesKeepApproval)
+  const keep = copiesKeepApproval(chosen, copy.mayKeep)
   const days = useMemo(() => copyDayChoices(copy.nowMs, tz, (t, z) => dayKeyInZone(t, z)), [copy.nowMs, tz])
   const [picked, setPicked] = useState<string[]>(() => days.slice(0, 1))
   // the original's own time of day; a post with no time yet starts at nine in the morning
   const [minutes, setMinutes] = useState<number>(() => (copy.at ? utcToZoned(new Date(copy.at), tz).minutes : 9 * 60))
   useEffect(() => {
-    onChange({ copies: copyTimes(picked, minutes, tz, zonedToUtc) })
+    // the answer always says what the copies start as, so the default is what is sent, not only what is shown
+    onChange({ copies: copyTimes(picked, minutes, tz, zonedToUtc), keep_approval: copiesKeepApproval(chosen, copy.mayKeep) })
     // eslint-disable-next-line react-hooks/exhaustive-deps -- the answer follows the ticks and the time, nothing else
   }, [picked, minutes, tz])
   const toggle = (d: string) => setPicked(p => (p.includes(d) ? p.filter(x => x !== d) : [...p, d]))
@@ -51,10 +55,10 @@ export default function CopyDays({ tz, copy, keep, onChange }: {
       {copy.mayKeep && (
         <div className="flex flex-col gap-1.5" role="group" aria-label="What the copies need">
           <div className="flex flex-wrap gap-1.5">
-            <button type="button" aria-pressed={!keep} onClick={() => onChange({ keep_approval: false })}
-              className={`${choice} ${!keep ? 'border-foreground bg-foreground text-background' : 'border-border bg-surface text-foreground'}`}>Start as drafts</button>
             <button type="button" aria-pressed={keep} onClick={() => onChange({ keep_approval: true })}
               className={`${choice} ${keep ? 'border-foreground bg-foreground text-background' : 'border-border bg-surface text-foreground'}`}>Keep the approval and book them</button>
+            <button type="button" aria-pressed={!keep} onClick={() => onChange({ keep_approval: false })}
+              className={`${choice} ${!keep ? 'border-foreground bg-foreground text-background' : 'border-border bg-surface text-foreground'}`}>Start as drafts</button>
           </div>
           <p className="text-[12px] text-muted-foreground">
             {keep

@@ -452,6 +452,17 @@ export function copyDayChoices(now: NowLike, tz: string, dayKey: (ms: number, tz
   return out
 }
 
+/**
+ * A DUPLICATE OF AN APPROVED POST IS BOOKED IN UNLESS TOLD OTHERWISE (the owner, 25 Nov 2026: "how come it's in
+ * draft … make sure duplicates and schedules"). The window opened on "Start as drafts": Renee copied a Basfoods
+ * story onto four days and got four drafts that showed nowhere as scheduled. With an approval to keep, the copies
+ * keep it and are booked unless somebody chooses drafts; with none to keep they can only ever be drafts.
+ */
+export function copiesKeepApproval(chosen: boolean | undefined, mayKeep: boolean): boolean {
+  if (!mayKeep) return false
+  return chosen !== false
+}
+
 /** the posting times for the days ticked, at one time of day, in day order; a day whose time cannot be made is left out */
 export function copyTimes(days: readonly string[], minutes: number, tz: string, toInstant: (day: string, minutes: number, tz: string) => Date | null): string[] {
   return [...days].sort().map(d => toInstant(d, minutes, tz)).filter((d): d is Date => !!d && Number.isFinite(d.getTime())).map(d => d.toISOString())

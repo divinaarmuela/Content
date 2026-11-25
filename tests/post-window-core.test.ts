@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
-  answerProblem, applyInstagramChoice, bodyEditable, buildActRequest, defaultPostTime,
+  answerProblem, applyInstagramChoice, bodyEditable, buildActRequest, copiesKeepApproval, defaultPostTime,
   draftPostsOf, footerButtons, frozenCopyOf, hourIsPast, instagramChoices, instagramCounter,
   minuteIsPast, minuteOptions, noteCounts, noteVersionOf, nowChip, parseNoteInput, pressAction,
   questionFor, readPostNotes, STAYS_OPEN, timeHint, unsavedPost, windowHeader, withWorkingCopy, workingCopyOf,
@@ -481,5 +481,31 @@ describe('Schedule it in the window (a super admin, 29 Sep 2026)', () => {
     })
     const h = windowHeader(p, NOW, { nameOf: id => (id === 'akmal' ? 'Akmal' : null) })
     expect(h.approvalLine).toBe('Scheduled without the quality check by Akmal')
+  })
+})
+
+/**
+ * A DUPLICATE OF AN APPROVED POST IS BOOKED IN UNLESS TOLD OTHERWISE (the owner, 25 Nov 2026: "how come it's in
+ * draft … make sure duplicates and schedules"). The Duplicate window opened on "Start as drafts", so a story copied
+ * onto four days became four drafts that showed nowhere as scheduled. It opens on "Keep the approval and book them"
+ * now; drafts are the choice somebody makes on purpose.
+ */
+describe("what a duplicate's copies start as", () => {
+  it('booked in, when the original has been approved and nobody has chosen', () => {
+    expect(copiesKeepApproval(undefined, true)).toBe(true)
+  })
+  it('whatever was chosen, once somebody has chosen', () => {
+    expect(copiesKeepApproval(false, true)).toBe(false)
+    expect(copiesKeepApproval(true, true)).toBe(true)
+  })
+  it('never booked in when the original has no approval to keep', () => {
+    expect(copiesKeepApproval(undefined, false)).toBe(false)
+    expect(copiesKeepApproval(true, false)).toBe(false)
+  })
+  it('the window sends that answer, and offers booking in first', async () => {
+    const { readFileSync } = await import('node:fs')
+    const days = readFileSync('app/dashboard/social/schedule/CopyDays.tsx', 'utf8')
+    expect(days).toMatch(/keep_approval: copiesKeepApproval\(/)
+    expect(days.indexOf('Keep the approval and book them')).toBeLessThan(days.indexOf('Start as drafts'))
   })
 })
