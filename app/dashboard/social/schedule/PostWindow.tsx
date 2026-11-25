@@ -231,6 +231,20 @@ export default function PostWindow({
     dispatch({ type: 'loaded', state: { postId: saved.id, ...composerFieldsOf(workingCopyOf(saved)) } })
   }, [saved, state.dirty])
 
+  /**
+   * THE WINDOW RELOADS FROM THE POST THE SERVER ANSWERED WITH — here, at once, never by blanking `loadedKey` and
+   * waiting for the effect above (25 Nov 2026, Karly's MGMT carousel: Edit on a booked post, new pictures, booked
+   * again — and the OLD pictures went back in, twice). The live row usually lands before a press's own answer; then
+   * `saved` does not change when the answer arrives, the effect does not run, and a blank key sat there until the
+   * person's next change — which the effect then took for a post it had never loaded and wiped.
+   */
+  const reloadFrom = (p: PostState) => {
+    loadedKey.current = `${p.id}:${p.rev}`
+    setAnswered(p)
+    setMovedUnder(false)
+    dispatch({ type: 'loaded', state: { postId: p.id, ...composerFieldsOf(workingCopyOf(p)) } })
+  }
+
   /* WHOM THE POST IS FOR (15 Sep 2026): a piece made "for" one of the client's
    * people opens a NEW post on that person's channels, not the first account
    * on the list. And never the wrong account ("we might be editing for the
@@ -721,10 +735,10 @@ export default function PostWindow({
     if (!back?.ok) {
       const why = !s1.ok ? s1.reason : back && !back.ok ? back.reason : 'it could not be booked back in'
       setReply({ action: 'save', tone: 'error', text: `The caption was not changed and the post is now a draft: ${why}. Book it again from here.`, problems: [] })
-      if (back && !back.ok && back.post) { loadedKey.current = null; setAnswered(back.post) }
+      if (back && !back.ok && back.post) reloadFrom(back.post)
       return
     }
-    if (back.post) { loadedKey.current = null; setAnswered(back.post) }
+    if (back.post) reloadFrom(back.post)
     setQuickCaption(null)
     setReply({ action: 'save', tone: 'ok', text: `Caption changed — still booked for ${melb(at)}. The old caption is in Versions.`, problems: [] })
   }
@@ -751,10 +765,10 @@ export default function PostWindow({
     if (!back?.ok) {
       const why = !s1.ok ? s1.reason : back && !back.ok ? back.reason : 'it could not be booked back in'
       setReply({ action: 'save', tone: 'error', text: `The automation was not saved and the post is now a draft: ${why}. Book it again from here.`, problems: [] })
-      if (back && !back.ok && back.post) { loadedKey.current = null; setAnswered(back.post) }
+      if (back && !back.ok && back.post) reloadFrom(back.post)
       return
     }
-    if (back.post) { loadedKey.current = null; setAnswered(back.post) }
+    if (back.post) reloadFrom(back.post)
     setQuickAuto(null)
     setReply({ action: 'save', tone: 'ok', text: next.on ? `Automation saved — still booked for ${melb(at)}. It starts when the post goes out.` : `Automation turned off — still booked for ${melb(at)}.`, problems: [] })
   }
@@ -826,10 +840,10 @@ export default function PostWindow({
       if (!v.scheduled_for || Date.parse(v.scheduled_for) - Date.now() < 15 * 60_000) return fail(`Version ${v.n} is back as a draft, but its time (${melb(v.scheduled_for)}) is too close or past — pick a new time and schedule it.`)
       const b = await api.act(id, { action: 'schedule_direct', expect_rev: rev, scheduled_for: v.scheduled_for, note: `Version ${v.n} booked back in for its own time` })
       if (!b.ok) return fail(`Version ${v.n} is back as a draft, but it could not be booked: ${b.reason}`)
-      if (b.post) { loadedKey.current = null; setAnswered(b.post) }
+      if (b.post) reloadFrom(b.post)
     } else {
       const fresh = readPostState(s.row)
-      if (fresh) { loadedKey.current = null; setAnswered(fresh) }
+      if (fresh) reloadFrom(fresh)
     }
     setBusy(false); savingRef.current = false; setWasBooked(null)
     setReply({ action: 'save', tone: 'ok', text: book ? `Version ${v.n} is booked back in for ${melb(v.scheduled_for)}` : `Version ${v.n} is back as the draft — edit it, then send or schedule it`, problems: [] })
@@ -886,7 +900,8 @@ export default function PostWindow({
       if (r.post) {
         // a plain Save keeps what is on screen (someone may still be typing);
         // any move reloads the window from the post the server answered with
-        loadedKey.current = action === 'save' && r.post.stage === 'draft' ? `${r.post.id}:${r.post.rev}` : null
+        if (action === 'save' && r.post.stage === 'draft') loadedKey.current = `${r.post.id}:${r.post.rev}`
+        else reloadFrom(r.post)
         // the server took it against the rev we held, so nobody else moved it under us
         setMovedUnder(false)
         dispatch({ type: 'saved', postId: r.postId })
