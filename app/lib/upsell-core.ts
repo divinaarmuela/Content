@@ -257,19 +257,42 @@ export function stagePatch(u: Pick<Upsell, 'stage' | 'pitched_at' | 'won_at' | '
 
 /* ── who may do what (the page itself is opened by page-access-core) ────── */
 
-export type UpsellViewer = { id: string; role: string }
+/**
+ * WHO SEES EVERYONE'S (the owner, 25 Nov 2026: "make sure each user in upsell can only see theirs. only contact and
+ * hello can see everyone's"). Two accounts keep the tracker — by address, not by role, so another super admin is one
+ * of the people on it like anybody else: they see, change and delete their own rows and nobody else's.
+ */
+export const UPSELL_KEEPER_EMAILS: readonly string[] = ['contact@mdmmarketing.com.au', 'hello@mdmmarketing.com.au']
 
-/** Change a row: the person whose upsell it is, or a super admin. Teammates on the page read each other's. */
-export function mayChangeUpsell(v: UpsellViewer, u: Pick<Upsell, 'pitched_by' | 'created_by'>): boolean {
-  return v.role === 'super_admin' || u.pitched_by === v.id || u.created_by === v.id
+export function seesAllUpsells(email: string | null | undefined): boolean {
+  return UPSELL_KEEPER_EMAILS.includes(String(email ?? '').trim().toLowerCase())
 }
 
-/** "The client has paid" decides commission, so the people on commission do not tick their own. */
+export type UpsellViewer = { id: string; role: string; seesAll: boolean }
+
+const isOwn = (v: UpsellViewer, u: Pick<Upsell, 'pitched_by' | 'created_by'>) => u.pitched_by === v.id || u.created_by === v.id
+
+/** A row is seen by the person whose upsell it is (or who logged it), and by the two keepers. */
+export function maySeeUpsell(v: UpsellViewer, u: Pick<Upsell, 'pitched_by' | 'created_by'>): boolean {
+  return v.seesAll || isOwn(v, u)
+}
+
+/** Change a row: whoever may see it. */
+export function mayChangeUpsell(v: UpsellViewer, u: Pick<Upsell, 'pitched_by' | 'created_by'>): boolean {
+  return maySeeUpsell(v, u)
+}
+
+/** "The client has paid" decides commission, so nobody on commission ticks their own — only a keeper. */
 export function mayMarkPaid(v: UpsellViewer): boolean {
-  return v.role === 'super_admin'
+  return v.seesAll
+}
+
+/** Log an upsell under somebody else's name: only a keeper. */
+export function mayLogForOthers(v: UpsellViewer): boolean {
+  return v.seesAll
 }
 
 export function mayDeleteUpsell(v: UpsellViewer, u: Pick<Upsell, 'pitched_by' | 'created_by' | 'stage'>): boolean {
-  if (v.role === 'super_admin') return true
-  return mayChangeUpsell(v, u) && u.stage !== 'won'
+  if (v.seesAll) return true
+  return isOwn(v, u) && u.stage !== 'won'
 }

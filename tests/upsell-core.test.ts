@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
-  PRICE_LIST, UPSELLS_PAGE, commissionOf, mayChangeUpsell, mayDeleteUpsell, mayMarkPaid, priceCheck, priceItem,
-  sanitiseUpsellInput, stagePatch, upsellTotals, type Upsell,
+  PRICE_LIST, UPSELLS_PAGE, commissionOf, mayChangeUpsell, mayDeleteUpsell, mayMarkPaid, maySeeUpsell, priceCheck, priceItem,
+  sanitiseUpsellInput, seesAllUpsells, stagePatch, upsellTotals, type Upsell,
 } from '@/app/lib/upsell-core'
 import { canSeePage, defaultAllows, isGrantablePage } from '@/app/lib/page-access-core'
 
@@ -134,23 +134,42 @@ describe('moving a row between stages stamps the day and undoes what no longer h
 })
 
 describe('who may do what', () => {
-  const sa = { id: 'divina', role: 'super_admin' }
-  const manal = { id: 'manal', role: 'account_manager' }
-  const karly = { id: 'karly', role: 'account_manager' }
-  it('the person who pitched it, or a super admin, changes a row; a teammate only reads it', () => {
+  // the owner, 25 Nov 2026: "make sure each user in upsell can only see theirs. only contact and hello can see everyone's"
+  const keeper = { id: 'hello', role: 'super_admin', seesAll: true }
+  const yusuf = { id: 'yusuf', role: 'super_admin', seesAll: false }
+  const manal = { id: 'manal', role: 'account_manager', seesAll: false }
+  const karly = { id: 'karly', role: 'account_manager', seesAll: false }
+  it('contact@ and hello@ are the two who see everyone\'s — by address, not by role', () => {
+    expect(seesAllUpsells('contact@mdmmarketing.com.au')).toBe(true)
+    expect(seesAllUpsells(' Hello@MDMmarketing.com.au ')).toBe(true)
+    expect(seesAllUpsells('divina@mdmmarketing.com.au')).toBe(false)
+    expect(seesAllUpsells('hello@elsewhere.com')).toBe(false)
+    expect(seesAllUpsells(null)).toBe(false)
+  })
+  it('a row is seen by its own person and the two keepers — not a teammate, not another super admin', () => {
+    expect(maySeeUpsell(manal, row())).toBe(true)
+    expect(maySeeUpsell(keeper, row())).toBe(true)
+    expect(maySeeUpsell(karly, row())).toBe(false)
+    expect(maySeeUpsell(yusuf, row())).toBe(false)
+    expect(maySeeUpsell(karly, row({ created_by: 'hello', pitched_by: 'karly' }))).toBe(true)
+  })
+  it('the same people change it', () => {
     expect(mayChangeUpsell(manal, row())).toBe(true)
-    expect(mayChangeUpsell(sa, row())).toBe(true)
+    expect(mayChangeUpsell(keeper, row())).toBe(true)
     expect(mayChangeUpsell(karly, row())).toBe(false)
+    expect(mayChangeUpsell(yusuf, row())).toBe(false)
   })
-  it('only a super admin says the client has paid — the people on commission do not tick their own', () => {
-    expect(mayMarkPaid(sa)).toBe(true)
+  it('only a keeper says the client has paid — nobody on commission ticks their own', () => {
+    expect(mayMarkPaid(keeper)).toBe(true)
     expect(mayMarkPaid(manal)).toBe(false)
+    expect(mayMarkPaid(yusuf)).toBe(false)
   })
-  it('a row is deleted by a super admin, or by its own person before it is won', () => {
-    expect(mayDeleteUpsell(sa, row({ stage: 'won' }))).toBe(true)
+  it('a row is deleted by a keeper, or by its own person before it is won', () => {
+    expect(mayDeleteUpsell(keeper, row({ stage: 'won' }))).toBe(true)
     expect(mayDeleteUpsell(manal, row({ stage: 'pitched' }))).toBe(true)
     expect(mayDeleteUpsell(manal, row({ stage: 'won' }))).toBe(false)
     expect(mayDeleteUpsell(karly, row())).toBe(false)
+    expect(mayDeleteUpsell(yusuf, row({ stage: 'won' }))).toBe(false)
   })
 })
 

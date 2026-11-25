@@ -6,8 +6,8 @@ import { AuthzError } from './authz'
 import { userMaySeePage } from './page-access'
 import { accessibleClientIds } from './production-access'
 import {
-  UPSELLS_PAGE, mayChangeUpsell, mayDeleteUpsell, mayMarkPaid, sanitiseUpsellInput, stagePatch,
-  RETAINER_COMMISSION_MONTHS, type Upsell,
+  UPSELLS_PAGE, mayChangeUpsell, mayDeleteUpsell, mayLogForOthers, mayMarkPaid, maySeeUpsell, sanitiseUpsellInput, seesAllUpsells,
+  stagePatch, RETAINER_COMMISSION_MONTHS, type Upsell, type UpsellViewer,
 } from './upsell-core'
 
 /**
@@ -19,6 +19,9 @@ import {
 export type Result<T> = { ok: true; value: T } | { ok: false; status: 400 | 403 | 404 | 409; reason: string; fresh?: Upsell | null }
 
 const rows = () => table<Upsell>('upsells')
+
+/** This person on the tracker: one of the two keepers (who see everyone's), or somebody who sees their own. */
+export const upsellViewer = (user: TeamUser): UpsellViewer => ({ id: user.id, role: user.role, seesAll: seesAllUpsells(user.email) })
 
 /** Refuses anyone the page is not opened to. */
 export async function requireUpsells(user: TeamUser): Promise<void> {
@@ -48,8 +51,10 @@ export async function upsellClients(user: TeamUser): Promise<{ id: string; name:
     .sort((a, b) => a.name.localeCompare(b.name))
 }
 
-export async function listUpsells(): Promise<Upsell[]> {
-  return (await rows().list()).sort((a, b) => String(b.logged_at).localeCompare(String(a.logged_at)))
+/** The rows this person may see: their own — everyone's only for the two keepers. */
+export async function listUpsells(user: TeamUser): Promise<Upsell[]> {
+  const viewer = upsellViewer(user)
+  return (await rows().list()).filter(u => maySeeUpsell(viewer, u)).sort((a, b) => String(b.logged_at).localeCompare(String(a.logged_at)))
 }
 
 export async function createUpsell(user: TeamUser, raw: unknown): Promise<Result<Upsell>> {
@@ -64,7 +69,7 @@ export async function createUpsell(user: TeamUser, raw: unknown): Promise<Result
   // whose upsell it is: your own, unless a super admin is logging it for somebody on the tracker
   let pitcher = { id: user.id, name: user.name }
   if (input.pitched_by && input.pitched_by !== user.id) {
-    if (user.role !== 'super_admin') return { ok: false, status: 403, reason: 'Only a super admin logs an upsell for somebody else' }
+    if (!mayLogForOthers(upsellViewer(user))) return { ok: false, status: 403, reason: 'You log your own upsells here, not somebody else\u2019s' }
     const other = (await upsellPeople()).find(p => p.id === input.pitched_by)
     if (!other) return { ok: false, status: 400, reason: 'That person is not on the upsell tracker' }
     pitcher = other
@@ -94,17 +99,18 @@ export async function patchUpsell(user: TeamUser, id: string, raw: unknown): Pro
   if (!Number.isInteger(expect)) return { ok: false, status: 400, reason: 'Reload the page and try again' }
   const input = sanitiseUpsellInput(body)
   const wantsPaid = 'paid' in body || 'months_paid' in body
-  const viewer = { id: user.id, role: user.role }
+  const viewer = upsellViewer(user)
   const now = new Date().toISOString()
 
   let refusal: Result<Upsell> | null = null
   const res = await rows().claim(id, current => {
     refusal = null
-    if (!current) { refusal = { ok: false, status: 404, reason: 'That upsell is gone' }; return null }
+    // somebody else's row is not there at all, as far as this person can tell
+    if (!current || !maySeeUpsell(viewer, current)) { refusal = { ok: false, status: 404, reason: 'That upsell is gone' }; return null }
     if (current.rev !== expect) { refusal = { ok: false, status: 409, reason: 'Somebody changed this just now — here it is as it stands', fresh: current }; return null }
     const touchesRow = Object.keys(input).length > 0
-    if (touchesRow && !mayChangeUpsell(viewer, current)) { refusal = { ok: false, status: 403, reason: 'Only the person who pitched it, or a super admin, changes this' }; return null }
-    if (wantsPaid && !mayMarkPaid(viewer)) { refusal = { ok: false, status: 403, reason: 'Only a super admin marks an upsell paid' }; return null }
+    if (touchesRow && !mayChangeUpsell(viewer, current)) { refusal = { ok: false, status: 403, reason: 'Only the person who pitched it changes this' }; return null }
+    if (wantsPaid && !mayMarkPaid(viewer)) { refusal = { ok: false, status: 403, reason: 'Marking an upsell paid is done for you, once the client has paid' }; return null }
 
     const { stage, client_id: _client, pitched_by: _who, ...fields } = input
     void _client; void _who
@@ -129,8 +135,9 @@ export async function patchUpsell(user: TeamUser, id: string, raw: unknown): Pro
 
 export async function deleteUpsell(user: TeamUser, id: string): Promise<Result<true>> {
   const current = await rows().get(id, { fresh: true })
-  if (!current) return { ok: false, status: 404, reason: 'That upsell is gone' }
-  if (!mayDeleteUpsell({ id: user.id, role: user.role }, current)) return { ok: false, status: 403, reason: 'Only a super admin deletes an upsell that was won' }
+  const viewer = upsellViewer(user)
+  if (!current || !maySeeUpsell(viewer, current)) return { ok: false, status: 404, reason: 'That upsell is gone' }
+  if (!mayDeleteUpsell(viewer, current)) return { ok: false, status: 403, reason: 'An upsell that was won is not deleted from here' }
   await rows().remove(id)
   return { ok: true, value: true }
 }

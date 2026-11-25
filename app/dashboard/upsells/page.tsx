@@ -24,7 +24,7 @@ import {
  * refuse everyone else. Rules, the price list and the commission sums are upsell-core's — this page only draws.
  */
 
-type Me = { id: string; name: string; role: string; mayMarkPaid: boolean }
+type Me = { id: string; name: string; role: string; seesAll: boolean; mayMarkPaid: boolean }
 type Named = { id: string; name: string }
 type Loaded = { rows: Upsell[]; clients: Named[]; people: Named[]; me: Me }
 
@@ -121,7 +121,9 @@ export default function UpsellsPage() {
     <div className="flex flex-col gap-5" data-upsells>
       <PageTitle
         title="Upsells"
-        summary="Add-ons pitched to existing clients: what was pitched, what was won, and the commission once the client has paid."
+        summary={me.seesAll
+          ? 'Add-ons pitched to existing clients: what was pitched, what was won, and the commission once the client has paid. You see everyone\u2019s.'
+          : 'The add-ons you pitched to existing clients: what was pitched, what was won, and your commission once the client has paid. Only you see these.'}
         actions={(
           <Button className="h-11 rounded-full px-5 text-[14px] font-semibold" onClick={() => setForm({ row: null })}>
             <Plus className="h-4 w-4" aria-hidden /> Log an upsell
@@ -149,13 +151,14 @@ export default function UpsellsPage() {
       </div>
 
       <div className="flex flex-wrap items-end gap-3">
-        <label className="flex min-w-[180px] flex-col gap-1">
+        {/* only the two who keep the tracker see everyone's; anybody else has only their own, so nothing to choose */}
+        {me.seesAll && <label className="flex min-w-[180px] flex-col gap-1">
           <span className={LABEL}>Whose</span>
           <select className={FIELD} value={who} onChange={e => setWho(e.target.value)} aria-label="Whose upsells">
             <option value="all">Everyone</option>
             {data.people.map(p => <option key={p.id} value={p.id}>{p.name}{p.id === me.id ? ' (you)' : ''}</option>)}
           </select>
-        </label>
+        </label>}
         <label className="flex min-w-[180px] flex-col gap-1">
           <span className={LABEL}>Stage</span>
           <select className={FIELD} value={stage} onChange={e => setStage(e.target.value as 'all' | UpsellStage)} aria-label="Stage">
@@ -172,7 +175,7 @@ export default function UpsellsPage() {
           title={data.rows.length === 0 ? 'No upsells logged yet' : 'Nothing matches those filters'}
           body={data.rows.length === 0
             ? 'Log an add-on before you raise it with the client, so the price is agreed and it is clear who raised it first.'
-            : 'Change Whose or Stage above to see the rest.'}
+            : me.seesAll ? 'Change Whose or Stage above to see the rest.' : 'Change Stage above to see the rest.'}
           actionLabel={data.rows.length === 0 ? 'Log an upsell' : undefined}
           onAction={data.rows.length === 0 ? () => setForm({ row: null }) : undefined}
         />
@@ -393,7 +396,7 @@ function UpsellForm({ row, me, clients, people, onClose, onSaved, change }: {
                 {UPSELL_STAGES.map(s => <option key={s} value={s}>{STAGE_WORDS[s]}</option>)}
               </select>
             </label>
-            {!row && me.role === 'super_admin' && (
+            {!row && me.seesAll && (
               <label className="flex flex-col gap-1">
                 <span className={LABEL}>Whose upsell</span>
                 <select className={FIELD} value={pitchedBy} onChange={e => setPitchedBy(e.target.value)}>

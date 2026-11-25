@@ -13,7 +13,7 @@ type Who = { id: string; name: string; role: string }
 let who: Who = { id: 'manal', name: 'Manal', role: 'account_manager' }
 
 vi.mock('../app/lib/authz', () => ({
-  requireSignedIn: async () => ({ ...who, email: `${who.id}@x.invalid`, active_status: true }),
+  requireSignedIn: async () => ({ ...who, email: who.id === 'hello' ? 'hello@mdmmarketing.com.au' : `${who.id}@x.invalid`, active_status: true }),
   AuthzError: class AuthzError extends Error {
     status: number
     constructor(message: string, status: number) { super(message); this.status = status }
@@ -28,7 +28,7 @@ const PAGE = '/dashboard/upsells'
 const person = (id: string, name: string, role: string) => ({ id, name, role, email: `${id}@x.invalid`, active_status: true })
 const seed = () => ({
   clients: [{ id: 'c1', name: 'Alia Fragrance', status: 'active' }, { id: 'c2', name: 'MGMT', status: 'active' }, { id: 'c9', name: 'A lead', status: 'lead' }] as unknown as Row[],
-  team_users: [person('divina', 'Divina', 'super_admin'), person('manal', 'Manal', 'account_manager'), person('karly', 'Karly', 'account_manager'),
+  team_users: [person('hello', 'MD Media', 'super_admin'), person('yusuf', 'Yusuf', 'super_admin'), person('manal', 'Manal', 'account_manager'), person('karly', 'Karly', 'account_manager'),
     person('james', 'James', 'account_manager'), person('ed', 'Ed', 'editor')] as unknown as Row[],
   team_user_clients: [{ id: 'manal__c1', team_user_id: 'manal', client_id: 'c1' }, { id: 'karly__c2', team_user_id: 'karly', client_id: 'c2' },
     { id: 'james__c1', team_user_id: 'james', client_id: 'c1' }] as unknown as Row[],
@@ -50,7 +50,7 @@ afterEach(() => fake.restore())
 describe('who the tracker opens for', () => {
   it('a super admin, and a person it is opened to by name', async () => {
     expect((await GET()).status).toBe(200)
-    as('divina', 'super_admin')
+    as('hello', 'super_admin')
     expect((await GET()).status).toBe(200)
   })
   it('not an account manager it was never opened to, and not an editor — reading or logging', async () => {
@@ -65,10 +65,13 @@ describe('who the tracker opens for', () => {
   it('the list comes with the person\'s own clients (never a lead) and who is on the tracker', async () => {
     const body = await (await GET()).json()
     expect(body.clients).toEqual([{ id: 'c1', name: 'Alia Fragrance' }])
-    expect(body.people.map((p: { name: string }) => p.name)).toEqual(['Divina', 'Karly', 'Manal'])
-    expect(body.me).toMatchObject({ id: 'manal', mayMarkPaid: false })
-    as('divina', 'super_admin')
-    expect((await (await GET()).json()).clients.map((c: { id: string }) => c.id)).toEqual(['c1', 'c2'])
+    expect(body.people.map((p: { name: string }) => p.name)).toEqual(['Manal'])
+    expect(body.me).toMatchObject({ id: 'manal', mayMarkPaid: false, seesAll: false })
+    as('hello', 'super_admin')
+    const all = await (await GET()).json()
+    expect(all.clients.map((c: { id: string }) => c.id)).toEqual(['c1', 'c2'])
+    expect(all.people.map((p: { name: string }) => p.name).sort()).toEqual(['Karly', 'MD Media', 'Manal', 'Yusuf'])
+    expect(all.me).toMatchObject({ mayMarkPaid: true, seesAll: true })
   })
 })
 
@@ -96,9 +99,12 @@ describe('logging an upsell', () => {
   })
   it('only a super admin logs one for somebody else — and only for somebody on the tracker', async () => {
     expect((await log({ ...VIDEO, pitched_by: 'karly' })).status).toBe(403)
-    as('divina', 'super_admin', 'Divina')
-    expect((await log({ ...VIDEO, pitched_by: 'karly' })).body.row).toMatchObject({ pitched_by: 'karly', pitched_by_name: 'Karly', created_by: 'divina' })
+    as('hello', 'super_admin', 'MD Media')
+    expect((await log({ ...VIDEO, pitched_by: 'karly' })).body.row).toMatchObject({ pitched_by: 'karly', pitched_by_name: 'Karly', created_by: 'hello' })
     expect((await log({ ...VIDEO, pitched_by: 'james' })).body.error).toBe('That person is not on the upsell tracker')
+    // another super admin is one of the people here, not the tracker's keeper
+    as('yusuf', 'super_admin', 'Yusuf')
+    expect((await log({ ...VIDEO, pitched_by: 'karly' })).status).toBe(403)
   })
 })
 
@@ -113,27 +119,36 @@ describe('changing a row', () => {
     expect(body.row).toMatchObject({ stage: 'won', rev: 2 })
     expect(body.row.won_at).toBeTruthy()
   })
-  it('a teammate on the tracker reads it and cannot change it', async () => {
+  it('nobody else on the tracker can reach it — to them it is not there', async () => {
     const row = await made()
-    as('karly', 'account_manager', 'Karly')
-    expect((await patch(row.id, { expect_rev: 1, amount: 1 })).status).toBe(403)
+    for (const [id, role] of [['karly', 'account_manager'], ['yusuf', 'super_admin']] as const) {
+      as(id, role)
+      expect((await patch(row.id, { expect_rev: 1, amount: 1 })).status, id).toBe(404)
+      expect((await patch(row.id, { expect_rev: 1, stage: 'won', paid: true })).status, id).toBe(404)
+      expect((await DELETE(new Request('http://x'), at(row.id))).status, id).toBe(404)
+    }
+  })
+  it('another super admin does not tick their own paid either', async () => {
+    as('yusuf', 'super_admin', 'Yusuf')
+    const row = (await log({ ...VIDEO, stage: 'won' })).body.row
+    expect((await patch(row.id, { expect_rev: 1, paid: true })).status).toBe(403)
   })
   it('the person on commission cannot tick their own paid; a super admin can, once it is won', async () => {
     const row = await made()
     expect((await patch(row.id, { expect_rev: 1, paid: true })).status).toBe(403)
-    as('divina', 'super_admin')
+    as('hello', 'super_admin')
     expect((await patch(row.id, { expect_rev: 1, paid: true })).body.error).toBe('Mark it Won before marking it paid')
     expect((await patch(row.id, { expect_rev: 1, stage: 'won', paid: true })).body.row).toMatchObject({ stage: 'won', paid: true, rev: 2 })
   })
   it('a monthly fee is paid month by month, three at most', async () => {
-    as('divina', 'super_admin', 'Divina')
+    as('hello', 'super_admin', 'MD Media')
     const row = (await log({ client_id: 'c1', service_key: 'meta_ads_management', amount: 1850, stage: 'won' })).body.row
     expect((await patch(row.id, { expect_rev: 1, months_paid: 4 })).status).toBe(400)
     expect((await patch(row.id, { expect_rev: 1, months_paid: 2 })).body.row).toMatchObject({ months_paid: 2, paid: false, rev: 2 })
     expect((await patch(row.id, { expect_rev: 2, months_paid: 3 })).body.row).toMatchObject({ months_paid: 3, paid: true })
   })
   it('a win that falls through is no longer paid', async () => {
-    as('divina', 'super_admin')
+    as('hello', 'super_admin')
     const row = (await log({ ...VIDEO, stage: 'won' })).body.row
     await patch(row.id, { expect_rev: 1, paid: true })
     expect((await patch(row.id, { expect_rev: 2, stage: 'lost' })).body.row).toMatchObject({ stage: 'lost', paid: false, paid_at: null })
@@ -150,13 +165,31 @@ describe('changing a row', () => {
   })
 })
 
+describe('each person sees their own upsells; only contact@ and hello@ see everyone\'s (the owner, 25 Nov 2026)', () => {
+  const ids = async () => ((await (await GET()).json()).rows as { pitched_by: string }[]).map(r => r.pitched_by).sort()
+  it('the list is yours alone, whatever your role', async () => {
+    await log(VIDEO)
+    as('karly', 'account_manager', 'Karly'); await log({ ...VIDEO, client_id: 'c2' })
+    as('yusuf', 'super_admin', 'Yusuf'); await log(VIDEO)
+    expect(await ids()).toEqual(['yusuf'])
+    as('karly', 'account_manager', 'Karly'); expect(await ids()).toEqual(['karly'])
+    as('manal', 'account_manager', 'Manal'); expect(await ids()).toEqual(['manal'])
+    as('hello', 'super_admin', 'MD Media'); expect(await ids()).toEqual(['karly', 'manal', 'yusuf'])
+  })
+  it('one logged for you by the keeper is yours to see', async () => {
+    as('hello', 'super_admin', 'MD Media'); await log({ ...VIDEO, pitched_by: 'karly' })
+    as('karly', 'account_manager', 'Karly'); expect(await ids()).toEqual(['karly'])
+    as('manal', 'account_manager', 'Manal'); expect(await ids()).toEqual([])
+  })
+})
+
 describe('deleting a row', () => {
   it('its own person, before it is won; after that only a super admin', async () => {
     const a = (await log({ ...VIDEO, stage: 'pitched' })).body.row
     const b = (await log({ ...VIDEO, stage: 'won' })).body.row
     expect((await DELETE(new Request('http://x'), at(b.id))).status).toBe(403)
     expect((await DELETE(new Request('http://x'), at(a.id))).status).toBe(200)
-    as('divina', 'super_admin')
+    as('hello', 'super_admin')
     expect((await DELETE(new Request('http://x'), at(b.id))).status).toBe(200)
     expect((await (await GET()).json()).rows).toEqual([])
   })

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { withRequestCache } from '@/lib/db'
 import { authzErrorResponse, requireSignedIn } from '../../lib/authz'
-import { createUpsell, listUpsells, requireUpsells, upsellClients, upsellPeople } from '../../lib/upsells'
+import { createUpsell, listUpsells, requireUpsells, upsellClients, upsellPeople, upsellViewer } from '../../lib/upsells'
 import { mayMarkPaid } from '../../lib/upsell-core'
 
 /**
@@ -16,10 +16,13 @@ export async function GET() {
     try {
       const user = await requireSignedIn()
       await requireUpsells(user)
-      const [rows, clients, people] = await Promise.all([listUpsells(), upsellClients(user), upsellPeople()])
+      const viewer = upsellViewer(user)
+      const [rows, clients, everyone] = await Promise.all([listUpsells(user), upsellClients(user), upsellPeople()])
+      // who else is on the tracker is the keepers' to know; anybody else is given only themselves
+      const people = viewer.seesAll ? everyone : [{ id: user.id, name: user.name }]
       return NextResponse.json({
         rows, clients, people,
-        me: { id: user.id, name: user.name, role: user.role, mayMarkPaid: mayMarkPaid({ id: user.id, role: user.role }) },
+        me: { id: user.id, name: user.name, role: user.role, seesAll: viewer.seesAll, mayMarkPaid: mayMarkPaid(viewer) },
       })
     } catch (e) {
       const { error, status } = authzErrorResponse(e)
