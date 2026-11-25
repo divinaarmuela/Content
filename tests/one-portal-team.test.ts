@@ -80,3 +80,28 @@ describe('nothing is emailed to a client unless a person presses send (the owner
     expect(mailer).toMatch(/return true \|\| process\.env\.PAUSE_CLIENT_NOTIFICATIONS/)
   })
 })
+
+/** NO APPROVAL NEEDED (the owner, 25 Nov 2026) — the third choice, from the request to the email. */
+describe('"No approval needed" on a post', () => {
+  it('the team route takes the choice, and still refuses a made-up one', () => {
+    const ok = parsePostActRequest({ action: 'set_if_no_answer', expect_rev: 1, if_no_answer: 'none' })
+    expect(ok.ok && ok.request.if_no_answer).toBe('none')
+    expect(parsePostActRequest({ action: 'set_if_no_answer', expect_rev: 1, if_no_answer: 'never' }).ok).toBe(false)
+  })
+  it('the preview email does not name a post the client is not asked about', () => {
+    const p = (id: string, over: Record<string, unknown>) => ({ id, stage: 'booked', sent_version: 1, scheduled_for: '2026-12-01T00:00:00.000Z', ...over }) as never
+    const out = unansweredBooked([p('asked', {}), p('wait', { if_no_answer: 'wait' }), p('quiet', { if_no_answer: 'none' })])
+    expect(out.map(x => (x as { id: string }).id).sort()).toEqual(['asked', 'wait'])
+  })
+  it('the card\'s own menu carries the three choices and the portal link, and the client\'s screen says Scheduled', () => {
+    const menu = readFileSync('app/dashboard/scheduler/board/PostPortalMenu.tsx', 'utf8')
+    expect(menu).toMatch(/IF_NO_ANSWER_CHOICES\.map\(/)
+    expect(menu).toMatch(/action: 'set_if_no_answer'/)
+    expect(menu).toMatch(/postPortalPath\(portal\.token, post\)/)
+    expect(readFileSync('app/dashboard/scheduler/board/PostCard.tsx', 'utf8')).toMatch(/<PostPortalMenu post=\{post\} portal=\{portal\}/)
+    const portal = readFileSync('app/components/portal/OnePortalScheduling.tsx', 'utf8')
+    expect(portal).toMatch(/portalStateWords\(tile\)/)
+    expect(portal).toMatch(/const asked = profile\.booked\.filter\(t => !t\.no_approval\)/)
+    expect(portal).toMatch(/tile\.no_approval \? \(/)
+  })
+})

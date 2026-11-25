@@ -32,14 +32,38 @@ export function isAgencyClient(clientId: unknown): boolean {
 
 /* ── the client's word on a booked post ─────────────────────────────────── */
 
-export type IfNoAnswer = 'post' | 'wait'
+/**
+ * …AND A THIRD: NO APPROVAL NEEDED (the owner, 25 Nov 2026: "sometimes we don't want it to have client approval …
+ * goes straight into their feed, booked, but not in the to-look-at row on their portal"; "50 need post anyway, which
+ * is on their portal, 25 need wait for client and the other 254 no approval needed, which doesn't show in their
+ * portal but only the feed"). Set on the post, not on the client. Such a post is booked and goes at its time; the
+ * client sees it in their feed as scheduled and is never asked about it — no place in what waits on them, no
+ * Approve or Not approved, no preview email naming it, no reminder, and it is never taken off for want of an answer.
+ */
+export type IfNoAnswer = 'post' | 'wait' | 'none'
+export const IF_NO_ANSWER_CHOICES: readonly IfNoAnswer[] = ['post', 'wait', 'none']
 export const IF_NO_ANSWER_WORDS: Record<IfNoAnswer, string> = {
   post: 'Post anyway',
   wait: 'Wait for the client',
+  none: 'No approval needed',
+}
+/** what the team is told when they pick one */
+export const IF_NO_ANSWER_SAID: Record<IfNoAnswer, string> = {
+  post: 'It goes out at its time, approved or not',
+  wait: 'It waits for the client — it comes off 15 minutes before its time unless they approve',
+  none: 'No approval needed — the client sees it in their feed as scheduled, and is not asked about it',
+}
+export const IF_NO_ANSWER_REFUSAL = 'Choose "Post anyway", "Wait for the client" or "No approval needed".'
+export function isIfNoAnswer(v: unknown): v is IfNoAnswer {
+  return v === 'post' || v === 'wait' || v === 'none'
 }
 /** The team's choice for a post the client has not approved; unset is "post anyway" (the owner's default). */
 export function ifNoAnswerOf(row: { if_no_answer?: unknown } | null | undefined): IfNoAnswer {
-  return row?.if_no_answer === 'wait' ? 'wait' : 'post'
+  return row?.if_no_answer === 'wait' ? 'wait' : row?.if_no_answer === 'none' ? 'none' : 'post'
+}
+/** Is the client asked about this post at all? Not when it needs no approval. */
+export function clientIsAsked(row: { if_no_answer?: unknown } | null | undefined): boolean {
+  return ifNoAnswerOf(row) !== 'none'
 }
 
 export type ClientVerdict = 'approved' | 'not_approved'
@@ -88,6 +112,11 @@ export const REVIEW_WORDS: Record<ReviewState, string> = {
   asked_again: 'Updated — have another look',
   not_approved: 'Not approved — off the schedule',
   not_reviewed: 'Not reviewed yet',
+}
+/** The same words on the client's portal — where a post that needs no approval is simply "Scheduled", never a
+ *  thing they have not got round to. A yes they gave before it was switched is kept, and still shown. */
+export function portalStateWords(tile: { state: ReviewState; no_approval?: boolean }): string {
+  return tile.no_approval && (tile.state === 'not_reviewed' || tile.state === 'asked_again') ? 'Scheduled' : REVIEW_WORDS[tile.state]
 }
 
 /** The team side: was the post changed after the client approved it? (R9: the approval stands, the team is shown.) */
@@ -139,6 +168,8 @@ export function clientAnswerProblem(
   const state = reviewState(post)
   const heldWaiting = post.stage === 'ready' && ifNoAnswerOf(post) === 'wait' && (state === 'not_reviewed' || state === 'asked_again')
   if (post.stage === 'posted' || liveOn.length > 0) return ANSWER_LIVE
+  // a post that needs no approval is not waiting on them (25 Nov 2026)
+  if (!clientIsAsked(post)) return ANSWER_NOT_OPEN
   if (post.stage !== 'booked' && !heldWaiting) return ANSWER_NOT_OPEN
   if (post.sent_version == null || input.version !== post.sent_version) return ANSWER_STALE
   if (input.verdict === 'not_approved' && !String(input.note ?? '').trim()) return ANSWER_NOTE_NEEDED
@@ -155,10 +186,10 @@ export const REMINDER_LEAD_MS = 24 * 60 * 60 * 1000
  * version (the caller dedupes on `<post>#v<version>`).
  */
 export function reminderDue(
-  post: { stage: string; scheduled_for: string | null; client_review?: unknown; review_asked?: unknown },
+  post: { stage: string; scheduled_for: string | null; client_review?: unknown; review_asked?: unknown; if_no_answer?: unknown },
   nowMs: number,
 ): boolean {
-  if (post.stage !== 'booked') return false
+  if (post.stage !== 'booked' || !clientIsAsked(post)) return false
   const asked = readReviewAsked(post.review_asked)
   if (!asked) return false
   const r = readClientReview(post.client_review)
@@ -234,6 +265,12 @@ export function onePortalPath(token: string, tab?: PortalTab, id?: string | null
 export type OldPortalLink =
   | { kind: 'root' | 'posts' }
   | { kind: 'shoot' | 'board' | 'team-board' | 'post' | 'item' | 'edit' | 'approve'; id: string }
+
+/** The portal address for a post: its own page on the Scheduling tab when the client is asked about it; the
+ *  Scheduling tab itself when it needs no approval — there is nothing of that post's to open and answer. */
+export function postPortalPath(token: string, post: { id: string; if_no_answer?: unknown }): string {
+  return oldLinkTarget(token, clientIsAsked(post) ? { kind: 'post', id: post.id } : { kind: 'posts' })
+}
 
 export function oldLinkTarget(token: string, link: OldPortalLink, workKindSlug?: string | null): string {
   switch (link.kind) {

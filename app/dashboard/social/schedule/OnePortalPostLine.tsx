@@ -7,7 +7,7 @@ import { postAct } from '@/app/lib/post-act-contract'
 import { NotifyClientButton } from '@/app/dashboard/board/NotifyClientDialog'
 import type { PostState } from '@/app/lib/post-stage-core'
 import {
-  IF_NO_ANSWER_WORDS, REVIEW_WORDS, changedSinceApproval, ifNoAnswerOf, isAgencyClient, oldLinkTarget, onePortal, readClientReview, reviewState,
+  IF_NO_ANSWER_CHOICES, IF_NO_ANSWER_SAID, IF_NO_ANSWER_WORDS, REVIEW_WORDS, changedSinceApproval, ifNoAnswerOf, isAgencyClient, onePortal, postPortalPath, readClientReview, reviewState,
   type IfNoAnswer,
 } from '@/app/lib/one-portal-core'
 
@@ -54,13 +54,15 @@ export default function OnePortalPostLine({ post, editable, onMoved, onOwnChange
     setBusy(false)
     onOwnChange?.('end', r.ok ? r.post : null)
     if (!r.ok) { toast.error(r.reason); return }
-    toast.success(next === 'wait' ? 'It waits for the client — it comes off 15 minutes before its time unless they approve' : 'It goes out at its time, approved or not')
+    toast.success(IF_NO_ANSWER_SAID[next])
     onMoved?.()
   }
 
   // the same address the client's emails open: their Scheduling tab, on this post
   const portalLink = client?.share_token && post.stage === 'booked' && typeof window !== 'undefined'
-    ? `${window.location.origin}${oldLinkTarget(client.share_token, { kind: 'post', id: post.id })}`
+    // …and for a post that needs no approval, their Scheduling tab itself (the owner, 25 Nov 2026: "the general
+    // scheduling portal link")
+    ? `${window.location.origin}${postPortalPath(client.share_token, post)}`
     : null
   const copyLink = () => {
     if (!portalLink) return
@@ -72,12 +74,13 @@ export default function OnePortalPostLine({ post, editable, onMoved, onOwnChange
   const select = (
     <select value={choice} disabled={!editable || busy} onChange={e => void set(e.target.value as IfNoAnswer)}
       className="min-h-9 rounded-full border border-border bg-surface px-3 text-[13px] font-semibold" aria-label="If the client hasn't approved">
-      {(['post', 'wait'] as const).map(k => <option key={k} value={k}>{IF_NO_ANSWER_WORDS[k]}</option>)}
+      {IF_NO_ANSWER_CHOICES.map(k => <option key={k} value={k}>{IF_NO_ANSWER_WORDS[k]}</option>)}
     </select>
   )
 
   if (inline) {
-    const word = state === 'not_approved' && review ? 'Not approved' : REVIEW_WORDS[state]
+    // a post that needs no approval is not "Not reviewed yet" — nobody was asked
+    const word = state === 'not_approved' && review ? 'Not approved' : choice === 'none' && state === 'not_reviewed' ? 'Client not asked' : REVIEW_WORDS[state]
     return (
       <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1.5 text-[13px]" data-one-portal-line>
         {(post.stage === 'booked' || review) && (
@@ -114,7 +117,7 @@ export default function OnePortalPostLine({ post, editable, onMoved, onOwnChange
           {state === 'not_approved' && review
             // on a Draft the note is already the header's "The client asked for a change" line — not twice
             ? <>Not approved{review.by && review.by !== 'the client' ? ` by ${review.by}` : ''}{review.note && post.stage !== 'draft' ? ` — “${review.note}”` : ''}</>
-            : REVIEW_WORDS[state]}
+            : choice === 'none' && state === 'not_reviewed' ? 'Not asked — this post needs no approval' : REVIEW_WORDS[state]}
           {state === 'approved' && review?.by && review.by !== 'the client' ? ` by ${review.by}` : ''}
           {state === 'approved' && review?.note ? `, with a comment — “${review.note}”` : ''}
         </p>

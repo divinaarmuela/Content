@@ -11,7 +11,7 @@ import { optionsFromExtras, readPerChannel } from './schedule-compose-core'
 import { buildPostPreview, clientPreviews, type ClientPreview } from './post-preview-core'
 import { postVersionId, readPostState, type PostState } from './post-stage-core'
 import { scheduledWhen } from './portal-words'
-import { ifNoAnswerOf, insideLastSlot, postOnPortal, reviewState, type ReviewState } from './one-portal-core'
+import { clientIsAsked, ifNoAnswerOf, insideLastSlot, postOnPortal, reviewState, type ReviewState } from './one-portal-core'
 import type { PortalScope } from './portal-owner-core'
 import { pickPoster, type PreviewRow } from './stream-core'
 
@@ -46,6 +46,8 @@ export type ScheduledTile = {
   state: ReviewState
   /** the client may answer now (booked, or a "wait" post that came off unanswered) */
   answerable: boolean
+  /** the team marked it "No approval needed": scheduled, in the feed, and the client is not asked about it */
+  no_approval?: boolean
   /** inside the last 15 minutes: an answer moves it to the next free slot first (R8) */
   last_slot: boolean
   waiting_for_them: boolean
@@ -196,7 +198,8 @@ export async function loadScheduling(
     } catch { preview = [] }
     const item = p.source_item_id ? itemById.get(p.source_item_id) : null
     const state = reviewState(p as never)
-    const answerable = p.stage === 'booked' || (p.stage === 'ready' && ifNoAnswerOf(p) === 'wait' && unanswered(p))
+    // NO APPROVAL NEEDED (25 Nov 2026): the post is in their feed as scheduled and there is nothing to answer
+    const answerable = clientIsAsked(p) && (p.stage === 'booked' || (p.stage === 'ready' && ifNoAnswerOf(p) === 'wait' && unanswered(p)))
     return {
       kind: 'booked',
       post_id: p.id,
@@ -213,6 +216,7 @@ export async function loadScheduling(
       own_captions: ownCaptions(v, id => accountById.get(id)?.platform as string | undefined),
       state,
       answerable,
+      no_approval: !clientIsAsked(p),
       last_slot: p.stage === 'booked' && insideLastSlot(p.scheduled_for, now.getTime()),
       waiting_for_them: ifNoAnswerOf(p) === 'wait',
       note: state === 'not_approved' ? p.client_review?.note ?? null : null,

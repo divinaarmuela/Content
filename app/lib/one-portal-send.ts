@@ -10,7 +10,7 @@ import { accountManagerName } from './portal-data'
 import { roundOutcomeWords } from './post-notify-core'
 import { managersWord } from './portal-words'
 import { readPostState, type PostState } from './post-stage-core'
-import { onePortal, onePortalPath, readClientReview, reminderDue } from './one-portal-core'
+import { clientIsAsked, onePortal, onePortalPath, readClientReview, reminderDue } from './one-portal-core'
 
 /**
  * SEND THE PREVIEW (docs/ONE_PORTAL_SPEC.md R12) — the email that tells the client to look at their Scheduling
@@ -32,6 +32,8 @@ const whenIn = (iso: string | null | undefined, tz: string) => (iso ? formatWith
 export function unansweredBooked(posts: readonly PostState[]): PostState[] {
   return posts
     .filter(p => p.stage === 'booked' && p.sent_version != null)
+    // a post that needs no approval is not put in front of them (25 Nov 2026, one-portal-core.clientIsAsked)
+    .filter(p => clientIsAsked(p))
     .filter(p => { const r = readClientReview(p.client_review); return !r || r.version < (p.sent_version ?? 0) })
     .sort((a, b) => String(a.scheduled_for ?? '').localeCompare(String(b.scheduled_for ?? '')))
 }

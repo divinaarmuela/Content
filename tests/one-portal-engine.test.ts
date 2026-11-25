@@ -138,3 +138,25 @@ describe('the pass books, bumping inside the last 15 minutes (R8)', () => {
     expect(checkPostTransition(ready, 'auto_book', { id: null, hats: ['system'] }, {}, OFF)).toMatchObject({ ok: false, code: 'time' })
   })
 })
+
+/** NO APPROVAL NEEDED (the owner, 25 Nov 2026): set on the post at any stage before it goes, a booked one included. */
+describe('No approval needed', () => {
+  it('the team sets it on a draft and on a post that is already booked', () => {
+    const draft = planPostTransition(post({ stage: 'draft', sent_version: null, approval: null, booking: null }), 'set_if_no_answer',
+      { id: 'u-maker', hats: ['creator'] }, { if_no_answer: 'none' }, ON)
+    if (!draft.ok) throw new Error(draft.reason)
+    expect(draft.patch.if_no_answer).toBe('none')
+    const booked = planPostTransition(post(), 'set_if_no_answer', { id: 'u-am', hats: ['am'] }, { if_no_answer: 'none' }, ON)
+    if (!booked.ok) throw new Error(booked.reason)
+    expect(booked.patch.if_no_answer).toBe('none')
+    expect(booked.to).toBe('booked')
+  })
+  it('a made-up choice is refused', () => {
+    expect(planPostTransition(post(), 'set_if_no_answer', { id: 'u-am', hats: ['am'] }, { if_no_answer: 'sometimes' as never }, ON).ok).toBe(false)
+  })
+  it('the client cannot answer such a post, and it is never held for them', () => {
+    const quiet = post({ if_no_answer: 'none' })
+    expect(checkPostTransition(quiet, 'client_ok', CLIENT, { version: 1 }, ON).ok).toBe(false)
+    expect(checkPostTransition(post({ if_no_answer: 'none', scheduled_for: at(10) }), 'hold_for_client', { id: null, hats: ['system'] }, {}, ON).ok).toBe(false)
+  })
+})

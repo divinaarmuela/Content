@@ -12,6 +12,7 @@ import type { PostCardFace } from '../../../lib/post-board-core'
 import Chip from '../../ui/Chip'
 import WorkCard, { type WorkTone } from '../../ui/WorkCard'
 import PlatformIcon from '../../social/PlatformIcon'
+import { PostPortalMenu, portalMenuShows } from './PostPortalMenu'
 
 /** A stage tone as a card tint: the neutral ones leave the card plain. */
 export function cardTint(tone: StageTone): WorkTone | undefined {
@@ -31,8 +32,10 @@ export function cardTint(tone: StageTone): WorkTone | undefined {
  * The whole card opens the post window (`windowHref`). Presentation only.
  */
 export function PostCard({
-  post, face, actions, moves, busy, error, windowHref, schedule, onPress, tour,
+  post, face, actions, moves, busy, error, windowHref, schedule, onPress, tour, portal = null,
 }: {
+  /** the client's one portal (usePostBoard): the card's menu then carries the client-approval choice and the link */
+  portal?: { token: string | null } | null
   post: PostState
   face: PostCardFace
   actions: PostActionList
@@ -52,7 +55,7 @@ export function PostCard({
   // the button on the face: the main one, or the first of the rest — and when
   // a rule stops it, its reason is drawn beside it
   const blockedPrimary = (primary ?? secondary[0])?.blocked ?? null
-  const hasMenu = secondary.length > 0 || moves.length > 0 || danger !== null
+  const hasMenu = secondary.length > 0 || moves.length > 0 || danger !== null || portalMenuShows(post, portal)
   const tint = cardTint(face.tone)
 
   return (
@@ -142,6 +145,7 @@ export function PostCard({
                   ))}
                 </>
               )}
+              <PostPortalMenu post={post} portal={portal} first={(primary ? secondary : secondary.slice(1)).length === 0 && moves.length === 0} />
               {danger && (
                 <>
                   <DropdownMenuSeparator />

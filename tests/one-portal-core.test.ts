@@ -3,6 +3,7 @@ import {
   ANSWER_LIVE, ANSWER_NOTE_NEEDED, ANSWER_NOT_OPEN, ANSWER_STALE, SLOT_MS,
   AGENCY_CLIENT_ID, changedSinceApproval, clientAnswerProblem, holdDue, ifNoAnswerOf, insideLastSlot, nextFreeSlot, onePortal,
   onePortalPath, postOnPortal, readClientReview, readTab, reminderDue, reviewState, workTab,
+  IF_NO_ANSWER_CHOICES, IF_NO_ANSWER_WORDS, clientIsAsked, oldLinkTarget, portalStateWords, postPortalPath,
 } from '../app/lib/one-portal-core'
 
 /* ── docs/ONE_PORTAL_SPEC.md (the owner, 2 Oct 2026) ── */
@@ -174,5 +175,51 @@ describe('a held "wait" post with an old no on an earlier version is still open 
     const src = readFileSync('app/lib/one-portal-schedule.ts', 'utf8')
     expect(src).not.toContain('!p.client_review')
     expect(src).toContain("ifNoAnswerOf(p) === 'wait' && unanswered(p) && p.sent_version != null")
+  })
+})
+
+/**
+ * NO APPROVAL NEEDED (the owner, 25 Nov 2026: "sometimes we don't want it to have client approval … goes straight
+ * into their feed, booked, but not in the to-look-at row on their portal"; "50 need post anyway, which is on their
+ * portal, 25 need wait for client and the other 254 no approval needed, which doesn't show in their portal but only
+ * the feed"). A third choice on the post beside Post anyway and Wait for the client.
+ */
+describe('a post that needs no approval from the client', () => {
+  const at = '2026-12-01T03:00:00.000Z'
+  const now = Date.parse('2026-11-30T12:00:00.000Z')
+  const post = (if_no_answer: unknown, extra: Record<string, unknown> = {}) => ({ stage: 'booked', sent_version: 1, scheduled_for: at, if_no_answer, client_review: null, ...extra })
+  it('is a third choice, with its own words, and unset is still Post anyway', () => {
+    expect(ifNoAnswerOf({ if_no_answer: 'none' })).toBe('none')
+    expect(ifNoAnswerOf({ if_no_answer: 'wait' })).toBe('wait')
+    expect(ifNoAnswerOf({})).toBe('post')
+    expect(ifNoAnswerOf({ if_no_answer: 'whatever' })).toBe('post')
+    expect(IF_NO_ANSWER_WORDS.none).toBe('No approval needed')
+    expect(IF_NO_ANSWER_CHOICES).toEqual(['post', 'wait', 'none'])
+  })
+  it('the client is asked about Post anyway and Wait for the client, and not about this one', () => {
+    expect(clientIsAsked(post('post'))).toBe(true)
+    expect(clientIsAsked(post(undefined))).toBe(true)
+    expect(clientIsAsked(post('wait'))).toBe(true)
+    expect(clientIsAsked(post('none'))).toBe(false)
+  })
+  it('the client cannot answer it — there is nothing to answer', () => {
+    expect(clientAnswerProblem(post('none'), { version: 1, verdict: 'approved' }, [])).toBe(ANSWER_NOT_OPEN)
+    expect(clientAnswerProblem(post('post'), { version: 1, verdict: 'approved' }, [])).toBeNull()
+  })
+  it('it is never taken off the schedule for want of an answer, and never reminded about', () => {
+    expect(holdDue(post('none', { scheduled_for: new Date(now + 60_000).toISOString() }), now)).toBe(false)
+    const asked = { review_asked: { version: 1, at: '2026-11-29T00:00:00.000Z', by: 'u1' } }
+    expect(reminderDue(post('post', asked), now)).toBe(true)
+    expect(reminderDue(post('none', asked), now)).toBe(false)
+  })
+  it('on the portal it reads Scheduled, never "Not reviewed yet"', () => {
+    expect(portalStateWords({ state: 'not_reviewed', no_approval: true })).toBe('Scheduled')
+    expect(portalStateWords({ state: 'not_reviewed', no_approval: false })).toBe('Not reviewed yet')
+    // a yes they gave before it was switched is kept and still shown
+    expect(portalStateWords({ state: 'approved', no_approval: true })).toBe('Approved')
+  })
+  it('its portal link is the Scheduling tab; a post they are asked about links to itself', () => {
+    expect(postPortalPath('tok', { id: 'p1', if_no_answer: 'none' })).toBe(oldLinkTarget('tok', { kind: 'posts' }))
+    expect(postPortalPath('tok', { id: 'p1', if_no_answer: 'post' })).toBe(oldLinkTarget('tok', { kind: 'post', id: 'p1' }))
   })
 })

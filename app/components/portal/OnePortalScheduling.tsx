@@ -6,7 +6,7 @@ import { toast } from 'sonner'
 import { PostPreviewFrame } from '../social/PostPreview'
 import OwnCaptions from './OwnCaptions'
 import type { NetworkProfile, PostedTile, ScheduledTile, SchedulingNetwork } from '../../lib/one-portal-schedule'
-import { REVIEW_WORDS } from '../../lib/one-portal-core'
+import { portalStateWords } from '../../lib/one-portal-core'
 
 /**
  * THE SCHEDULING TAB (docs/ONE_PORTAL_SPEC.md R10, R11) — each network as its own profile: Instagram a 3-column
@@ -24,6 +24,10 @@ const STATE_TONE: Record<ScheduledTile['state'], string> = {
   not_reviewed: 'bg-amber-400',
   not_approved: 'bg-red-500',
 }
+
+/** a post that needs no approval is scheduled, not waiting: a quiet dot, never the amber "look at this" one */
+const toneOf = (t: Pick<ScheduledTile, 'state' | 'no_approval'>) =>
+  t.no_approval && (t.state === 'not_reviewed' || t.state === 'asked_again') ? 'bg-foreground/30' : STATE_TONE[t.state]
 
 function Cover({ tile, className }: { tile: { cover?: ScheduledTile['cover']; thumbnail?: string | null; mediaType?: string | null }; className?: string }) {
   const url = 'cover' in tile && tile.cover ? tile.cover.url : (tile as PostedTile).thumbnail ?? null
@@ -49,7 +53,7 @@ function Cover({ tile, className }: { tile: { cover?: ScheduledTile['cover']; th
 function StateMark({ t }: { t: ScheduledTile }) {
   return (
     <span className="absolute left-1.5 top-1.5 inline-flex max-w-[calc(100%-12px)] items-center gap-1.5 rounded-full bg-black/70 px-2 py-0.5 text-[10px] font-semibold text-white">
-      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${STATE_TONE[t.state]}`} aria-hidden />
+      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${toneOf(t)}`} aria-hidden />
       <span className="truncate">{t.when ? t.when.split(',').slice(0, 1).join('') : 'Booked'}</span>
     </span>
   )
@@ -115,8 +119,11 @@ export default function OnePortalScheduling({ token, profiles, openPostId }: {
           </div>
 
           {profile.booked.length > 0 && (() => {
-            const done = profile.booked.filter(t => t.state === 'approved').length
-            const left = profile.booked.length - done
+            // only the posts they are asked about are counted — one that needs no approval is not theirs to review
+            const asked = profile.booked.filter(t => !t.no_approval)
+            if (asked.length === 0) return null
+            const done = asked.filter(t => t.state === 'approved').length
+            const left = asked.length - done
             return (
               <p className="text-[14px] font-semibold" data-answer-count role="status">
                 {done} approved · {left === 0 ? 'nothing left to review' : `${left} still to review`}
@@ -181,7 +188,7 @@ function Grid({ profile, tall, onOpen }: { profile: NetworkProfile; tall: boolea
     <div className="grid grid-cols-3 gap-0.5" data-grid>
       {profile.booked.map(t => (
         <button key={t.post_id} type="button" onClick={() => onOpen({ booked: t })} className={`relative ${aspect} overflow-hidden bg-muted`}
-          aria-label={`${t.title}, ${t.when ?? 'booked'} — ${REVIEW_WORDS[t.state]}`} data-booked={t.post_id}>
+          aria-label={`${t.title}, ${t.when ?? 'booked'} — ${portalStateWords(t)}`} data-booked={t.post_id}>
           <Cover tile={t} className="h-full w-full" />
           <StateMark t={t} />
           <AnswerMark t={t} />
@@ -208,7 +215,7 @@ function LinkedInFeed({ profile, onOpen }: { profile: NetworkProfile; onOpen: (o
         return (
           <button key={t.post_id} type="button" onClick={() => onOpen({ booked: t })} className="relative rounded-card border border-border bg-card p-3 text-left hover:border-foreground/40" data-booked={t.post_id}>
             <span className="mb-2 inline-flex items-center gap-1.5 text-[12px] font-semibold">
-              <span className={`h-2 w-2 rounded-full ${STATE_TONE[t.state]}`} aria-hidden />{t.when ?? 'Booked'} · {REVIEW_WORDS[t.state]}
+              <span className={`h-2 w-2 rounded-full ${toneOf(t)}`} aria-hidden />{t.when ?? 'Booked'} · {portalStateWords(t)}
             </span>
             {frame ? <div className="pointer-events-none"><PostPreviewFrame preview={frame as never} /></div> : <Cover tile={t} className="aspect-[1.91/1] w-full rounded" />}
           </button>
@@ -295,7 +302,7 @@ function BookedSheet({ token, tile, network, onClose }: { token: string; tile: S
   return (
     <Sheet title={tile.title} onClose={onClose}>
       <p className="mb-3 text-[13px] text-muted-foreground">
-        {tile.when ? `Goes out ${tile.when}` : 'Booked'} · <span className="font-semibold text-foreground">{REVIEW_WORDS[tile.state]}</span>
+        {tile.when ? `Goes out ${tile.when}` : 'Booked'} · <span className="font-semibold text-foreground">{portalStateWords(tile)}</span>
       </p>
       {/* smaller on a phone, so a tall reel leaves the answer close by */}
       <div className="mx-auto w-full max-w-[min(420px,30dvh)] sm:max-w-[420px]">
@@ -341,6 +348,8 @@ function BookedSheet({ token, tile, network, onClose }: { token: string; tile: S
             <p className="text-[12px] text-muted-foreground">This post waits for your approval — it does not go out until you approve it.</p>
           )}
         </div>
+      ) : tile.no_approval ? (
+        <p className="mt-4 rounded-inner bg-muted p-3 text-[14px]" data-no-approval>This post is scheduled. Nothing is needed from you.</p>
       ) : null}
 
       <Comments token={token} tile={tile} name={name} text={draft} setText={setDraft} />

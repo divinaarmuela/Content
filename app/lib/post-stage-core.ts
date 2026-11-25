@@ -58,7 +58,7 @@ import { readPostAutomation, type PostAutomation } from './comment-automation-co
 import { isTestClient } from './test-clients-core'
 import { readPostBatch, type PostBatch } from './post-batch-core'
 import {
-  ANSWER_LIVE, ANSWER_NOTE_NEEDED, clientAnswerProblem, holdDue, ifNoAnswerOf, insideLastSlot, isAgencyClient, onePortal, readClientReview, readReviewAsked,
+  ANSWER_LIVE, ANSWER_NOTE_NEEDED, IF_NO_ANSWER_REFUSAL, clientAnswerProblem, holdDue, ifNoAnswerOf, insideLastSlot, isAgencyClient, isIfNoAnswer, onePortal, readClientReview, readReviewAsked,
   type ClientReview, type ClientVerdict, type IfNoAnswer, type ReviewAsked,
 } from './one-portal-core'
 
@@ -542,7 +542,7 @@ export function readPostState(row: Record<string, unknown> | null | undefined): 
     // …and its batch, only when it is one of a card's posts
     ...(readPostBatch(row.batch) ? { batch: readPostBatch(row.batch) } : {}),
     // …and the one portal's records, only when there are some
-    ...(row.if_no_answer === 'wait' || row.if_no_answer === 'post' ? { if_no_answer: row.if_no_answer } : {}),
+    ...(isIfNoAnswer(row.if_no_answer) ? { if_no_answer: row.if_no_answer } : {}),
     ...(readClientReview(row.client_review) ? { client_review: readClientReview(row.client_review) } : {}),
     ...(readReviewAsked(row.review_asked) ? { review_asked: readReviewAsked(row.review_asked) } : {}),
     ...(list(row.client_reviews).map(readClientReview).some(Boolean)
@@ -1160,7 +1160,7 @@ export function checkPostTransition(
     }
 
     case 'set_if_no_answer':
-      if (input.if_no_answer !== 'post' && input.if_no_answer !== 'wait') return refuse('invalid', 'Choose "Post anyway" or "Wait for the client".')
+      if (!isIfNoAnswer(input.if_no_answer)) return refuse('invalid', IF_NO_ANSWER_REFUSAL)
       break
 
     case 'duplicate': {

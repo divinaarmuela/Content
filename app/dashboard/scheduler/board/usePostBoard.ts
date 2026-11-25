@@ -1,5 +1,6 @@
 'use client'
 
+import { isAgencyClient, onePortal } from '@/app/lib/one-portal-core'
 import { latestActivity } from '../../../lib/pager-core'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTable } from '@/lib/db-client'
@@ -42,6 +43,9 @@ export type BoardPost = {
   activityAt: string
   hats: PostHat[]
   ctx: Omit<TransitionContext, 'now'>
+  /** the client's one portal, when this post can be seen on it: its link token (null = no link made yet). Null for
+   *  a client not on the one portal, and for MD Media's own posts — there is nobody to ask. */
+  portal: { token: string | null } | null
 }
 
 /**
@@ -138,6 +142,9 @@ export function usePostBoard(person: ScopeViewer | null) {
       activityAt: activityOf.get(post.id) ?? String(post.stage_at ?? ''),
       hats: hatsFor(person, post),
       ctx,
+      portal: onePortal(client as never) && !isAgencyClient(post.client_id)
+        ? { token: typeof (client as { share_token?: unknown } | null)?.share_token === 'string' ? String((client as { share_token?: string }).share_token).trim() || null : null }
+        : null,
       face: postCardFace(post, {
         now: clock.now,
         today: clock.today,

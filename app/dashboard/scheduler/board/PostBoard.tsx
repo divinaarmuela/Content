@@ -129,6 +129,7 @@ export function PostBoard({
       <PostCard
         post={bp.post}
         face={bp.face}
+        portal={bp.portal}
         actions={actions}
         moves={postMoveTargets(bp.post, bp.hats, now, bp.ctx)}
         busy={busyId === bp.post.id}

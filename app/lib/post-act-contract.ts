@@ -83,7 +83,7 @@ export type PostActRequest = {
   /** Change approval steps */
   steps?: ApprovalSteps | null
   /** the one portal: if the client has not approved — post anyway, or wait for them */
-  if_no_answer?: 'post' | 'wait' | null
+  if_no_answer?: 'post' | 'wait' | 'none' | null
   /** client sends: who to email (the server delivers, THEN moves the post) */
   send_to?: string[] | null
   /** client sends: 'link' when the person copies the link instead of emailing */
@@ -188,7 +188,7 @@ export function parsePostActRequest(body: unknown): { ok: true; request: PostAct
     request.steps = body.steps as ApprovalSteps
   }
   if (body.if_no_answer !== undefined && body.if_no_answer !== null) {
-    if (body.if_no_answer !== 'post' && body.if_no_answer !== 'wait') return { ok: false, reason: 'Choose "Post anyway" or "Wait for the client".' }
+    if (body.if_no_answer !== 'post' && body.if_no_answer !== 'wait' && body.if_no_answer !== 'none') return { ok: false, reason: 'Choose "Post anyway", "Wait for the client" or "No approval needed".' }
     request.if_no_answer = body.if_no_answer
   }
   if (body.confirm !== undefined && body.confirm !== null) {
