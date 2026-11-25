@@ -47,3 +47,32 @@ describe('arrows do not count as something on screen', () => {
     expect(cardBoxes([{ x: 0, y: 0, w: 3000, h: 10, kind: 'arrow' }, { x: 0, y: 0, w: 100, h: 100, kind: 'note' }])).toEqual([{ x: 0, y: 0, w: 100, h: 100 }])
   })
 })
+
+/**
+ * THE BOARD PANS FREELY WHEN YOU ARE ZOOMED IN ON A TALL CARD (the owner, 25 Nov 2026: "when I'm zooming in more I
+ * can't drag the canvas, like it's stuck … I can't drag anything"). A picture, a post or a column has no height of
+ * its own on record, and the rule took every such card for 120px tall. Zoomed in on the middle of a 2,000px column,
+ * the rule saw nothing in sight and pulled the camera back to the column's top on every move.
+ */
+describe('a card counts as in sight by the size it is drawn at, not a guess', () => {
+  const vp = { w: 1200, h: 700 }
+  const column = { id: 'col', kind: 'column', x: 0, y: 0, w: 300 }
+  // zoomed to 200%, looking at the column 1,000px down it
+  const cam = { x: 300, y: -2000, s: 2 }
+  it('by the guess, the column is out of sight and the camera is pulled back — the bug', () => {
+    expect(keepAnyInView(cam, cardBoxes([column]), vp)).not.toBe(cam)
+  })
+  it('by its drawn size it is in sight, and the camera is left alone', () => {
+    const drawn = new Map([['col', { w: 300, h: 2000 }]])
+    expect(keepAnyInView(cam, cardBoxes([column], drawn), vp)).toBe(cam)
+  })
+  it('a card inside a column is drawn by the column and is not counted at its own stale place', () => {
+    const child = { id: 'k', kind: 'note', x: 9000, y: 9000, w: 200, col: 'col' }
+    expect(cardBoxes([column, child], new Map([['col', { w: 300, h: 2000 }]]))).toHaveLength(1)
+  })
+  it('it still cannot be pushed right off the board', () => {
+    const drawn = new Map([['col', { w: 300, h: 2000 }]])
+    const gone = { x: 5000, y: 5000, s: 2 }
+    expect(keepAnyInView(gone, cardBoxes([column], drawn), vp)).not.toBe(gone)
+  })
+})

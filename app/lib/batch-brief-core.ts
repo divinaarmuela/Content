@@ -589,6 +589,17 @@ export function clampCardSize(
   return { w: cw, h: clamp(n, lim.minH, lim.maxH) }
 }
 
+/**
+ * EVERY CARD RESIZES FROM ITS CORNER (the owner, 25 Nov 2026: "why is it so hard to resize links pasted or columns
+ * from the corners"). A kind with a height of its own takes the sideways pull as its width and the downward pull as
+ * its height. A kind that is only as wide as it is told — a column, a post, a heading: its height follows — has one
+ * size to change, so its corner takes whichever way it is pulled further; dragging down and out makes it bigger.
+ */
+export function cornerPull(kind: CanvasCard['kind'], dx: number, dy: number): number {
+  if (CANVAS_SIZE_LIMITS[kind].minH !== null) return dx
+  return Math.abs(dy) > Math.abs(dx) ? dy : dx
+}
+
 /** One step of a corner drag, in world pixels. `start` is the box at
  *  pointerdown — the height MEASURED from the DOM when the card had none
  *  of its own — and `lockAspect` (Shift) keeps start's shape: the width

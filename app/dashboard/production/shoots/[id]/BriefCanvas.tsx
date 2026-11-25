@@ -26,7 +26,7 @@ import {
 import NewBoardDialog from '../../../boards/NewBoardDialog'
 import { CanvasCardView, NOTE_COLORS, TEXT_COLOR_SWATCH } from './CanvasCard'
 import {
-  CANVAS_NOTE_COLORS, TEXT_SIZE_LABEL, hasTextSize, cardTakesHeight, minCardWidth, mockupPlatformFor, resizeCard,
+  CANVAS_NOTE_COLORS, TEXT_SIZE_LABEL, hasTextSize, cardTakesHeight, cornerPull, minCardWidth, mockupPlatformFor, resizeCard,
   seedCardsFromReferences, stepTextSize, textSizeOf, CANVAS_MAX_CARDS,
   type CanvasCard, type CanvasTextSize, type ReferenceMedia, CANVAS_TEXT_COLORS, textColorOf, CANVAS_TEXT_ALIGNS, textAlignOf,
   hasTextStyle, defaultAlignOf, textBoldOf, boldWordsIn, inBoldRun,
@@ -253,13 +253,32 @@ export default function BriefCanvas({
     bar.style.transformOrigin = above ? 'bottom center' : 'top center'
   }, [])
 
+  /**
+   * THE CARDS' SIZES AS DRAWN, for the rule that keeps some of the board in sight (the owner, 25 Nov 2026: "when I'm
+   * zooming in more I can't drag the canvas, like it's stuck"). Measured once when a pan, a scroll or a pinch starts
+   * and whenever the cards change — never on every move, which is where the rule runs.
+   */
+  const drawnRef = useRef<Map<string, { w: number; h: number }>>(new Map())
+  const measureDrawn = useCallback(() => {
+    const vp = viewportRef.current
+    if (!vp) return
+    const out = new Map<string, { w: number; h: number }>()
+    for (const el of Array.from(vp.querySelectorAll<HTMLElement>('[data-cid]'))) {
+      const box = el.firstElementChild as HTMLElement | null
+      const id = el.getAttribute('data-cid')
+      // the whole wrapper's height: a post's link line under it is part of what is on screen
+      if (id && box) out.set(id, { w: box.offsetWidth, h: Math.max(box.offsetHeight, el.offsetHeight) })
+    }
+    drawnRef.current = out
+  }, [])
   const paint = useCallback(() => {
     // never lose the board (the owner, 4 Nov 2026): a Magic Mouse or trackpad
     // scrolls on the lightest touch and keeps going after the finger lifts, so
     // the brief glided off screen. Some of the cards always stay in sight.
     const vp = viewportRef.current
     if (vp) {
-      const kept = keepAnyInView(camRef.current, cardBoxes(visibleRef.current), { w: vp.clientWidth, h: vp.clientHeight })
+      // by the cards' sizes AS DRAWN (measureDrawn): a guess of 120px a card left the board stuck when zoomed in
+      const kept = keepAnyInView(camRef.current, cardBoxes(visibleRef.current, drawnRef.current), { w: vp.clientWidth, h: vp.clientHeight })
       camRef.current.x = kept.x
       camRef.current.y = kept.y
     }
@@ -269,6 +288,8 @@ export default function BriefCanvas({
     // no dot grid behind the cards (the owner, 21 Sep 2026: "remove the dots") — a plain surface
   }, [keepToolbarInView])
 
+  // …and after every render that could have changed a size, so the zoom buttons and Fit use real sizes too
+  useEffect(() => { measureDrawn() })
   const commitCamera = useCallback(() => {
     setScalePct(Math.round(camRef.current.s * 100))
     forceRender(n => n + 1)
@@ -364,6 +385,9 @@ export default function BriefCanvas({
   /* ── viewport gestures: pan (wheel / drag背景) and zoom-to-cursor ── */
   useGesture(
     {
+      onWheelStart: () => measureDrawn(),
+      onPinchStart: () => measureDrawn(),
+      onDragStart: () => measureDrawn(),
       onWheel: ({ event, delta: [dx, dy] }) => {
         // a note or list that scrolls inside its own box scrolls first; the
         // board only pans under the wheel once there is nothing left to scroll
@@ -438,6 +462,9 @@ export default function BriefCanvas({
       drag: { pointer: { buttons: [1, 4] } },
     },
   )
+
+  /** true while a press on the board has the browser's word selection switched off (see onPointerDownCapture) */
+  const noSelectRef = useRef(false)
 
   /* ── the pick box ── */
   const startMarquee = (e: React.PointerEvent) => {
@@ -1072,8 +1099,9 @@ export default function BriefCanvas({
     const s = camRef.current.s
     const rawDx = (e.clientX - r.startX) / s
     // a left-edge pull grows the card leftwards: width up, x down
-    const dx = r.mode === 'w' ? -rawDx : rawDx
     const dy = r.mode === 'se' ? (e.clientY - r.startY) / s : 0
+    // the corner of a width-only card (a column, a post, a heading) takes whichever way it is pulled further
+    const dx = r.mode === 'w' ? -rawDx : r.mode === 'se' ? cornerPull(card.kind, rawDx, dy) : rawDx
     // never narrower than the card's widest word, at its text size
     const words = card.kind === 'todo' || card.kind === 'board' ? card.name : card.text
     const next = resizeCard(card.kind, { w: r.ow, h: r.oh }, dx, dy, e.shiftKey && r.mode === 'se', words, textSizeOf(card))
@@ -2426,7 +2454,38 @@ export default function BriefCanvas({
         }}
         // a click on bare canvas puts the player back to a still, so the board
         // never carries a running video somebody has walked away from
+        // A DRAG ON THE BOARD IS NEVER THE BROWSER'S OWN DRAG (the owner, 25 Nov 2026: "when I'm dragging around the
+        // canvas why does the main toolbar get highlighted" and "I can't drag the canvas, like it's stuck"). One
+        // cause, two faces: a press on the board that was then dragged was also the start of the browser's word
+        // selection, so the pointer crossing the toolbar painted its labels blue; and with words selected, the NEXT
+        // press-and-drag was taken by the browser as dragging those words — it cancelled the pointer after the first
+        // few pixels, and the board (or the card) stopped following. So: the browser's own drag never starts in
+        // here, and while a button is down on the board nothing is selected — except in a box being typed in, where
+        // dragging across the words is how they are selected.
+        onDragStart={e => { if (!(e.target as HTMLElement).closest?.('input, textarea, [contenteditable="true"]')) e.preventDefault() }}
         onPointerDownCapture={e => {
+          const typing = !!(e.target as HTMLElement).closest?.('input, textarea, select, [contenteditable="true"]')
+          if (!typing) {
+            // words left selected by an earlier drag are let go, unless they are in a box somebody is typing in
+            const sel = window.getSelection()
+            const inBox = !!(sel?.anchorNode && (sel.anchorNode.nodeType === 1 ? sel.anchorNode as Element : sel.anchorNode.parentElement)?.closest?.('input, textarea, [contenteditable="true"]'))
+            if (sel && !sel.isCollapsed && !inBox) sel.removeAllRanges()
+            if (!noSelectRef.current) {
+              const prev = document.body.style.userSelect
+              noSelectRef.current = true
+              document.body.style.userSelect = 'none'
+              const done = () => {
+                noSelectRef.current = false
+                document.body.style.userSelect = prev
+                window.removeEventListener('pointerup', done, true)
+                window.removeEventListener('pointercancel', done, true)
+                window.removeEventListener('blur', done)
+              }
+              window.addEventListener('pointerup', done, true)
+              window.addEventListener('pointercancel', done, true)
+              window.addEventListener('blur', done)
+            }
+          }
           const onItem = !!(e.target as HTMLElement).closest?.('[data-card], button, input, textarea, a')
           panRef.current = e.button === 1 || (!onItem && !e.shiftKey && !e.metaKey)
         }}
@@ -2753,7 +2812,12 @@ export default function BriefCanvas({
                   square to look at, a 44px square to grab — drawn on touch
                   devices too. Each stops the pointer here, so it never starts
                   a card move or a canvas pan. */}
-              {selected === card.id && !viewOnly && !editing && card.kind !== 'arrow' && (
+              {selected === card.id && !viewOnly && !editing && card.kind !== 'arrow' && (() => {
+                // THE SAME SIZE ON SCREEN WHATEVER THE ZOOM (the owner, 25 Nov 2026: "why is it so hard to resize …
+                // from the corners"): zoomed out to fit a big board, a 44px grab square was 20px and its dot 5
+                // …up to a little over double: on a board zoomed right out, full-size handles would cover a small card whole
+                const handleScale = Math.min(2.2, Math.max(1, 1 / camRef.current.s))
+                return (
                 <>
                   {(['w', 'e'] as const).map(mode => (
                     <div key={mode} role="presentation" aria-label={mode === 'w' ? 'Resize from the left' : 'Resize from the right'}
@@ -2764,27 +2828,32 @@ export default function BriefCanvas({
                       // comment bubble in its top-right corner (the owner, 13 Sep
                       // 2026: "it's overlapping that thing") — its handles sit on
                       // the bottom edge instead
-                      style={{ ...(mode === 'w' ? { left: -22 } : { right: -22 }), ...(card.kind === 'label' ? { top: 'calc(100% - 22px)' } : {}) }}
+                      style={{ ...(mode === 'w' ? { left: -22 } : { right: -22 }), ...(card.kind === 'label' ? { top: 'calc(100% - 22px)' } : {}), scale: String(handleScale) }}
                       onPointerDown={e => startResize(e, card, mode)}
                       onPointerMove={e => moveResize(e, card)}
                       onPointerUp={() => endResize(card)}>
-                      <span aria-hidden className="block h-2.5 w-2.5 rounded-[2px] border-[1.5px] border-white bg-accent-blue shadow dark:border-background" />
+                      <span aria-hidden className="block h-3 w-3 rounded-[2px] border-[1.5px] border-white bg-accent-blue shadow dark:border-background" />
                     </div>
                   ))}
-                  {cardTakesHeight(card.kind) && (
+                  {/* THE CORNER, ON EVERY KIND (25 Nov 2026): it was only on the kinds with a height of their own, so a
+                      column, a pasted post and a heading had nothing where a hand goes first. On those it changes the
+                      width, whichever way it is pulled (cornerPull). A heading keeps its two bottom-edge handles only:
+                      its right one already sits on that corner. */}
+                  {card.kind !== 'label' && (
                     <div role="presentation" aria-label="Resize"
-                      title="Drag to resize · hold Shift to keep the shape"
+                      title={cardTakesHeight(card.kind) ? 'Drag to resize · hold Shift to keep the shape' : 'Drag to resize'}
                       data-resize="se"
                       className="absolute -bottom-[22px] flex h-11 w-11 touch-none cursor-nwse-resize items-center justify-center"
-                      style={{ left: card.w - 22 }}
+                      style={{ right: -22, scale: String(handleScale) }}
                       onPointerDown={e => startResize(e, card, 'se')}
                       onPointerMove={e => moveResize(e, card)}
                       onPointerUp={() => endResize(card)}>
-                      <span aria-hidden className="block h-2.5 w-2.5 rounded-[2px] border-[1.5px] border-white bg-accent-blue shadow dark:border-background" />
+                      <span aria-hidden className="block h-3 w-3 rounded-[2px] border-[1.5px] border-white bg-accent-blue shadow dark:border-background" />
                     </div>
                   )}
                 </>
-              )}
+                )
+              })()}
               {/* THE CARD'S TOOLBAR, just above it — following it as the
                   board pans, held at screen size as the board zooms. It
                   drops below the card when the card is at the top edge. */}

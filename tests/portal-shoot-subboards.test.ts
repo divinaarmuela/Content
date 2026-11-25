@@ -110,7 +110,8 @@ describe('the portal page is read-only, by construction', () => {
     // the text toolbar stays up while a card's words are typed (15 Sep 2026) — still behind viewOnly
     // …and since 13 Nov 2026 it is put away while several cards are picked (their own toolbar shows instead)
     expect(canvas).toMatch(/selected === card\.id && picked\.size <= 1 && !viewOnly && \(!editing \|\| editing === card\.id\) && card\.kind !== 'arrow' && \(\(\) => \{/)
-    expect(canvas).toMatch(/selected === card\.id && !viewOnly && !editing && card\.kind !== 'arrow' && \(\s*<>\s*\{\(\['w', 'e'\] as const\)/)
+    // (the handles' block works out their on-screen size first since 25 Nov 2026 — the gate in front of it is the same)
+    expect(canvas).toMatch(/selected === card\.id && !viewOnly && !editing && card\.kind !== 'arrow' && \(\(\) => \{[^]{0,900}?<>\s*\{\(\['w', 'e'\] as const\)/)
     // and the gate is the portal's, never the device's
     expect(canvas).toMatch(/const viewOnly = readOnly$/m)
     expect(canvas).toMatch(/<NewBoardDialog[^]*?open=\{!viewOnly && boardDialog !== null\}/)

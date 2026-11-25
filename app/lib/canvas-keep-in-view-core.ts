@@ -46,11 +46,29 @@ export function keepInView(cam: Cam, box: Box | null, viewport: { w: number; h: 
   return x === cam.x && y === cam.y ? cam : { ...cam, x, y }
 }
 
-/** every card's own world box */
-export function cardBoxes(cards: readonly { x: number; y: number; w?: number | null; h?: number | null; kind?: string }[]): Box[] {
+/**
+ * Every card's own world box.
+ *
+ * BY THE SIZE IT IS DRAWN AT (the owner, 25 Nov 2026: "when I'm zooming in more I can't drag the canvas, like it's
+ * stuck"). A picture, a post and a column have no height on record — theirs follows what is in them — and each was
+ * taken for 120px tall. Zoomed in on the middle of a tall one, nothing counted as in sight, so the camera was pulled
+ * back to its top on every move and the board would not pan. `drawn` is each card's size measured off the page; a
+ * card with none measured keeps the old guess. A card inside a column is drawn by the column, wherever its own
+ * stale x and y say, so it is not counted.
+ */
+export function cardBoxes(
+  cards: readonly { id?: string; x: number; y: number; w?: number | null; h?: number | null; kind?: string; col?: string | null }[],
+  drawn?: ReadonlyMap<string, { w: number; h: number }>,
+): Box[] {
   // an arrow is a line, not a card: its box is mostly empty space, and keeping
   // it "in view" parked the brief on a screen of nothing (4 Nov 2026, live)
-  return cards.filter(c => c.kind !== 'arrow').map(c => contentBox([c])).filter((b): b is Box => b !== null)
+  return cards
+    .filter(c => c.kind !== 'arrow' && !(drawn && c.col))
+    .map(c => {
+      const d = drawn && c.id ? drawn.get(c.id) : undefined
+      return contentBox([d && d.w > 0 && d.h > 0 ? { ...c, w: d.w, h: d.h } : c])
+    })
+    .filter((b): b is Box => b !== null)
 }
 
 /**
