@@ -18,6 +18,7 @@ import { copyText } from '../../../../lib/copy-text-client'
 import { useProductionLive } from '../../useProductionLive'
 import BriefCanvas, { type CanvasOp } from './BriefCanvas'
 import PlanReadOnly from './PlanReadOnly'
+import PrintBrief from './PrintBrief'
 import BriefBoardComments from './BriefBoardComments'
 import BriefComments from './BriefComments'
 import ShootNow from './ShootNow'
@@ -389,6 +390,9 @@ export default function ShootPage({ params }: { params: Promise<{ id: string }> 
         <Button variant="outline" className="h-11 rounded-full px-4 text-[14px] font-semibold" onClick={() => void copyDetails()}>
           <Copy className="h-4 w-4" aria-hidden /> Copy details
         </Button>
+        {/* ON PAPER (Renee, 25 Nov 2026: "the shoot brief needs to be printable"): the plan and the whole board, read
+            into a document — the plan PDF under More options carries the nine parts and none of the board */}
+        <PrintBrief shoot={batch} cards={canvasCards} crew={crew.map(c => c.name)} />
         {detailsToSelect !== null && (
           <div className="flex w-full flex-col gap-1.5 rounded-inner border border-border bg-surface p-3" role="status">
             <p className="text-[13px] text-muted-foreground">This browser would not take the copy — select the text below and copy it yourself.</p>

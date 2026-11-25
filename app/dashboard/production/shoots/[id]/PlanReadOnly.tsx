@@ -7,6 +7,7 @@ import { Check } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import BriefCanvas from './BriefCanvas'
+import PrintBrief from './PrintBrief'
 import { planAsText, type SopShoot } from '../../../../lib/shoot-sop-core'
 import { shootCardId } from '../../../../lib/deliverable-group-core'
 import type { CanvasCard, ReferenceMedia } from '../../../../lib/batch-brief-core'
@@ -122,7 +123,10 @@ export default function PlanReadOnly({ batch, cards, references, crew, viewerId,
           </Card>
           {cards.length > 0 && (
             <div className="flex flex-col gap-2">
-              <p className={H}>Plan canvas</p>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className={H}>Plan canvas</p>
+                <PrintBrief shoot={batch} cards={cards} crew={crew.map(c => c.name)} />
+              </div>
               <BriefCanvas cards={cards} references={references} canEdit={false} clientName={batch.clients?.name ?? undefined} onOp={async () => false} />
             </div>
           )}
