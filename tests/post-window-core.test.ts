@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   answerProblem, applyInstagramChoice, bodyEditable, buildActRequest, copiesKeepApproval, defaultPostTime,
   draftPostsOf, footerButtons, frozenCopyOf, hourIsPast, instagramChoices, instagramCounter,
-  minuteIsPast, minuteOptions, noteCounts, noteVersionOf, nowChip, parseNoteInput, pressAction,
+  minuteIsPast, minuteOptions, noteCounts, noteVersionOf, nowChip, opensCreatedPost, parseNoteInput, pressAction,
   questionFor, readPostNotes, STAYS_OPEN, timeHint, unsavedPost, windowHeader, withWorkingCopy, workingCopyOf,
   type PostWindowApi, type WorkingCopy,
 } from '@/app/lib/post-window-core'
@@ -507,5 +507,23 @@ describe("what a duplicate's copies start as", () => {
     const days = readFileSync('app/dashboard/social/schedule/CopyDays.tsx', 'utf8')
     expect(days).toMatch(/keep_approval: copiesKeepApproval\(/)
     expect(days.indexOf('Keep the approval and book them')).toBeLessThan(days.indexOf('Start as drafts'))
+  })
+})
+
+/**
+ * AFTER A DUPLICATE THE WINDOW CLOSES (the owner, 25 Nov 2026: "after duplicate a post another popup comes up").
+ * A move that makes a post used to open it straight away — right for Post the missing networks, which makes one post
+ * to look at; wrong for Duplicate, which makes several and says how many.
+ */
+describe('which moves open the post they made', () => {
+  it('Post the missing networks opens the one post it made', () => {
+    expect(opensCreatedPost('missing_networks')).toBe(true)
+  })
+  it('Duplicate does not: it says how many copies were made and the window closes', () => {
+    expect(opensCreatedPost('duplicate')).toBe(false)
+  })
+  it('the window uses that rule', async () => {
+    const { readFileSync } = await import('node:fs')
+    expect(readFileSync('app/dashboard/social/schedule/PostWindow.tsx', 'utf8')).toMatch(/createdPostId: opensCreatedPost\(action\) \? \(r\.createdPostId \?\? null\) : null/)
   })
 })

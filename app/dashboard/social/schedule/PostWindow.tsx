@@ -27,7 +27,7 @@ import {
   type AccountRef, type OfferedAction, type PostAction, type PostActionList, type PostStage, type PostState,
 } from '@/app/lib/post-stage-core'
 import {
-  AGREED_VIA_CHOICES, CLOSE_QUESTION, STAYS_OPEN, answerProblem, applyInstagramChoice, bodyEditable, closeChoices, hasUnsavedChanges,
+  AGREED_VIA_CHOICES, CLOSE_QUESTION, STAYS_OPEN, opensCreatedPost, answerProblem, applyInstagramChoice, bodyEditable, closeChoices, hasUnsavedChanges,
   defaultPostTime, footerButtons, frozenCopyOf, instagramChoices, instagramCounter,
   noteVersionOf, nowChip, pressAction, questionFor, readPostNotes, timeHint, unsavedPost, windowHeader,
   withWorkingCopy, workingBody, workingCopyOf,
@@ -898,7 +898,7 @@ export default function PostWindow({
       const outcome: PostWindowOutcome = {
         postId: r.postId, itemId, words: r.words, stage: r.stage,
         at: r.post?.scheduled_for ?? state.scheduledFor, channels: [...(r.post?.channels ?? state.channels)],
-        createdPostId: r.createdPostId ?? null, link: r.link ?? null,
+        createdPostId: opensCreatedPost(action) ? (r.createdPostId ?? null) : null, link: r.link ?? null,
       }
       if (onDone) onDone(outcome)
       else setReply({ action, tone: 'ok', text: r.link ? `${r.words}. The link: ${r.link}` : r.words, problems: [] })

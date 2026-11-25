@@ -481,6 +481,15 @@ export function footerButtons(list: PostActionList): { offered: OfferedAction; k
   ]
 }
 
+/**
+ * AFTER A DUPLICATE THE WINDOW CLOSES (the owner, 25 Nov 2026: "after duplicate a post another popup comes up"). A
+ * move that makes a post opened it straight away — right for Post the missing networks, which makes one post to look
+ * at; wrong for Duplicate, which makes one for each day ticked and says how many.
+ */
+export function opensCreatedPost(action: PostAction): boolean {
+  return action !== 'duplicate'
+}
+
 /** The moves after which the window stays open: the person is still working on the post. */
 export const STAYS_OPEN: readonly PostAction[] = ['save', 'edit', 'edit_booked', 'rebook', 'set_steps']
 
