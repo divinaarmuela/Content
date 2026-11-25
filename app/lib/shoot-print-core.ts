@@ -210,3 +210,25 @@ export function printSections(cards: readonly CanvasCard[], boardName = 'On the 
 export function printCounts(sections: readonly PrintSection[]): { sections: number; pictures: number } {
   return { sections: sections.length, pictures: sections.reduce((n, s) => n + s.pictures.length, 0) }
 }
+
+/* ── THE BOARD AS IT LOOKS (Renee, 25 Nov 2026, after printing the document: "we need it to be landscape … and
+ *    similar to the one on screen too") — the wall itself on one sheet, shrunk to fit, beside the document above. ── */
+
+export type PrintBox = { x: number; y: number; w: number; h: number }
+
+/** The box around every card on the board; null for an empty board. */
+export function boardBounds(boxes: readonly PrintBox[]): PrintBox | null {
+  if (boxes.length === 0) return null
+  const x = Math.min(...boxes.map(b => b.x)), y = Math.min(...boxes.map(b => b.y))
+  const r = Math.max(...boxes.map(b => b.x + b.w)), bt = Math.max(...boxes.map(b => b.y + b.h))
+  return { x, y, w: r - x, h: bt - y }
+}
+
+/** a board of three cards is not blown up to fill the sheet */
+const MAX_PRINT_SCALE = 2
+
+/** How much the board is shrunk to fit the page, and where its top-left corner lands so it sits in the middle. */
+export function fitBoardToPage(board: PrintBox, page: { w: number; h: number }): { scale: number; left: number; top: number } {
+  const scale = Math.min(page.w / Math.max(board.w, 1), page.h / Math.max(board.h, 1), MAX_PRINT_SCALE)
+  return { scale, left: (page.w - board.w * scale) / 2, top: (page.h - board.h * scale) / 2 }
+}

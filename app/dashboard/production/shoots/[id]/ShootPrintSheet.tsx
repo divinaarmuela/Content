@@ -155,12 +155,15 @@ export const PRINT_PAPERS: readonly PrintPaper[] = ['A3', 'A4']
  * height in packed rows — as many as fit across — instead of a grid of tall boxes with one left over.
  */
 export function shootPrintCss(paper: PrintPaper): string {
-  return SHEET_CSS.replace('size:A4', `size:${paper}`) + (paper === 'A3' ? A3_CSS : '')
+  return paper === 'A3' ? SHEET_CSS.replace('size:A4', 'size:A3 landscape') + A3_CSS : SHEET_CSS
 }
 
-/** A3 is twice the page: the board runs down two columns, so a line of words stays a readable length. */
+/**
+ * A3 is twice the page, and ON ITS SIDE (Renee, 25 Nov 2026, after printing it: "just tested the A3, we need it to be
+ * landscape"): the board runs down three columns across the wide sheet, so a line of words stays a readable length.
+ */
 const A3_CSS = `
-.sp-body{column-count:2;column-gap:12mm;column-rule:1px solid #ddd}
+.sp-body{column-count:3;column-gap:10mm;column-rule:1px solid #ddd}
 .sp-body > .sp-sec:first-child{margin-top:0}
 `
 
@@ -212,3 +215,24 @@ const SHEET_CSS = `
   #shoot-print{display:block !important}
 }
 `
+
+/** the printable part of an A3 sheet on its side with 10mm margins, in CSS pixels (96 to the inch) */
+export const BOARD_PAGE = { w: Math.floor((420 - 20) * 96 / 25.4), h: Math.floor((297 - 20) * 96 / 25.4) - 4 }
+
+/**
+ * THE BOARD AS IT LOOKS ON THE SCREEN (Renee, 25 Nov 2026: "similar to the one on screen too"): a copy of the board
+ * itself, shrunk on to one A3 sheet on its side. PrintBrief makes the copy; this is only the paper it sits on.
+ */
+export function boardPrintCss(): string {
+  return `
+#shoot-print{display:none}
+#shoot-print .sp-board{position:relative;overflow:hidden;width:${BOARD_PAGE.w}px;height:${BOARD_PAGE.h}px;background:#fff}
+#shoot-print .sp-board *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+@media print{
+  @page{size:A3 landscape;margin:10mm}
+  html,body{background:#fff !important;height:auto !important}
+  body > *:not(#shoot-print){display:none !important}
+  #shoot-print{display:block !important}
+}
+`
+}

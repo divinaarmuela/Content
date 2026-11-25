@@ -2615,7 +2615,7 @@ export default function BriefCanvas({
           <div aria-hidden className="pointer-events-none absolute z-[6000] rounded-sm border border-accent-blue bg-accent-blue/10"
             style={{ left: Math.min(marquee.x0, marquee.x1), top: Math.min(marquee.y0, marquee.y1), width: Math.abs(marquee.x1 - marquee.x0), height: Math.abs(marquee.y1 - marquee.y0) }} />
         )}
-        <div ref={worldRef} className="absolute left-0 top-0" style={{ transformOrigin: '0 0' }}>
+        <div ref={worldRef} data-board-world className="absolute left-0 top-0" style={{ transformOrigin: '0 0' }}>
           {/* maxWidth must be inline: the preflight's svg{max-width:100%} against this
               0-width parent collapses the svg to 0px, and Chrome skips painting
               zero-width svgs entirely — every arrow drew invisibly until this */}
