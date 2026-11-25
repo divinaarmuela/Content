@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { pictureFloorUnderCaption } from '../app/lib/batch-brief-core'
+import { pictureFloorUnderCaption, pictureRoomUnderCaption } from '../app/lib/batch-brief-core'
 
 /**
  * THE WHOLE CAPTION SHOWS (Manal, 25 Nov 2026, a video of the StretchWorks board: "if I send this to the client
@@ -25,5 +25,15 @@ describe('a picture card shows its whole caption', () => {
     expect(pictureFloorUnderCaption(400)).toBe(272)
     expect(pictureFloorUnderCaption(150)).toBe(90)
     expect(pictureFloorUnderCaption(undefined)).toBeUndefined()
+  })
+  /* Renee, 25 Nov 2026 (the Alia shoot brief): "i refreshed page and the photos glitched and moved, tried to resize but
+   * it bounces back". A card that grows is `min-height`, so `flex: 1 1 0%` on its picture meant the picture's own
+   * height: measured in Chrome, a 236 x 381 card holding a phone screenshot drew 561px tall, and 381 again with a
+   * pixel basis. The picture's room is its floor AND its basis, on the picture and on the clip alike. */
+  it('a sized picture starts at its floor, not at its own height — the card stays the size it was given', () => {
+    expect(pictureRoomUnderCaption(381)).toEqual({ minHeight: 253, flexBasis: 253 })
+    expect(pictureRoomUnderCaption(undefined)).toBeUndefined()
+    expect(card.match(/style=\{captionStrip \? pictureRoomUnderCaption\(card\.h\) : undefined\}/g)).toHaveLength(2)
+    expect(card).not.toMatch(/minHeight: pictureFloorUnderCaption\(card\.h\)/)
   })
 })

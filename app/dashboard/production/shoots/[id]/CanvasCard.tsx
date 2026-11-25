@@ -7,7 +7,7 @@ import {
 } from 'lucide-react'
 import { postMediaOf, type PostMedia, DRIVE_PICTURE_SIZE, portalDriveStreamUrl, portalDriveThumbnailUrl } from '../../../../lib/canvas-drive-core'
 import { Link2 } from 'lucide-react'
-import { LABEL_FONT_PX, NOTE_FONT_PX, pictureFloorUnderCaption, textSizeOf, type CanvasCard as Card, textColorOf, textAlignOf, textBoldOf, boldRuns } from '../../../../lib/batch-brief-core'
+import { LABEL_FONT_PX, NOTE_FONT_PX, pictureRoomUnderCaption, textSizeOf, type CanvasCard as Card, textColorOf, textAlignOf, textBoldOf, boldRuns } from '../../../../lib/batch-brief-core'
 
 /** A note's words with their bold runs (**like this**) drawn bold and their highlights (==like this==) on a
  *  highlighter colour (Manal, 20 Oct 2026 — note-format-core). */
@@ -1064,11 +1064,11 @@ function CanvasCardInner({
     const isFilm = isPlayableFile(card.url ?? '')
     return (
       // a card with a height of its own is AT LEAST that tall: a caption that needs more room makes it taller,
-      // and the picture keeps the room it always had (pictureFloorUnderCaption)
+      // and the picture keeps the room it always had (pictureRoomUnderCaption)
       <div data-grows={card.h && captionStrip ? '' : undefined} className={`overflow-hidden rounded-inner border border-border bg-surface shadow-sm ${BOX}`}
         style={card.h && captionStrip ? { width: card.w, minHeight: card.h } : boxStyle(card)}>
         {isFilm ? (
-          <div className="relative min-h-0 flex-1 shrink" style={captionStrip ? { minHeight: pictureFloorUnderCaption(card.h) } : undefined} ref={frameRef}>
+          <div className="relative min-h-0 flex-1 shrink" style={captionStrip ? pictureRoomUnderCaption(card.h) : undefined} ref={frameRef}>
             <video
               ref={videoRef}
               src={playing || auto.load ? card.url : undefined}
@@ -1093,7 +1093,7 @@ function CanvasCardInner({
           // eslint-disable-next-line @next/next/no-img-element
           <img src={card.url} alt={card.name ?? 'reference'} loading="lazy" decoding="async"
             draggable={false} className={`w-full min-h-0 shrink select-none ${card.h ? 'flex-1 object-cover' : ''}`}
-            style={captionStrip ? { minHeight: pictureFloorUnderCaption(card.h) } : undefined} />
+            style={captionStrip ? pictureRoomUnderCaption(card.h) : undefined} />
         )}
         {card.name && (
           <p className="shrink-0 truncate px-2 py-1 text-[12px] text-muted-foreground">{card.name}</p>

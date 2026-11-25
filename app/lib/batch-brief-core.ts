@@ -576,6 +576,20 @@ export function pictureFloorUnderCaption(h: number | null | undefined): number |
   return Math.max(90, Math.round(h) - 128)
 }
 
+/**
+ * THE PICTURE'S ROOM IN A CARD THAT GROWS WITH ITS CAPTION — its floor AND its starting size (Renee, 25 Nov 2026, the
+ * Alia shoot brief: "i refreshed page and the photos glitched and moved, tried to resize but it bounces back").
+ * The card that grows is `min-height`, not `height`, so its height is no longer a definite size — and the picture's
+ * `flex: 1 1 0%` then means "as tall as the picture really is": a phone screenshot sized to 381px drew 561px tall,
+ * over its neighbours, and a resize sprang back to that the moment it was let go. A pixel basis is definite whatever
+ * the card's height is, so the picture starts at its floor and only fills what the card's own height leaves spare.
+ * Absent height = a card that follows its picture: nothing to set.
+ */
+export function pictureRoomUnderCaption(h: number | null | undefined): { minHeight: number; flexBasis: number } | undefined {
+  const floor = pictureFloorUnderCaption(h)
+  return floor === undefined ? undefined : { minHeight: floor, flexBasis: floor }
+}
+
 /** Clamp a size into its kind's box. A height on a width-only kind, or a
  *  height that is not a number, comes back as `undefined` (= follow content). */
 export function clampCardSize(
