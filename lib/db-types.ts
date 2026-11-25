@@ -121,6 +121,7 @@ export type TableName =
   | 'todo_projects'
   | 'todo_sections'
   | 'todos'
+  | 'upsells'
   | 'user_page_access'
   | 'video_frames'
   | 'video_previews'
@@ -2045,6 +2046,32 @@ export interface Todo {
   project_section_id: string | null
 }
 
+export interface Upsell {
+  id: string
+  client_id: string
+  client_name: string
+  service_key: string | null
+  service_name: string
+  category: string
+  billing: string
+  amount: number
+  stage: string
+  paid: boolean
+  months_paid: number
+  paid_at: string | null
+  pitched_by: string
+  pitched_by_name: string
+  logged_at: string
+  pitched_at: string | null
+  won_at: string | null
+  lost_at: string | null
+  notes: string | null
+  created_by: string
+  created_at: string
+  updated_at: string
+  rev: number
+}
+
 export interface UserPageAccess {
   team_user_id: string
   href: string
@@ -2236,6 +2263,7 @@ export const TABLE_COLUMNS = {
   todo_projects: ['id', 'name', 'colour', 'member_ids', 'private', 'asana_gid', 'created_at', 'updated_at'],
   todo_sections: ['id', 'owner_id', 'name', 'position', 'created_at', 'updated_at'],
   todos: ['id', 'prospect_id', 'title', 'note', 'status', 'due_date', 'start_date', 'owner_id', 'created_by', 'client_id', 'files', 'created_at', 'updated_at', 'done_at', 'done_by', 'parent_id', 'followers', 'likes', 'section_id', 'position', 'blocked_by', 'asana_gid', 'repeat', 'repeat_of', 'fields', 'project_section_id'],
+  upsells: ['id', 'client_id', 'client_name', 'service_key', 'service_name', 'category', 'billing', 'amount', 'stage', 'paid', 'months_paid', 'paid_at', 'pitched_by', 'pitched_by_name', 'logged_at', 'pitched_at', 'won_at', 'lost_at', 'notes', 'created_by', 'created_at', 'updated_at', 'rev'],
   user_page_access: ['team_user_id', 'href', 'granted_at', 'granted_by', 'id'],
   video_frames: ['id', 'source', 'duration_ms', 'frames', 'error', 'created_at', 'updated_at'],
   video_previews: ['id', 'source_url', 'stream_uid', 'state', 'playback_hls', 'thumbnail_url', 'duration_sec', 'width', 'height', 'error', 'created_at', 'updated_at'],
@@ -2364,6 +2392,7 @@ export const NULLABLE_COLUMNS = {
   todo_projects: ['colour', 'member_ids', 'private', 'asana_gid'],
   todo_sections: ['position'],
   todos: ['prospect_id', 'note', 'due_date', 'start_date', 'owner_id', 'created_by', 'client_id', 'files', 'done_at', 'done_by', 'parent_id', 'followers', 'likes', 'section_id', 'position', 'blocked_by', 'asana_gid', 'repeat', 'repeat_of', 'fields', 'project_section_id'],
+  upsells: ['service_key', 'paid_at', 'pitched_at', 'won_at', 'lost_at', 'notes'],
   user_page_access: ['granted_by'],
   video_frames: ['duration_ms', 'frames', 'error'],
   video_previews: ['stream_uid', 'playback_hls', 'thumbnail_url', 'duration_sec', 'width', 'height', 'error'],
@@ -2499,6 +2528,7 @@ export const JSON_COLUMNS = {
   todo_projects: ['member_ids'],
   todo_sections: [],
   todos: ['files', 'followers', 'likes', 'blocked_by', 'repeat', 'fields'],
+  upsells: [],
   user_page_access: [],
   video_frames: ['frames'],
   video_previews: [],
@@ -2633,6 +2663,7 @@ export const JSON_ARRAY_COLUMNS = {
   todo_projects: [],
   todo_sections: [],
   todos: [],
+  upsells: [],
   user_page_access: [],
   video_frames: [],
   video_previews: [],
@@ -2642,7 +2673,7 @@ export const JSON_ARRAY_COLUMNS = {
   workflow_activity: [],
 } as const satisfies Record<TableName, readonly string[]>
 
-export const UPDATED_AT_TABLES: ReadonlySet<TableName> = new Set<TableName>(['agency_credentials', 'audience_snapshots', 'automation_sends', 'batches', 'board_items', 'boards', 'client_agreements', 'client_contacts', 'client_credentials', 'client_notes', 'client_reports', 'comment_automations', 'content_items', 'data_deletion_requests', 'drive_pulls', 'drive_seen', 'drive_sources', 'drive_uploads', 'encode_jobs', 'inbox_touches', 'instagram_videos', 'journal_posts', 'post_comments', 'projects', 'report_settings', 'schedule_notes', 'social_posts', 'team_users', 'todo_comments', 'todo_sections', 'todos', 'video_frames'])
+export const UPDATED_AT_TABLES: ReadonlySet<TableName> = new Set<TableName>(['agency_credentials', 'audience_snapshots', 'automation_sends', 'batches', 'board_items', 'boards', 'client_agreements', 'client_contacts', 'client_credentials', 'client_notes', 'client_reports', 'comment_automations', 'content_items', 'data_deletion_requests', 'drive_pulls', 'drive_seen', 'drive_sources', 'drive_uploads', 'encode_jobs', 'inbox_touches', 'instagram_videos', 'journal_posts', 'post_comments', 'projects', 'report_settings', 'schedule_notes', 'social_posts', 'team_users', 'todo_comments', 'todo_sections', 'todos', 'upsells', 'video_frames'])
 
 export function encodeKey(s: string): string {
   return s.replace(/[.#$\[\]\/%]/g, ch => '%' + ch.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0'))

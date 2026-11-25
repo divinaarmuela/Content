@@ -48,6 +48,8 @@ export const GRANTABLE_PAGES: { href: string; label: string; parent?: string }[]
   { href: '/dashboard/calendar', label: 'Calendar' },
   { href: '/dashboard/activity', label: 'Asana activity' },
   { href: '/dashboard/reports', label: 'Reports' },
+  // the upsell tracker (25 Nov 2026): a super admin's, and opened by name to the people pitching add-ons
+  { href: '/dashboard/upsells', label: 'Upsells' },
   { href: '/dashboard/team', label: 'Team' },
   // NOT a subpage of Team: it is the workload board, and someone can
   // reasonably be given one without the other (an editor who runs the
@@ -145,6 +147,10 @@ export function defaultAllows(role: Role | null, href: string): boolean {
   if (socialParentOf(href)) return (role === 'scheduler' || role === 'general') && SCHEDULER_SOCIAL_PAGES.includes(href)
   // the monthly client report: a super admin's and an account manager's, nobody else's by default
   if (href === '/dashboard/reports') return role === 'super_admin' || role === 'account_manager'
+  // THE UPSELL TRACKER (Divina, 25 Nov 2026: "shared only between Manal, Karly, Yusuf, Renee" — and the owner: "super
+  // admins can log or these people can log"). It holds prices and commission, so no role has it but a super admin;
+  // everyone else is opened to it by name. An account manager's blanket default below must not reach it.
+  if (href === '/dashboard/upsells') return role === 'super_admin'
   // the client's welcome email (the owner, 13 Nov 2026: "ensure AM or super admins can access and create that")
   if (href === ONBOARDING_SUBPAGE) return role === 'super_admin' || role === 'account_manager'
   if (role === 'editor') {

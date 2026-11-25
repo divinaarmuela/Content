@@ -15,6 +15,8 @@ const isProtectedRoute = createRouteMatcher([
   '/api/leads(.*)',
   '/api/team(.*)',
   '/api/todos(.*)',
+  // the upsell tracker (25 Nov 2026): signed-in only; the route then asks page access (super admins and the people it is opened to)
+  '/api/upsells(.*)',
   '/api/todo-comments(.*)',
   '/api/todo-sections(.*)',
   '/api/todo-fields(.*)',
@@ -198,6 +200,7 @@ export const config = {
     '/api/social/:path*',
     '/api/team/:path*',
     '/api/todos/:path*',
+    '/api/upsells/:path*',
     '/api/todo-comments/:path*',
     '/api/todo-sections/:path*',
     '/api/todo-fields/:path*',

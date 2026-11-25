@@ -9,7 +9,7 @@ import { isReviewer } from '@/app/lib/reviewer-lock-core'
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/sheet'
 import {
   LayoutGrid, Inbox, Users, Globe, Kanban, Activity, Camera, CalendarCheck,
-  BarChart3, Sparkles, Bell, Settings, Menu, Sun, Moon, Share2, Megaphone,
+  BarChart3, Sparkles, Bell, Settings, Menu, Sun, Moon, Share2, Megaphone, TrendingUp,
   CalendarClock, CalendarDays, Search, ListChecks, StickyNote, Radar, GalleryHorizontalEnd } from 'lucide-react'
 import NotificationBell from '../NotificationBell'
 import { ActAsButton, ActingBar, useActAs } from './ActAs'
@@ -107,6 +107,8 @@ export const NAV_SOCIAL_CHILDREN: NavItem[] = [
 
 export const NAV_TOOLS: NavItem[] = [
   { href: '/dashboard/reports',       label: 'Reports',       icon: BarChart3 },
+  // pitched versus won, and the commission on it (25 Nov 2026) — a super admin's, and opened by name
+  { href: '/dashboard/upsells',       label: 'Upsells',       icon: TrendingUp },
   { href: '/dashboard/team',          label: 'Team',          icon: Users },
   // the directory says who exists; this says what each of them is holding
   { href: '/dashboard/team/activity', label: 'Team activity', icon: Activity },
@@ -127,7 +129,7 @@ export const GROUPS: { label: string; hrefs: string[] }[] = [
   { label: 'General', hrefs: ['/dashboard', '/dashboard/leads', '/dashboard/clients', '/dashboard/audience'] },
   { label: 'Content', hrefs: ['/dashboard/todos', '/dashboard/production', '/dashboard/team-boards', '/dashboard/editor', '/dashboard/designer', '/dashboard/scheduler', '/dashboard/bookings', '/dashboard/website', '/dashboard/activity'] },
   { label: 'Social',  hrefs: ['/dashboard/social'] },
-  { label: 'Team',    hrefs: ['/dashboard/team', '/dashboard/team/activity', '/dashboard/reports', '/dashboard/ai', '/dashboard/notifications'] },
+  { label: 'Team',    hrefs: ['/dashboard/team', '/dashboard/team/activity', '/dashboard/reports', '/dashboard/upsells', '/dashboard/ai', '/dashboard/notifications'] },
 ]
 export const PINNED_BOTTOM = '/dashboard/settings'
 
@@ -159,6 +161,7 @@ export const PAGE_TITLES: Record<string, string> = {
   '/dashboard/calendar':      'Posting calendar',
   '/dashboard/activity':      'Asana activity',
   '/dashboard/reports':       'Reports',
+  '/dashboard/upsells':       'Upsells',
   '/dashboard/team':          'Team',
   '/dashboard/team/activity': 'Team activity',
   '/dashboard/ai':            'AI Assistant',

@@ -126,7 +126,8 @@ describe('defaultAllows — one page per role', () => {
   it("account managers get their clients' pages — everything except business development", () => {
     // reports are NOT business development — a monthly client report is client
     // delivery, and the account manager is who presents it
-    const excluded = ['/dashboard/leads', '/dashboard/audience']
+    // …nor is the upsell tracker theirs by role (25 Nov 2026): it holds prices and commission, and is opened by name
+    const excluded = ['/dashboard/leads', '/dashboard/audience', '/dashboard/upsells']
     for (const href of excluded) expect(defaultAllows('account_manager', href)).toBe(false)
     for (const { href } of GRANTABLE_PAGES) {
       if (excluded.includes(href) || GRANT_ONLY_PAGES.has(href)) continue

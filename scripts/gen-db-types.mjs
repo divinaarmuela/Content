@@ -1180,6 +1180,34 @@ const GHOST_TABLES = {
     ['updated_by_name', col('string', true)],
     ['updated_at', col('string', false)],
   ],
+  // upsells — THE UPSELL TRACKER (Divina, 25 Nov 2026; app/lib/upsell-core.ts). One row per add-on a team member
+  // raises with an existing client: what, how much (AUD ex GST), where it is up to, whether the client has paid.
+  // Commission is worked out from the row, never stored. `rev` is the row's own version: every change carries it.
+  upsells: [
+    ['id', col('string', false)],
+    ['client_id', col('string', false)],
+    ['client_name', col('string', false)],
+    ['service_key', col('string', true)],
+    ['service_name', col('string', false)],
+    ['category', col('string', false)],
+    ['billing', col('string', false)],
+    ['amount', col('number', false)],
+    ['stage', col('string', false)],
+    ['paid', col('boolean', false)],
+    ['months_paid', col('number', false)],
+    ['paid_at', col('string', true)],
+    ['pitched_by', col('string', false)],
+    ['pitched_by_name', col('string', false)],
+    ['logged_at', col('string', false)],
+    ['pitched_at', col('string', true)],
+    ['won_at', col('string', true)],
+    ['lost_at', col('string', true)],
+    ['notes', col('string', true)],
+    ['created_by', col('string', false)],
+    ['created_at', col('string', false)],
+    ['updated_at', col('string', false)],
+    ['rev', col('number', false)],
+  ],
   portal_feeds: [
     ['id', col('string', false)],
     ['client_id', col('string', false)],
@@ -1322,7 +1350,7 @@ for (const [ghost, cols] of Object.entries(GHOST_TABLES)) {
 }
 // Ghost tables have no `create trigger` line to be read from, so the ones that
 // carry updated_at say so here — lib/db.ts stamps the column from this set.
-for (const ghost of ['social_posts', 'post_comments', 'todos', 'todo_comments', 'todo_sections', 'schedule_notes', 'drive_uploads', 'drive_pulls', 'encode_jobs', 'drive_sources', 'drive_seen', 'video_frames', 'boards', 'board_items', 'instagram_videos', 'inbox_touches', 'comment_automations', 'automation_sends', 'data_deletion_requests', 'client_reports', 'audience_snapshots']) updatedAt.add(ghost)
+for (const ghost of ['social_posts', 'post_comments', 'todos', 'todo_comments', 'todo_sections', 'schedule_notes', 'drive_uploads', 'drive_pulls', 'encode_jobs', 'drive_sources', 'drive_seen', 'video_frames', 'boards', 'board_items', 'instagram_videos', 'inbox_touches', 'comment_automations', 'automation_sends', 'data_deletion_requests', 'client_reports', 'audience_snapshots', 'upsells']) updatedAt.add(ghost)
 
 // Columns the code writes but no SQL ever created.
 //   notification_log.claimed_at — when a retrier last took the row. The stale
