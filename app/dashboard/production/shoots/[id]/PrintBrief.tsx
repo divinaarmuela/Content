@@ -7,11 +7,11 @@ import { ChevronDown, Printer } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import type { CanvasCard } from '../../../../lib/batch-brief-core'
-import { boardBounds, fitBoardToPage, type PrintBox } from '../../../../lib/shoot-print-core'
+import { boardBounds, fitBoardToPage, picturesReadyLine, type PrintBox } from '../../../../lib/shoot-print-core'
 import ShootPrintSheet, { BOARD_PAGE, PRINT_PAPERS, boardPrintCss, shootPrintCss, type PrintPaper, type PrintShoot } from './ShootPrintSheet'
 
-/** how long the print window waits for the board's pictures before it opens anyway */
-const PICTURES_WAIT_MS = 25_000
+/** how often the pictures are counted while the sheet waits for them */
+const PICTURES_CHECK_MS = 300
 
 /** what is printed: the plan read into a document on one of the papers, or the board as it looks on the screen */
 type PrintJob = PrintPaper | 'board'
@@ -50,7 +50,8 @@ function copyBoardInto(host: HTMLElement): boolean {
  * browser's own print window opens on the sheet and nothing else — the same way the monthly report prints. "Save as
  * PDF" in that window makes the file.
  *
- * Nothing is fetched or saved: the sheet is drawn from the plan and the board already on the page.
+ * Nothing is saved: the sheet is drawn from the plan and the board already on the page, its pictures from their
+ * small copies (shoot-print-core's `printPicture`).
  */
 export default function PrintBrief({ shoot, cards, crew = [], className }: {
   shoot: PrintShoot
@@ -77,20 +78,37 @@ export default function PrintBrief({ shoot, cards, crew = [], className }: {
       }
     }
     window.addEventListener('afterprint', done)
+    // THE SHEET WAITS FOR EVERY PICTURE, AND SAYS HOW FAR IT HAS GOT (Renee, 26 Nov 2026: "it doesnt save the pics
+    // when print" — the Alia brief's 94 pictures were 194 MB at full size, and the print window opened after a flat
+    // 25 seconds with whatever had arrived: the words and one picture). There is no clock now: the count is shown as
+    // it climbs, and "Print now" is the person's own way to stop waiting. A picture that fails counts as done.
     const pictures = Array.from(node.querySelectorAll('img'))
-    const note = pictures.length > 0 ? toast.loading(`Getting ${pictures.length === 1 ? 'the picture' : `${pictures.length} pictures`} ready to print…`) : undefined
-    const loaded = Promise.all(pictures.map(img => (img.complete
-      ? Promise.resolve()
-      : new Promise<void>(res => { img.addEventListener('load', () => res(), { once: true }); img.addEventListener('error', () => res(), { once: true }) }))))
-    const waited = new Promise<void>(res => { setTimeout(res, PICTURES_WAIT_MS) })
-    void Promise.race([loaded, waited]).then(() => {
+    let note: string | number | undefined
+    let timer: ReturnType<typeof setInterval> | undefined
+    let opened = false
+    const open = () => {
+      if (opened) return
+      opened = true
+      if (timer !== undefined) clearInterval(timer)
       if (note !== undefined) toast.dismiss(note)
       if (!live) return
       window.print()
       // a browser with no `afterprint` (or a print window closed at once) must not leave the sheet mounted
       setTimeout(done, 1000)
-    })
-    return () => { live = false; window.removeEventListener('afterprint', done) }
+    }
+    const check = () => {
+      const ready = pictures.filter(img => img.complete).length
+      if (ready >= pictures.length) { open(); return }
+      note = toast.loading(picturesReadyLine(ready, pictures.length), { id: note, action: { label: 'Print now', onClick: open } })
+    }
+    check()
+    if (!opened) timer = setInterval(check, PICTURES_CHECK_MS)
+    return () => {
+      live = false
+      if (timer !== undefined) clearInterval(timer)
+      if (note !== undefined) toast.dismiss(note)
+      window.removeEventListener('afterprint', done)
+    }
   }, [printing])
 
   return (

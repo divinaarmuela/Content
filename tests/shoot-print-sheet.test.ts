@@ -75,3 +75,11 @@ describe('the board printed as it looks on the screen', () => {
     expect(css).toContain('print-color-adjust:exact')
   })
 })
+
+describe('pictures big enough to read', () => {
+  // Renee, 26 Nov 2026: "we need the photos bigger"; the owner: "so its clear"
+  it('70mm tall on A4, 80mm on A3', () => {
+    expect(shootPrintCss('A4')).toContain('.sp-pic img{display:block;height:70mm;')
+    expect(shootPrintCss('A3')).toContain('.sp-pic img{height:80mm}')
+  })
+})

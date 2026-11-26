@@ -3,7 +3,7 @@ import { boldRuns, type CanvasCard } from '../../../../lib/batch-brief-core'
 import { markRuns } from '../../../../lib/note-format-core'
 import { sanitiseCanvasHtml } from '../../../../lib/canvas-rich-core'
 import { planAsText, type SopShoot } from '../../../../lib/shoot-sop-core'
-import { printSections, type PrintBlock, type PrintSection } from '../../../../lib/shoot-print-core'
+import { printPicture, printSections, type PrintBlock, type PrintSection } from '../../../../lib/shoot-print-core'
 
 /**
  * THE SHOOT BRIEF AS A SHEET OF PAPER (Renee, 25 Nov 2026: "the shoot brief needs to be printable"). The plan's nine
@@ -31,8 +31,15 @@ function shortLink(url: string): string {
   try { const u = new URL(url); return `${u.hostname.replace(/^www\./, '')}${u.pathname.replace(/\/$/, '')}` } catch { return url }
 }
 
-/** a picture that will not load leaves no broken frame on the paper */
-const hide = (e: React.SyntheticEvent<HTMLImageElement>) => { e.currentTarget.style.display = 'none' }
+/**
+ * A picture is printed from its small copy. If that will not load, the full-size picture is tried once; one that
+ * still will not load leaves no broken frame on the paper.
+ */
+const orHide = (full: string | undefined) => (e: React.SyntheticEvent<HTMLImageElement>) => {
+  const img = e.currentTarget
+  if (full && img.dataset.full !== '1' && img.getAttribute('src') !== full) { img.dataset.full = '1'; img.src = full; return }
+  img.style.display = 'none'
+}
 
 function Block({ b }: { b: PrintBlock }) {
   switch (b.kind) {
@@ -70,7 +77,7 @@ function Block({ b }: { b: PrintBlock }) {
       return (
         <figure className="sp-pic">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={b.url} alt="" onError={hide} />
+          <img src={printPicture(b.url)} alt="" onError={orHide(b.url)} />
           {b.caption && <figcaption>{b.caption}</figcaption>}
         </figure>
       )
@@ -78,7 +85,7 @@ function Block({ b }: { b: PrintBlock }) {
       return (
         <figure className="sp-pic sp-post">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          {b.thumb && <img src={b.thumb} alt="" onError={hide} referrerPolicy="no-referrer" />}
+          {b.thumb && <img src={printPicture(b.thumb)} alt="" onError={orHide(b.thumb)} referrerPolicy="no-referrer" />}
           <figcaption>
             {b.author && <strong>{b.author} </strong>}
             {b.words && <span className="sp-post-words">{b.words}</span>}
@@ -172,6 +179,9 @@ export const PRINT_PAPERS: readonly PrintPaper[] = ['A3', 'A4']
  * NO WASTED PAGES (the owner, 25 Nov 2026, Renee's 18-page PDF: "each page is kinda wasted with a single photo
  * suddenly on one page"): words may run on to the next page instead of jumping to it whole, and pictures are one
  * height in packed rows — as many as fit across — instead of a grid of tall boxes with one left over.
+ *
+ * PICTURES BIG ENOUGH TO READ (Renee, 26 Nov 2026: "we need the photos bigger", the owner: "so its clear") — 70mm
+ * tall on A4 and 80mm on A3, where they were 44 and 46. It costs pages: about three rows of pictures to a sheet.
  */
 export function shootPrintCss(paper: PrintPaper): string {
   return paper === 'A3' ? SHEET_CSS.replace('size:A4', 'size:A3 landscape') + A3_CSS : SHEET_CSS
@@ -197,7 +207,7 @@ const A3_CSS = `
 .sp-few > .sp-text{column-count:2;column-gap:10mm}
 .sp-sec:not(.sp-both) > .sp-text{column-count:3;column-gap:10mm}
 .sp-sec:not(.sp-both) > .sp-text .sp-table{column-span:all}
-.sp-pic img{height:46mm}
+.sp-pic img{height:80mm}
 `
 
 const SHEET_CSS = `
@@ -235,7 +245,7 @@ const SHEET_CSS = `
 .sp-link span{color:#444}
 .sp-pics{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;align-items:flex-start}
 .sp-pic{margin:0;break-inside:avoid;display:flex;flex-direction:column;max-width:100%}
-.sp-pic img{display:block;height:44mm;width:auto;max-width:100%;object-fit:contain;object-position:left top;border:1px solid #ddd}
+.sp-pic img{display:block;height:70mm;width:auto;max-width:100%;object-fit:contain;object-position:left top;border:1px solid #ddd}
 .sp-pic figcaption{margin-top:2px;font-size:7.5pt;line-height:1.25;color:#333;overflow-wrap:anywhere;width:0;min-width:100%}
 .sp-post figcaption{min-width:max(100%,30mm)}
 .sp-post-words{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}

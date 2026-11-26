@@ -1,4 +1,5 @@
 import type { CanvasCard } from './batch-brief-core'
+import { boardThumb } from './board-thumb-core'
 
 /**
  * THE SHOOT BRIEF, ON PAPER (Renee, 25 Nov 2026: "the shoot brief needs to be printable … im gonna try print this
@@ -231,4 +232,21 @@ const MAX_PRINT_SCALE = 2
 export function fitBoardToPage(board: PrintBox, page: { w: number; h: number }): { scale: number; left: number; top: number } {
   const scale = Math.min(page.w / Math.max(board.w, 1), page.h / Math.max(board.h, 1), MAX_PRINT_SCALE)
   return { scale, left: (page.w - board.w * scale) / 2, top: (page.h - board.h * scale) / 2 }
+}
+
+/* ── THE PICTURES ON THE PAPER (Renee, 26 Nov 2026: "it doesnt save the pics when print") ── */
+
+/**
+ * The address a picture is PRINTED from: the 1280-wide small copy of a picture in our own storage (board-thumb-core),
+ * which is sharp at the size it is printed and a fraction of the weight — the Alia brief's 94 pictures were 194 MB at
+ * full size, more than the print window ever waited for. A picture on another site is printed from where it lives.
+ */
+export function printPicture(url: string): string {
+  return boardThumb(url, 1280)
+}
+
+/** What the wait says while the pictures arrive: "31 of 94 pictures ready…". */
+export function picturesReadyLine(ready: number, total: number): string {
+  if (total === 1) return 'Getting the picture ready to print…'
+  return `${Math.min(Math.max(ready, 0), total)} of ${total} pictures ready to print…`
 }

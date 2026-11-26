@@ -112,3 +112,21 @@ describe('one card as what is printed', () => {
     expect(() => printSections(loop)).not.toThrow()
   })
 })
+
+import { picturesReadyLine, printPicture } from '../app/lib/shoot-print-core'
+
+describe('the pictures on the paper', () => {
+  // Renee, 26 Nov 2026: "it doesnt save the pics when print" — 94 full-size pictures, 194 MB, never arrived in time
+  it('a picture in our own storage is printed from its 1280 small copy', () => {
+    const url = 'https://pub-abc.r2.dev/briefs/shot.PNG'
+    expect(printPicture(url)).toBe(`/api/img?u=${encodeURIComponent(url)}&w=1280`)
+  })
+  it('a picture on another site is printed from where it lives', () => {
+    expect(printPicture('https://i.pinimg.com/736x/a.jpg')).toBe('https://i.pinimg.com/736x/a.jpg')
+  })
+  it('the wait says how many pictures have arrived', () => {
+    expect(picturesReadyLine(31, 94)).toBe('31 of 94 pictures ready to print…')
+    expect(picturesReadyLine(0, 1)).toBe('Getting the picture ready to print…')
+    expect(picturesReadyLine(99, 94)).toBe('94 of 94 pictures ready to print…')
+  })
+})
