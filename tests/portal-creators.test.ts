@@ -49,8 +49,15 @@ describe('what a client is handed', () => {
     expect(seatLine(v)).toBe('1 of 2 seats confirmed · 1 waiting on their yes')
     expect(v.next_step).toBe('1 creator to look at.')
     expect(v.open_for_answers).toBe(true)
-    expect(seatLine({ seats: null, confirmed: 3, waiting: 0, open: null })).toBe('3 confirmed')
-    expect(seatLine({ seats: 10, confirmed: 8, waiting: 1, open: 1 })).toBe('8 of 10 seats confirmed · 1 waiting on their yes · 1 open')
+    expect(seatLine({ seats: null, confirmed: 3, waiting: 0, open: null, over: false })).toBe('3 confirmed')
+    expect(seatLine({ seats: 10, confirmed: 8, waiting: 1, open: 1, over: false })).toBe('8 of 10 seats confirmed · 1 waiting on their yes · 1 open')
+  })
+  // Review Focus 4: more confirmed than seats is said, never shown as "3 of 2" with nothing beside it
+  it('more creators confirmed than there are seats is said outright', () => {
+    const over = clientCampaign(campaign({ seats: 2 }), [creator('a', 'confirmed'), creator('b', 'confirmed'), creator('c', 'confirmed')], '2026-11-26')!
+    expect(over.over).toBe(true)
+    expect(seatLine(over)).toBe('3 confirmed for 2 seats')
+    expect(clientCampaign(campaign(), everyone(), '2026-11-26')!.over).toBe(false)
   })
   it('after the closing day, or once the team closes it, they may look but not answer', () => {
     const late = clientCampaign(campaign({ closes_on: '2026-11-20' }), everyone(), '2026-11-26')!
@@ -86,6 +93,8 @@ describe('the client answers through their portal link', () => {
   beforeEach(() => { told.length = 0; fake = seed() })
   afterEach(() => fake.restore())
 
+  // review, 26 Nov 2026: the person who MADE a campaign is not told by that alone — a manager taken off the client
+  // would keep hearing every answer. The client's managers are told by the helper; members by name; nobody else.
   it('a yes lands on the creator, leaves a line of history, and the campaign’s team is told', async () => {
     const res = await send({ ...yes, note: 'Love her food content' })
     expect(res.status).toBe(200)
@@ -93,7 +102,7 @@ describe('the client answers through their portal link', () => {
     expect(stored().find(r => r.id === 'k1__lydia')).toMatchObject({ stage: 'approved', decided_by: 'portal-c1' })
     expect(fake.rows('campaign_creator_events')).toHaveLength(1)
     expect(told).toHaveLength(1)
-    expect(told[0]).toMatchObject({ clientId: 'c1', dashboardPath: '/dashboard/creators/k1', alsoUserIds: ['ed', 'ama'] })
+    expect(told[0]).toMatchObject({ clientId: 'c1', dashboardPath: '/dashboard/creators/k1', alsoUserIds: ['ed'] })
     expect(told[0].body).toBe('Alia Fragrance said yes to lydia. “Love her food content”')
   })
   it('a no, then a change of mind', async () => {

@@ -41,19 +41,10 @@ export const FIELD = 'h-11 w-full rounded-inner border border-border bg-surface 
 export const AREA = 'w-full rounded-inner border border-border bg-surface p-3 text-[14px] text-foreground outline-none focus:border-foreground'
 export const LABEL = 'text-[13px] font-semibold'
 
-/** "Fri 27 Nov, 12:30 pm" in the reader's own time zone, or null */
+/** "Fri 27 Nov, 12:30 pm" — Melbourne time, the same the client is shown — or null */
 export function whenWords(iso: string | null | undefined): string | null {
   if (!iso) return null
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return null
-  return d.toLocaleString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })
-}
-
-/** an ISO moment as the value a `datetime-local` box wants, in the reader's own time zone */
-export function localInput(iso: string | null | undefined): string {
-  if (!iso) return ''
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return ''
-  const p = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`
+  return d.toLocaleString('en-AU', { timeZone: 'Australia/Melbourne', weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })
 }

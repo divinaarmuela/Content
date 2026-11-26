@@ -193,7 +193,22 @@ describe('creators on a campaign', () => {
     expect(stored('creators')).toHaveLength(1)
     const other = await make({ title: 'Second campaign' })
     const picked = await out(await ADD(req({ creator_id: stored('creators')[0].id, why: 'Again' }), at(other.id)))
-    expect(picked.body.creator).toMatchObject({ name: 'Lydia H', instagram: 'lydia.eats', why: 'Again', stage: 'idea' })
+    expect(picked.body.creator).toMatchObject({ name: 'Lydia', instagram: 'lydia.eats', why: 'Again', stage: 'idea' })
+  })
+  // review, 26 Nov 2026: typing a creator again with the photo and follower boxes left blank wiped what the list held
+  it('typing a known creator again with boxes left blank keeps what the agency’s list already holds', async () => {
+    const c = await make()
+    await add(c.id, { photo_url: 'https://cdn.x/lydia.jpg' })
+    const other = await make({ title: 'Second campaign' })
+    const again = await out(await ADD(req({ name: 'Lydia', instagram: 'lydia.eats', photo_url: null, instagram_followers: null }), at(other.id)))
+    expect(again.body.creator).toMatchObject({ photo_url: 'https://cdn.x/lydia.jpg', instagram_followers: 17900 })
+    expect(stored('creators')[0]).toMatchObject({ photo_url: 'https://cdn.x/lydia.jpg', instagram_followers: 17900 })
+  })
+  it('a creator already on the campaign, typed again, changes nothing in the list', async () => {
+    const c = await make()
+    await add(c.id, { photo_url: 'https://cdn.x/lydia.jpg' })
+    await ADD(req({ name: 'Somebody Else', instagram: 'lydia.eats' }), at(c.id))
+    expect(stored('creators')[0]).toMatchObject({ name: 'Lydia' })
   })
   it('a creator needs a name', async () => {
     const c = await make()

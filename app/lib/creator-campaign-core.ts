@@ -317,3 +317,37 @@ export function followerWords(n: number | null | undefined): string | null {
   if (n >= 1_000) return `${(n / 1_000).toFixed(n >= 100_000 ? 0 : 1).replace(/\.0$/, '')}K`
   return String(n)
 }
+
+/* ── the event's time is Melbourne's ────────────────────────────────────── */
+
+const MELBOURNE = 'Australia/Melbourne'
+const melbourneParts = (d: Date) => {
+  const p = Object.fromEntries(new Intl.DateTimeFormat('en-CA', { timeZone: MELBOURNE, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
+    .formatToParts(d).map(x => [x.type, x.value]))
+  return { y: Number(p.year), mo: Number(p.month), d: Number(p.day), h: Number(p.hour), mi: Number(p.minute) }
+}
+
+/**
+ * A moment as the value a `datetime-local` box wants — IN MELBOURNE, not in the typist's own time zone (review,
+ * 26 Nov 2026: a teammate typing 12:30 from a laptop set to another zone showed the client a different time).
+ */
+export function melbourneInput(iso: string | null | undefined): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  const p = melbourneParts(d)
+  const two = (n: number) => String(n).padStart(2, '0')
+  return `${p.y}-${two(p.mo)}-${two(p.d)}T${two(p.h)}:${two(p.mi)}`
+}
+
+/** What was typed in that box, read as Melbourne wall time → the moment, or null. */
+export function fromMelbourneInput(v: string | null | undefined): string | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(String(v ?? ''))
+  if (!m) return null
+  const wall = Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]), Number(m[4]), Number(m[5]))
+  // how far ahead of UTC Melbourne is at about that moment; asked twice so a daylight-saving edge settles
+  const ahead = (at: number) => { const p = melbourneParts(new Date(at)); return Date.UTC(p.y, p.mo - 1, p.d, p.h, p.mi) - at }
+  let at = wall - ahead(wall)
+  at = wall - ahead(at)
+  return new Date(at).toISOString()
+}

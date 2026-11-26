@@ -13,12 +13,14 @@ import { AREA, FIELD, LABEL } from './stageWords'
  * before) so nobody types the same person twice. The "why" and the terms belong to this campaign; the rest is the
  * creator's own profile. Version one never contacts the creator.
  */
-export default function CreatorDialog({ campaignId, row, onClose, onSaved }: {
+export default function CreatorDialog({ campaignId, row, onClose, onSaved, onStale }: {
   campaignId: string
   /** the creator being changed; null = adding one */
   row: CampaignCreator | null
   onClose: () => void
   onSaved: (row: CampaignCreator) => void
+  /** somebody changed this creator in between: the list is given them as they now stand, the dialog stays open */
+  onStale: (row: CampaignCreator) => void
 }) {
   const [picked, setPicked] = useState<Creator | null>(null)
   const [q, setQ] = useState('')
@@ -32,6 +34,8 @@ export default function CreatorDialog({ campaignId, row, onClose, onSaved }: {
   const [why, setWhy] = useState(row?.why ?? '')
   const [terms, setTerms] = useState<'gifted' | 'paid'>(row?.terms ?? 'gifted')
   const [rate, setRate] = useState(row?.rate ?? '')
+  /** the version this dialog saves on — moved forward when somebody else's change is shown, so Save can be pressed again */
+  const [rev, setRev] = useState(row?.rev ?? 0)
   const [samples, setSamples] = useState((row?.samples ?? []).join('\n'))
   const [busy, setBusy] = useState(false)
   const [uploading, setUploading] = useState(false)
@@ -87,12 +91,17 @@ export default function CreatorDialog({ campaignId, row, onClose, onSaved }: {
     setBusy(true)
     try {
       const res = row
-        ? await fetch(`/api/creators/${campaignId}/creators/${row.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ expect_rev: row.rev, ...body }) })
+        ? await fetch(`/api/creators/${campaignId}/creators/${row.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ expect_rev: rev, ...body }) })
         : await fetch(`/api/creators/${campaignId}/creators`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...(picked ? { creator_id: picked.id } : {}), ...body }) })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) {
-        // somebody changed this creator in between: show how they stand now rather than overwrite
-        if (json?.fresh && row) onSaved(json.fresh as CampaignCreator)
+        // somebody changed this creator in between (the client answered, a colleague moved them): nothing typed
+        // here is lost and nothing of theirs is overwritten — say so, and Save again puts these details on top
+        if (json?.fresh && row) {
+          const now = json.fresh as CampaignCreator
+          onStale(now); setRev(now.rev)
+          setProblem('Somebody changed this creator while you were typing. Your changes are still here. Press Save again to keep them.'); return
+        }
         setProblem(json?.error ?? 'That did not save'); return
       }
       toast.success(row ? 'Saved' : `${name.trim()} added as an idea`)

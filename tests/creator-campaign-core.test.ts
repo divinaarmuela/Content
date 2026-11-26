@@ -202,3 +202,20 @@ describe('what is typed in is tidied before it is kept', () => {
 it('a creator on a campaign has one row, whatever is pressed twice', () => {
   expect(campaignCreatorId('c1', 'nancy')).toBe('c1__nancy')
 })
+
+import { melbourneInput, fromMelbourneInput } from '../app/lib/creator-campaign-core'
+
+// review, 26 Nov 2026: the date box was read in the typist's own time zone and shown to the client in Melbourne's
+describe('the event time is Melbourne time, whoever types it and wherever they sit', () => {
+  it('what is typed is Melbourne wall time, summer and winter', () => {
+    expect(fromMelbourneInput('2026-12-10T12:30')).toBe('2026-12-10T01:30:00.000Z')
+    expect(fromMelbourneInput('2026-07-01T09:00')).toBe('2026-06-30T23:00:00.000Z')
+    expect(fromMelbourneInput('')).toBeNull()
+    expect(fromMelbourneInput('not a time')).toBeNull()
+  })
+  it('and it is put back in the box the same way', () => {
+    expect(melbourneInput('2026-12-10T01:30:00.000Z')).toBe('2026-12-10T12:30')
+    expect(melbourneInput('2026-06-30T23:00:00.000Z')).toBe('2026-07-01T09:00')
+    expect(melbourneInput(null)).toBe('')
+  })
+})

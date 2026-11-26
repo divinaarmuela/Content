@@ -106,6 +106,7 @@ export default function CreatorCampaignsPage() {
                 <span className="text-[13px] text-muted-foreground">{[whenWords(c.starts_at), c.place].filter(Boolean).join(' · ') || 'No date yet'}</span>
                 <div className="mt-auto flex flex-wrap items-center gap-2 pt-1">
                   <Chip tone="surface">{seatWords(c.counts)}</Chip>
+                  {c.counts.over && <Chip tone="red">More confirmed than seats</Chip>}
                   {c.with_client > 0 && <Chip tone="amber">{c.with_client} with the client</Chip>}
                   {c.creators === 0 && <Chip tone="muted">No creators yet</Chip>}
                   {c.status === 'live' && !c.client_visible && <Chip tone="muted">Hidden from client</Chip>}

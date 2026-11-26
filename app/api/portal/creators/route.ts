@@ -45,7 +45,9 @@ export async function POST(req: Request) {
             subjectTitle: found.campaign.title,
             body: `${owner.contact?.name ?? owner.client.name} ${WORDS[to] ?? to} ${res.value.name}.${res.value.client_note ? ` “${res.value.client_note}”` : ''}`,
             dashboardPath: `/dashboard/creators/${campaignId}`,
-            alsoUserIds: [...found.campaign.member_ids, found.campaign.created_by],
+            // members by name; the client's managers are told by the helper. NOT whoever made it: a manager taken off
+            // the client would keep hearing every answer (review, 26 Nov 2026)
+            alsoUserIds: found.campaign.member_ids,
           })
         }
       } catch (e) {

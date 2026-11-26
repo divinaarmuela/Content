@@ -133,10 +133,20 @@ export async function patchCampaign(v: Viewer, id: string, raw: unknown, expectR
 }
 
 export async function deleteCampaign(v: Viewer, id: string): Promise<Result<true>> {
-  const found = await campaigns().get(id, { fresh: true })
-  const current = found ? whole(found) : null
-  if (!current || !maySeeCampaign(v, current)) return { ok: false, status: 404, reason: GONE }
-  if (!mayDeleteCampaign(v, current)) return { ok: false, status: 403, reason: 'Only a super admin deletes a campaign that is live, or one somebody else made' }
+  // WIN THE CAMPAIGN FIRST (review, 26 Nov 2026 — it was read, then deleted: a colleague making it live in between
+  // had a live campaign deleted under them). The rule is asked inside the claim, on the row as it is at that instant,
+  // and winning closes and hides it — so anybody else's change is now stale and the client no longer sees it. Only
+  // then do its creators go, and the campaign last: a failure part-way leaves a closed, hidden campaign, never a live
+  // one with its creators gone.
+  let refusal: Result<true> | null = null
+  const res = await campaigns().claim(id, found => {
+    refusal = null
+    const current = found ? whole(found) : null
+    if (!current || !maySeeCampaign(v, current)) { refusal = { ok: false, status: 404, reason: GONE }; return null }
+    if (!mayDeleteCampaign(v, current)) { refusal = { ok: false, status: 403, reason: 'Only a super admin deletes a campaign that is live, or one somebody else made' }; return null }
+    return { ...current, status: 'closed', client_visible: false, rev: current.rev + 1, updated_at: new Date().toISOString() }
+  })
+  if (!res.claimed) return refusal ?? { ok: false, status: 409, reason: STALE, fresh: res.current ? whole(res.current) : null }
   await onCampaign().removeWhere(r => r.campaign_id === id)
   await campaigns().remove(id)
   return { ok: true, value: true }
@@ -180,17 +190,18 @@ export async function addCreator(v: Viewer, campaignId: string, raw: unknown): P
     const all = await directory().list()
     known = all.find(c => (input.instagram && c.instagram === input.instagram) || (input.tiktok && c.tiktok === input.tiktok)) ?? null
   }
+  // what was typed wins; a box left blank keeps what the list already holds (it is not an order to wipe it)
   const profile = {
     name: input.name ?? known?.name ?? '',
-    photo_url: input.photo_url !== undefined ? input.photo_url : known?.photo_url ?? null,
-    instagram: input.instagram !== undefined ? input.instagram : known?.instagram ?? null,
-    instagram_followers: input.instagram_followers !== undefined ? input.instagram_followers : known?.instagram_followers ?? null,
-    tiktok: input.tiktok !== undefined ? input.tiktok : known?.tiktok ?? null,
-    tiktok_followers: input.tiktok_followers !== undefined ? input.tiktok_followers : known?.tiktok_followers ?? null,
+    photo_url: input.photo_url ?? known?.photo_url ?? null,
+    instagram: input.instagram ?? known?.instagram ?? null,
+    instagram_followers: input.instagram_followers ?? known?.instagram_followers ?? null,
+    tiktok: input.tiktok ?? known?.tiktok ?? null,
+    tiktok_followers: input.tiktok_followers ?? known?.tiktok_followers ?? null,
   }
-  const kept = known
-    ? await directory().upsert({ ...known, ...profile, updated_at: now })
-    : await directory().insert({ ...profile, created_by: v.id, created_at: now, updated_at: now } as never)
+  // a creator new to the list is put in it first (the campaign row needs their id); one already in it is updated
+  // only AFTER they are on the campaign, so a refused add changes nothing
+  const kept = known ?? await directory().insert({ ...profile, created_by: v.id, created_at: now, updated_at: now } as never)
 
   const id = campaignCreatorId(campaignId, kept.id)
   const res = await onCampaign().claim(id, current => current ? null : {
@@ -198,7 +209,8 @@ export async function addCreator(v: Viewer, campaignId: string, raw: unknown): P
     why: input.why ?? null, terms: input.terms ?? 'gifted', rate: input.rate ?? null, samples: input.samples ?? [],
     stage: 'idea', client_note: null, decided_at: null, decided_by: null, created_at: now, updated_at: now, rev: 1,
   })
-  if (!res.claimed) return { ok: false, status: 409, reason: `${profile.name} is already on this campaign`, fresh: res.current }
+  if (!res.claimed) return { ok: false, status: 409, reason: `${res.current?.name ?? profile.name} is already on this campaign`, fresh: res.current ? wholeRow(res.current) : null }
+  if (known) await directory().upsert({ ...known, ...profile, updated_at: now })
   return { ok: true, value: wholeRow(res.row) }
 }
 

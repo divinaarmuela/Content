@@ -14,11 +14,11 @@ import PageTitle from '../../ui/PageTitle'
 import Chip from '../../ui/Chip'
 import EmptyState from '../../EmptyState'
 import {
-  CAMPAIGN_STATUSES, STAGE_LABEL, clientSees, dayWords, followerWords, seatCount, seatWords, teamMoves,
+  CAMPAIGN_STATUSES, STAGE_LABEL, clientSees, dayWords, followerWords, fromMelbourneInput, melbourneInput, seatCount, seatWords, teamMoves,
   type Campaign, type CampaignCreator, type CampaignStatus, type CreatorStage,
 } from '../../../lib/creator-campaign-core'
 import CreatorDialog from '../CreatorDialog'
-import { AREA, FIELD, LABEL, STAGE_HELP, STAGE_ORDER, STAGE_TONE, STATUS_TONE, STATUS_WORDS, localInput, moveWords, whenWords } from '../stageWords'
+import { AREA, FIELD, LABEL, STAGE_HELP, STAGE_ORDER, STAGE_TONE, STATUS_TONE, STATUS_WORDS, moveWords, whenWords } from '../stageWords'
 
 /**
  * ONE CREATOR CAMPAIGN — Details · Creators · Client view. The routes decide who may open this and who may change
@@ -175,7 +175,7 @@ export default function CampaignPage({ params }: { params: Promise<{ id: string 
 
       {dialog && (
         <CreatorDialog campaignId={id} row={dialog.row} onClose={() => setDialog(null)}
-          onSaved={row => { putCreator(row); setDialog(null) }} />
+          onSaved={row => { putCreator(row); setDialog(null) }} onStale={putCreator} />
       )}
 
       <Dialog open={deleting} onOpenChange={open => { if (!open) setDeleting(false) }}>
@@ -292,7 +292,7 @@ function DetailsTab({ campaign, clientName, people, mayEdit, mayRemove, busy, on
 }) {
   const [title, setTitle] = useState(campaign.title)
   const [kind, setKind] = useState(campaign.kind)
-  const [starts, setStarts] = useState(localInput(campaign.starts_at))
+  const [starts, setStarts] = useState(melbourneInput(campaign.starts_at))
   const [place, setPlace] = useState(campaign.place ?? '')
   const [seats, setSeats] = useState(campaign.seats != null ? String(campaign.seats) : '')
   const [closes, setCloses] = useState(campaign.closes_on ?? '')
@@ -305,7 +305,7 @@ function DetailsTab({ campaign, clientName, people, mayEdit, mayRemove, busy, on
     if (!title.trim()) { toast.error('Give the campaign a name'); return }
     void onSave({
       title, kind, place: place || null, seats: seats.trim() || null, closes_on: closes || null,
-      starts_at: starts ? new Date(starts).toISOString() : null,
+      starts_at: fromMelbourneInput(starts),
       deliverables: deliverables.split('\n').map(d => d.trim()).filter(Boolean), usage_terms: usage || null,
       status, member_ids: members,
     }, 'Saved')
@@ -334,7 +334,7 @@ function DetailsTab({ campaign, clientName, people, mayEdit, mayRemove, busy, on
           </select>
         </label>
         <label className="flex flex-col gap-1">
-          <span className={LABEL}>Date and time</span>
+          <span className={LABEL}>Date and time (Melbourne time)</span>
           <input type="datetime-local" className={FIELD} value={starts} disabled={off} onChange={e => setStarts(e.target.value)} />
         </label>
         <label className="flex flex-col gap-1">
@@ -362,7 +362,7 @@ function DetailsTab({ campaign, clientName, people, mayEdit, mayRemove, busy, on
 
       <fieldset className="flex flex-col gap-2">
         <legend className={LABEL}>Team on this campaign</legend>
-        <p className="text-[13px] text-muted-foreground">The client&rsquo;s own managers and super admins see it already. Tick anyone else who should.</p>
+        <p className="text-[13px] text-muted-foreground">The client&rsquo;s own managers and super admins see it already. Tick anyone else who should. Somebody who is not a manager can look, not change, and also needs Creator campaigns opened to them on the Team page.</p>
         <div className="grid gap-1 sm:grid-cols-2">
           {people.map(p => (
             <label key={p.id} className="flex min-h-11 items-center gap-2 rounded-inner px-2 text-[14px] hover:bg-foreground/[0.04]">

@@ -25,6 +25,8 @@ export type ClientCampaign = {
   starts_at: string | null; place: string | null; closes_on: string | null
   deliverables: string[]; usage_terms: string | null
   seats: number | null; confirmed: number; waiting: number; open: number | null
+  /** more creators confirmed than there are seats */
+  over: boolean
   /** may the client still answer, and if not, why */
   open_for_answers: boolean; closed_reason: string | null
   shortlist: ClientCreator[]; passed: ClientCreator[]; chosen: ClientCreator[]
@@ -45,7 +47,7 @@ export function clientCampaign(c: Campaign, creators: readonly CampaignCreator[]
   return {
     id: c.id, title: c.title, kind: c.kind, starts_at: c.starts_at, place: c.place, closes_on: c.closes_on,
     deliverables: c.deliverables ?? [], usage_terms: c.usage_terms,
-    seats: counts.seats, confirmed: counts.confirmed, waiting: counts.waiting, open: counts.open,
+    seats: counts.seats, confirmed: counts.confirmed, waiting: counts.waiting, open: counts.open, over: counts.over,
     open_for_answers: may.ok, closed_reason: may.ok ? null : next,
     shortlist: view.shortlist.map(forClient), passed: view.passed.map(forClient), chosen: view.confirmed.map(forClient),
     next_step: next,
@@ -53,9 +55,10 @@ export function clientCampaign(c: Campaign, creators: readonly CampaignCreator[]
 }
 
 /** "8 of 10 seats confirmed · 1 waiting on their yes · 1 open" */
-export function seatLine(c: Pick<ClientCampaign, 'seats' | 'confirmed' | 'waiting' | 'open'>): string {
+export function seatLine(c: Pick<ClientCampaign, 'seats' | 'confirmed' | 'waiting' | 'open' | 'over'>): string {
   return [
-    c.seats === null ? `${c.confirmed} confirmed` : `${c.confirmed} of ${c.seats} seats confirmed`,
+    // more confirmed than seats is said as it is, never as "11 of 10"
+    c.seats === null ? `${c.confirmed} confirmed` : c.over ? `${c.confirmed} confirmed for ${c.seats} seats` : `${c.confirmed} of ${c.seats} seats confirmed`,
     c.waiting > 0 ? `${c.waiting} waiting on their yes` : null,
     c.open !== null && c.open > 0 ? `${c.open} open` : null,
   ].filter(Boolean).join(' · ')
