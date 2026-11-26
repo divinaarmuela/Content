@@ -12,7 +12,8 @@ import PageTitle from '../ui/PageTitle'
 import Chip from '../ui/Chip'
 import EmptyState from '../EmptyState'
 import { CAMPAIGN_STATUSES, seatWords, type Campaign, type CampaignStatus, type SeatCount } from '../../lib/creator-campaign-core'
-import { FIELD, LABEL, STATUS_TONE, STATUS_WORDS, whenWords } from './stageWords'
+import Pick from './Pick'
+import { LABEL, STATUS_TONE, STATUS_WORDS, whenWords } from './stageWords'
 
 /**
  * CREATOR CAMPAIGNS — the list (the owner, 25 Nov 2026: "a page where we can build this portal … super admins can
@@ -69,21 +70,16 @@ export default function CreatorCampaignsPage() {
       {data.campaigns.length > 0 && (
         <div className="flex flex-wrap items-end gap-3">
           {clientsOnList.length > 1 && (
-            <label className="flex min-w-[180px] flex-col gap-1">
+            <div className="flex w-full flex-col gap-1 sm:w-[240px]">
               <span className={LABEL}>Client</span>
-              <select className={FIELD} value={client} onChange={e => setClient(e.target.value)}>
-                <option value="all">All clients</option>
-                {clientsOnList.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
-            </label>
+              <Pick label="Client" value={client} onChange={setClient} options={[{ value: 'all', label: 'All clients' }, ...clientsOnList.map(c => ({ value: c.id, label: c.name }))]} />
+            </div>
           )}
-          <label className="flex min-w-[160px] flex-col gap-1">
+          <div className="flex w-full flex-col gap-1 sm:w-[200px]">
             <span className={LABEL}>Status</span>
-            <select className={FIELD} value={status} onChange={e => setStatus(e.target.value as 'all' | CampaignStatus)}>
-              <option value="all">Every status</option>
-              {CAMPAIGN_STATUSES.map(s => <option key={s} value={s}>{STATUS_WORDS[s]}</option>)}
-            </select>
-          </label>
+            <Pick<'all' | CampaignStatus> label="Status" value={status} onChange={setStatus}
+              options={[{ value: 'all', label: 'Every status' }, ...CAMPAIGN_STATUSES.map(s => ({ value: s, label: STATUS_WORDS[s] }))]} />
+          </div>
         </div>
       )}
 
@@ -156,24 +152,18 @@ function NewCampaign({ clients, onClose }: { clients: Named[]; onClose: () => vo
           <DialogDescription>It starts as a draft. The client sees nothing until you open it to them.</DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-3.5">
-          <label className="flex flex-col gap-1">
+          <div className="flex flex-col gap-1">
             <span className={LABEL}>Client</span>
-            <select className={FIELD} value={clientId} onChange={e => setClientId(e.target.value)}>
-              <option value="">Choose a client…</option>
-              {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
-          </label>
+            <Pick label="Client" value={clientId} onChange={setClientId} placeholder="Choose a client…" options={clients.map(c => ({ value: c.id, label: c.name }))} />
+          </div>
           <label className="flex flex-col gap-1">
             <span className={LABEL}>Name</span>
             <Input className="h-11" value={title} maxLength={140} onChange={e => setTitle(e.target.value)} placeholder="Creator lunch, summer launch…" />
           </label>
-          <label className="flex flex-col gap-1">
+          <div className="flex flex-col gap-1">
             <span className={LABEL}>What it is</span>
-            <select className={FIELD} value={kind} onChange={e => setKind(e.target.value as 'event' | 'content')}>
-              <option value="event">An event creators come to</option>
-              <option value="content">Content creators make</option>
-            </select>
-          </label>
+            <Pick label="What it is" value={kind} onChange={setKind} options={[{ value: 'event', label: 'An event creators come to' }, { value: 'content', label: 'Content creators make' }]} />
+          </div>
           {problem && <p role="alert" className="rounded-inner border border-accent-red/40 bg-tint-red px-3 py-2 text-[13px] font-medium">{problem}</p>}
         </div>
         <DialogFooter>

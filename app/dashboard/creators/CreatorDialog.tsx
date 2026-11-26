@@ -6,7 +6,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import type { CampaignCreator, Creator } from '../../lib/creator-campaign-core'
-import { AREA, FIELD, LABEL } from './stageWords'
+import Pick from './Pick'
+import { AREA, LABEL } from './stageWords'
 
 /**
  * ADD A CREATOR, OR CHANGE ONE. A new creator is typed in, or picked from the agency's own list (everyone typed in
@@ -177,13 +178,10 @@ export default function CreatorDialog({ campaignId, row, onClose, onSaved, onSta
           </label>
 
           <div className="grid gap-3 sm:grid-cols-2">
-            <label className="flex flex-col gap-1">
+            <div className="flex flex-col gap-1">
               <span className={LABEL}>Terms</span>
-              <select className={FIELD} value={terms} onChange={e => setTerms(e.target.value as 'gifted' | 'paid')}>
-                <option value="gifted">Gifted</option>
-                <option value="paid">Paid</option>
-              </select>
-            </label>
+              <Pick label="Terms" value={terms} onChange={setTerms} options={[{ value: 'gifted', label: 'Gifted' }, { value: 'paid', label: 'Paid' }]} />
+            </div>
             {terms === 'paid' && (
               <label className="flex flex-col gap-1">
                 <span className={LABEL}>Rate</span>

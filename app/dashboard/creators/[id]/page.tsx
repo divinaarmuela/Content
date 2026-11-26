@@ -18,6 +18,7 @@ import {
   type Campaign, type CampaignCreator, type CampaignStatus, type CreatorStage,
 } from '../../../lib/creator-campaign-core'
 import CreatorDialog from '../CreatorDialog'
+import Pick from '../Pick'
 import { AREA, FIELD, LABEL, STAGE_HELP, STAGE_ORDER, STAGE_TONE, STATUS_TONE, STATUS_WORDS, moveWords, whenWords } from '../stageWords'
 
 /**
@@ -313,26 +314,30 @@ function DetailsTab({ campaign, clientName, people, mayEdit, mayRemove, busy, on
   const off = !mayEdit
 
   return (
-    <div className="flex max-w-[720px] flex-col gap-3.5">
-      <p className="text-[14px]"><span className={LABEL}>Client</span> · {clientName}</p>
+    <div className="flex flex-col gap-4" data-campaign-details>
+      {/* FILLS THE PAGE (the owner, 26 Nov 2026: "ui is broken" — this was a 720px strip of bare fields down the left
+          of a wide screen, the team list trailing under it): the campaign in one card, who is on it in its own beside */}
+      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(280px,1fr)]">
+      <section className="flex flex-col gap-3.5 rounded-card border border-border bg-surface p-4 sm:p-5" aria-label="About this campaign">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 className="text-[16px] font-semibold">About this campaign</h2>
+        <p className="text-[13px] text-muted-foreground">For {clientName}</p>
+      </div>
       <label className="flex flex-col gap-1">
         <span className={LABEL}>Name</span>
         <Input className="h-11" value={title} maxLength={140} disabled={off} onChange={e => setTitle(e.target.value)} />
       </label>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <label className="flex flex-col gap-1">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="flex flex-col gap-1">
           <span className={LABEL}>What it is</span>
-          <select className={FIELD} value={kind} disabled={off} onChange={e => setKind(e.target.value as Campaign['kind'])}>
-            <option value="event">An event creators come to</option>
-            <option value="content">Content creators make</option>
-          </select>
-        </label>
-        <label className="flex flex-col gap-1">
+          <Pick<Campaign['kind']> label="What it is" value={kind} disabled={off} onChange={setKind}
+            options={[{ value: 'event', label: 'An event creators come to' }, { value: 'content', label: 'Content creators make' }]} />
+        </div>
+        <div className="flex flex-col gap-1">
           <span className={LABEL}>Status</span>
-          <select className={FIELD} value={status} disabled={off} onChange={e => setStatus(e.target.value as CampaignStatus)}>
-            {CAMPAIGN_STATUSES.map(s => <option key={s} value={s}>{STATUS_WORDS[s]}{s === 'draft' ? ' (the client sees nothing)' : s === 'closed' ? ' (the client can look, not answer)' : ''}</option>)}
-          </select>
-        </label>
+          <Pick<CampaignStatus> label="Status" value={status} disabled={off} onChange={setStatus}
+            options={CAMPAIGN_STATUSES.map(s => ({ value: s, label: `${STATUS_WORDS[s]}${s === 'draft' ? ' (the client sees nothing)' : s === 'closed' ? ' (the client can look, not answer)' : ''}` }))} />
+        </div>
         <label className="flex flex-col gap-1">
           <span className={LABEL}>Date and time (Melbourne time)</span>
           <input type="datetime-local" className={FIELD} value={starts} disabled={off} onChange={e => setStarts(e.target.value)} />
@@ -359,11 +364,13 @@ function DetailsTab({ campaign, clientName, people, mayEdit, mayRemove, busy, on
         <span className={LABEL}>How the client may use the content</span>
         <Input className="h-11" value={usage} maxLength={600} disabled={off} onChange={e => setUsage(e.target.value)} placeholder="Organic reposts for 12 months, credited" />
       </label>
+      </section>
 
-      <fieldset className="flex flex-col gap-2">
-        <legend className={LABEL}>Team on this campaign</legend>
+      <fieldset className="flex min-w-0 flex-col gap-2 rounded-card border border-border bg-surface p-4 sm:p-5">
+        <legend className="sr-only">Team on this campaign</legend>
+        <h2 className="text-[16px] font-semibold" aria-hidden>Team on this campaign{members.length > 0 ? ` (${members.length})` : ''}</h2>
         <p className="text-[13px] text-muted-foreground">The client&rsquo;s own managers and super admins see it already. Tick anyone else who should. Somebody who is not a manager can look, not change, and also needs Creator campaigns opened to them on the Team page.</p>
-        <div className="grid gap-1 sm:grid-cols-2">
+        <div className="grid max-h-[420px] gap-x-2 overflow-y-auto sm:grid-cols-2 lg:grid-cols-1 2xl:grid-cols-2">
           {people.map(p => (
             <label key={p.id} className="flex min-h-11 items-center gap-2 rounded-inner px-2 text-[14px] hover:bg-foreground/[0.04]">
               <input type="checkbox" className="h-4 w-4 accent-[var(--dbx-blue)]" disabled={off} checked={members.includes(p.id)}
@@ -373,9 +380,10 @@ function DetailsTab({ campaign, clientName, people, mayEdit, mayRemove, busy, on
           ))}
         </div>
       </fieldset>
+      </div>
 
       {mayEdit && (
-        <div className="flex flex-wrap items-center gap-2 pt-1">
+        <div className="flex flex-wrap items-center gap-2">
           <Button className="h-11 rounded-full px-5 font-semibold" disabled={busy} onClick={save}>{busy ? 'Saving…' : 'Save details'}</Button>
           {mayRemove && (
             <Button variant="outline" className="h-11 rounded-full px-4 text-accent-red-deep" disabled={busy} onClick={onDelete}><Trash2 className="h-4 w-4" aria-hidden /> Delete campaign</Button>
@@ -401,7 +409,7 @@ function ClientTab({ campaign, creators, token, mayEdit, busy, onChange }: {
   const names = (rows: CampaignCreator[]) => rows.length === 0 ? 'Nobody yet' : rows.map(r => r.name).join(', ')
 
   return (
-    <div className="flex max-w-[720px] flex-col gap-4">
+    <div className="grid items-start gap-4 lg:grid-cols-2 2xl:grid-cols-3" data-campaign-client-view>
       <div className="flex flex-col gap-2 rounded-card border border-border bg-surface p-4">
         <p className="text-[15px] font-semibold">{view ? 'The client can see this campaign' : 'The client cannot see this campaign'}</p>
         <p className="text-[13px] text-muted-foreground">
