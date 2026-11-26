@@ -1,5 +1,25 @@
 # Project state — as at 4 September 2026
 
+## Creator campaigns — 26 Nov 2026 (version one; NOT on main until the owner says push)
+
+A client's event or content push with creators. Design: `docs/superpowers/specs/2026-11-25-creator-campaigns-design.md`.
+
+- **Team:** `/dashboard/creators` (list, New campaign) and `/dashboard/creators/[id]` (Creators · Details · Client view).
+  Super admins see and make every client's; an account manager their own clients' plus any they were added to; anyone
+  else only what they were added to, and may look, not change. Rules: `app/lib/creator-campaign-core.ts` (pure, tested).
+  Server half: `app/lib/creator-campaigns.ts` (every write inside `claim` on the row's `rev`). Routes: `/api/creators/**`.
+- **Client:** `/portal/[token]/creators` and `/portal/[token]/creators/[id]` under the portal link they already have;
+  `POST /api/portal/creators` takes their yes / no. They are shown only creators the team put in front of them, never
+  an idea, a creator who declined, or a creator's rate (`app/lib/creator-portal-core.ts`). The team is told through
+  `notifyManagersOfComment` (test clients never email a real person).
+- **Stages:** Idea → With client → Approved | Passed → Invited → Confirmed | Declined. The app never contacts a creator.
+- **Tables (ghost):** `creator_campaigns`, `creators` (the agency's own list), `campaign_creators`, `campaign_creator_events`.
+- **Not built:** a "Creators" tab on the client's portal home (the tabs are a fixed typed list; version one is the link
+  copied from the Client view tab); the public invite page; ScrapeCreators lookup; any message to a creator.
+- **Checked:** unit and route tests; the client's page rendered locally at desktop and 390px and one Approve pressed on
+  the ZZ E2E Test Client (campaign "ZZ TEST creator lunch (please ignore)" is left in the database there).
+  **Not checked:** the team's two pages have not been rendered signed-in (no local login in the session).
+
 ## Follower scan and People page — REMOVED 1 Oct 2026
 
 The third-party (HikerAPI) read of each client Instagram account's followers
