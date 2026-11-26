@@ -29,6 +29,8 @@ import { Plus, Pencil, Trash2, Link2, Search, ArrowRight } from 'lucide-react'
 import SocialChannels from './SocialChannels'
 import { friendlyError } from '@/app/lib/support-core'
 import PageTitle from '../ui/PageTitle'
+import { useRole } from '../useRole'
+import { clientsOfMine, startsOnMine } from '../../lib/clients-filter-core'
 
 type Client = {
   id: string
@@ -77,11 +79,23 @@ export default function ClientsPage() {
   const [deleting, setDeleting] = useState<Client | null>(null)
   const [saving, setSaving] = useState(false)
   const [search, setSearch] = useState('')
+  // MY CLIENTS / EVERYONE (Manal, 26 Nov 2026: the Overview said 6 of hers and this page showed everyone's; the
+  // owner: "for am in clients make sure to show theirs … if 2 am show both"). null = not decided yet: it waits for
+  // who is signed in, so an account manager never sees all 66 flash past before their own.
+  const { me, loading: findingMe } = useRole()
+  const [mine, setMine] = useState<boolean | null>(null)
+  useEffect(() => {
+    if (mine !== null || findingMe) return
+    // nobody to ask (the account has no place in the team yet): everyone's, as this page always was
+    setMine(me ? startsOnMine(me.role, window.location.search) : false)
+  }, [me, findingMe, mine])
+  const myClients = clientsOfMine(clients ?? [], me?.id)
+  const listed = mine ? myClients : (clients ?? [])
 
   const q = search.trim().toLowerCase()
   // ACTIVE FIRST, ARCHIVED LAST (29 Oct 2026: "active clients on top in alphabetical order and archived clients below
   // all of the active ones") — prospects and paused between, each group A to Z
-  const visible = (clients ?? []).filter(c =>
+  const visible = listed.filter(c =>
     !q || [c.name, c.slug, c.industry, c.contact_name, c.email]
       .some(field => (field ?? '').toLowerCase().includes(q)),
   ).sort((a, b) => (STATUS_ORDER[a.status] ?? 2) - (STATUS_ORDER[b.status] ?? 2)
@@ -218,7 +232,18 @@ export default function ClientsPage() {
       {/* Search across the things someone actually remembers about a client —
           the name, the slug, the industry, or whoever they deal with. */}
       {clients !== null && clients.length > 0 && (
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          {/* whose clients are listed — only offered to someone who has clients of their own */}
+          {mine !== null && myClients.length > 0 && (
+            <div role="group" aria-label="Whose clients" className="flex shrink-0 rounded-full border border-border bg-surface p-1">
+              {([[true, `My clients (${myClients.length})`], [false, `Everyone (${clients.length})`]] as const).map(([value, label]) => (
+                <button key={String(value)} type="button" aria-pressed={mine === value} onClick={() => setMine(value)}
+                  className={`min-h-9 rounded-full px-4 text-[13px] font-semibold transition-colors ${mine === value ? 'bg-foreground text-background' : 'text-muted-foreground hover:text-foreground'}`}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
           {/* a search bar you see (29 Oct 2026: "and a search bar too") — wide, with its icon, at the top of the list */}
           <div className="relative w-full max-w-md flex-1">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
@@ -233,13 +258,13 @@ export default function ClientsPage() {
           </div>
           {search && (
             <span className="font-mono text-secondary-13 text-muted-foreground">
-              {visible.length} of {clients.length}
+              {visible.length} of {listed.length}
             </span>
           )}
         </div>
       )}
 
-      {clients === null ? (
+      {clients === null || mine === null ? (
         <Card>
           <CardContent className="flex flex-col gap-3 p-6">
             {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-9 w-full" />)}

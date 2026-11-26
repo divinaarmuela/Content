@@ -973,7 +973,8 @@ export function overviewTiles(input: OverviewInput): OverviewTile[] {
   }
   const clients: OverviewTile = {
     key: 'clients', title: 'Your clients', tone: 'green',
-    href: '/dashboard/clients', actionLabel: 'Clients',
+    // opens the Clients page on the clients this tile COUNTED (Manal, 26 Nov 2026: it said 6 and opened all 66)
+    href: '/dashboard/clients?mine=1', actionLabel: 'Clients',
     stats: [{ value: input.clientCount ?? 0, label: 'you look after' }],
   }
 
