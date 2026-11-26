@@ -13,6 +13,8 @@ import { boardThumb } from './board-thumb-core'
  *   - a card lying loose on the board goes with the column it sits BESIDE — the nearest one to its left that starts
  *     at or above it (a column's reference pictures are laid out to its right, down to the next column below). A
  *     loose card hard up against a column on its RIGHT is that column's opening line instead;
+ *   - a column holding nothing but a board tile is a door to that board, not a section: no loose card is filed
+ *     with it (the Alia brief's PHOTOS (SEB) column took the 39 pictures laid beside VID 1 to VID 4);
  *   - a board tile (a board inside the board) follows the section it sits with, as a section of its own;
  *   - what sits beside no column opens the document.
  *
@@ -160,8 +162,15 @@ export function printSections(cards: readonly CanvasCard[], boardName = 'On the 
     const opening = new Map<string, CanvasCard[]>()
     const beside = new Map<string, CanvasCard[]>()
     const alone: CanvasCard[] = []
+    // A COLUMN THAT HOLDS ONLY A BOARD TILE IS A DOOR, NOT A SECTION (Renee, 26 Nov 2026, the Alia brief: "so like
+    // this" — VID 1 with its pictures beside it — "this is how it looks when printed": the words and one picture).
+    // A small PHOTOS (SEB) column, holding nothing but the tile that opens the PHOTOS board, sat at the top of the
+    // wall of pictures laid beside VID 1 to VID 4, and being the nearest column to their left it took all 39 of
+    // them into a section of its own, pages after the scripts they belong to. Loose cards are never filed with it.
+    const doors = new Set(columns.filter(col => { const own = inside(col.id); return own.length > 0 && own.every(c => c.kind === 'board') }).map(c => c.id))
+    const sections = columns.filter(col => !doors.has(col.id))
     for (const c of loose) {
-      const at = columnBeside(c, columns)
+      const at = columnBeside(c, sections)
       if (!at) { alone.push(c); continue }
       const into = at.side === 'right' ? opening : beside
       into.set(at.column.id, [...(into.get(at.column.id) ?? []), c])

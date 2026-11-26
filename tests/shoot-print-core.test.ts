@@ -130,3 +130,26 @@ describe('the pictures on the paper', () => {
     expect(picturesReadyLine(99, 94)).toBe('94 of 94 pictures ready to print…')
   })
 })
+
+describe('a column that is only a door to another board', () => {
+  // Renee, 26 Nov 2026, the Alia brief: "so like this" (VID 1 with its pictures beside it) — "this is how it looks
+  // when printed" (the words and one picture). PHOTOS (SEB), holding only the PHOTOS board's tile, sat nearer the
+  // pictures than VID 1 did and took them all into a section of its own.
+  const board = [
+    col('v1', 'VID 1', -1624, 145),
+    card({ id: 'n1', kind: 'note', x: -1624, y: 145, col: 'v1', ord: 0, text: 'The hero script' }),
+    col('door', 'PHOTOS (SEB)', -1304, -524),
+    card({ id: 'tile', kind: 'board', x: -1290, y: -524, col: 'door', ord: 0, name: 'PHOTOS' }),
+    card({ id: 'inner', kind: 'image', x: 0, y: 0, parent: 'tile', url: 'https://x/inner.jpg' }),
+    card({ id: 'p1', kind: 'image', x: -1280, y: 176, url: 'https://x/1.jpg' }),
+    card({ id: 'p2', kind: 'image', x: -760, y: 500, url: 'https://x/2.jpg' }),
+  ]
+  it('takes no loose pictures: they go with the script they sit beside', () => {
+    const sections = printSections(board)
+    expect(sections.find(s => s.title === 'VID 1')?.pictures.map(p => p.id)).toEqual(['p1', 'p2'])
+    expect(sections.some(s => s.title === 'PHOTOS (SEB)')).toBe(false)
+  })
+  it('the board behind the tile is still printed, as its own section', () => {
+    expect(printSections(board).find(s => s.title === 'PHOTOS')?.pictures.map(p => p.id)).toEqual(['inner'])
+  })
+})
