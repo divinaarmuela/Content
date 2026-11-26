@@ -1208,6 +1208,76 @@ const GHOST_TABLES = {
     ['updated_at', col('string', false)],
     ['rev', col('number', false)],
   ],
+  // CREATOR CAMPAIGNS (the owner, 25 Nov 2026; app/lib/creator-campaign-core.ts). A campaign is one client's event or
+  // content push with creators; `creators` is the agency's own list, typed in once; `campaign_creators` is one
+  // creator on one campaign (id `{campaign_id}__{creator_id}`), where the stage lives; `campaign_creator_events` is
+  // the append-only history of every move. `rev` is a row's own version: every change carries it.
+  creator_campaigns: [
+    ['id', col('string', false)],
+    ['client_id', col('string', false)],
+    ['title', col('string', false)],
+    ['kind', col('string', false)],
+    ['starts_at', col('string', true)],
+    ['ends_at', col('string', true)],
+    ['place', col('string', true)],
+    ['seats', col('number', true)],
+    ['closes_on', col('string', true)],
+    ['deliverables', col('unknown', false, true, true)],
+    ['usage_terms', col('string', true)],
+    ['status', col('string', false)],
+    ['client_visible', col('boolean', false)],
+    ['member_ids', col('unknown', false, true, true)],
+    ['created_by', col('string', true)],
+    ['created_at', col('string', false)],
+    ['updated_at', col('string', false)],
+    ['rev', col('number', false)],
+  ],
+  creators: [
+    ['id', col('string', false)],
+    ['name', col('string', false)],
+    ['photo_url', col('string', true)],
+    ['instagram', col('string', true)],
+    ['instagram_followers', col('number', true)],
+    ['tiktok', col('string', true)],
+    ['tiktok_followers', col('number', true)],
+    ['created_by', col('string', true)],
+    ['created_at', col('string', false)],
+    ['updated_at', col('string', false)],
+  ],
+  campaign_creators: [
+    ['id', col('string', false)],
+    ['campaign_id', col('string', false)],
+    ['client_id', col('string', false)],
+    ['creator_id', col('string', false)],
+    ['name', col('string', false)],
+    ['photo_url', col('string', true)],
+    ['instagram', col('string', true)],
+    ['instagram_followers', col('number', true)],
+    ['tiktok', col('string', true)],
+    ['tiktok_followers', col('number', true)],
+    ['why', col('string', true)],
+    ['terms', col('string', false)],
+    ['rate', col('string', true)],
+    ['samples', col('unknown', false, true, true)],
+    ['stage', col('string', false)],
+    ['client_note', col('string', true)],
+    ['decided_at', col('string', true)],
+    ['decided_by', col('string', true)],
+    ['created_at', col('string', false)],
+    ['updated_at', col('string', false)],
+    ['rev', col('number', false)],
+  ],
+  campaign_creator_events: [
+    ['id', col('string', false)],
+    ['campaign_id', col('string', false)],
+    ['row_id', col('string', false)],
+    ['from', col('string', false)],
+    ['to', col('string', false)],
+    ['actor', col('string', false)],
+    ['actor_id', col('string', true)],
+    ['note', col('string', true)],
+    ['at', col('string', false)],
+  ],
   portal_feeds: [
     ['id', col('string', false)],
     ['client_id', col('string', false)],
@@ -1350,7 +1420,7 @@ for (const [ghost, cols] of Object.entries(GHOST_TABLES)) {
 }
 // Ghost tables have no `create trigger` line to be read from, so the ones that
 // carry updated_at say so here — lib/db.ts stamps the column from this set.
-for (const ghost of ['social_posts', 'post_comments', 'todos', 'todo_comments', 'todo_sections', 'schedule_notes', 'drive_uploads', 'drive_pulls', 'encode_jobs', 'drive_sources', 'drive_seen', 'video_frames', 'boards', 'board_items', 'instagram_videos', 'inbox_touches', 'comment_automations', 'automation_sends', 'data_deletion_requests', 'client_reports', 'audience_snapshots', 'upsells']) updatedAt.add(ghost)
+for (const ghost of ['social_posts', 'post_comments', 'todos', 'todo_comments', 'todo_sections', 'schedule_notes', 'drive_uploads', 'drive_pulls', 'encode_jobs', 'drive_sources', 'drive_seen', 'video_frames', 'boards', 'board_items', 'instagram_videos', 'inbox_touches', 'comment_automations', 'automation_sends', 'data_deletion_requests', 'client_reports', 'audience_snapshots', 'upsells', 'creator_campaigns', 'creators', 'campaign_creators']) updatedAt.add(ghost)
 
 // Columns the code writes but no SQL ever created.
 //   notification_log.claimed_at — when a retrier last took the row. The stale

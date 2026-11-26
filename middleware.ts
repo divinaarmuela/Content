@@ -17,6 +17,8 @@ const isProtectedRoute = createRouteMatcher([
   '/api/todos(.*)',
   // the upsell tracker (25 Nov 2026): signed-in only; the route then asks page access (super admins and the people it is opened to)
   '/api/upsells(.*)',
+  // creator campaigns (25 Nov 2026): signed-in only; each route then asks the per-campaign rule. The client side is /api/portal/creators (token)
+  '/api/creators(.*)',
   '/api/todo-comments(.*)',
   '/api/todo-sections(.*)',
   '/api/todo-fields(.*)',
@@ -201,6 +203,7 @@ export const config = {
     '/api/team/:path*',
     '/api/todos/:path*',
     '/api/upsells/:path*',
+    '/api/creators/:path*',
     '/api/todo-comments/:path*',
     '/api/todo-sections/:path*',
     '/api/todo-fields/:path*',
