@@ -219,3 +219,23 @@ describe('the event time is Melbourne time, whoever types it and wherever they s
     expect(melbourneInput(null)).toBe('')
   })
 })
+
+import { sanitiseCampaignInput as tidyCampaign, sanitiseCreatorInput as tidyCreator } from '../app/lib/creator-campaign-core'
+
+// the owner, 26 Nov 2026: the client's page "looks ai slop … nice layout page modern sleek and images" — a campaign
+// carries a cover picture, and a creator carries pictures of their posts, so the client is shown people, not links
+describe('the pictures a campaign and a creator carry', () => {
+  it('a campaign keeps one cover picture: a web address, or none', () => {
+    expect(tidyCampaign({ cover_url: ' https://cdn.x/cover.jpg ' }).cover_url).toBe('https://cdn.x/cover.jpg')
+    expect(tidyCampaign({ cover_url: '' }).cover_url).toBeNull()
+    expect(tidyCampaign({ cover_url: null }).cover_url).toBeNull()
+    expect(tidyCampaign({ cover_url: 'javascript:alert(1)' }).cover_url).toBeNull()
+    expect('cover_url' in tidyCampaign({ title: 'x' })).toBe(false)
+  })
+  it('a creator keeps up to six pictures of their posts, web addresses only', () => {
+    const many = Array.from({ length: 9 }, (_, i) => `https://cdn.x/p${i}.jpg`)
+    expect(tidyCreator({ sample_images: many }).sample_images).toEqual(many.slice(0, 6))
+    expect(tidyCreator({ sample_images: ['https://cdn.x/a.jpg', 'data:image/png;base64,AAAA', 7, ''] }).sample_images).toEqual(['https://cdn.x/a.jpg'])
+    expect('sample_images' in tidyCreator({ name: 'x' })).toBe(false)
+  })
+})

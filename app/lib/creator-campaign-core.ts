@@ -36,6 +36,8 @@ export type Campaign = {
   /** what each creator delivers, one line each */
   deliverables: string[]
   usage_terms: string | null
+  /** the picture across the top of the client's page (26 Nov 2026); absent on campaigns made before it */
+  cover_url?: string | null
   status: CampaignStatus
   /** the team's switch: on the client's portal or not */
   client_visible: boolean
@@ -67,6 +69,8 @@ export type CampaignCreator = {
   rate: string | null
   /** up to six links to their posts */
   samples: string[]
+  /** up to six PICTURES of their posts — what the client is shown (26 Nov 2026); absent on rows made before it */
+  sample_images?: string[]
   stage: CreatorStage
   /** what the client wrote when they answered */
   client_note: string | null
@@ -274,6 +278,7 @@ export function sanitiseCampaignInput(raw: unknown): Partial<Campaign> {
   }
   if ('place' in r && (r.place === null || typeof r.place === 'string')) out.place = text(r.place, 200)
   if ('usage_terms' in r && (r.usage_terms === null || typeof r.usage_terms === 'string')) out.usage_terms = text(r.usage_terms, 600)
+  if ('cover_url' in r) out.cover_url = httpLink(r.cover_url)
   if ('seats' in r) {
     if (r.seats === null || r.seats === '') out.seats = null
     else { const n = count(r.seats); if (typeof n === 'number' && n >= 1 && n <= 500) out.seats = n }
@@ -307,6 +312,7 @@ export function sanitiseCreatorInput(raw: unknown): Partial<CampaignCreator> {
   if (r.terms === 'gifted' || r.terms === 'paid') out.terms = r.terms
   if ('rate' in r && (r.rate === null || typeof r.rate === 'string')) out.rate = text(r.rate, 120)
   if (Array.isArray(r.samples)) out.samples = r.samples.map(httpLink).filter((s): s is string => !!s).slice(0, 6)
+  if (Array.isArray(r.sample_images)) out.sample_images = r.sample_images.map(httpLink).filter((s): s is string => !!s).slice(0, 6)
   return out
 }
 

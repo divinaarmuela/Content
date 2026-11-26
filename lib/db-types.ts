@@ -555,6 +555,7 @@ export interface CampaignCreator {
   terms: string
   rate: string | null
   samples: unknown
+  sample_images: unknown
   stage: string
   client_note: string | null
   decided_at: string | null
@@ -877,6 +878,7 @@ export interface CreatorCampaign {
   closes_on: string | null
   deliverables: unknown
   usage_terms: string | null
+  cover_url: string | null
   status: string
   client_visible: boolean
   member_ids: unknown
@@ -2245,7 +2247,7 @@ export const TABLE_COLUMNS = {
   bookings: ['id', 'created_at', 'service_id', 'resource_id', 'start_at', 'end_at', 'customer_name', 'customer_email', 'customer_phone', 'notes', 'status', 'payment_status', 'payment_ref', 'amount_cents', 'policy_agreed_at', 'checkout_ref', 'public_ref', 'seat_no', 'space_id'],
   calendar_accounts: ['email', 'refresh_token_encrypted', 'enabled', 'connected_at', 'connected_by', 'created_at', 'id'],
   campaign_creator_events: ['id', 'campaign_id', 'row_id', 'from', 'to', 'actor', 'actor_id', 'note', 'at'],
-  campaign_creators: ['id', 'campaign_id', 'client_id', 'creator_id', 'name', 'photo_url', 'instagram', 'instagram_followers', 'tiktok', 'tiktok_followers', 'why', 'terms', 'rate', 'samples', 'stage', 'client_note', 'decided_at', 'decided_by', 'created_at', 'updated_at', 'rev'],
+  campaign_creators: ['id', 'campaign_id', 'client_id', 'creator_id', 'name', 'photo_url', 'instagram', 'instagram_followers', 'tiktok', 'tiktok_followers', 'why', 'terms', 'rate', 'samples', 'sample_images', 'stage', 'client_note', 'decided_at', 'decided_by', 'created_at', 'updated_at', 'rev'],
   card_views: ['id', 'user_id', 'item_id', 'viewed_at'],
   claim_locks: ['id'],
   client_agreements: ['id', 'created_at', 'updated_at', 'client_id', 'deliverable_lines', 'services', 'notes', 'updated_by', 'start_date'],
@@ -2261,7 +2263,7 @@ export const TABLE_COLUMNS = {
   content_assets: ['id', 'client_id', 'title', 'platform', 'slug', 'dest_url', 'post_url', 'provider_post_id', 'source', 'offer_code', 'keyword', 'published_at', 'created_at'],
   content_items: ['archived_at', 'archived_by', 'upload_folder_id', 'upload_folder_url', 'upload_folder_lock', 'upload_version_folders', 'done_at', 'done_by', 'group_id', 'deliver_only', 'blocked_need', 'blocked_from_id', 'blocked_note', 'blocked_at', 'blocked_nudged_12_at', 'blocked_nudged_24_at', 'ack_nudged_at', 'qc_done_version', 'handover_drive_at', 'handover_source_at', 'drive_folder_id', 'drive_url', 'tagged_ids', 'link_final', 'link_versions', 'delivered_at', 'posting_approval_state', 'id', 'created_at', 'updated_at', 'client_id', 'batch_id', 'title', 'content_type', 'platform_targets', 'status', 'owner_id', 'assigned_by', 'due_date', 'priority', 'caption', 'client_approval_required', 'current_version_number', 'raw_assets_url', 'brief', 'raw_assets', 'review_link', 'review_note', 'scheduler_ids', 'brief_url', 'work_kind_id', 'portal_hidden', 'graded_round', 'split_from_id', 'split_round', 'split_at', 'split_for_round', 'adhoc_post', 'for_contact_id', 'clip_approvals', 'edit_round', 'include_plan', 'final_files', 'change_assets', 'drive_handins', 'client_round', 'client_rounds', 'client_frozen', 'share_token', 'accepted_at', 'accepted_round', 'link_url', 'link_kind', 'change_note', 'change_note_by', 'change_note_at', 'posted_slides', 'asked_ids', 'asked_at'],
   content_tracker: ['id', 'client_id', 'month', 'required_graphics', 'required_reels', 'notes', 'responsible', 'in_asana', 'updated_by', 'created_at', 'updated_at'],
-  creator_campaigns: ['id', 'client_id', 'title', 'kind', 'starts_at', 'ends_at', 'place', 'seats', 'closes_on', 'deliverables', 'usage_terms', 'status', 'client_visible', 'member_ids', 'created_by', 'created_at', 'updated_at', 'rev'],
+  creator_campaigns: ['id', 'client_id', 'title', 'kind', 'starts_at', 'ends_at', 'place', 'seats', 'closes_on', 'deliverables', 'usage_terms', 'cover_url', 'status', 'client_visible', 'member_ids', 'created_by', 'created_at', 'updated_at', 'rev'],
   creators: ['id', 'name', 'photo_url', 'instagram', 'instagram_followers', 'tiktok', 'tiktok_followers', 'created_by', 'created_at', 'updated_at'],
   data_deletion_requests: ['id', 'meta_user_id', 'received_at', 'status', 'note', 'updated_at'],
   deliverable_groups: ['id', 'client_id', 'batch_id', 'content_type', 'title', 'target', 'work_kind_id', 'created_by', 'created_at', 'planned'],
@@ -2394,7 +2396,7 @@ export const NULLABLE_COLUMNS = {
   content_assets: ['client_id', 'platform', 'dest_url', 'post_url', 'provider_post_id', 'offer_code', 'keyword', 'published_at'],
   content_items: ['archived_at', 'archived_by', 'upload_folder_id', 'upload_folder_url', 'upload_folder_lock', 'upload_version_folders', 'done_at', 'done_by', 'group_id', 'deliver_only', 'blocked_need', 'blocked_from_id', 'blocked_note', 'blocked_at', 'blocked_nudged_12_at', 'blocked_nudged_24_at', 'ack_nudged_at', 'qc_done_version', 'handover_drive_at', 'handover_source_at', 'drive_folder_id', 'drive_url', 'tagged_ids', 'link_final', 'link_versions', 'delivered_at', 'batch_id', 'owner_id', 'assigned_by', 'due_date', 'caption', 'raw_assets_url', 'brief', 'raw_assets', 'review_link', 'review_note', 'scheduler_ids', 'brief_url', 'work_kind_id', 'portal_hidden', 'graded_round', 'split_from_id', 'split_round', 'split_at', 'split_for_round', 'adhoc_post', 'for_contact_id', 'clip_approvals', 'edit_round', 'include_plan', 'final_files', 'change_assets', 'drive_handins', 'client_round', 'client_rounds', 'client_frozen', 'share_token', 'accepted_at', 'accepted_round', 'link_url', 'link_kind', 'change_note', 'change_note_by', 'change_note_at', 'posted_slides', 'asked_ids', 'asked_at'],
   content_tracker: ['required_graphics', 'required_reels', 'notes', 'responsible', 'in_asana', 'updated_by'],
-  creator_campaigns: ['starts_at', 'ends_at', 'place', 'seats', 'closes_on', 'usage_terms', 'created_by'],
+  creator_campaigns: ['starts_at', 'ends_at', 'place', 'seats', 'closes_on', 'usage_terms', 'cover_url', 'created_by'],
   creators: ['photo_url', 'instagram', 'instagram_followers', 'tiktok', 'tiktok_followers', 'created_by'],
   data_deletion_requests: ['note'],
   deliverable_groups: ['batch_id', 'work_kind_id', 'created_by', 'planned'],
@@ -2518,7 +2520,7 @@ export const JSON_COLUMNS = {
   bookings: [],
   calendar_accounts: [],
   campaign_creator_events: [],
-  campaign_creators: ['samples'],
+  campaign_creators: ['samples', 'sample_images'],
   card_views: [],
   claim_locks: [],
   client_agreements: ['deliverable_lines', 'services'],
@@ -2657,7 +2659,7 @@ export const JSON_ARRAY_COLUMNS = {
   bookings: [],
   calendar_accounts: [],
   campaign_creator_events: [],
-  campaign_creators: ['samples'],
+  campaign_creators: ['samples', 'sample_images'],
   card_views: [],
   claim_locks: [],
   client_agreements: ['deliverable_lines', 'services'],

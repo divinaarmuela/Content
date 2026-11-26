@@ -6,7 +6,12 @@ import PortalShell from './PortalShell'
  * The page a client's creator campaigns sit in: the same MD Media header and theme as the rest of their portal
  * (team boards, shoots), so it reads as one more part of the link they already have.
  */
-export default function CreatorsFrame({ clientName, crumb, children }: { clientName: string; crumb: string; children: React.ReactNode }) {
+export default function CreatorsFrame({ clientName, crumb, bleed = false, children }: {
+  clientName: string; crumb: string
+  /** the page runs edge to edge and keeps its own margins (a campaign's cover photograph) */
+  bleed?: boolean
+  children: React.ReactNode
+}) {
   return (
     <PortalShell className={`dbx ${archivo.variable} ${sometype.variable}`}>
       <div
@@ -23,7 +28,7 @@ export default function CreatorsFrame({ clientName, crumb, children }: { clientN
         }}
       >
         <header className="sticky top-0 z-20 border-b border-border bg-background/85 backdrop-blur">
-          <div className="mx-auto flex min-h-14 w-full max-w-[1100px] flex-wrap items-center gap-x-4 gap-y-1 px-5 py-2 pr-14 sm:px-10">
+          <div className={`mx-auto flex min-h-14 w-full flex-wrap items-center gap-x-4 gap-y-1 px-5 py-2 pr-14 sm:px-10 ${bleed ? 'lg:px-16' : 'max-w-[1240px]'}`}>
             <span className="flex shrink-0 items-center rounded-md bg-gradient-to-b from-zinc-800 to-zinc-950 px-2 py-1.5">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src="/MDLogo-trim.png" alt="MD Media" className="h-2.5 w-auto" />
@@ -33,7 +38,7 @@ export default function CreatorsFrame({ clientName, crumb, children }: { clientN
             <p className="text-[14px] text-muted-foreground">{crumb}</p>
           </div>
         </header>
-        <main className="portal-legible mx-auto flex w-full max-w-[1100px] flex-col gap-8 px-5 py-6 pb-24 sm:px-10 sm:pb-16">
+        <main className={bleed ? 'portal-legible flex w-full flex-col' : 'portal-legible mx-auto flex w-full max-w-[1240px] flex-col gap-8 px-5 py-6 pb-24 sm:px-10 sm:pb-16'}>
           {children}
         </main>
         <Toaster position="top-center" />

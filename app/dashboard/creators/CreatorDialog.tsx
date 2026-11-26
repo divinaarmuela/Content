@@ -8,6 +8,10 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import type { CampaignCreator, Creator } from '../../lib/creator-campaign-core'
 import Pick from './Pick'
 import { AREA, LABEL } from './stageWords'
+import { uploadPicture } from './uploadPicture'
+
+/** how many pictures of a creator's posts the client is shown */
+const MAX_PICTURES = 6
 
 /**
  * ADD A CREATOR, OR CHANGE ONE. A new creator is typed in, or picked from the agency's own list (everyone typed in
@@ -38,6 +42,8 @@ export default function CreatorDialog({ campaignId, row, onClose, onSaved, onSta
   /** the version this dialog saves on — moved forward when somebody else's change is shown, so Save can be pressed again */
   const [rev, setRev] = useState(row?.rev ?? 0)
   const [samples, setSamples] = useState((row?.samples ?? []).join('\n'))
+  const [pictures, setPictures] = useState<string[]>(row?.sample_images ?? [])
+  const picturesRef = useRef<HTMLInputElement | null>(null)
   const [busy, setBusy] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
@@ -67,17 +73,23 @@ export default function CreatorDialog({ campaignId, row, onClose, onSaved, onSta
 
   const upload = async (file: File) => {
     setUploading(true); setProblem(null)
-    try {
-      const form = new FormData(); form.set('file', file)
-      const res = await fetch('/api/creators/photo', { method: 'POST', body: form })
-      const json = await res.json().catch(() => ({}))
-      if (!res.ok) { setProblem(json?.error ?? 'That photo did not upload'); return }
-      setPhoto(String(json.url))
-    } catch {
-      setProblem('That photo did not upload. Check the connection and try again.')
-    } finally {
-      setUploading(false)
+    const res = await uploadPicture(file)
+    setUploading(false)
+    if (!res.ok) { setProblem(res.reason); return }
+    setPhoto(res.url)
+  }
+
+  /** Pictures of their posts: as many of the chosen files as there is room for, one after another. */
+  const addPictures = async (files: File[]) => {
+    setUploading(true); setProblem(null)
+    let have = pictures
+    for (const file of files.slice(0, MAX_PICTURES - pictures.length)) {
+      const res = await uploadPicture(file)
+      if (!res.ok) { setProblem(res.reason); break }
+      have = [...have, res.url]
+      setPictures(have)
     }
+    setUploading(false)
   }
 
   const save = async () => {
@@ -88,6 +100,7 @@ export default function CreatorDialog({ campaignId, row, onClose, onSaved, onSta
       instagram_followers: igFollowers.replace(/[,\s]/g, '') || null, tiktok_followers: ttFollowers.replace(/[,\s]/g, '') || null,
       why: why || null, terms, rate: terms === 'paid' ? rate || null : null,
       samples: samples.split('\n').map(s => s.trim()).filter(Boolean),
+      sample_images: pictures,
     }
     setBusy(true)
     try {
@@ -188,6 +201,30 @@ export default function CreatorDialog({ campaignId, row, onClose, onSaved, onSta
                 <Input className="h-11" value={rate} maxLength={120} onChange={e => setRate(e.target.value)} placeholder="$300 for the day" />
               </label>
             )}
+          </div>
+
+          {/* PICTURES OF THEIR POSTS (the owner, 26 Nov 2026: "images") — what the client looks at before saying yes */}
+          <div className="flex flex-col gap-2">
+            <span className={LABEL}>Pictures of their posts <span className="font-normal text-muted-foreground">({pictures.length} of {MAX_PICTURES})</span></span>
+            <p className="-mt-1 text-[12px] text-muted-foreground">Screenshots of their best posts. The client sees these on the creator&rsquo;s card.</p>
+            <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
+              {pictures.map((src, i) => (
+                <div key={src} className="relative aspect-[4/5] overflow-hidden rounded-inner border border-border">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={src} alt="" className="h-full w-full object-cover" />
+                  <button type="button" aria-label={`Remove picture ${i + 1}`} onClick={() => setPictures(p => p.filter(x => x !== src))}
+                    className="absolute right-1 top-1 flex h-7 w-7 items-center justify-center rounded-full bg-foreground text-[14px] font-semibold leading-none text-background">×</button>
+                </div>
+              ))}
+              {pictures.length < MAX_PICTURES && (
+                <button type="button" disabled={uploading} onClick={() => picturesRef.current?.click()}
+                  className="flex aspect-[4/5] flex-col items-center justify-center gap-1 rounded-inner border border-dashed border-border text-[12px] text-muted-foreground hover:border-foreground hover:text-foreground disabled:opacity-60">
+                  <span className="text-[20px] leading-none">+</span>{uploading ? 'Uploading…' : 'Add'}
+                </button>
+              )}
+            </div>
+            <input ref={picturesRef} type="file" multiple accept="image/png,image/jpeg,image/webp" className="hidden"
+              onChange={e => { const fs = Array.from(e.target.files ?? []); if (fs.length) void addPictures(fs); e.target.value = '' }} />
           </div>
 
           <label className="flex flex-col gap-1">

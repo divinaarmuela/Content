@@ -27,7 +27,7 @@ const GONE = 'That campaign is not here'
 
 /** RTDB keeps no empty list: a campaign saved with nobody on it comes back with the key missing. */
 const whole = (c: Campaign): Campaign => ({ ...c, deliverables: c.deliverables ?? [], member_ids: c.member_ids ?? [] })
-const wholeRow = (r: CampaignCreator): CampaignCreator => ({ ...r, samples: r.samples ?? [] })
+const wholeRow = (r: CampaignCreator): CampaignCreator => ({ ...r, samples: r.samples ?? [], sample_images: r.sample_images ?? [] })
 
 /** The client's own day, YYYY-MM-DD — the agency and its clients are in Melbourne. */
 export const todayInMelbourne = (now = new Date()) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Melbourne' }).format(now)
@@ -101,7 +101,7 @@ export async function createCampaign(v: Viewer, raw: unknown): Promise<Result<Ca
     client_id: client.id, title: input.title, kind: input.kind ?? 'event',
     starts_at: input.starts_at ?? null, ends_at: input.ends_at ?? null, place: input.place ?? null,
     seats: input.seats ?? null, closes_on: input.closes_on ?? null,
-    deliverables: input.deliverables ?? [], usage_terms: input.usage_terms ?? null,
+    deliverables: input.deliverables ?? [], usage_terms: input.usage_terms ?? null, cover_url: input.cover_url ?? null,
     // a new campaign is the team's own until somebody opens it to the client
     status: 'draft', client_visible: false,
     member_ids: [], created_by: v.id, created_at: now, updated_at: now, rev: 1,
@@ -206,7 +206,7 @@ export async function addCreator(v: Viewer, campaignId: string, raw: unknown): P
   const id = campaignCreatorId(campaignId, kept.id)
   const res = await onCampaign().claim(id, current => current ? null : {
     id, campaign_id: campaignId, client_id: gate.campaign.client_id, creator_id: kept.id, ...profile,
-    why: input.why ?? null, terms: input.terms ?? 'gifted', rate: input.rate ?? null, samples: input.samples ?? [],
+    why: input.why ?? null, terms: input.terms ?? 'gifted', rate: input.rate ?? null, samples: input.samples ?? [], sample_images: input.sample_images ?? [],
     stage: 'idea', client_note: null, decided_at: null, decided_by: null, created_at: now, updated_at: now, rev: 1,
   })
   if (!res.claimed) return { ok: false, status: 409, reason: `${res.current?.name ?? profile.name} is already on this campaign`, fresh: res.current ? wholeRow(res.current) : null }

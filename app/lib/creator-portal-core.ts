@@ -1,4 +1,4 @@
-import { clientMayDecide, clientSees, dayWords, seatCount, type Campaign, type CampaignCreator, type CreatorStage } from './creator-campaign-core'
+import { clientMayDecide, clientSees, dayWords, melbourneInput, seatCount, type Campaign, type CampaignCreator, type CreatorStage } from './creator-campaign-core'
 
 /**
  * WHAT A CLIENT IS HANDED about a creator campaign, and the words on their page. Pure. The client is given only
@@ -11,17 +11,25 @@ export type ClientCreator = {
   instagram: string | null; instagram_followers: number | null
   tiktok: string | null; tiktok_followers: number | null
   why: string | null; terms: 'gifted' | 'paid'; samples: string[]
+  /** pictures of their posts */
+  sample_images: string[]
   stage: CreatorStage; client_note: string | null; rev: number
 }
 
 const forClient = (c: CampaignCreator): ClientCreator => ({
   id: c.id, name: c.name, photo_url: c.photo_url, instagram: c.instagram, instagram_followers: c.instagram_followers,
-  tiktok: c.tiktok, tiktok_followers: c.tiktok_followers, why: c.why, terms: c.terms, samples: c.samples ?? [],
+  tiktok: c.tiktok, tiktok_followers: c.tiktok_followers, why: c.why, terms: c.terms, samples: c.samples ?? [], sample_images: c.sample_images ?? [],
   stage: c.stage, client_note: c.client_note, rev: c.rev,
 })
 
+/** One step of "where it is up to": done, where things are now, or still to come. */
+export type ClientStep = { key: 'choose' | 'closes' | 'day'; label: string; when: string | null; state: 'done' | 'now' | 'next' }
+
 export type ClientCampaign = {
   id: string; title: string; kind: Campaign['kind']
+  /** the picture across the top, or null */
+  cover_url: string | null
+  steps: ClientStep[]
   starts_at: string | null; place: string | null; closes_on: string | null
   deliverables: string[]; usage_terms: string | null
   seats: number | null; confirmed: number; waiting: number; open: number | null
@@ -44,7 +52,16 @@ export function clientCampaign(c: Campaign, creators: readonly CampaignCreator[]
     : n > 0 ? `${n} ${n === 1 ? 'creator' : 'creators'} to look at.`
       : view.confirmed.length > 0 ? 'Nothing waiting on you. We will add more creators here if we find them.'
         : 'No creators to look at yet. We will put them here.'
+  // WHERE IT IS UP TO — choosing, the list closing, the day itself; only the steps the team has dated
+  const day = c.starts_at ? melbourneInput(c.starts_at).slice(0, 10) : ''
+  const closed = !!c.closes_on && today > c.closes_on
+  const steps: ClientStep[] = [
+    { key: 'choose', label: 'Choosing creators', when: c.closes_on ? `Until ${dayWords(c.closes_on)}` : null, state: may.ok && !(day && today >= day) ? 'now' : 'done' },
+    ...(c.closes_on ? [{ key: 'closes' as const, label: 'The list closes', when: dayWords(c.closes_on), state: closed ? 'done' as const : 'next' as const }] : []),
+    ...(day ? [{ key: 'day' as const, label: c.kind === 'event' ? 'The day' : 'Content goes out', when: dayWords(day), state: today > day ? 'done' as const : today === day ? 'now' as const : 'next' as const }] : []),
+  ]
   return {
+    cover_url: c.cover_url ?? null, steps,
     id: c.id, title: c.title, kind: c.kind, starts_at: c.starts_at, place: c.place, closes_on: c.closes_on,
     deliverables: c.deliverables ?? [], usage_terms: c.usage_terms,
     seats: counts.seats, confirmed: counts.confirmed, waiting: counts.waiting, open: counts.open, over: counts.over,

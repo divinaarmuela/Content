@@ -1,6 +1,6 @@
 'use client'
 
-import { use, useCallback, useEffect, useMemo, useState } from 'react'
+import { use, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
@@ -19,6 +19,7 @@ import {
 } from '../../../lib/creator-campaign-core'
 import CreatorDialog from '../CreatorDialog'
 import Pick from '../Pick'
+import { uploadPicture } from '../uploadPicture'
 import { AREA, FIELD, LABEL, STAGE_HELP, STAGE_ORDER, STAGE_TONE, STATUS_TONE, STATUS_WORDS, moveWords, whenWords } from '../stageWords'
 
 /**
@@ -301,6 +302,17 @@ function DetailsTab({ campaign, clientName, people, mayEdit, mayRemove, busy, on
   const [usage, setUsage] = useState(campaign.usage_terms ?? '')
   const [status, setStatus] = useState<CampaignStatus>(campaign.status)
   const [members, setMembers] = useState<string[]>(campaign.member_ids)
+  const [cover, setCover] = useState(campaign.cover_url ?? '')
+  const [sending, setSending] = useState(false)
+  const coverRef = useRef<HTMLInputElement | null>(null)
+  const sendCover = async (file: File) => {
+    setSending(true)
+    const res = await uploadPicture(file)
+    setSending(false)
+    if (!res.ok) { toast.error(res.reason); return }
+    setCover(res.url)
+    toast.success('Picture added. Press Save details to keep it.')
+  }
 
   const save = () => {
     if (!title.trim()) { toast.error('Give the campaign a name'); return }
@@ -308,7 +320,7 @@ function DetailsTab({ campaign, clientName, people, mayEdit, mayRemove, busy, on
       title, kind, place: place || null, seats: seats.trim() || null, closes_on: closes || null,
       starts_at: fromMelbourneInput(starts),
       deliverables: deliverables.split('\n').map(d => d.trim()).filter(Boolean), usage_terms: usage || null,
-      status, member_ids: members,
+      status, member_ids: members, cover_url: cover || null,
     }, 'Saved')
   }
   const off = !mayEdit
@@ -322,6 +334,26 @@ function DetailsTab({ campaign, clientName, people, mayEdit, mayRemove, busy, on
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="text-[16px] font-semibold">About this campaign</h2>
         <p className="text-[13px] text-muted-foreground">For {clientName}</p>
+      </div>
+      {/* THE COVER PICTURE (the owner, 26 Nov 2026: the client's page wants "images") — across the top of what the client opens */}
+      <div className="flex flex-col gap-2">
+        <span className={LABEL}>Cover picture</span>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          {cover ? <img src={cover} alt="" className="h-[120px] w-full rounded-inner border border-border object-cover sm:w-[260px]" />
+            : <span className="flex h-[120px] w-full items-center justify-center rounded-inner border border-dashed border-border px-4 text-center text-[13px] text-muted-foreground sm:w-[260px]">No cover yet. The client&rsquo;s page opens with this picture.</span>}
+          {mayEdit && (
+            <div className="flex flex-wrap items-center gap-2">
+              <input ref={coverRef} type="file" accept="image/png,image/jpeg,image/webp" className="hidden"
+                onChange={e => { const f = e.target.files?.[0]; if (f) void sendCover(f); e.target.value = '' }} />
+              <Button type="button" variant="outline" className="h-11 rounded-full px-4 text-[13px]" disabled={sending} onClick={() => coverRef.current?.click()}>
+                {sending ? 'Uploading…' : cover ? 'Change picture' : 'Add a picture'}
+              </Button>
+              {cover && <Button type="button" variant="ghost" className="h-11 px-3 text-[13px]" onClick={() => setCover('')}>Remove</Button>}
+              <span className="basis-full text-[12px] text-muted-foreground">A wide photo works best. PNG, JPEG or WebP, under 4 MB.</span>
+            </div>
+          )}
+        </div>
       </div>
       <label className="flex flex-col gap-1">
         <span className={LABEL}>Name</span>
@@ -384,7 +416,7 @@ function DetailsTab({ campaign, clientName, people, mayEdit, mayRemove, busy, on
 
       {mayEdit && (
         <div className="flex flex-wrap items-center gap-2">
-          <Button className="h-11 rounded-full px-5 font-semibold" disabled={busy} onClick={save}>{busy ? 'Saving…' : 'Save details'}</Button>
+          <Button className="h-11 rounded-full px-5 font-semibold" disabled={busy || sending} onClick={save}>{busy ? 'Saving…' : 'Save details'}</Button>
           {mayRemove && (
             <Button variant="outline" className="h-11 rounded-full px-4 text-accent-red-deep" disabled={busy} onClick={onDelete}><Trash2 className="h-4 w-4" aria-hidden /> Delete campaign</Button>
           )}

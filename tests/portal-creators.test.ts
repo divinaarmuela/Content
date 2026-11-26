@@ -22,12 +22,12 @@ const T1 = '11111111-1111-4111-8111-111111111111'
 const T2 = '22222222-2222-4222-8222-222222222222'
 const campaign = (over: Partial<Campaign> = {}): Campaign => ({
   id: 'k1', client_id: 'c1', title: 'Teta’s table lunch', kind: 'event', starts_at: null, ends_at: null, place: 'South Yarra', seats: 2,
-  closes_on: null, deliverables: ['3 Stories on the day'], usage_terms: null, status: 'live', client_visible: true, member_ids: ['ed'], created_by: 'ama',
+  closes_on: null, deliverables: ['3 Stories on the day'], usage_terms: null, cover_url: 'https://cdn.x/cover.jpg', status: 'live', client_visible: true, member_ids: ['ed'], created_by: 'ama',
   created_at: '2026-11-25T00:00:00.000Z', updated_at: '2026-11-25T00:00:00.000Z', rev: 1, ...over,
 })
 const creator = (id: string, stage: CampaignCreator['stage'], over: Partial<CampaignCreator> = {}): CampaignCreator => ({
   id: `k1__${id}`, campaign_id: 'k1', client_id: 'c1', creator_id: id, name: id, photo_url: null, instagram: id, instagram_followers: 1000, tiktok: null, tiktok_followers: null,
-  why: 'Fits', terms: 'paid', rate: '$300', samples: [], stage, client_note: null, decided_at: null, decided_by: null, rev: 1, ...over,
+  why: 'Fits', terms: 'paid', rate: '$300', samples: [], sample_images: ['https://cdn.x/post1.jpg'], stage, client_note: null, decided_at: null, decided_by: null, rev: 1, ...over,
 })
 const everyone = () => [creator('idea1', 'idea'), creator('lydia', 'with_client'), creator('yes1', 'approved'), creator('inv1', 'invited'), creator('conf1', 'confirmed'), creator('no1', 'passed'), creator('gone', 'declined')]
 
@@ -66,6 +66,22 @@ describe('what a client is handed', () => {
     expect(clientCampaign(campaign({ closes_on: '2026-11-26' }), everyone(), '2026-11-26')!.open_for_answers).toBe(true)
     const closed = clientCampaign(campaign({ status: 'closed' }), everyone(), '2026-11-26')!
     expect(closed).toMatchObject({ open_for_answers: false, closed_reason: 'This list is closed.' })
+  })
+  it('the pictures come with it: the campaign\u2019s cover, and each creator\u2019s posts', () => {
+    const v = clientCampaign(campaign(), everyone(), '2026-11-26')!
+    expect(v.cover_url).toBe('https://cdn.x/cover.jpg')
+    expect(v.shortlist[0].sample_images).toEqual(['https://cdn.x/post1.jpg'])
+  })
+  it('where the campaign is up to: choosing, the list closing, the day — each done, now or still to come', () => {
+    const c = campaign({ closes_on: '2026-12-05', starts_at: '2026-12-10T01:30:00.000Z' })
+    const at = (today: string) => clientCampaign(c, everyone(), today)!.steps.map(s => `${s.label}|${s.when}|${s.state}`)
+    expect(at('2026-11-26')).toEqual(['Choosing creators|Until Sat 5 Dec|now', 'The list closes|Sat 5 Dec|next', 'The day|Thu 10 Dec|next'])
+    expect(at('2026-12-07')).toEqual(['Choosing creators|Until Sat 5 Dec|done', 'The list closes|Sat 5 Dec|done', 'The day|Thu 10 Dec|next'])
+    expect(at('2026-12-10')).toEqual(['Choosing creators|Until Sat 5 Dec|done', 'The list closes|Sat 5 Dec|done', 'The day|Thu 10 Dec|now'])
+    expect(at('2026-12-11').map(s => s.split('|')[2])).toEqual(['done', 'done', 'done'])
+    // no dates set: one step, and it is where things are
+    expect(clientCampaign(campaign(), everyone(), '2026-11-26')!.steps.map(s => `${s.label}|${s.when}|${s.state}`)).toEqual(['Choosing creators|null|now'])
+    expect(clientCampaign(campaign({ kind: 'content', starts_at: '2026-12-10T01:30:00.000Z' }), everyone(), '2026-11-26')!.steps[1].label).toBe('Content goes out')
   })
   it('where a creator they said yes to has got to', () => {
     expect(chosenWords({ stage: 'approved', name: 'Lydia H' })).toBe('You said yes. We are inviting them')
