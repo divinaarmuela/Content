@@ -156,6 +156,8 @@ export default function BriefCanvas({
   // typing in a note never throws the page up (Manal, 20 Oct 2026) — app/lib/hold-page-scroll.ts
   useEffect(() => { const v = viewportRef.current; return v ? holdPageScroll(v) : undefined }, [])
   const worldRef = useRef<HTMLDivElement>(null)
+  /** the timer that takes the "about to move" hint off the board once it has stopped */
+  const settleRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const camRef = useRef<Camera>({ x: 0, y: 0, s: 1 })
   const [, forceRender] = useState(0)
   const [scalePct, setScalePct] = useState(100)
@@ -283,7 +285,15 @@ export default function BriefCanvas({
       camRef.current.y = kept.y
     }
     const { x, y, s } = camRef.current
-    if (worldRef.current) worldRef.current.style.transform = `translate(${x}px, ${y}px) scale(${s})`
+    if (worldRef.current) {
+      // WHILE IT MOVES, the board is one picture the browser slides — not 95 cards redrawn every frame (the owner,
+      // 26 Nov 2026: it "lags heavily when going around the canvas"). The hint comes off a moment after the last
+      // move, so the board is drawn sharp again at whatever zoom it stopped on.
+      worldRef.current.style.willChange = 'transform'
+      if (settleRef.current) clearTimeout(settleRef.current)
+      settleRef.current = setTimeout(() => { if (worldRef.current) worldRef.current.style.willChange = '' }, 350)
+      worldRef.current.style.transform = `translate(${x}px, ${y}px) scale(${s})`
+    }
     keepToolbarInView()
     // no dot grid behind the cards (the owner, 21 Sep 2026: "remove the dots") — a plain surface
   }, [keepToolbarInView])

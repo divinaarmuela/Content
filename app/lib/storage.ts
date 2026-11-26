@@ -89,6 +89,19 @@ export async function putObject(
 }
 
 /** putObject for a body too big to hold in memory: streamed through to R2 with its length known up front. */
+/**
+ * Put a file at an EXACT key (no random prefix) — for things whose name is worked out from what they are, so asking
+ * twice lands on the same object: a board picture's small copy (`thumb/w640/<name>.webp`, board-thumb-core).
+ * `immutable`: a small copy of a given picture never changes, so browsers keep it.
+ */
+export async function putObjectAt(key: string, bytes: Buffer, contentType: string): Promise<{ publicUrl: string; key: string }> {
+  if (!r2Configured()) throw new Error('File storage is not configured')
+  await r2().send(new PutObjectCommand({
+    Bucket: R2_BUCKET!, Key: key, Body: bytes, ContentType: contentType, CacheControl: 'public, max-age=31536000, immutable',
+  }))
+  return { publicUrl: `${R2_PUBLIC_BASE!.replace(/\/$/, '')}/${key}`, key }
+}
+
 export async function putStream(
   filename: string, body: ReadableStream<Uint8Array>, length: number, contentType: string,
 ): Promise<{ publicUrl: string; key: string }> {

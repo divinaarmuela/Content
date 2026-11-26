@@ -10,6 +10,7 @@ import {
 import { COLOUR_CLASS, ICON } from './canvasTone'
 import NoteEditor from './NoteEditor'
 import type { LiveItem } from './useBoard'
+import { boardThumb } from '../../lib/board-thumb-core'
 
 /**
  * One thing on the canvas, drawn by its kind.
@@ -88,7 +89,9 @@ export default function CanvasItemView({
       <div data-item={item.id} data-kind="image" className={cn(shell, 'bg-paper')} style={style}>
         {item.url && (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={item.url} alt={item.label ?? ''} draggable={false} className="h-full w-full object-cover" />
+          // a small copy of a stored picture (board-thumb-core); the full-size file if that will not load
+          <img src={boardThumb(item.url, item.w)} alt={item.label ?? ''} draggable={false} loading="lazy" decoding="async" className="h-full w-full object-cover"
+            onError={e => { const img = e.currentTarget; if (item.url && img.dataset.full !== '1') { img.dataset.full = '1'; img.src = item.url } }} />
         )}
         {badge}
       </div>

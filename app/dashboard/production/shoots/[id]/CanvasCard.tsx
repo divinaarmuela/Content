@@ -35,6 +35,17 @@ import { CanvasCommentBadge } from '../../../../components/canvas/CanvasComments
 import { usePortalDriveScope } from '../../../../components/canvas/PortalDriveScope'
 import { growTextarea } from '../../../../lib/grow-textarea'
 import { MilanoteCard, drawnAsMilanote } from './MilanoteCards'
+import { boardThumb } from '../../../../lib/board-thumb-core'
+
+/**
+ * A BOARD DRAWS A SMALL COPY of a stored picture (the owner, 26 Nov 2026: a board "lags heavily when going around the
+ * canvas" — board-thumb-core has what was measured). If the small copy will not load for any reason, the picture
+ * falls back to the full-size file it drew before, once.
+ */
+const toOriginal = (full: string | undefined) => (e: React.SyntheticEvent<HTMLImageElement>) => {
+  const img = e.currentTarget
+  if (full && img.dataset.full !== '1') { img.dataset.full = '1'; img.src = full }
+}
 
 /** Sticky-note palette — light and dark resolved as pairs, never inverted. */
 /** the words' own colour, when picked; '' = the box decides */
@@ -790,7 +801,7 @@ function CanvasCardInner({
       </div>
     ) : card.url ? (
       // eslint-disable-next-line @next/next/no-img-element
-      <img src={card.url} alt="mockup" loading="lazy" decoding="async" draggable={false}
+      <img src={boardThumb(card.url, card.w)} onError={toOriginal(card.url)} alt="mockup" loading="lazy" decoding="async" draggable={false}
         className="h-full w-full select-none object-cover" />
     ) : (
       <div className="flex h-full w-full flex-col items-center justify-center gap-1 text-muted-foreground">
@@ -1091,7 +1102,7 @@ function CanvasCardInner({
           </div>
         ) : (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={card.url} alt={card.name ?? 'reference'} loading="lazy" decoding="async"
+          <img src={boardThumb(card.url, card.w)} onError={toOriginal(card.url)} alt={card.name ?? 'reference'} loading="lazy" decoding="async"
             draggable={false} className={`w-full min-h-0 shrink select-none ${card.h ? 'flex-1 object-cover' : ''}`}
             style={captionStrip ? pictureRoomUnderCaption(card.h) : undefined} />
         )}
