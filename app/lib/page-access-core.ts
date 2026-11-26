@@ -47,6 +47,8 @@ export const GRANTABLE_PAGES: { href: string; label: string; parent?: string }[]
   { href: '/dashboard/scheduler', label: 'Post approval' },
   { href: '/dashboard/calendar', label: 'Calendar' },
   { href: '/dashboard/activity', label: 'Asana activity' },
+  // creator campaigns (25 Nov 2026): super admins and account managers; anyone else is opened to it by name
+  { href: '/dashboard/creators', label: 'Creator campaigns' },
   { href: '/dashboard/reports', label: 'Reports' },
   // the upsell tracker (25 Nov 2026): a super admin's, and opened by name to the people pitching add-ons
   { href: '/dashboard/upsells', label: 'Upsells' },
@@ -151,6 +153,10 @@ export function defaultAllows(role: Role | null, href: string): boolean {
   // admins can log or these people can log"). It holds prices and commission, so no role has it but a super admin;
   // everyone else is opened to it by name. An account manager's blanket default below must not reach it.
   if (href === '/dashboard/upsells') return role === 'super_admin'
+  // CREATOR CAMPAIGNS (the owner, 25 Nov 2026: "super admins can create for any client and AM can join in"). A
+  // manager's page; `general` and the rest do not inherit it — they are opened to it by name, and then see only the
+  // campaigns they were added to (the routes decide that, not this).
+  if (href === '/dashboard/creators') return role === 'super_admin' || role === 'account_manager'
   // the client's welcome email (the owner, 13 Nov 2026: "ensure AM or super admins can access and create that")
   if (href === ONBOARDING_SUBPAGE) return role === 'super_admin' || role === 'account_manager'
   if (role === 'editor') {

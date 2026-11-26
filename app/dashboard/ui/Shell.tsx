@@ -9,7 +9,7 @@ import { isReviewer } from '@/app/lib/reviewer-lock-core'
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/sheet'
 import {
   LayoutGrid, Inbox, Users, Globe, Kanban, Activity, Camera, CalendarCheck,
-  BarChart3, Sparkles, Bell, Settings, Menu, Sun, Moon, Share2, Megaphone, TrendingUp,
+  BarChart3, Sparkles, Bell, Settings, Menu, Sun, Moon, Share2, Megaphone, TrendingUp, UsersRound,
   CalendarClock, CalendarDays, Search, ListChecks, StickyNote, Radar, GalleryHorizontalEnd } from 'lucide-react'
 import NotificationBell from '../NotificationBell'
 import { ActAsButton, ActingBar, useActAs } from './ActAs'
@@ -42,6 +42,8 @@ export const NAV_MAIN: NavItem[] = [
   { href: '/dashboard',            label: 'Overview',         icon: LayoutGrid },
   { href: '/dashboard/leads',      label: 'Leads',            icon: Inbox },
   { href: '/dashboard/clients',    label: 'Clients',          icon: Users },
+  // a client's event or content push with creators (25 Nov 2026) — super admins and account managers
+  { href: '/dashboard/creators',   label: 'Creator campaigns', icon: UsersRound },
   // the agency's filing cabinet, as Google Drive holds it — HIDDEN from the
   // rail for now (the owner, 9 Sep 2026: "can you hide the files page for
   // now"); the page and its routes stay, reachable by address
@@ -126,7 +128,7 @@ export const NAV_TOOLS: NavItem[] = [
  *  in NAV_MAIN or NAV_TOOLS that is in no group and is not the pinned one is
  *  simply never drawn, and nothing else would notice. */
 export const GROUPS: { label: string; hrefs: string[] }[] = [
-  { label: 'General', hrefs: ['/dashboard', '/dashboard/leads', '/dashboard/clients', '/dashboard/audience'] },
+  { label: 'General', hrefs: ['/dashboard', '/dashboard/leads', '/dashboard/clients', '/dashboard/creators', '/dashboard/audience'] },
   { label: 'Content', hrefs: ['/dashboard/todos', '/dashboard/production', '/dashboard/team-boards', '/dashboard/editor', '/dashboard/designer', '/dashboard/scheduler', '/dashboard/bookings', '/dashboard/website', '/dashboard/activity'] },
   { label: 'Social',  hrefs: ['/dashboard/social'] },
   { label: 'Team',    hrefs: ['/dashboard/team', '/dashboard/team/activity', '/dashboard/reports', '/dashboard/upsells', '/dashboard/ai', '/dashboard/notifications'] },
@@ -138,6 +140,7 @@ export const PAGE_TITLES: Record<string, string> = {
   '/dashboard/start':         'How this works',
   '/dashboard/leads':         'Leads',
   '/dashboard/clients':       'Clients',
+  '/dashboard/creators':      'Creator campaigns',
   '/dashboard/files':         'Files',
   '/dashboard/boards':        'Boards',
   '/dashboard/audience':      'Audience',
