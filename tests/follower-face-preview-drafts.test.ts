@@ -22,14 +22,15 @@ describe('drafts in the feed preview', () => {
   // THE POSTING REBUILD (29 Sep 2026, the owner's decision 1): Schedule is for getting APPROVED posts out, so the
   // preview is Instagram posts that are going out — Ready to post and Booked in — and drafts live on Post approval.
   // The preview also stopped drawing cancelled posts, other networks, and posted ones twice (audit S8).
-  it('the Preview is given the channel’s posts and keeps only what is going out on Instagram', () => {
+  // 27 Nov 2026: one account at a time, on every connected platform — the same rule, for the account pressed
+  it('the Preview is given the client’s posts and keeps only what is going out on the account pressed', () => {
     const page = readFileSync('app/dashboard/social/schedule/page.tsx', 'utf8')
     // a tile opens on the page that owns its stage (`openPost`, review fix 29 Sep 2026)
     // every post of the channel, Stories and all — the Posts / Stories tabs (25 Nov 2026) narrow the calendar, not the feed
-    expect(page).toContain('<PreviewGrid posts={channelPostsAll} tz={tz} onOpen={openPost}')
+    expect(page).toContain('<PreviewGrid posts={previewRows} tz={tz} onOpen={openPost} accounts={data.accounts} barAccountId={selected?.id ?? null} />')
     expect(page).toContain('const planned = useMemo(() => channelPosts.filter(p => showsOnSchedule(p.stage)), [channelPosts])')
     const views = readFileSync('app/dashboard/social/schedule/views.tsx', 'utf8')
-    expect(views).toContain('previewOrder(previewPosts(posts, instagramIds, feedShown))')
+    expect(views).toContain('previewOrder(previewPosts(posts, new Set([account.id]), feedShown))')
     expect(views).not.toContain('live_status')
   })
 })

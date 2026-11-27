@@ -7,7 +7,11 @@ import { dayKeyInZone, formatInZone } from '@/app/lib/timezone-core'
 import { groupForList, monthCells } from '@/app/lib/social-schedule-core'
 import { dropIntent, dropLabelAt, moveToDay, previewOrder } from '@/app/lib/schedule-drag-core'
 import { previewPosts, type NetworkLine } from '@/app/lib/schedule-stage-core'
-import { feedWords, type LiveTile } from '@/app/lib/feed-preview-core'
+import type { LiveTile } from '@/app/lib/feed-preview-core'
+import { feedPreviewNote } from '@/app/lib/portal-core'
+import { networkName } from '@/app/lib/publish-core'
+import { CLIENT_WORD_LABEL, CLIENT_WORD_TONE, clientWord, previewAccount, previewAccounts, previewCaption, previewCover, previewShape } from '@/app/lib/schedule-client-word-core'
+import PlatformIcon from '../PlatformIcon'
 import Chip from '../../ui/Chip'
 import { AlertMark, NetworkLogos, STAGE_DIM, STAGE_RING, StageDot, Thumb, clockLabel } from './tiles'
 import { automationLine } from '@/app/lib/comment-automation-core'
@@ -439,26 +443,59 @@ export function MonthGrid({
   )
 }
 
+type PreviewAccountRow = { id: string; platform: string; username?: string | null; name?: string | null; active?: boolean | null }
+
+const CLIENT_MARK_CLS: Record<'amber' | 'red' | 'green' | 'grey', string> = {
+  amber: 'bg-amber-400 text-black',
+  red: 'bg-red-600 text-white',
+  green: 'bg-emerald-600 text-white',
+  grey: 'bg-ink/80 text-cream',
+}
+
+/** where the client stands on a post still to go out, on its tile (schedule-client-word-core) */
+function ClientWordMark({ post, className }: { post: SchedulePostRow; className?: string }) {
+  const word = clientWord(post)
+  if (!word) return null
+  return (
+    <span data-client-word={word}
+      className={cn('rounded-lg px-2 py-0.5 text-[10px] font-semibold leading-tight sm:text-[11px]', CLIENT_MARK_CLS[CLIENT_WORD_TONE[word]], className)}>
+      {CLIENT_WORD_LABEL[word]}
+    </span>
+  )
+}
+
 /**
  * THE FEED AS IT WILL LOOK (the owner, 24 Sep 2026, pointing at Later's visual Instagram planner).
  *
- * The posts going out sit above the account's OWN grid as it is right now,
- * read from the platform, so the next post can be judged against what it will
- * actually join. Instagram only, and only Ready to post and Booked in
- * (`previewPosts`): a cancelled post, a TikTok-only post or a post still
- * being approved is not going to be in this feed (audit S8). What already went
- * out is drawn once — from the feed itself. Nothing here posts anything.
+ * The posts going out sit above the account's OWN feed as it is right now, read from the platform, so the next post
+ * can be judged against what it will actually join. Only Ready to post and Booked in (`previewPosts`): a cancelled
+ * post or one still being approved is not going to be in this feed (audit S8). What already went out is drawn once —
+ * from the feed itself. Nothing here posts anything.
+ *
+ * EVERY CONNECTED PLATFORM, ONE AT A TIME (the owner, 27 Nov 2026: "client portal feed has all the platforms but here
+ * there is none … its only showing instagram"): a button per account on Instagram, Facebook, TikTok and LinkedIn —
+ * the portal's own four — and the feed of the one pressed. Instagram and TikTok are grids, Facebook and LinkedIn a
+ * column of posts with their words, as the post window's Feed preview draws them.
+ *
+ * AND WHERE THE CLIENT STANDS, ON EACH TILE (the same day: "post anyway or approved and scheduled or awaiting client
+ * or whatever status we have from post approval"): `clientWord`, beside the stage and the time.
  */
-export function PreviewGrid({ posts, tz, onOpen, accountId, handle, instagramIds }: {
+export function PreviewGrid({ posts, tz, onOpen, accounts, barAccountId }: {
   posts: SchedulePostRow[]
   tz: string
   onOpen: (post: SchedulePostRow) => void
-  /** the Instagram account whose feed sits underneath, when one is picked */
-  accountId?: string | null
-  handle?: string | null
-  /** the client's Instagram account ids — the only channels this preview is of */
-  instagramIds: ReadonlySet<string>
+  /** every account of the client; the Preview offers the connected ones on its four networks */
+  accounts: readonly PreviewAccountRow[]
+  /** the account picked in the bar above the calendar, when one is */
+  barAccountId?: string | null
 }) {
+  const offered = previewAccounts(accounts)
+  const [pickedId, setPickedId] = useState<string | null>(null)
+  // a press in the bar above is the newer wish
+  useEffect(() => { setPickedId(null) }, [barAccountId])
+  const account = previewAccount(accounts, pickedId, barAccountId)
+  const accountId = account?.id ?? null
+
   const [live, setLive] = useState<LiveTile[] | null>(null)
   const [reason, setReason] = useState<string | null>(null)
   useEffect(() => {
@@ -471,57 +508,128 @@ export function PreviewGrid({ posts, tz, onOpen, accountId, handle, instagramIds
       .catch(() => { if (alive) { setLive([]); setReason('unreadable') } })
     return () => { alive = false }
   }, [accountId])
+
+  if (!account) {
+    return <Empty>This client has no Instagram, Facebook, TikTok or LinkedIn account connected, so there is no feed to preview.</Empty>
+  }
+  const network = String(account.platform).toLowerCase()
+  const name = networkName(network)
   // the feed was read: what already went out is drawn from it, not twice
   const feedShown = live !== null && !reason
-  // what has not gone out yet first, soonest at the top left — the order it
-  // will actually appear in — then what is already up, newest first
-  const ordered = previewOrder(previewPosts(posts, instagramIds, feedShown))
+  // what has not gone out yet first, the latest at the top — the order it will actually appear in — then what is up
+  const ordered = previewOrder(previewPosts(posts, new Set([account.id]), feedShown))
   const feed = live ?? []
-  if (instagramIds.size === 0) {
-    return <Empty>This client has no Instagram account connected, so there is no feed to preview.</Empty>
-  }
-  if (ordered.length === 0 && feed.length === 0) {
-    return <Empty>{accountId && live === null ? 'Reading the feed…' : 'Nothing is going out on Instagram yet, so there is nothing to preview.'}</Empty>
-  }
+  const shape = previewShape(network)
+  const note = feedPreviewNote(network, feed.length, live === null ? 'reading' : reason ? 'unreadable' : 'read')
+  const when = (p: SchedulePostRow) => formatInZone(p.scheduled_for ?? '', tz, 'full') ?? 'No time yet'
+  const title = (p: SchedulePostRow) => `${p.item_title ?? 'Post'} · ${p.facts.label} · ${when(p)}${clientWord(p) ? ` · ${CLIENT_WORD_LABEL[clientWord(p)!]}` : ''}`
+  const handleOf = (a: PreviewAccountRow) => a.username
+    ? (a.platform === 'linkedin' || a.platform === 'facebook' ? a.username : `@${a.username}`)
+    : a.name ?? networkName(a.platform)
+
   return (
-    <div className="flex max-w-xl flex-col gap-2 pb-4">
-      <p className="text-[13px] text-muted-foreground">
-        {feedWords(ordered.length, feed.length, handle ?? null)}
-        {reason === 'not_connected' ? ' Connect the account to see its own grid.' : ''}
-      </p>
-      <div className="grid grid-cols-3 gap-1">
-      {ordered.map(p => (
-        <button
-          key={p.id}
-          type="button"
-          onClick={() => onOpen(p)}
-          aria-label={`${p.item_title ?? 'Post'} · ${p.facts.label} · ${formatInZone(p.scheduled_for ?? '', tz, 'full') ?? 'No time yet'}`}
-          title={`${p.item_title ?? 'Post'} · ${p.facts.label} · ${formatInZone(p.scheduled_for ?? '', tz, 'full') ?? ''}`}
-          className={cn('relative aspect-square overflow-hidden border border-border focus-visible:z-10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent-blue', STAGE_RING[p.facts.tone])}
-        >
-          <Thumb slide={p.slides[0] ?? null} label={p.item_title ?? 'Post'} className="h-full w-full" />
-          <StageDot tone={p.facts.tone} className="absolute left-1.5 top-1.5" />
-          <span className="absolute bottom-1 left-1 rounded-full bg-ink/80 px-1.5 py-0.5 text-[10px] font-semibold text-cream">{p.facts.label}</span>
-        </button>
-      ))}
-      {/* the account's own grid, as it is now — opens the real post, never this dashboard's copy */}
-      {feed.map(t => (
-        <a
-          key={t.id}
-          href={t.permalink ?? undefined}
-          target="_blank"
-          rel="noopener noreferrer"
-          title={`Already posted${t.at ? ` · ${formatInZone(t.at, tz, 'full') ?? ''}` : ''}`}
-          aria-label={`Already posted: ${t.caption.slice(0, 80) || 'post'}`}
-          className="relative aspect-square overflow-hidden border border-border"
-        >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={t.thumbnail ?? ''} alt="" loading="lazy" className="h-full w-full object-cover" />
-          {t.mediaType === 'video' && <Play className="absolute right-1.5 top-1.5 h-3.5 w-3.5 text-white drop-shadow" aria-hidden />}
-          {t.mediaType === 'carousel' && <Copy className="absolute right-1.5 top-1.5 h-3.5 w-3.5 text-white drop-shadow" aria-hidden />}
-        </a>
-      ))}
+    <div className="flex flex-col gap-3 pb-6" data-preview-feed={network}>
+      <div role="tablist" aria-label="Which account's feed" className="flex flex-wrap gap-1.5">
+        {offered.map(a => (
+          <button key={a.id} type="button" role="tab" aria-selected={a.id === account.id} data-preview-account={a.platform}
+            onClick={() => setPickedId(a.id)}
+            className={cn('flex min-h-11 items-center gap-2 rounded-full border px-3.5 text-[13px] font-semibold',
+              a.id === account.id ? 'border-foreground bg-foreground text-background' : 'border-border bg-surface hover:bg-muted')}>
+            <PlatformIcon platform={a.platform} size={16} />
+            {handleOf(a)}
+          </button>
+        ))}
       </div>
+      <p className="text-[13px] text-muted-foreground">
+        {ordered.length === 0
+          ? `Nothing is going out on ${name} yet.`
+          : `${ordered.length} ${ordered.length === 1 ? 'post' : 'posts'} going out on ${name}, latest first, above what is live there now.`}
+        {reason === 'not_connected' ? ' Connect the account to see its own posts.' : ''}
+      </p>
+
+      {ordered.length === 0 && feed.length === 0 ? (
+        <Empty>{live === null ? `Reading ${name}…` : `Nothing is going out on ${name} yet, and nothing is live there to show.`}</Empty>
+      ) : shape === 'cards' ? (
+        <ul className="flex max-w-[520px] flex-col gap-3">
+          {ordered.map(p => {
+            const cover = previewCover(p, account.id)
+            const words = previewCaption(p, account.id)
+            return (
+              <li key={p.id}>
+                <button type="button" onClick={() => onOpen(p)} aria-label={title(p)} data-preview-post={p.id}
+                  className={cn('flex w-full flex-col overflow-hidden rounded-inner border border-border bg-card text-left hover:bg-muted/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent-blue', STAGE_RING[p.facts.tone])}>
+                  <span className="flex flex-wrap items-center gap-2 px-3 py-2.5">
+                    <span className="flex items-center gap-1.5 rounded-full bg-ink/80 px-2.5 py-0.5 text-[12px] font-semibold text-cream">
+                      <StageDot tone={p.facts.tone} className="border-0" /> {p.facts.label} · {when(p)}
+                    </span>
+                    <ClientWordMark post={p} />
+                  </span>
+                  {words && <span className="px-3 pb-2.5"><span className="line-clamp-3 whitespace-pre-line break-words text-[14px]">{words}</span></span>}
+                  {cover && <span className="relative block aspect-[4/5] max-h-[420px] w-full overflow-hidden bg-foreground/[0.06]"><Thumb slide={cover as never} label={p.item_title ?? 'Post'} className="absolute inset-0 h-full w-full" /></span>}
+                </button>
+              </li>
+            )
+          })}
+          {feed.map(t => (
+            <li key={t.id} className="overflow-hidden rounded-inner border border-border bg-card">
+              <div className="flex items-center justify-between gap-2 px-3 py-2.5 text-[12px] text-muted-foreground">
+                <span>Posted{t.at ? ` · ${formatInZone(t.at, tz, 'full') ?? ''}` : ''}</span>
+                {t.permalink && <a href={t.permalink} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center font-semibold text-foreground underline underline-offset-4">Open</a>}
+              </div>
+              {t.caption && <div className="px-3 pb-2.5"><p className="line-clamp-3 whitespace-pre-line break-words text-[14px]">{t.caption}</p></div>}
+              {t.thumbnail && (
+                <div className="relative aspect-[4/5] max-h-[420px] w-full overflow-hidden bg-foreground/[0.06]">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={t.thumbnail} alt="" loading="lazy" className="absolute inset-0 h-full w-full object-cover" />
+                </div>
+              )}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        // BIG ENOUGH TO READ: the grid takes the room there is, up to the width a profile is read at
+        <div className={cn('grid w-full grid-cols-3 gap-1', shape === 'tall-grid' ? 'max-w-[660px]' : 'max-w-[780px]')}>
+          {ordered.map(p => (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => onOpen(p)}
+              aria-label={title(p)}
+              title={title(p)}
+              data-preview-post={p.id}
+              className={cn('relative overflow-hidden border border-border focus-visible:z-10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent-blue',
+                shape === 'tall-grid' ? 'aspect-[9/16]' : 'aspect-[4/5]', STAGE_RING[p.facts.tone])}
+            >
+              <Thumb slide={(previewCover(p, account.id) ?? null) as never} label={p.item_title ?? 'Post'} className="h-full w-full" />
+              {/* ON A PHONE a tile is about 120px wide: the mark wraps instead of being cut ("Client: not appr…", seen in the
+                  render, 27 Nov 2026), and the badge keeps the time — the dot beside it says the stage */}
+              <ClientWordMark post={p} className="absolute left-1 top-1 max-w-[calc(100%-8px)] text-left sm:left-1.5 sm:top-1.5" />
+              <span className="absolute bottom-1 left-1 right-1 flex items-center justify-center gap-1.5 rounded-lg bg-ink/80 px-1.5 py-1 text-center text-[10px] font-semibold leading-tight text-cream sm:bottom-1.5 sm:left-1.5 sm:right-1.5 sm:px-2 sm:text-[11px]">
+                <StageDot tone={p.facts.tone} className="border-0" />
+                <span><span className="hidden sm:inline">{p.facts.label} · </span>{when(p)}</span>
+              </span>
+            </button>
+          ))}
+          {/* the account's own posts, as they are now — opens the real post, never this dashboard's copy */}
+          {feed.map(t => (
+            <a
+              key={t.id}
+              href={t.permalink ?? undefined}
+              target="_blank"
+              rel="noopener noreferrer"
+              title={`Already posted${t.at ? ` · ${formatInZone(t.at, tz, 'full') ?? ''}` : ''}`}
+              aria-label={`Already posted: ${t.caption.slice(0, 80) || 'post'}`}
+              className={cn('relative overflow-hidden border border-border bg-foreground/[0.06]', shape === 'tall-grid' ? 'aspect-[9/16]' : 'aspect-[4/5]')}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              {t.thumbnail && <img src={t.thumbnail} alt="" loading="lazy" className="h-full w-full object-cover" />}
+              {t.mediaType === 'video' && <Play className="absolute right-1.5 top-1.5 h-3.5 w-3.5 text-white drop-shadow" aria-hidden />}
+              {t.mediaType === 'carousel' && <Copy className="absolute right-1.5 top-1.5 h-3.5 w-3.5 text-white drop-shadow" aria-hidden />}
+            </a>
+          ))}
+        </div>
+      )}
+      {note && <p className="text-[13px] text-muted-foreground" data-preview-note>{note}</p>}
     </div>
   )
 }

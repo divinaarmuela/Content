@@ -15,6 +15,7 @@ import {
   LIST_FILTER_LABEL, matchesListFilter, scheduleCounts, showsOnSchedule, type ListFilter,
   KIND_TABS, KIND_TAB_LABEL, kindTabCounts, onKindTab, postedMix, postedMixWords, type KindTab,
 } from '@/app/lib/schedule-stage-core'
+import { CLIENT_WORDS, CLIENT_WORD_LABEL, CLIENT_WORD_TONE, clientWord, clientWordCounts, type ClientWord } from '@/app/lib/schedule-client-word-core'
 import { MISSED_LABEL, STAGE_LABEL, STAGE_TONE, MISSED_TONE, type StageTone } from '@/app/lib/post-stage-core'
 import { POST_APPROVAL_BOARD } from '@/app/lib/overview-links-core'
 import { postAct, type PostActRequest, type PostActResponse } from '@/app/lib/post-act-contract'
@@ -77,6 +78,11 @@ import { monthLabel, rangeLabel, shiftDays, shiftMonths } from './week-nav'
 const VIEW_KEY = 'md-schedule-view'
 
 /** The counts above the calendar: the schedule's three stages and the missed times, in the stage colours. */
+/** the dot on a client-standing count: amber waits, red is a no, green is a yes, grey needs nobody */
+const CLIENT_DOT: Record<'amber' | 'red' | 'green' | 'grey', string> = {
+  amber: 'bg-amber-400', red: 'bg-red-600', green: 'bg-emerald-600', grey: 'bg-muted-foreground/50',
+}
+
 const SUMMARY: { key: 'ready' | 'booked' | 'posted' | 'missed'; tone: StageTone }[] = [
   { key: 'ready', tone: STAGE_TONE.ready },
   { key: 'booked', tone: STAGE_TONE.booked },
@@ -137,11 +143,6 @@ export default function SchedulePage() {
   /** the channel the profiles bar is filtering to, as the core reads it */
   const selected = useMemo(
     () => data.accounts.find(a => a.id === channel) ?? null, [data.accounts, channel])
-  /** the Instagram accounts the feed preview is of — the one picked, or all of the client's */
-  const instagramIds = useMemo(() => new Set(
-    (selected ? [selected] : data.allAccounts).filter(a => a.platform === 'instagram').map(a => a.id)),
-  [selected, data.allAccounts])
-
   const suggested = useSuggestedTimes(
     clientId, selected?.platform ?? data.accounts[0]?.platform ?? 'instagram', data.tz)
 
@@ -455,6 +456,12 @@ export default function SchedulePage() {
     // person used to leave the calendar on the last one's posts (audit S4)
     [livePosts, selected, owner, ownerAccountIds])
 
+  /** what the Preview reads: every post of the client (and the picked person), whatever account the bar above is on —
+   *  the Preview has its own button per account, and a Facebook-only post must not vanish behind an Instagram pick */
+  const previewRows = useMemo(
+    () => livePosts.filter(p => owner === 'all' || p.channels.some(id => ownerAccountIds.has(id))),
+    [livePosts, owner, ownerAccountIds])
+
   /**
    * POSTS OR STORIES (the team, 25 Nov 2026: "can we not include stories as posted … have 2 tabs"). A Story is not a
    * deliverable, so it is not counted with the posts: the calendar, the list and every number above them are the
@@ -495,33 +502,46 @@ export default function SchedulePage() {
 
   /** THE LIST'S FILTER — one of the counts above, pressed */
   const [listFilter, setListFilter] = useState<ListFilter>('all')
-  useEffect(() => { setListFilter('all') }, [clientId])
-  const showList = (f: ListFilter) => { setListFilter(f); setView('List') }
+  /**
+   * WHERE THE CLIENT STANDS, COUNTED AND PRESSABLE (the owner, 27 Nov 2026, of the row of counts: "this needs to be
+   * updated" — with the client's statuses from Post approval). A second row under the stages: how many posts still
+   * to go out wait for the client, were refused, go out anyway, are approved, or need no approval. Pressing one
+   * lists those posts, as pressing a stage does. One or the other, never both at once.
+   */
+  const [clientFilter, setClientFilter] = useState<ClientWord | null>(null)
+  useEffect(() => { setListFilter('all'); setClientFilter(null) }, [clientId])
+  const showList = (f: ListFilter) => { setClientFilter(null); setListFilter(f); setView('List') }
+  const showClient = (w: ClientWord) => { setListFilter('all'); setClientFilter(w); setView('List') }
+  const showSchedule = () => { setListFilter('all'); setClientFilter(null) }
 
   /** the missed times, whatever week they are in: the first thing the List shows */
   const missed = useMemo(
     () => channelPosts.filter(p => matchesListFilter(p, 'missed')), [channelPosts])
+  const clientCounts = useMemo(() => clientWordCounts(channelPosts), [channelPosts])
   const listPosts = useMemo(() => {
+    if (clientFilter) return channelPosts.filter(p => clientWord(p) === clientFilter)
     if (listFilter !== 'all') return channelPosts.filter(p => matchesListFilter(p, listFilter))
     // the week's posts on the schedule, and any with no time yet; the missed
     // ones lead the list on their own, so they are not listed twice
     return planned.filter(p => !p.facts.missed && (!p.scheduled_for || onOneOfDays(p.scheduled_for, tz, weekKeys)))
-  }, [listFilter, channelPosts, planned, tz, weekKeys])
-  const listPinned = listFilter === 'all' ? { label: MISSED_LABEL, posts: missed } : null
-  const listEmpty = listFilter === 'all'
+  }, [listFilter, clientFilter, channelPosts, planned, tz, weekKeys])
+  const listPinned = listFilter === 'all' && !clientFilter ? { label: MISSED_LABEL, posts: missed } : null
+  const listEmpty = clientFilter
+    ? `No post still to go out is at "${CLIENT_WORD_LABEL[clientFilter]}".`
+    : listFilter === 'all'
     ? 'Nothing on the schedule this week.'
     : listFilter === 'drafts'
       ? 'No drafts. A new post starts as a draft, then goes to quality check.'
       : `Nothing in ${LIST_FILTER_LABEL[listFilter]}.`
-  const listNote = listFilter !== 'all' ? (
+  const listNote = listFilter !== 'all' || clientFilter ? (
     <p role="status" className="flex flex-wrap items-center gap-x-3 gap-y-1 px-1 pb-2 text-[13px] text-muted-foreground">
-      Showing {LIST_FILTER_LABEL[listFilter]} · {listPosts.length}.
+      Showing {clientFilter ? CLIENT_WORD_LABEL[clientFilter] : LIST_FILTER_LABEL[listFilter]} · {listPosts.length}.
       {listFilter === 'drafts' && (
         <Link href={POST_APPROVAL_BOARD} className="inline-flex min-h-11 items-center font-semibold underline underline-offset-4">
           Drafts are sent for quality check on Post approval
         </Link>
       )}
-      <button type="button" onClick={() => setListFilter('all')} className="min-h-11 font-semibold underline underline-offset-4">Show the schedule</button>
+      <button type="button" onClick={showSchedule} className="min-h-11 font-semibold underline underline-offset-4">Show the schedule</button>
     </p>
   ) : null
 
@@ -889,11 +909,11 @@ export default function SchedulePage() {
                   <button
                     key={key}
                     type="button"
-                    aria-pressed={view === 'List' && listFilter === key}
+                    aria-pressed={view === 'List' && !clientFilter && listFilter === key}
                     onClick={() => showList(key)}
                     className={cn(
                       'flex min-h-11 items-center gap-2 rounded-full border border-border px-3.5 text-[13px] font-semibold hover:bg-muted',
-                      view === 'List' && listFilter === key ? 'bg-foreground text-background hover:bg-foreground' : 'bg-surface',
+                      view === 'List' && !clientFilter && listFilter === key ? 'bg-foreground text-background hover:bg-foreground' : 'bg-surface',
                       key === 'missed' && n === 0 && 'text-muted-foreground',
                     )}
                   >
@@ -913,6 +933,33 @@ export default function SchedulePage() {
                   {STAGE_LABEL.cancelled} · {counts.cancelled}
                 </button>
               )}
+            </div>
+          )}
+          {!data.loading && !data.error && (
+            <div role="group" aria-label="Where the client stands on what is still to go out" className="flex flex-wrap items-center gap-1.5 pb-2" data-client-words>
+              <span className="pr-1 text-[13px] font-semibold text-muted-foreground">Client</span>
+              {CLIENT_WORDS.map(word => {
+                const n = clientCounts[word]
+                const on = view === 'List' && clientFilter === word
+                return (
+                  <button
+                    key={word}
+                    type="button"
+                    aria-pressed={on}
+                    data-client-word-count={word}
+                    onClick={() => showClient(word)}
+                    className={cn(
+                      'flex min-h-11 items-center gap-2 rounded-full border border-border px-3.5 text-[13px] font-semibold hover:bg-muted',
+                      on ? 'bg-foreground text-background hover:bg-foreground' : 'bg-surface',
+                      n === 0 && !on && 'text-muted-foreground',
+                    )}
+                  >
+                    <span aria-hidden className={cn('inline-block h-2.5 w-2.5 shrink-0 rounded-full', CLIENT_DOT[CLIENT_WORD_TONE[word]])} />
+                    {CLIENT_WORD_LABEL[word]}
+                    <span className="tabular-nums">{n}</span>
+                  </button>
+                )
+              })}
             </div>
           )}
 
@@ -997,10 +1044,7 @@ export default function SchedulePage() {
             <div data-preview-whole>
               {/* THE FEED AS IT WILL LOOK: `PreviewGrid` keeps only Instagram posts that are going out — Ready
                   to post and Booked in — and draws what already went out once, from the feed (audit S8) */}
-              <PreviewGrid posts={channelPostsAll} tz={tz} onOpen={openPost}
-                instagramIds={instagramIds}
-                accountId={(selected?.platform === 'instagram' ? selected.id : data.accounts.find(a => a.platform === 'instagram')?.id) ?? null}
-                handle={(selected?.platform === 'instagram' ? selected.username : data.accounts.find(a => a.platform === 'instagram')?.username) ?? null} />
+              <PreviewGrid posts={previewRows} tz={tz} onOpen={openPost} accounts={data.accounts} barAccountId={selected?.id ?? null} />
             </div>
           ) : (
             <div className="min-h-0 flex-1 overflow-y-auto">
