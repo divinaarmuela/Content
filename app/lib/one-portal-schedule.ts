@@ -85,7 +85,7 @@ type FeedRow = { id: string; client_id: string; platform: string; tiles: LiveTil
 /** One account's posted feed: the stored copy, refreshed from Zernio when older than 15 minutes. The portal's
  *  "Your feed" AND the dashboard's feed route (/api/social/schedule/feed) both read it — one source, one cache. */
 /** the cover chosen for a post's video, as its feed tile shows it: Instagram's, else TikTok's, else any channel's */
-function chosenCoverOf(perChannel: unknown, platformOf: (id: string) => string | undefined): string | null {
+export function chosenCoverOf(perChannel: unknown, platformOf: (id: string) => string | undefined): string | null {
   const entries = Object.entries((perChannel ?? {}) as Record<string, { thumbnailUrl?: string; videoCoverImageUrl?: string }>)
   const urlOf = (x: { thumbnailUrl?: string; videoCoverImageUrl?: string }) => (x.thumbnailUrl ?? x.videoCoverImageUrl ?? '').trim()
   const by = (pf: string) => entries.find(([id, x]) => platformOf(id) === pf && urlOf(x))
@@ -176,6 +176,11 @@ export async function loadScheduling(
     const v: FrozenPost | null = raw ? readFrozenPost(raw as unknown as Record<string, unknown>) : null
     if (!v || n == null) return null
     const files = reviewFiles(v)
+    // THE COVER IS READ FROM THE VERSION'S OWN ROW, NOT FROM `v` (Abby, 27 Nov 2026: "Karly updated the cover reels
+    // but it's not reflecting here"). `readFrozenPost` keeps only each channel's files and words, so the chosen cover
+    // (thumbnailUrl / videoCoverImageUrl) was gone before `chosenCoverOf` looked for it: the portal has drawn every
+    // video's automatic one-second still, whatever cover was picked — checked on the live Senorita feed, where none
+    // of the three chosen covers was in the page.
     const perChannel = readPerChannel((raw as unknown as Record<string, unknown>)?.per_channel)
     let preview: ClientPreview[] = []
     try {
@@ -210,7 +215,7 @@ export async function loadScheduling(
       when: scheduledWhen(p.scheduled_for, tz),
       scheduled_for: p.scheduled_for,
       // a video's CHOSEN COVER is its still on the client's feed (the owner, 2 Nov 2026): Instagram's first, else any channel's
-      cover: files[0] ? { url: files[0].url, type: files[0].type === 'video' ? 'video' : 'image', ...(files[0].type === 'video' ? { poster: chosenCoverOf(v.per_channel, id => accountById.get(id)?.platform as string | undefined) } : {}) } : null,
+      cover: files[0] ? { url: files[0].url, type: files[0].type === 'video' ? 'video' : 'image', ...(files[0].type === 'video' ? { poster: chosenCoverOf((raw as unknown as Record<string, unknown>)?.per_channel, id => accountById.get(id)?.platform as string | undefined) } : {}) } : null,
       files: files.length,
       caption: v.caption,
       own_captions: ownCaptions(v, id => accountById.get(id)?.platform as string | undefined),

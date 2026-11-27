@@ -60,6 +60,27 @@ describe('the client comments on a post (2 Oct 2026: "why can\'t they leave comm
   })
 })
 
+describe('a video tile shows the cover the team chose (27 Nov 2026: "Karly updated the cover reels" and the portal did not show them)', () => {
+  it('Instagram’s cover first, else TikTok’s, else any channel’s; none chosen is null', async () => {
+    const { chosenCoverOf } = await import('../app/lib/one-portal-schedule')
+    const platformOf = (id: string) => ({ ig: 'instagram', tt: 'tiktok', fb: 'facebook' } as Record<string, string>)[id]
+    expect(chosenCoverOf({ fb: { thumbnailUrl: 'fb.jpg' }, tt: { videoCoverImageUrl: 'tt.jpg' }, ig: { thumbnailUrl: 'ig.jpg' } }, platformOf)).toBe('ig.jpg')
+    expect(chosenCoverOf({ fb: { thumbnailUrl: 'fb.jpg' }, tt: { tiktokConsent: true, videoCoverImageUrl: 'tt.jpg' } }, platformOf)).toBe('tt.jpg')
+    expect(chosenCoverOf({ fb: { thumbnailUrl: 'fb.jpg' } }, platformOf)).toBe('fb.jpg')
+    expect(chosenCoverOf({ ig: { slides: [] } }, platformOf)).toBeNull()
+    expect(chosenCoverOf(null, platformOf)).toBeNull()
+  })
+  it('the cover is looked for on the version’s own row — the trimmed copy has none', async () => {
+    const { readFrozenPost } = await import('../app/lib/portal-core')
+    const row = { n: 2, slides: [{ url: 'a.mov', type: 'video' }], channels: ['ig'], caption: '', per_channel: { ig: { thumbnailUrl: 'cover.jpg' } } }
+    // what the loader used to hand over: no cover left in it
+    expect(JSON.stringify(readFrozenPost(row)!.per_channel)).not.toContain('cover.jpg')
+    const loader = readFileSync('app/lib/one-portal-schedule.ts', 'utf8')
+    expect(loader).toContain('poster: chosenCoverOf((raw as unknown as Record<string, unknown>)?.per_channel,')
+    expect(loader).not.toContain('chosenCoverOf(v.per_channel')
+  })
+})
+
 describe('mini pages (2 Oct 2026: "each tab has like mini pages"; Scheduling "by the work")', () => {
   it('groups booked posts by the work they came from, the next to go out first, "Other posts" last; one post on two networks counts once', async () => {
     const { schedulingWorks, profilesForWork } = await import('../app/lib/one-portal-schedule')
