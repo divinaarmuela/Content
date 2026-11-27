@@ -51,7 +51,8 @@ describe('the client comments on a post (2 Oct 2026: "why can\'t they leave comm
     expect(route).toContain("if (body.action === 'client_comment') return commentOnPost(body, client, scope)")
     expect(route).toMatch(/async function commentOnPost[\s\S]{0,200}if \(!onePortal\(client\)\)/)
     expect(route).toMatch(/visibility: 'client',\s+author_id: actor\.id, author_name: name, author_role: 'client',/)
-    expect(route).toContain('const people = [...new Set([post.created_by, post.assigned_to].filter((x): x is string => !!x))]')
+    // 27 Nov 2026: and the client's account managers, and the one inbox that hears every client answer
+    expect(route).toContain('const people = [...new Set([post.created_by, post.assigned_to, ...also].filter((x): x is string => !!x))]')
     expect(route).toMatch(/postOnPortal\(post, scope\)/)
   })
   it('the sheet shows the thread and one name box for the answer and the comment', () => {

@@ -35,6 +35,7 @@ import {
   type NotifyTarget, type PostAction, type PostEffect, type PostStage, type PostState,
 } from './post-stage-core'
 import { networkName } from './publish-core'
+import { CLIENT_ANSWER_ACTIONS, CLIENT_ANSWER_INBOX, inboxPerson } from './client-answer-inbox-core'
 import { POST_APPROVAL_BOARD } from './overview-links-core'
 
 /* ── people ─────────────────────────────────────────────────────────────── */
@@ -254,6 +255,8 @@ export function planMoveEmails(input: {
   roster: Roster
   actorId: string | null
   now: string | number | Date
+  /** the address that hears every client answer (client-answer-inbox-core); null adds nobody */
+  inbox?: string | null
 }): MoveEmailPlan {
   const targets = input.effects.filter((e): e is Extract<PostEffect, { kind: 'notify' }> => e.kind === 'notify')
   const next = nextPersonId({ from: input.from, to: input.to }, input.post, input.actorId, input.now)
@@ -269,6 +272,12 @@ export function planMoveEmails(input: {
   for (const t of targets.filter(t => t.to === 'person')) add(recipientsFor('person', input.post, input.roster, input.actorId, t.person_id), 'person')
   for (const t of targets.filter(t => t.to !== 'person')) add(recipientsFor(t.to, input.post, input.roster, input.actorId, t.person_id), t.to)
   if (next) add(recipientsFor('person', input.post, input.roster, input.actorId, next), 'next_person')
+  // THE CLIENT'S OWN WORD ALSO GOES TO THE ONE INBOX, whatever client it is (the owner, 27 Nov 2026: "contact needs
+  // notification when approved comments etc … yes for every client") — the email the account managers get
+  if (CLIENT_ANSWER_ACTIONS.includes(String(input.action)) && out.length > 0) {
+    const inbox = inboxPerson(input.roster.people, input.inbox === undefined ? CLIENT_ANSWER_INBOX : input.inbox)
+    if (inbox && reachable(inbox) && inbox.id !== input.actorId) add([inbox], 'account_managers')
+  }
   return { ok: true, emails: out }
 }
 

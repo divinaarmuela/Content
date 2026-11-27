@@ -1224,6 +1224,12 @@ export async function performTransition(
           u.active_status && (u.role === 'account_manager' || u.role === 'super_admin'))
         if (chosen.length > 0) people = chosen
       }
+      // A CLIENT'S OWN DECISION ON A CARD also goes to the one inbox that hears every client answer
+      // (client-answer-inbox-core, 27 Nov 2026) — with the account managers, as the same email
+      if (audience === 'account_managers' && !system && actor.role === 'client') {
+        const { withClientAnswerInbox } = await import('./client-answer-inbox')
+        people = await withClientAnswerInbox(people)
+      }
       if (audience === 'assigned_schedulers') {
         if (schedulerIds.length > 0) {
           // the approver picked who schedules this — same trust rule as

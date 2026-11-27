@@ -5,6 +5,7 @@ import type { TeamUser as TeamUserRow, TeamUserClient } from '@/lib/db-types'
 import { notify, renderEmail, escapeHtml } from './mailer'
 import type { TeamUser } from './authz'
 import { DASHBOARD_URL } from './app-url'
+import { clientAnswerInbox } from './client-answer-inbox'
 
 
 /** The client's standing portal identity: one hidden team_users row per
@@ -65,6 +66,9 @@ export async function notifyManagersOfComment(opts: {
     const u = await table<TeamUserRow>('team_users').get(id) as unknown as Person | null
     if (u && u.active_status && u.role !== 'client' && u.email) extras.push(u)
   }
+  // …and the one inbox that hears every client answer, on every client (client-answer-inbox-core, 27 Nov 2026)
+  const inbox = await clientAnswerInbox()
+  if (inbox && ![...managers, ...extras].some(p => p.id === inbox.id)) extras.push(inbox)
   for (const m of [...managers, ...extras]) {
     await notify({
       actorName: opts.speaker,

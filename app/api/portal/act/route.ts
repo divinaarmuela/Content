@@ -20,7 +20,8 @@ import { portalOwnerByToken } from '../../../lib/portal-owner'
 import { belongsToPortal, type PortalScope } from '../../../lib/portal-owner-core'
 import { postVersionId, readPostState, type PostState } from '../../../lib/post-stage-core'
 import { refusalStatus, type PostActRefused } from '../../../lib/post-act-contract'
-import { clientActOnPost } from '../../../lib/post-stage'
+import { clientActOnPost, clientManagers } from '../../../lib/post-stage'
+import { withClientAnswerInbox } from '../../../lib/client-answer-inbox'
 import { ANSWER_NOTE_NEEDED, onePortal } from '../../../lib/one-portal-core'
 import { splitCard } from '../../../lib/split'
 
@@ -65,7 +66,8 @@ async function notifyManagers(clientId: string, item: { id: string; adhoc_post?:
     .map(r => r.team_users as unknown as { id: string; email: string; role: string; active_status: boolean } | null)
     .filter((u): u is { id: string; email: string; role: string; active_status: boolean } =>
       !!u && (u.role === 'account_manager' || u.role === 'super_admin') && u.active_status)
-  for (const m of managers) {
+  // …and the one inbox that hears every client answer (client-answer-inbox-core, 27 Nov 2026)
+  for (const m of await withClientAnswerInbox(managers)) {
     await notify({
       actorName: clientName,
       actorEmail: 'portal+client@mdmmarketing.com.au',
@@ -191,11 +193,15 @@ async function commentOnPost(body: PostBody, client: Client, scope: PortalScope)
     body: note, assigned_to: null, resolved_at: null, resolved_by: null,
     created_at: at, updated_at: at,
   } as Omit<PostComment, 'id'> as PostComment)
-  // the maker and the holder hear about it — a comment nobody reads is worse than none
-  const people = [...new Set([post.created_by, post.assigned_to].filter((x): x is string => !!x))]
+  // the maker and the holder hear about it — a comment nobody reads is worse than none. AND THE CLIENT'S ACCOUNT
+  // MANAGERS, AND THE ONE INBOX (the owner, 27 Nov 2026: "contact needs notification when approved comments etc"):
+  // an approval reached the managers and a comment did not, so what a client wrote could pass their manager by
+  const managers = await clientManagers(client.id).catch(() => [] as { id: string; email: string; name: string }[])
+  const also = (await withClientAnswerInbox(managers)).map(m => m.id)
+  const people = [...new Set([post.created_by, post.assigned_to, ...also].filter((x): x is string => !!x))]
   for (const id of people) {
     const person = await table<TeamUser>('team_users').get(id).catch(() => null)
-    if (!person?.email) continue
+    if (!person?.email || person.active_status === false) continue
     await notify({
       eventType: 'one_portal_client_comment', entityType: 'social_post', entityId: `${post.id}#comment#${saved.id}`,
       recipientId: person.id, recipientEmail: person.email,

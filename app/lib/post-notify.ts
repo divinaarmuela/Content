@@ -16,6 +16,7 @@ import {
   planMoveEmails, recipientsFor, reminderWords, roundOutcomeWords, scheduledDirectMaker,
   teamPostPath, type RoundPost, type Roster, type TeamPerson, type Words,
 } from './post-notify-core'
+import { inboxAddress } from './client-answer-inbox-core'
 import { clientRecipients, pickRecipients } from './client-recipients-core'
 import { portalWaitingPath, readFrozenPost } from './portal-core'
 import { portalPostHref } from './post-page-core'
@@ -177,6 +178,7 @@ export async function notifyPostMove(input: {
     const planned = planMoveEmails({
       action: plan.action, from: plan.from, to: plan.to, version: plan.event.version,
       effects, post, roster, actorId: actor?.id ?? null, now,
+      inbox: inboxAddress(process.env.CLIENT_ANSWER_INBOX),
     })
     if (!planned.ok) return { told: [], skipped: planned.reason }
     if (planned.emails.length === 0) return { told: [], skipped: 'This move tells nobody' }
