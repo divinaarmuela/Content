@@ -33,6 +33,10 @@ const when = (iso: string) =>
   new Date(iso).toLocaleString('en-AU', { timeZone: 'Australia/Melbourne', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })
 
 const input = 'w-full rounded-full border border-border bg-background px-4 text-[14px] text-foreground outline-none placeholder:text-muted-foreground focus:border-foreground/50'
+/** A BOX FOR SEVERAL LINES is a rounded rectangle, not a pill (the owner, 27 Nov 2026: "why is this comment input so
+ *  rounded"). It was `${input} rounded-2xl`: two corner classes on one element, and the pill's won — so the three-line
+ *  comment box had the ends of a lozenge and its first words sat in the curve. */
+const area = `${input.replace('rounded-full', 'rounded-2xl')} py-3`
 
 export default function EditingReview({ data, approved: clientApproved = false }: {
   data: EditingPortal
@@ -410,7 +414,7 @@ export default function EditingReview({ data, approved: clientApproved = false }
             <label className="flex flex-col gap-1 text-[13px] font-medium text-muted-foreground">
               What should we change? A note on one {words.one} can also go in the comments beside it.
               <textarea autoFocus rows={3} value={changeNote} maxLength={2000} onChange={e => setChangeNote(e.target.value)}
-                className={`${input} rounded-2xl py-3`} />
+                className={area} />
             </label>
             <div className="flex flex-wrap gap-2">
               <button type="button" onClick={() => void askForChange()} disabled={sending || !changeNote.trim()}
@@ -477,7 +481,7 @@ export default function EditingReview({ data, approved: clientApproved = false }
           )}
           <textarea value={draft} onChange={e => setDraft(e.target.value)} rows={3} placeholder={clip?.kind === 'image' ? 'Your thoughts on this design — anything you’d like us to change' : 'Your thoughts on this clip — a note at this second, or anything you’d like us to know'}
             onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') void send() }}
-            className={`${input} rounded-2xl py-3`} />
+            className={area} />
           {error && <p role="alert" className="text-[13px] text-red-500 dark:text-red-300">{error}</p>}
           <button type="button" onClick={() => void send()} disabled={!clip || sending || !draft.trim()}
             className="inline-flex min-h-11 w-fit items-center gap-2 rounded-full bg-foreground px-5 text-[14px] font-semibold text-background hover:bg-foreground/90 disabled:opacity-50">
