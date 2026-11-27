@@ -97,3 +97,19 @@ d2('a login running out soon, though healthy', () => {
   i2('a 1-day rolling token (TikTok) stays ok', () => e2(hv(row(1), now).level).toBe('ok'))
   i2('30 days out is ok', () => e2(hv(row(30), now).level).toBe('ok'))
 })
+
+describe('a client left off the Social page is not emailed about (27 Nov 2026: "make sure we dont get notifications for this connection")', () => {
+  it('hidden from Social or archived: no reconnect email; anyone else, and an account with no client, as before', async () => {
+    const { tellsAboutClient } = await import('../app/lib/account-health-core')
+    expect(tellsAboutClient({ hide_from_social: true, status: 'active' })).toBe(false)
+    expect(tellsAboutClient({ status: 'archived' })).toBe(false)
+    expect(tellsAboutClient({ hide_from_social: false, status: 'active' })).toBe(true)
+    expect(tellsAboutClient({ status: 'paused' })).toBe(true)
+    expect(tellsAboutClient(null)).toBe(true)
+  })
+  it('both reconnect emails ask first: the morning check and the provider’s disconnect', async () => {
+    const { readFileSync } = await import('node:fs')
+    expect(readFileSync('app/lib/account-health.ts', 'utf8')).toContain('if (!tellsAboutClient(client as { hide_from_social?: unknown; status?: unknown } | null)) return 0')
+    expect(readFileSync('app/lib/zernio-events.ts', 'utf8')).toContain('if (!tellsAboutClient(client)) return false')
+  })
+})

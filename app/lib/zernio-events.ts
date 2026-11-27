@@ -6,6 +6,7 @@ import type {
   TeamUser, TeamUserClient, WebhookDelivery,
 } from '@/lib/db-types'
 import { notify } from './mailer'
+import { tellsAboutClient } from './account-health-core'
 import { NETWORK_LABEL } from './publish-core'
 import type { ZernioAction } from './zernio-webhook-core'
 import { DASHBOARD_URL } from './app-url'
@@ -498,6 +499,11 @@ export async function accountNeedsReconnecting(
   account: { id: string; client_id: string | null; platform: string; name: string | null; username: string | null },
   droppedAt: string,
 ): Promise<boolean> {
+  // a client left off the Social page is not emailed about (account-health-core tellsAboutClient, 27 Nov 2026)
+  if (account.client_id) {
+    const client = await table<{ id: string; hide_from_social?: boolean | null; status?: string | null }>('clients').get(account.client_id).catch(() => null)
+    if (!tellsAboutClient(client)) return false
+  }
   const { clientName, people } = account.client_id
     ? await managersForClient(account.client_id)
     : await accountManagersFor(null)

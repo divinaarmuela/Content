@@ -5,7 +5,7 @@ import type { Client, SocialAccount, TeamUserClient } from '@/lib/db-types'
 import { getPublisher } from './publisher'
 import { refreshAvatars } from './account-avatars'
 import { notify, renderEmail, escapeHtml } from './mailer'
-import { healthVerdict, readStoredHealth, reconnectSubject, type ProviderHealth, type StoredHealth } from './account-health-core'
+import { healthVerdict, readStoredHealth, reconnectSubject, type ProviderHealth, type StoredHealth, tellsAboutClient } from './account-health-core'
 import { DASHBOARD_URL } from './app-url'
 
 /** the agency's own inbox — always told when an account drops (the owner,
@@ -86,6 +86,8 @@ export async function checkAllAccountsHealth(now: Date = new Date()): Promise<{ 
 
 async function tellTheTeam(account: SocialAccount, health: StoredHealth, day: string): Promise<number> {
   const client = account.client_id ? await table<Client>('clients').get(account.client_id).catch(() => null) : null
+  // a client left off the Social page is not emailed about (account-health-core tellsAboutClient)
+  if (!tellsAboutClient(client as { hide_from_social?: unknown; status?: unknown } | null)) return 0
   const links = account.client_id
     ? await table<TeamUserClient>('team_user_clients').list({ by: { client_id: account.client_id } })
     : []

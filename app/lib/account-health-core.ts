@@ -120,6 +120,18 @@ export function needsReconnect(h: StoredHealth | null | undefined): boolean {
 }
 
 /** the subject line of the note to the team */
+/**
+ * IS THE TEAM TOLD when one of this client's accounts needs reconnecting? Not for a client left off the Social page
+ * (`hide_from_social`), and not for an archived one (the owner, 27 Nov 2026, of Releeph's Instagram, dead since its
+ * password changed and emailed about every morning: "hide" — "make sure we dont get notifications for this
+ * connection"). The account's health is still read and written, so its icon is right the day the client is shown
+ * again; it is only the daily email that stops.
+ */
+export function tellsAboutClient(client: { hide_from_social?: unknown; status?: unknown } | null | undefined): boolean {
+  if (!client) return true
+  return client.hide_from_social !== true && client.status !== 'archived'
+}
+
 export function reconnectSubject(account: { username?: string | null; name?: string | null; platform: string }, clientName: string | null): string {
   const who = account.username || account.name || account.platform
   return `Reconnect ${who} (${account.platform})${clientName ? ` — ${clientName}` : ''}`
