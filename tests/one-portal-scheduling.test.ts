@@ -61,20 +61,40 @@ describe('the client comments on a post (2 Oct 2026: "why can\'t they leave comm
 })
 
 describe('mini pages (2 Oct 2026: "each tab has like mini pages"; Scheduling "by the work")', () => {
-  it('groups booked posts by the work they came from, waiting first, "Other posts" last; one post on two networks counts once', async () => {
+  it('groups booked posts by the work they came from, the next to go out first, "Other posts" last; one post on two networks counts once', async () => {
     const { schedulingWorks, profilesForWork } = await import('../app/lib/one-portal-schedule')
     const t = (post_id: string, work_id: string, over: Record<string, unknown> = {}) =>
       ({ post_id, work_id, work_title: work_id === 'other' ? 'Other posts' : `Work ${work_id}`, state: 'approved', answerable: true, scheduled_for: '2026-10-09T00:00:00.000Z', ...over }) as never
-    const ig = { network: 'instagram', booked: [t('p1', 'w1'), t('p2', 'w2', { state: 'not_reviewed' }), t('p3', 'other')], off: [t('p4', 'w1', { state: 'not_approved', answerable: false })], posted: [{ id: 'x' }] } as never
+    const ig = { network: 'instagram', booked: [t('p1', 'w1', { scheduled_for: '2026-10-12T00:00:00.000Z', when: 'Mon 12 Oct, 11:00 am' }), t('p2', 'w2', { state: 'not_reviewed', when: 'Fri 9 Oct, 11:00 am' }), t('p3', 'other', { scheduled_for: '2026-10-01T00:00:00.000Z' })], off: [t('p4', 'w1', { state: 'not_approved', answerable: false })], posted: [{ id: 'x' }] } as never
     const li = { network: 'linkedin', booked: [t('p2', 'w2', { state: 'not_reviewed' })], off: [], posted: [] } as never
     const works = schedulingWorks([ig, li])
     expect(works.map(w => w.id)).toEqual(['w2', 'w1', 'other'])
-    expect(works.find(w => w.id === 'w2')).toMatchObject({ booked: 1, waiting: 1 })
+    expect(works.find(w => w.id === 'w2')).toMatchObject({ booked: 1, waiting: 1, next_when: 'Fri 9 Oct, 11:00 am' })
     expect(works.find(w => w.id === 'w1')).toMatchObject({ booked: 1, off: 1, waiting: 0 })
     const only = profilesForWork([ig, li], 'w2')
     expect(only.map(p => p.network)).toEqual(['instagram', 'linkedin'])
     // …and each keeps its posted feed behind them: the preview (5 Oct 2026, "the feed preview is not showing")
     expect(only[0].posted).toEqual([{ id: 'x' }])
+  })
+  it('the next post to go out is at the top, then each later one; a work with nothing booked comes after (27 Nov 2026)', async () => {
+    const { schedulingWorks, schedulingWorkLine } = await import('../app/lib/one-portal-schedule')
+    const t = (post_id: string, work_id: string, day: string, over: Record<string, unknown> = {}) =>
+      ({ post_id, work_id, work_title: `Work ${work_id}`, state: 'approved', answerable: true, scheduled_for: `2026-12-${day}T04:00:00.000Z`, when: `${day} Dec, 3:00 pm`, ...over }) as never
+    const ig = {
+      network: 'instagram', posted: [],
+      // the latest is the one that waits on the client: it used to jump to the top
+      booked: [t('a', 'late', '14', { state: 'not_reviewed' }), t('b', 'soon', '02'), t('c', 'mid', '04'), t('d', 'mid', '09')],
+      off: [t('e', 'gone', '01', { state: 'not_approved', answerable: false })],
+    } as never
+    const works = schedulingWorks([ig])
+    expect(works.map(w => w.id)).toEqual(['soon', 'mid', 'late', 'gone'])
+    expect(works.map(schedulingWorkLine)).toEqual([
+      'Posts 02 Dec, 3:00 pm',
+      '2 posts · next 04 Dec, 3:00 pm',
+      'Posts 14 Dec, 3:00 pm',
+      '1 off the schedule',
+    ])
+    expect(readFileSync('app/portal/[token]/home/page.tsx', 'utf8')).toContain('line: schedulingWorkLine(w),')
   })
   it('the page: Shoot brief lists shoots and boards, Scheduling lists Your feed and the works; each opens its own page', () => {
     const page = readFileSync('app/portal/[token]/home/page.tsx', 'utf8')

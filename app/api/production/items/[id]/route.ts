@@ -13,7 +13,7 @@ import { announceItemChange } from '../../../../lib/production-live'
 import { loadItemForUser, shapeItemDetail } from '../../../../lib/production-access'
 import { logActivity, notifyFilesToWorkFrom, notifyHandedOver, notifyJobAssigned, sanitiseRawAssets } from '../../../../lib/workflow'
 import { actingRoles } from '../../../../lib/workflow-core'
-import { canEditItemFields } from '../../../../lib/item-edit-core'
+import { canEditItemFields, canRenameItem } from '../../../../lib/item-edit-core'
 import { askedPatch, NOBODY_ASKED } from '../../../../lib/asked-core'
 import { cascadeItemDelete } from '../../../../lib/post-stage'
 import { loadPostingContext } from '../../../../lib/production-publish'
@@ -158,6 +158,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     // the due date is the one planning field the person DOING the work may
     // move — the calendar lets an owner drag their own item to another day
     const dueOnly = keys.length > 0 && keys.every(k => k === 'due_date')
+    // the NAME is a label the client reads in their portal: anyone on the team who can open the card may fix it
+    // (item-edit-core canRenameItem, 27 Nov 2026)
+    const titleOnly = keys.length === 1 && keys[0] === 'title'
     // 'scheduler' is the lowest team floor: it admits every team role and no
     // client. The per-item check below is the real gate.
     const user = await requireRole('scheduler')
@@ -174,7 +177,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
     // general fields: managers edit anything; the owner and anyone handed the
     // scheduling edit their own; nobody else edits anything
-    if (!captionOnly && !briefOnly && !dueOnly && !canEditItemFields(user, current)) {
+    if (!captionOnly && !briefOnly && !dueOnly && !(titleOnly && canRenameItem(user)) && !canEditItemFields(user, current)) {
       return NextResponse.json({ error: 'Only whoever holds this item — or a manager — can edit it' }, { status: 403 })
     }
     // 'scheduler' as a floor admits editors — the caption IS the published post
@@ -207,6 +210,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
     const patch: Record<string, unknown> = {}
     for (const key of allowed) if (key in body) patch[key] = body[key]
+    // a name is words, never blank — it is what the client reads in their portal
+    if ('title' in patch) {
+      if (typeof patch.title !== 'string' || !patch.title.trim()) return NextResponse.json({ error: 'Give the card a name' }, { status: 400 })
+      patch.title = patch.title.trim().slice(0, 200)
+    }
     // a priority is one of the four words, or Normal (priority-core, 21 Sep 2026)
     if ('priority' in patch) patch.priority = isPriority(patch.priority) ? patch.priority : 'normal'
     // WHERE THE REVIEWER SHOULD LOOK (Abby, 11 Sep 2026: "the task must have

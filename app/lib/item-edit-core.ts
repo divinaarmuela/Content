@@ -35,6 +35,18 @@ export function canEditItemFields(
 }
 
 /**
+ * May this person change this item's NAME, and nothing else?
+ *
+ * Anyone on the team who can open the card (the owner, 27 Nov 2026: "allow us to change the card name in post
+ * approval anyone can do it so it reflects in the portal"). A post made straight on the Schedule is named after
+ * its file — "133", "138" — and that name is what the client reads in their portal (Abby, the same day: "are
+ * these the images title?"). Whoever notices may fix it; it is a label, not the work. Never a client.
+ */
+export function canRenameItem(viewer: { role: Role }): boolean {
+  return viewer.role !== 'client'
+}
+
+/**
  * Does the client-team check apply to this creation?
  *
  * A TASK (research, strategy, copy — no media, not a shoot plan) is internal

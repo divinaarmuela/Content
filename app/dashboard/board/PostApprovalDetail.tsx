@@ -204,6 +204,8 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
   const [headTitle, setHeadTitle] = useState('')
   const [headDue, setHeadDue] = useState('')
   const [savingHead, setSavingHead] = useState(false)
+  /** the due date is a manager's, on a card that was planned; the NAME is anyone's on the team (27 Nov 2026) */
+  const mayPlanHead = (me?.role === 'account_manager' || me?.role === 'super_admin') && (item as { adhoc_post?: unknown } | null)?.adhoc_post !== true
   const openHead = () => {
     if (!item) return
     setHeadTitle(String(item.title ?? ''))
@@ -218,7 +220,8 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
     try {
       const res = await fetch(`/api/production/items/${item.id}`, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, due_date: headDue || null }),
+        // the name alone from anyone on the team; the due date goes with it only from a manager, on a planned card
+        body: JSON.stringify(mayPlanHead ? { title, due_date: headDue || null } : { title }),
       })
       if (!res.ok) throw new Error('Could not save that')
       toast.success('Saved')
@@ -565,11 +568,14 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
                 <input id="head-title" value={headTitle} onChange={e => setHeadTitle(e.target.value)}
                   className="min-h-11 rounded-inner border border-border bg-surface px-3 text-[14px] font-normal" />
               </label>
-              <label className="flex flex-col gap-1 text-[12px] font-semibold" htmlFor="head-due">
-                Due <span className="font-normal text-muted-foreground">(optional)</span>
-                <input id="head-due" type="date" value={headDue} onChange={e => setHeadDue(e.target.value)}
-                  className="min-h-11 rounded-inner border border-border bg-surface px-3 text-[14px] font-normal" />
-              </label>
+              <p className="text-[12px] text-muted-foreground">The client sees this name in their portal.</p>
+              {mayPlanHead && (
+                <label className="flex flex-col gap-1 text-[12px] font-semibold" htmlFor="head-due">
+                  Due <span className="font-normal text-muted-foreground">(optional)</span>
+                  <input id="head-due" type="date" value={headDue} onChange={e => setHeadDue(e.target.value)}
+                    className="min-h-11 rounded-inner border border-border bg-surface px-3 text-[14px] font-normal" />
+                </label>
+              )}
               <div className="flex items-center gap-2">
                 <Button className={primary} disabled={savingHead} onClick={() => void saveHead()}>Save</Button>
                 <Button variant="ghost" className={secondary} disabled={savingHead} onClick={() => setEditingHead(false)}>Cancel</Button>
@@ -657,10 +663,12 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
               "AM and super admin should see the client portal on the
               assigned task" (not the editor, not the scheduler) */}
           {/* renames, due dates and the rest live on the full card page */}
-          {!adhoc && isManager && !editingHead && (
-            <button type="button" onClick={openHead}
+          {/* THE NAME IS ANYONE'S TO FIX (the owner, 27 Nov 2026: "allow us to change the card name in post approval
+              anyone can do it so it reflects in the portal") — a post made on the Schedule is named after its file */}
+          {!editingHead && (
+            <button type="button" onClick={openHead} data-rename-card
               className="inline-flex min-h-11 items-center gap-1 rounded-full border border-border px-3 text-[13px] font-semibold hover:bg-muted">
-              Rename or set due date
+              {mayPlanHead ? 'Rename or set due date' : 'Rename'}
             </button>
           )}
           {isManager && client?.share_token && (

@@ -12,7 +12,7 @@ import OnePortalTabs from '../../../components/portal/OnePortalTabs'
 import OnePortalWorkList from '../../../components/portal/OnePortalWorkList'
 import OnePortalShoots from '../../../components/portal/OnePortalShoots'
 import { loadOnePortalAll, oldPortalPathFor } from '../../../lib/one-portal-load'
-import { loadScheduling, profilesForWork, onlyPostOf, schedulingWaiting, schedulingWorks } from '../../../lib/one-portal-schedule'
+import { loadScheduling, profilesForWork, onlyPostOf, schedulingWaiting, schedulingWorkLine, schedulingWorks } from '../../../lib/one-portal-schedule'
 import OnePortalList, { type ListRow } from '../../../components/portal/OnePortalList'
 import ShootBoard from '../../../components/portal/ShootBoard'
 import { getPortalTeamBoardDetail } from '../../../lib/portal-team-board'
@@ -263,7 +263,8 @@ export default async function OnePortalPage({ params, searchParams }: {
     key: w.id,
     href: onePortalPath(token, 'scheduling', w.id),
     title: w.title,
-    line: `${w.booked} booked${w.off ? ` · ${w.off} off the schedule` : ''}`,
+    // WHEN IT GOES OUT, on the row (the owner, 27 Nov 2026: "name is there and date to post date is there")
+    line: schedulingWorkLine(w),
     chip: w.waiting > 0 ? { words: `${w.waiting} to look at`, tone: 'waiting' } : w.booked > 0 ? { words: 'All answered', tone: 'done' }
       // every post of it came off on their own no: say so, instead of a bare row that reads as nothing happened
       : w.off > 0 ? { words: 'Not approved — being changed', tone: 'done' } : null,

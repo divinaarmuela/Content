@@ -270,8 +270,13 @@ export async function loadScheduling(
 }
 
 /** THE WORKS (the owner, 2 Oct 2026: "each tab has mini pages… by the work"): one entry per piece the booked
- *  posts came from, with how many are booked, wait on the client, and came off; "Other posts" last. */
-export type SchedulingWork = { id: string; title: string; booked: number; waiting: number; off: number; next: string | null }
+ *  posts came from, with how many are booked, wait on the client, and came off; "Other posts" last.
+ *
+ *  THE NEXT ONE TO GO OUT IS AT THE TOP, then each later one in turn (the owner, 27 Nov 2026: "date to post date is
+ *  there and make the next post soon latest at top and gradually"). It used to put what waits on the client first,
+ *  which read as no order at all; the chip on each row still says what waits. A work with nothing booked sits after
+ *  the booked ones. `next_when` is that post's time in the client's own words ("Fri 27 Nov, 3:00 pm"). */
+export type SchedulingWork = { id: string; title: string; booked: number; waiting: number; off: number; next: string | null; next_when: string | null }
 export function schedulingWorks(profiles: readonly NetworkProfile[]): SchedulingWork[] {
   const seen = new Map<string, { t: ScheduledTile; off: boolean }>()
   for (const p of profiles) {
@@ -280,17 +285,31 @@ export function schedulingWorks(profiles: readonly NetworkProfile[]): Scheduling
   }
   const works = new Map<string, SchedulingWork>()
   for (const { t, off } of seen.values()) {
-    const w = works.get(t.work_id) ?? { id: t.work_id, title: t.work_title, booked: 0, waiting: 0, off: 0, next: null }
+    const w = works.get(t.work_id) ?? { id: t.work_id, title: t.work_title, booked: 0, waiting: 0, off: 0, next: null, next_when: null }
     if (off) w.off += 1
     else {
       w.booked += 1
-      if (!w.next || String(t.scheduled_for ?? '') < String(w.next)) w.next = t.scheduled_for
+      if (t.scheduled_for && (!w.next || String(t.scheduled_for) < String(w.next))) { w.next = t.scheduled_for; w.next_when = t.when ?? null }
     }
     if (t.answerable && (t.state === 'not_reviewed' || t.state === 'asked_again')) w.waiting += 1
     works.set(t.work_id, w)
   }
   return [...works.values()].sort((a, b) =>
-    (a.id === 'other' ? 1 : 0) - (b.id === 'other' ? 1 : 0) || (b.waiting - a.waiting) || String(a.next ?? '~').localeCompare(String(b.next ?? '~')))
+    (a.id === 'other' ? 1 : 0) - (b.id === 'other' ? 1 : 0)
+    // nothing booked goes after everything that is (said outright: a made-up "late" string sorted FIRST by locale)
+    || (a.next ? 0 : 1) - (b.next ? 0 : 1)
+    || (a.next && b.next ? (a.next < b.next ? -1 : a.next > b.next ? 1 : 0) : 0)
+    || a.title.localeCompare(b.title))
+}
+
+/** A work's line under its name in the list: when it goes out, and how many. */
+export function schedulingWorkLine(w: Pick<SchedulingWork, 'booked' | 'off' | 'next_when'>): string {
+  const off = w.off ? `${w.off} off the schedule` : ''
+  if (w.booked === 0) return off || 'Nothing booked'
+  const when = w.next_when
+    ? (w.booked === 1 ? `Posts ${w.next_when}` : `${w.booked} posts · next ${w.next_when}`)
+    : `${w.booked} booked`
+  return [when, off].filter(Boolean).join(' · ')
 }
 
 /**
