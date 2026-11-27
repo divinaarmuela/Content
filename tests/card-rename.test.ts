@@ -34,4 +34,12 @@ describe('renaming a card', () => {
     expect(ui).toContain("{mayPlanHead ? 'Rename or set due date' : 'Rename'}")
     expect(ui).toContain('JSON.stringify(mayPlanHead ? { title, due_date: headDue || null } : { title })')
   })
+
+  it('the post window on the Schedule renames too — that is where a Schedule-made post is opened', () => {
+    const win = readFileSync('app/dashboard/social/schedule/PostWindow.tsx', 'utf8')
+    expect(win).toContain('<PostName itemId={itemId} title={title} onRenamed=')
+    const name = readFileSync('app/dashboard/social/schedule/PostName.tsx', 'utf8')
+    expect(name).toContain("body: JSON.stringify({ title: name })")
+    expect(name).toContain('/api/production/items/${itemId}')
+  })
 })

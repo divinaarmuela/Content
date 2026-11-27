@@ -1,6 +1,7 @@
 'use client'
 
 import PostLog from './PostLog'
+import PostName from './PostName'
 import PostFeedPreview from './PostFeedPreview'
 import PostVersions, { melb, type SavedVersion } from './PostVersions'
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
@@ -187,7 +188,11 @@ export default function PostWindow({
   }, [live, answered, id])
   const itemId = seed?.itemId ?? saved?.source_item_id ?? null
   const { row: itemRow } = useRow<ContentItem>('content_items', itemId)
-  const title = seed?.title ?? (itemRow as { title?: string } | null)?.title ?? 'Post'
+  // THE NAME CAN BE CHANGED HERE (PostName, 27 Nov 2026): the name just saved, then the card's live one, then the
+  // name the window was opened with — which used to win, and would have kept showing the old name after a rename
+  const [renamed, setRenamed] = useState<{ itemId: string; title: string } | null>(null)
+  const title = (renamed && renamed.itemId === itemId ? renamed.title : null)
+    ?? ((itemRow as { title?: string } | null)?.title?.trim() || null) ?? seed?.title ?? 'Post'
 
   /* ── the working copy ────────────────────────────────────────────────── */
 
@@ -1101,7 +1106,7 @@ export default function PostWindow({
           <div className="flex items-center gap-2.5">
             {header && <Chip tone={header.tone} className="shrink-0 font-semibold" ><span data-stage-chip>{header.label}</span></Chip>}
             {header?.missed && <Chip tone="red" className="shrink-0 font-semibold">{header.missed}</Chip>}
-            <span className="min-w-0 truncate text-[14px] font-semibold">{title}</span>
+            <PostName itemId={itemId} title={title} onRenamed={t => { if (itemId) setRenamed({ itemId, title: t }) }} />
             <button
               type="button"
               onClick={requestClose}
