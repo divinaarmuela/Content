@@ -86,6 +86,9 @@ export default function SocialPage() {
     .filter(c => c.status !== 'archived' && !c.hide_from_social)
     .filter(c => !search || c.name.toLowerCase().includes(search.toLowerCase()))
 
+  /** the clients this page has a card for — the only ones a "Reconnect" can lead to */
+  const visibleIds = new Set((clients ?? []).filter(c => c.status !== 'archived' && !c.hide_from_social).map(c => c.id))
+
   const clientName = (id: string | null) =>
     (clients ?? []).find(c => c.id === id)?.name ?? 'Unassigned'
 
@@ -136,7 +139,11 @@ export default function SocialPage() {
 
       {/* WHAT NEEDS RECONNECTING, AT THE TOP (the owner, 26 Sep 2026) — each opens that client's card and its link */}
       {(() => {
-        const down = accounts.filter(a => !a.active && a.client_id)
+        // ONLY FOR A CLIENT WHO IS ON THIS PAGE (the owner, 27 Nov 2026: "remove the fb turnkey building group
+        // notification that i have been getting"). The Turnkey client was deleted and its switched-off Facebook row
+        // stayed behind, so the page asked every day for "A client · @Turnkey Building Group" to be reconnected —
+        // with a button that scrolls to a card that is not there. Nothing can be reconnected for a client who is gone.
+        const down = accounts.filter(a => !a.active && a.client_id && visibleIds.has(a.client_id))
         if (down.length === 0) return null
         const nameOf = (id: string | null) => (clients ?? []).find(c => c.id === id)?.name ?? 'A client'
         return (
