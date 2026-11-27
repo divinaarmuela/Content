@@ -85,6 +85,10 @@ describe('the Preview, one account at a time (27 Nov 2026: "its only showing ins
 })
 
 describe('on the page', () => {
+  it('while an account’s feed is being read, nothing posted is drawn among what is going out', () => {
+    expect(readFileSync('app/dashboard/social/schedule/views.tsx', 'utf8')).toContain('const feedShown = live === null || !reason')
+  })
+
   const views = readFileSync('app/dashboard/social/schedule/views.tsx', 'utf8')
   const page = readFileSync('app/dashboard/social/schedule/page.tsx', 'utf8')
 
@@ -99,7 +103,10 @@ describe('on the page', () => {
   })
 
   it('the counts row says where the client stands too, and a press lists those posts', () => {
-    expect(page).toContain('{CLIENT_WORDS.map(word => {')
+    // one quiet line, only the standings somebody is at (the owner: "too many badges and can be confusing")
+    expect(page).toContain('CLIENT_WORDS.some(w => clientCounts[w] > 0) && (')
+    expect(page).toContain('{CLIENT_WORDS.filter(w => clientCounts[w] > 0).map((word, i) => {')
+    expect(page).not.toContain('{CLIENT_WORDS.map(word => {')
     expect(page).toContain('onClick={() => showClient(word)}')
     expect(page).toContain('if (clientFilter) return channelPosts.filter(p => clientWord(p) === clientFilter)')
   })

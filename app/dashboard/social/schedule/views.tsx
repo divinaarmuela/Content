@@ -514,8 +514,11 @@ export function PreviewGrid({ posts, tz, onOpen, accounts, barAccountId }: {
   }
   const network = String(account.platform).toLowerCase()
   const name = networkName(network)
-  // the feed was read: what already went out is drawn from it, not twice
-  const feedShown = live !== null && !reason
+  // the feed was read: what already went out is drawn from it, not twice. WHILE IT IS BEING READ nothing posted is
+  // drawn from our own rows either — they used to stand among what is going out for a few seconds, then drop away
+  // (seen on the live page, 27 Nov 2026: Facebook showed 21 tiles "going out", then 7). Only a feed that could not
+  // be read falls back to them.
+  const feedShown = live === null || !reason
   // what has not gone out yet first, the latest at the top — the order it will actually appear in — then what is up
   const ordered = previewOrder(previewPosts(posts, new Set([account.id]), feedShown))
   const feed = live ?? []

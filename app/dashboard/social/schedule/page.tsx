@@ -15,7 +15,7 @@ import {
   LIST_FILTER_LABEL, matchesListFilter, scheduleCounts, showsOnSchedule, type ListFilter,
   KIND_TABS, KIND_TAB_LABEL, kindTabCounts, onKindTab, postedMix, postedMixWords, type KindTab,
 } from '@/app/lib/schedule-stage-core'
-import { CLIENT_WORDS, CLIENT_WORD_LABEL, CLIENT_WORD_TONE, clientWord, clientWordCounts, type ClientWord } from '@/app/lib/schedule-client-word-core'
+import { CLIENT_WORDS, CLIENT_WORD_LABEL, CLIENT_WORD_TONE, clientCountWords, clientWord, clientWordCounts, type ClientWord } from '@/app/lib/schedule-client-word-core'
 import { MISSED_LABEL, STAGE_LABEL, STAGE_TONE, MISSED_TONE, type StageTone } from '@/app/lib/post-stage-core'
 import { POST_APPROVAL_BOARD } from '@/app/lib/overview-links-core'
 import { postAct, type PostActRequest, type PostActResponse } from '@/app/lib/post-act-contract'
@@ -935,32 +935,32 @@ export default function SchedulePage() {
               )}
             </div>
           )}
-          {!data.loading && !data.error && (
-            <div role="group" aria-label="Where the client stands on what is still to go out" className="flex flex-wrap items-center gap-1.5 pb-2" data-client-words>
-              <span className="pr-1 text-[13px] font-semibold text-muted-foreground">Client</span>
-              {CLIENT_WORDS.map(word => {
-                const n = clientCounts[word]
+          {/* ONE QUIET LINE, AND ONLY WHAT HAS POSTS (the owner, 27 Nov 2026, of the row of five more chips this was for
+              an hour: "this has too many badges and can be confusing"). The stages above stay the row of chips; where
+              the client stands is words under it — "Client: 7 not reviewed — posts anyway" — each one pressable, and a
+              standing nobody is at is not drawn at all. */}
+          {!data.loading && !data.error && CLIENT_WORDS.some(w => clientCounts[w] > 0) && (
+            <p role="group" aria-label="Where the client stands on what is still to go out" className="flex flex-wrap items-center gap-x-1 pb-2 text-[13px] text-muted-foreground" data-client-words>
+              <span className="pr-1 font-semibold">Client:</span>
+              {CLIENT_WORDS.filter(w => clientCounts[w] > 0).map((word, i) => {
                 const on = view === 'List' && clientFilter === word
                 return (
-                  <button
-                    key={word}
-                    type="button"
-                    aria-pressed={on}
-                    data-client-word-count={word}
-                    onClick={() => showClient(word)}
-                    className={cn(
-                      'flex min-h-11 items-center gap-2 rounded-full border border-border px-3.5 text-[13px] font-semibold hover:bg-muted',
-                      on ? 'bg-foreground text-background hover:bg-foreground' : 'bg-surface',
-                      n === 0 && !on && 'text-muted-foreground',
-                    )}
-                  >
-                    <span aria-hidden className={cn('inline-block h-2.5 w-2.5 shrink-0 rounded-full', CLIENT_DOT[CLIENT_WORD_TONE[word]])} />
-                    {CLIENT_WORD_LABEL[word]}
-                    <span className="tabular-nums">{n}</span>
-                  </button>
+                  <span key={word} className="inline-flex items-center gap-x-1">
+                    {i > 0 && <span aria-hidden>·</span>}
+                    <button
+                      type="button"
+                      aria-pressed={on}
+                      data-client-word-count={word}
+                      onClick={() => showClient(word)}
+                      className={cn('inline-flex min-h-11 items-center gap-1.5 px-1 font-semibold underline-offset-4 hover:underline', on ? 'text-foreground underline' : 'text-muted-foreground')}
+                    >
+                      <span aria-hidden className={cn('inline-block h-2 w-2 shrink-0 rounded-full', CLIENT_DOT[CLIENT_WORD_TONE[word]])} />
+                      <span className="tabular-nums">{clientCounts[word]}</span> {clientCountWords(word)}
+                    </button>
+                  </span>
                 )
               })}
-            </div>
+            </p>
           )}
 
           {data.error ? (

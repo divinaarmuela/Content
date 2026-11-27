@@ -24,6 +24,18 @@ export const CLIENT_WORD_LABEL: Record<ClientWord, string> = {
   no_approval: 'No approval needed',
 }
 
+/** the same words after a number, in the one line under the stage counts: "7 not reviewed — posts anyway" */
+const AFTER_A_NUMBER: Record<ClientWord, string> = {
+  waiting: 'waiting for client',
+  not_approved: 'not approved by client',
+  posts_anyway: 'not reviewed — posts anyway',
+  approved: 'approved by client',
+  no_approval: 'no approval needed',
+}
+export function clientCountWords(word: ClientWord): string {
+  return AFTER_A_NUMBER[word]
+}
+
 /** how a tile's mark is coloured: amber waits, red is a no, green is a yes, grey needs nobody */
 export const CLIENT_WORD_TONE: Record<ClientWord, 'amber' | 'red' | 'green' | 'grey'> = {
   waiting: 'amber',
