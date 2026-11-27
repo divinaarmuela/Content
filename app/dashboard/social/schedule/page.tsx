@@ -421,6 +421,11 @@ export default function SchedulePage() {
     () => scheduleWeekGrid({ start: anchor ?? todayKey ?? '', tz, rowPx: WEEK_ROW_PX, fromHour: hours.fromHour, toHour: hours.toHour }),
     [anchor, todayKey, tz, hours])
   const monthView = view === 'Month'
+  // THE WHOLE FEED, NOT A STRIP OF IT (Karly, 27 Nov 2026: on the preview "can we see the whole page? atm its a line
+  // and we have to scroll through"). The Preview used to sit in a box of whatever height the bars above left over —
+  // 654px on a big monitor (measured, holding 2,569px of feed) and about one row on a laptop — scrolling by itself.
+  // Like the Month, it now takes the height it needs and the page scrolls.
+  const tallView = monthView || view === 'Preview'
   const monthKey = (anchor ?? todayKey ?? '').slice(0, 7)
 
   /**
@@ -684,7 +689,7 @@ export default function SchedulePage() {
     // render outside the shell (a test, a storybook), never the source of truth.
     // THE MONTH IS AS TALL AS ITS POSTS (the team, 26 Oct 2026: "scroll y is not good in this section … it looks cut
     // off"): in Month the page itself scrolls, never a box inside it; the rail stays in view beside it
-    <div className={cn('flex min-h-[560px] flex-col', monthView ? 'min-h-[calc(100vh-var(--dbx-chrome,9rem))]' : 'h-[calc(100vh-var(--dbx-chrome,9rem))]')}>
+    <div className={cn('flex min-h-[560px] flex-col', tallView ? 'min-h-[calc(100vh-var(--dbx-chrome,9rem))]' : 'h-[calc(100vh-var(--dbx-chrome,9rem))]')}>
       <PageTitle
         title="Schedule"
         summary="One client's week. Approved media on the left, what is going out on the right."
@@ -694,7 +699,7 @@ export default function SchedulePage() {
         {/* The rail is a full-height column beside the calendar on a desktop
             and a bottom sheet on a phone: at 390px a 236px column would leave
             no calendar at all. */}
-        <aside className={cn('hidden w-[236px] shrink-0 flex-col border-r border-border py-1 pr-3.5 lg:flex', monthView && 'sticky top-0 h-[calc(100vh-var(--dbx-chrome,9rem))] self-start')}>
+        <aside className={cn('hidden w-[236px] shrink-0 flex-col border-r border-border py-1 pr-3.5 lg:flex', tallView && 'sticky top-0 h-[calc(100vh-var(--dbx-chrome,9rem))] self-start')}>
           {rail}
         </aside>
 
@@ -989,7 +994,7 @@ export default function SchedulePage() {
               <ListView posts={listPosts} tz={tz} todayKey={todayKey} onOpen={openPost} onBin={binPost} pinned={listPinned} empty={listEmpty} />
             </div>
           ) : view === 'Preview' ? (
-            <div className="min-h-0 flex-1 overflow-y-auto">
+            <div data-preview-whole>
               {/* THE FEED AS IT WILL LOOK: `PreviewGrid` keeps only Instagram posts that are going out — Ready
                   to post and Booked in — and draws what already went out once, from the feed (audit S8) */}
               <PreviewGrid posts={channelPostsAll} tz={tz} onOpen={openPost}
