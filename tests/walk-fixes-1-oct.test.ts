@@ -66,7 +66,9 @@ describe('a designer uploads; the Drive hand-in is the editors’ (1 Oct 2026)',
   it('a graphics card’s main button uploads, and it offers no Drive hand-in', () => {
     const d = readFileSync('app/dashboard/board/EditorCardDrawer.tsx', 'utf8')
     expect(d).toContain("=== 'graphics'")
-    expect(d).toContain('if (designCard) { setUploadOpen(true); return }')
+    // 27 Nov 2026: only where the client's cards do not file into Drive — otherwise the Drive uploader, as a video card
+    expect(d).toContain('if (designCard && !driveFiling) { setUploadOpen(true); return }')
+    expect(d).toContain('const driveFiling = filingAnswer ?? true')
     expect(d).toContain('Upload the finished files — {roundLabel(handInRound(item as never))}')
     expect(d).toContain('{!designCard && !(holder && submitting && !hasFinishedWork(item as never)) && (')
   })

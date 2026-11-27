@@ -259,7 +259,12 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
   // A VIDEO CARD UPLOADS INTO ITS DRIVE FOLDER FROM THE START — never the old upload while the uploader is still asking
   // (live, 25 Oct 2026: Justin's October Video went on through "Upload instead", into our storage only, no Drive folder)
   const [filingAnswer, setDriveFiling] = useState<boolean | null>(null)
-  const driveFiling = filingAnswer ?? !designCard
+  // A DESIGN CARD TOO (the owner, 27 Nov 2026: "on designer why does version 1 get uploaded in drive only when the
+  // version 1 gets replaced"). It used to start on the old upload — our storage only — while Replace went through the
+  // Drive uploader, so a graphics card's Version 1 reached Drive only as somebody's replacement (checked on a real
+  // card: three V1 files in storage only, their one replacement in Drive). Every card now starts on the uploader;
+  // the old upload is what is left when the server says this client's cards do not file into Drive.
+  const driveFiling = filingAnswer ?? true
   // Replace pressed on a video's picture on the card page: the new cut comes here, to the uploader
   useEffect(() => {
     const on = (e: Event) => {
@@ -564,7 +569,8 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
                 <Button className={primaryBtn} disabled={busy}
                   onClick={() => {
                     // the hand-in is a Drive link now (the owner, 30 Sep 2026) — the upload is the fallback lower down
-                    if (designCard) { setUploadOpen(true); return }
+                    // a design card goes to the same uploader as a video card; the old dialog only where Drive filing is off
+                    if (designCard && !driveFiling) { setUploadOpen(true); return }
                     // no more Drive hand-in (the owner, 22 Oct 2026: "no more hand in drive"): to the card's uploader
                     if (driveFiling) { setTab('work'); setTimeout(() => document.getElementById('card-upload')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50); return }
                     if (filesCard) { setDriveOpen(true); return }
