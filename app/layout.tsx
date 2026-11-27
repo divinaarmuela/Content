@@ -192,6 +192,7 @@ import { cn } from "@/lib/utils";
 import Clarity from "./Clarity";
 import MetaPixel from "./MetaPixel";
 import UtmPassthrough from "./UtmPassthrough";
+import MediaFallback from './components/MediaFallback'
 
 // shipped with the app, not fetched from Google at build time (30 Sep 2026 — see components/lama/fonts.ts)
 const geist = localFont({ src: '../node_modules/geist/dist/fonts/geist-sans/Geist-Variable.woff2', weight: '100 900', variable: '--font-sans', display: 'swap' })
@@ -218,6 +219,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <Clarity />
           <MetaPixel />
           <UtmPassthrough />
+          {/* a stored picture or video that will not load from storage is asked for again through our own site */}
+          <MediaFallback publicBase={process.env.R2_PUBLIC_BASE_URL ?? null} />
         </body>
       </html>
   )

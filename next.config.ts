@@ -1,4 +1,5 @@
 import type { NextConfig } from 'next'
+import { mediaRewrite } from './app/lib/media-fallback-core'
 
 const nextConfig: NextConfig = {
   // pdfkit ships its font metrics (.afm) as data files and resolves them via
@@ -17,6 +18,13 @@ const nextConfig: NextConfig = {
   // content.mdmmarketing.com.au is a legacy alias of this same project (the
   // Linktree still points at it) — send it to the canonical site instead of
   // serving a duplicate homepage
+  // A SECOND WAY TO EVERY STORED FILE (27 Nov 2026, media-fallback-core): /media/<file> on our own site is passed on
+  // to storage, for the browser whose internet will not look up storage's own address
+  async rewrites() {
+    const media = mediaRewrite(process.env.R2_PUBLIC_BASE_URL)
+    return media ? [media] : []
+  },
+
   async redirects() {
     return [
       {
